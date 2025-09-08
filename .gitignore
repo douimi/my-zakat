@@ -1,0 +1,17 @@
+.env
+__pycache__/
+instance/
+*.pyc
+*.pyo
+*.pyd
+.env.*
+# Ignore all video files in the repository
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.flv
+*.wmv
+app/static/videos/
+static/videos/

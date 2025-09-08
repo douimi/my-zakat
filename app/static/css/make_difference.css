@@ -1,0 +1,116 @@
+/* Make a Difference Section Styles (modularized) */
+.make-difference-section {
+    background: #f9f9f9;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.make-difference-section h2 {
+    color: #0056b3;
+    font-size: 2rem;
+    margin-bottom: 30px;
+}
+
+.make-difference-section p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+.make-difference-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: nowrap;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px;
+    text-align: left;
+}
+
+.make-difference-images {
+    flex: 1.2;
+    min-width: 320px;
+    max-width: 60%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.make-difference-images img {
+    width: 100%;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
+}
+
+.make-difference-content {
+    flex: .8;
+    max-width: 40%;
+    background: #fff;
+    padding: 28px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 18px;
+}
+
+/* --- Mobile Polish for Making a Difference Section --- */
+@media (max-width: 600px) {
+    .make-difference-section {
+        padding: 24px 6px;
+        border-radius: 0;
+    }
+
+    .make-difference-section h2 {
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+    }
+
+    .make-difference-section .section-tagline {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .make-difference-container {
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+        padding: 0;
+    }
+
+    .make-difference-images img {
+        width: 100%;
+        max-width: 98vw;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+    .make-difference-content {
+        padding: 0 4px;
+        text-align: center;
+    }
+
+    .impact-quote {
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .impact-story-text {
+        font-size: 0.97rem;
+        margin-bottom: 10px;
+    }
+
+    .impact-cta-button {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 10px 0;
+        border-radius: 8px;
+        display: inline-block;
+        text-align: center;
+    }
+}

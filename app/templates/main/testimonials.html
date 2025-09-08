@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="testimonials fade-in">
+  <h2>🌟 What People Say About Us</h2>
+  <p class="section-subtitle">Short quotes from those you’ve helped</p>
+  <div class="testimonials-container">
+    <a href="{{ url_for('main.submit_testimonial') }}" class="button" style="margin-bottom:24px;">Share Your Story</a>
+    {% for t in testimonials %}
+    <div class="testimonial fade-in">
+      {% if t.image %}
+        <img src="{{ url_for('static', filename=t.image) }}" alt="{{ t.name }}">
+      {% endif %}
+      <p><i class="fas fa-quote-left"></i> {{ t.text }} <i class="fas fa-quote-right"></i></p>
+      <h4>— {{ t.name }}{% if t.country %}, {{ t.country }}{% endif %}</h4>
+      {% if t.rating %}
+        <div class="testimonial-rating">
+          {% for i in range(t.rating) %}<i class="fas fa-star" style="color:#ffc107;"></i>{% endfor %}
+        </div>
+      {% endif %}
+      {% if t.video_url %}
+        <div class="testimonial-video">
+          <video controls width="220">
+            <source src="{{ t.video_url }}" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      {% endif %}
+      {% if t.category %}
+        <div class="testimonial-category">({{ t.category|capitalize }})</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Send Newsletter{% endblock %}
+{% block content %}
+<div class="container">
+    <h2>Send Newsletter/Update to Subscribers</h2>
+    <form method="POST" action="{{ url_for('admin.send_newsletter') }}" class="newsletter-form">
+        <div class="form-group">
+            <label for="subject">Subject:</label>
+            <input type="text" id="subject" name="subject" required class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="body">Message:</label>
+            <textarea id="body" name="body" rows="8" required class="form-control"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Send to All Subscribers</button>
+    </form>
+    {% if sent_count is defined %}
+        <div class="alert alert-success" style="margin-top:20px;">Newsletter sent to {{ sent_count }} subscribers.</div>
+    {% endif %}
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

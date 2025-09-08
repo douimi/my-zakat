@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="events-section">
+    <h2>Upcoming Events</h2>
+    <p>Join our events and make a difference!</p>
+
+    <div class="events-container">
+        {% for event in events %}
+        <div class="event-card">
+            <img src="{{ url_for('static', filename=event.image) }}" alt="{{ event.title }}">
+            <div class="event-info">
+                <h3>{{ event.title }}</h3>
+                <p><strong>Date:</strong> {{ event.date.strftime('%B %d, %Y') }}</p>
+                <p>{{ event.description[:100] }}...</p> <!-- Shortened description -->
+                <a href="{{ url_for('events.event_details', event_id=event.id) }}" class="event-button">Read More</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

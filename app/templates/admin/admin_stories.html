@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Manage Stories{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>📚 Manage Stories</h2>
+
+    <!-- 🔹 Add Story Button -->
+    <div class="admin-actions">
+        <a href="{{ url_for('admin.add_story') }}" class="admin-button">➕ Add New Story</a>
+    </div>
+
+    <!-- 🔹 Stories Table -->
+    {% if stories %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Summary</th>
+                <th>Image</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for story in stories %}
+            <tr>
+                <td>{{ story.id }}</td>
+                <td>{{ story.title }}</td>
+                <td>{{ story.summary[:60] }}...</td>
+                <td>
+                    {% if story.image_filename %}
+                        <img src="{{ url_for('static', filename='images/stories/' ~ story.image_filename) }}"  alt="Story Image" width="80">
+
+                    {% else %}
+                        No Image
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('admin.edit_story', story_id=story.id) }}" class="btn btn-primary btn-sm">Edit</a>
+                    <a href="{{ url_for('admin.delete_story', story_id=story.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this story?');">Delete</a>
+                </td>
+            </tr>            
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p class="no-data">No stories found.</p>
+    {% endif %}
+</div>
+
+<!-- 🔙 Back to Dashboard -->
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+</div>
+{% endblock %}

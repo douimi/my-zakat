@@ -1,0 +1,49 @@
+# Deploying Your Flask Stripe Donation App to PythonAnywhere
+
+## 1. Prepare Your Files
+- Ensure you have the following updated files ready to upload:
+  - app/main/routes.py
+  - app/templates/main/donate.html
+  - .env (update secrets for production, do NOT use test keys in production)
+  - requirements.txt
+  - Any other files you changed for Stripe or donation logic
+
+## 2. Upload Files to PythonAnywhere
+- Log in to your PythonAnywhere account.
+- Go to the 'Files' tab.
+- Upload your updated files to the correct directories, matching your local project structure.
+- If you have a new database, upload it to the correct location (e.g., /home/yourusername/yourproject/instance/contacts.db).
+
+## 3. Set Up Environment Variables
+- In the PythonAnywhere dashboard, go to the 'Web' tab.
+- Under 'Environment Variables', add the variables from your .env file (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, etc.).
+- Do NOT use test keys in production.
+
+## 4. Install Requirements
+- Open a Bash console on PythonAnywhere.
+- Navigate to your project directory.
+- Run:
+  pip install --user -r requirements.txt
+
+## 5. Update Stripe Webhook Endpoint
+- In your Stripe Dashboard, go to Developers > Webhooks.
+- Add or update the endpoint to:
+  https://yourusername.pythonanywhere.com/stripe-webhook
+- Copy the new webhook signing secret and update it in your PythonAnywhere environment variables or .env file.
+
+## 6. Reload Your Web App
+- In the PythonAnywhere 'Web' tab, click 'Reload' to restart your Flask app.
+
+## 7. Test Everything
+- Make a test donation through your live site.
+- Check that donations are saved and emails are sent after payment.
+- Check your error logs on PythonAnywhere if anything goes wrong.
+
+---
+
+**Tip:**
+- For security, never upload your local .env file with test or development secrets to production. Always use production keys and secrets.
+- If you need to migrate your database, use the correct path and permissions.
+
+---
+If you need more help, check the PythonAnywhere help pages or ask for deployment troubleshooting!

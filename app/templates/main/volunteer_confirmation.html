@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Thank You for Volunteering{% endblock %}
+
+{% block content %}
+<section class="confirmation-section">
+    <div class="confirmation-container">
+        <h2>Thank You, {{ name }}!</h2>
+        <p>We appreciate your interest in volunteering with the Zakat Distribution Foundation.</p>
+        <p>We'll reach out to you soon with more details. May Allah reward you generously!</p>
+
+        <a href="{{ url_for('main.home') }}" class="button">Return to Homepage</a>
+    </div>
+</section>
+{% endblock %}

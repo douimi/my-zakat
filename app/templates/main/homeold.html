@@ -1,0 +1,597 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- 🔹 Enhanced Hero Section -->
+<!-- 🔹 Enhanced Hero Section -->
+<section class="hero-section fade-in">
+    <img src="{{ url_for('static', filename='images/hero.jpg') }}" alt="Zakat Charity Support" class="hero-image">
+    <div class="hero-overlay"></div>
+
+    <div class="hero-content">
+        <h1>Your Zakat, Their Lifeline</h1>
+        <p>Join us in making a difference in the lives of those in need.</p>
+        <a href="{{ url_for('main.donate') }}" class="button">Donate Now</a>
+        <p class="trust-message">🌍 Trusted by 10,000+ donors worldwide</p>
+    </div>
+  
+
+
+</section>
+
+<!-- Scroll Down Arrow - overlays the hero -->
+<div class="scroll-down-indicator fixed-outside">
+    <a href="#impact"><i class="fas fa-chevron-down"></i></a>
+</div>
+
+
+
+<div class="welcome-message">
+    <h2>Welcome to the Zakat Distribution Foundation</h2>
+    <div class="sub-nav-inline">
+        <a href="#impact"><i class="fas fa-chart-line"></i> Impact</a>
+        <a href="#programs"><i class="fas fa-hand-holding-heart"></i> Programs</a>
+        <a href="#volunteer"><i class="fas fa-users"></i> Volunteer</a>
+        <a href="#sadaqa"><i class="fas fa-donate"></i> Monthly Giving</a>
+        <a href="#events"><i class="fas fa-calendar-alt"></i> Events</a>
+        <a href="#difference"><i class="fas fa-globe-americas"></i> Make A Difference</a>
+    </div>
+    
+</div>
+
+
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Image Carousel Section with Text -->
+<section class="carousel-section">
+    <div class="carousel-container">
+        <button class="carousel-btn prev" onclick="moveSlide(-1)">&#10094;</button>
+
+        <div class="carousel">
+            <div class="carousel-slide">
+                <img src="{{ url_for('static', filename='images/slide1.jpg') }}" alt="Helping the needy">
+                <div class="carousel-text">"A small act of kindness can change a life."</div>
+            </div>
+            <div class="carousel-slide">
+                <img src="{{ url_for('static', filename='images/slide2.jpg') }}" alt="Providing food and aid">
+                <div class="carousel-text">"Your Zakat feeds the hungry and shelters the homeless."</div>
+            </div>
+            <div class="carousel-slide">
+                <img src="{{ url_for('static', filename='images/slide3.jpg') }}" alt="Supporting orphans">
+                <div class="carousel-text">"Every donation brings hope to someone in need."</div>
+            </div>
+        </div>
+
+        <button class="carousel-btn next" onclick="moveSlide(1)">&#10095;</button>
+        <button class="carousel-btn prev" onclick="moveSlide(-1)">&#10094;</button> 
+
+    </div>
+
+    <div class="carousel-dots" id="main-carousel-dots"></div>
+
+</section>
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<section class="impact-section fade-in">
+    <h2>The Impact of Your Zakat</h2>
+  
+    <div class="impact-container">
+      <div class="impact-video">
+        <video controls>
+          <source src="{{ url_for('static', filename='videos/zakat_impact.mp4') }}" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+  
+      <div class="impact-text">
+        <h3 class="impact-heading">
+          <i class="fas fa-hands-helping"></i> Every Zakat Makes a Difference
+        </h3>
+        <p>
+          Your generosity brings hope and relief to children who have been victims of war and displacement.
+          Watch this short video to see how your donations make a life-changing difference.
+        </p>
+      </div>
+    </div>
+  
+    <!-- Donate Button Centered Below Box -->
+    <div class="impact-donate-wrapper">
+      <a href="{{ url_for('main.donate') }}" class="impact-donate-button">Donate Now</a>
+    </div>
+  </section>
+  
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+
+<!-- 🔹 Ramadan Giving Campaign Section -->
+<section class="ramadan-campaign">
+    <div class="campaign-content">
+        <img src="{{ url_for('static', filename='images/ramadan_drive.jpg') }}" alt="Ramadan Food Drive" class="campaign-image">
+        <div class="campaign-text">
+            <h2>Ramadan Giving Campaign</h2>
+            <p>Join us in making a difference this Ramadan. Your Zakat and Sadaqa help provide food, water, and essential supplies to those in need.</p>
+
+            <!-- Progress Tracker -->
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ (total_ramadan_donations / 50000) * 100 }}%;"></div>
+            </div>
+            <p>Raised: ${{ total_ramadan_donations + 2000| int }} of $50000 goal</p>
+
+            <!-- Call to Action -->
+            <a href="{{ url_for('main.donate') }}" class="campaign-button">Donate Now</a>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Testimonials & Impact Stories Section -->
+<section class="testimonials fade-in">
+  <h2>🌟 What People Say About Us</h2>
+  <p class="section-subtitle">Short quotes from those you’ve helped</p>
+  <div class="testimonials-container">
+    <div class="testimonial fade-in">
+      <img src="{{ url_for('static', filename='images/testimonial1.jpeg') }}" alt="Ahmed">
+      <p><i class="fas fa-quote-left"></i> ZDF gave us clean water. May Allah bless you! <i class="fas fa-quote-right"></i></p>
+      <h4>— Ahmed, Yemen</h4>
+    </div>
+    <div class="testimonial fade-in">
+      <img src="{{ url_for('static', filename='images/testimonial2.jpeg') }}" alt="Fatima">
+      <p><i class="fas fa-quote-left"></i> ZDF provided education for my kids. <i class="fas fa-quote-right"></i></p>
+      <h4>— Fatima, Syria</h4>
+    </div>
+    <div class="testimonial fade-in">
+      <img src="{{ url_for('static', filename='images/testimonial3.jpeg') }}" alt="Amina">
+      <p><i class="fas fa-quote-left"></i> Thanks to your generosity, we now have food. <i class="fas fa-quote-right"></i></p>
+      <h4>— Amina, Sudan</h4>
+    </div>
+  </div>
+</section>
+
+{% if featured_stories %}
+<section class="real-stories fade-in">
+  <h2>🌟 Featured Stories</h2>
+
+  <div class="carousel-container">
+    <button class="carousel-btn prev" onclick="moveFeaturedSlide(-1)">&#10094;</button>
+
+    <div class="carousel" id="featured-carousel">
+      {% for story in featured_stories %}
+      <div class="carousel-slide">
+        <img src="{{ url_for('static', filename='images/stories/' ~ story.image_filename) }}" alt="{{ story.title }}">
+        <div class="carousel-text">
+          <h3>{{ story.title }}</h3>
+          <p>{{ story.summary[:100] }}...</p>
+          <a href="{{ url_for('main.story_detail', story_id=story.id) }}" class="read-more">Read More</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="carousel-dots" id="featured-carousel-dots"></div>           
+
+    <button class="carousel-btn next" onclick="moveFeaturedSlide(1)">&#10095;</button>
+  </div>
+
+</section>
+{% endif %}
+
+
+
+
+
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Monthly Donors (Sadaqa Jariya) Section -->
+<section id="sadaqa" class="sadaqa-jariya fade-in">
+    <h2>💖 Be a Lifeline — Join Our Monthly Donors</h2>
+    <p>Your steady support means food, shelter, and hope — every single month.</p>
+    <p class="monthly-count">🌟 152 families rely on monthly donors like you.</p>
+
+    <div class="donor-grid">
+        <div class="donor-card fade-in">
+            <img src="{{ url_for('static', filename='images/donor1.jpeg') }}" alt="Donor 1">
+            <p><strong>Ali Khan</strong></p>
+            <p>"Giving monthly brings joy to my heart, knowing I'm helping someone in need."</p>
+            <div class="donor-impact-badge">🌱 Sustains 3 families</div>
+        </div>
+        <div class="donor-card fade-in">
+            <img src="{{ url_for('static', filename='images/donor2.jpeg') }}" alt="Donor 2">
+            <p><strong>Fatima Ahmed</strong></p>
+            <p>"Sadaqa Jariya is my way of leaving a lasting impact."</p>
+            <div class="donor-impact-badge">📚 Supports 2 orphans</div>
+        </div>
+        <div class="donor-card fade-in">
+            <img src="{{ url_for('static', filename='images/donor3.jpeg') }}" alt="Donor 3">
+            <p><strong>Mohammed Yusuf</strong></p>
+            <p>"Giving monthly allows me to support causes close to my heart effortlessly."</p>
+            <div class="donor-impact-badge">🍲 Provides 30 meals/month</div>
+        </div>
+    </div>
+
+    <div class="donate-monthly">
+        <a href="{{ url_for('main.donate') }}" class="cta-button big-donate-button">
+            💚 Start Giving Monthly
+        </a>
+    </div>
+</section>
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Press Release Section -->
+<!-- 🔹 Press Release Section -->
+<section class="press-release-section fade-in">
+    <h2>Press Releases & News</h2>
+
+    <div class="press-container">
+        <div class="press-box">
+            <img src="{{ url_for('static', filename='images/press1.jpg') }}" alt="Emergency Aid">
+            <h3>Emergency Aid Delivered to Refugees</h3>
+            <p class="press-date">March 1, 2024</p>
+            <p>We successfully distributed food, water, and medical supplies to over 500 families in urgent need.</p>
+        </div>
+
+        <div class="press-box">
+            <img src="{{ url_for('static', filename='images/press2.jpg') }}" alt="Zakat Awareness">
+            <h3>New Zakat Awareness Campaign Launched</h3>
+            <p class="press-date">February 15, 2024</p>
+            <p>Our new campaign aims to educate communities on the impact of Zakat and how they can contribute.</p>
+        </div>
+
+        <div class="press-box">
+            <img src="{{ url_for('static', filename='images/press3.jpg') }}" alt="Water Wells">
+            <h3>Building Water Wells for Communities</h3>
+            <p class="press-date">January 10, 2024</p>
+            <p>We have launched a project to provide clean water access to villages in remote areas.</p>
+        </div>
+    </div>
+</section>
+
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+
+<!-- 🔹 Our Programs Section -->
+<section id="programs" class="programs-section" fade-in>
+    <h2>Our Programs</h2>
+
+    <div class="programs-container">
+        <div class="program-box">
+            <img src="{{ url_for('static', filename='images/program1.jpg') }}" alt="Helping the Needy">
+            <h3>Helping the Needy</h3>
+            <p>Providing food, water, and essential support to impoverished communities worldwide.</p>
+        </div>
+
+        <div class="program-box">
+            <img src="{{ url_for('static', filename='images/program2.jpg') }}" alt="Supporting Victims">
+            <h3>Supporting Victims</h3>
+            <p>Emergency relief for victims of war, natural disasters, and humanitarian crises.</p>
+        </div>
+
+        <div class="program-box">
+            <img src="{{ url_for('static', filename='images/program3.jpg') }}" alt="Caring for Orphans">
+            <h3>Caring for Orphans</h3>
+            <p>Ensuring education, shelter, and well-being for orphaned children around the world.</p>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Making a Difference Section -->
+<section  class="impact-section" fade-in>
+    
+    <h2>Making a Difference</h2>
+    <p id= "difference" class="impact-subtitle">Real Stories, Real Change, Real Impact...</p>
+
+    <div class="impact-container">
+        <div class="impact-box">
+            <img src="{{ url_for('static', filename='images/impact1.jpeg') }}" alt="Community Water Project">
+            <h3>Clean Water for All</h3>
+            <p>Through our water well initiatives, we have provided clean drinking water to thousands of families in remote areas.</p>
+        </div>
+
+        <div class="impact-box">
+            <img src="{{ url_for('static', filename='images/impact2.jpeg') }}" alt="Feeding Program">
+            <h3>Feeding the Hungry</h3>
+            <p>Our food distribution programs ensure that vulnerable communities have access to nutritious meals every day.</p>
+        </div>
+
+        <div class="impact-box">
+            <img src="{{ url_for('static', filename='images/impact3.jpeg') }}" alt="Education for Orphans">
+            <h3>Education for Orphans</h3>
+            <p>We empower orphans by providing access to quality education, ensuring a brighter future for every child in need.</p>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Sponsor a Child / Family Section -->
+<section class="sponsorship-section" fade-in>
+    <h2>Make a Difference: Sponsor a Child, Orphan, or Family</h2>
+    <p>Your sponsorship provides food, shelter, education, and healthcare for those in need.</p>
+
+    <div class="sponsorship-container">
+        <!-- Sponsor a Child -->
+        <div class="sponsorship-box">
+            <img src="{{ url_for('static', filename='images/sponsor_child.jpeg') }}" alt="Sponsor a Child">
+            <h3>Sponsor a Child</h3>
+            <p>Help provide a brighter future for a child in need by covering their basic necessities and education.</p>
+            <a href="{{ url_for('main.donate') }}" class="sponsor-button">Sponsor Now</a>
+        </div>
+
+        <!-- Sponsor an Orphan -->
+        <div class="sponsorship-box">
+            <img src="{{ url_for('static', filename='images/sponsor_orphan.jpeg') }}" alt="Sponsor an Orphan">
+            <h3>Sponsor an Orphan</h3>
+            <p>Support an orphan by giving them access to food, shelter, and education to build a better life.</p>
+            <a href="{{ url_for('main.donate') }}" class="sponsor-button">Sponsor Now</a>
+        </div>
+
+        <!-- Sponsor a Family -->
+        <div class="sponsorship-box">
+            <img src="{{ url_for('static', filename='images/sponsor_family.jpeg') }}" alt="Sponsor a Family">
+            <h3>Sponsor a Family</h3>
+            <p>Provide urgent support to families struggling with poverty and displacement through your generous donations.</p>
+            <a href="{{ url_for('main.donate') }}" class="sponsor-button">Sponsor Now</a>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Volunteer Section -->
+<section id="volunteer" class="volunteer-section" fade-in>
+    <h2>Get Involved: Volunteer With Us</h2>
+    <p>Make a difference by joining our team of volunteers. Here are some ways you can help:</p>
+
+    <div class="volunteer-container">
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/volunteer.jpg') }}" alt="Volunteer Opportunity">
+            <h3>General Volunteering</h3>
+            <p>Help distribute aid, organize events, and make a difference in your community.</p>
+            <a href="{{ url_for('main.volunteer') }}" class="volunteer-button">Learn More</a>
+        </div>
+
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/fundraiser.jpg') }}" alt="Fundraising">
+            <h3>Fundraising</h3>
+            <p>Raise funds to support our mission and provide resources for those in need.</p>
+            <a href="{{ url_for('main.volunteer') }}" class="volunteer-button">Get Involved</a>
+        </div>
+
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/outreach_coordinator.jpg') }}" alt="Community Outreach">
+            <h3>Community Outreach</h3>
+            <p>Engage with local communities to spread awareness and expand our reach.</p>
+            <a href="{{ url_for('main.volunteer') }}" class="volunteer-button">Join Now</a>
+        </div>
+    </div>
+</section>
+
+
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<!-- 🔹 Social Media & Latest News Section -->
+<section class="news-social-section fade-in">
+    <div class="news-container">
+        <h3>Latest News</h3>
+        <div class="news-item">
+            <img src="{{ url_for('static', filename='images/news1.jpeg') }}" alt="News Image">
+            <div class="news-content">
+                <h4>Emergency Relief in Sudan</h4>
+                <p>We have launched a new emergency relief effort to support families affected by recent floods.</p>
+                <a href="#">Read More</a>
+            </div>
+        </div>
+        <div class="news-item">
+            <img src="{{ url_for('static', filename='images/news2.jpeg') }}" alt="News Image">
+            <div class="news-content">
+                <h4>New Zakat Calculator Update</h4>
+                <p>Our updated Zakat Calculator makes it easier than ever to calculate and give your Zakat.</p>
+                <a href="#">Read More</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="social-container">
+        <h3>Follow Us</h3>
+        <div class="social-feed">
+            <a href="https://twitter.com/YOURHANDLE" target="_blank">Twitter Feed</a>
+            <a href="https://facebook.com/YOURPAGE" target="_blank">Facebook Updates</a>
+            <a href="https://instagram.com/YOURHANDLE" target="_blank">Instagram Highlights</a>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Newsletter Subscription Section -->
+<section class="newsletter-section fade-in">
+    <div class="newsletter-content">
+        <h2>Stay Updated with Our Latest News</h2>
+        <p>Subscribe to our newsletter to receive updates on our latest campaigns, success stories, and upcoming events.</p>
+        <form action="{{ url_for('main.subscribe_newsletter') }}" method="POST" class="newsletter-form">
+            <input type="email" name="email" placeholder="Enter your email address" required>
+            <button type="submit" class="subscribe-button">Subscribe</button>
+        </form>
+    </div>
+</section>
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+<section id="events" class="events-section fade-in">
+    <h2>Upcoming Events</h2>
+    <p>Join our upcoming charity events and make a difference in people's lives.</p>
+
+    <div class="events-container">
+        {% for event in events %}
+        <div class="event-box">
+            <img src="{{ url_for('static', filename='images/events/' ~ event.image) }}" alt="{{ event.title }}">
+            <h3>{{ event.title }}</h3>
+            <p>{{ event.description[:100] }}...</p>
+            <p><strong>Date:</strong> {{ event.date.strftime('%B %d, %Y') }}</p>
+            <a href="{{ url_for('events.event_details', event_id=event.id) }}" class="event-button">Learn More</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+
+<!-- 🔹 Separator -->
+<div class="gradient-section"></div>
+
+
+<section id="impact" class="impact-summary section-light fade-in">
+    <h2>Our Impact So Far</h2>
+  
+    <!-- Progress Bar -->
+    <div class="progress-bar-container">
+      <span class="progress-label">Funds Raised: ${{ (total_donations) }} / $500,000 Goal</span>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: {{ (total_donations / 500000) * 100 }}%;"></div>
+      </div>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-box">
+          <i class="fas fa-utensils"></i>
+          <h3>{{ meals }}</h3>
+          <p>Meals Provided</p>
+        </div>
+        <div class="stat-box">
+          <i class="fas fa-home"></i>
+          <h3>{{ families }}</h3>
+          <p>Families Helped</p>
+        </div>
+        <div class="stat-box">
+          <i class="fas fa-child"></i>
+          <h3>{{ orphans }}</h3>
+          <p>Orphans Sponsored</p>
+        </div>
+        <div class="stat-box">
+          <i class="fas fa-hand-holding-usd"></i>
+          <h3>${{ '{:,.0f}'.format(total_donations) }}</h3>
+          <p>Total Donations</p>
+        </div>
+      </div>
+      
+  
+  
+
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const counters = document.querySelectorAll(".counter");
+
+        counters.forEach(counter => {
+            counter.innerText = "0";
+            const updateCounter = () => {
+                const target = +counter.getAttribute("data-target");
+                const count = +counter.innerText;
+                const increment = target / 100;
+
+                if (count < target) {
+                    counter.innerText = Math.ceil(count + increment);
+                    setTimeout(updateCounter, 20);
+                } else {
+                    counter.innerText = target;
+                }
+            };
+            updateCounter();
+        });
+    });
+</script>
+
+
+<script>
+let slideIndex = 0;
+showSlides();
+
+function moveSlide(n) {
+    slideIndex += n;
+    showSlides();
+}
+
+function showSlides() {
+    const slides = document.querySelectorAll(".carousel-section .carousel-slide");
+    const dotsContainer = document.getElementById("main-carousel-dots");
+    const numSlides = slides.length;
+
+    if (slideIndex >= numSlides) slideIndex = 0;
+    if (slideIndex < 0) slideIndex = numSlides - 1;
+
+    slides.forEach((slide, i) => {
+        slide.style.display = i === slideIndex ? "flex" : "none";
+    });
+
+    // Dots
+    dotsContainer.innerHTML = '';
+    for (let i = 0; i < numSlides; i++) {
+        const dot = document.createElement("span");
+        dot.className = "dot" + (i === slideIndex ? " active" : "");
+        dot.onclick = () => {
+            slideIndex = i;
+            showSlides();
+        };
+        dotsContainer.appendChild(dot);
+    }
+}
+
+setInterval(() => { moveSlide(1); }, 4000);
+</script>
+
+<script>
+let featuredIndex = 0;
+showFeaturedSlides();
+
+function moveFeaturedSlide(n) {
+    featuredIndex += n;
+    showFeaturedSlides();
+}
+
+function showFeaturedSlides() {
+    const slides = document.querySelectorAll("#featured-carousel .carousel-slide");
+    const dotsContainer = document.getElementById("featured-carousel-dots");
+    const numSlides = slides.length;
+
+    if (slides.length === 0) return;
+
+    if (featuredIndex >= numSlides) featuredIndex = 0;
+    if (featuredIndex < 0) featuredIndex = numSlides - 1;
+
+    // Hide all slides
+    slides.forEach(slide => {
+        slide.style.display = "none";
+    });
+
+    // Show only the current one
+    slides[featuredIndex].style.display = "flex";
+
+    // Build dots
+    dotsContainer.innerHTML = '';
+    for (let i = 0; i < numSlides; i++) {
+        const dot = document.createElement("span");
+        dot.className = "dot" + (i === featuredIndex ? " active" : "");
+        dot.onclick = () => {
+            featuredIndex = i;
+            showFeaturedSlides();
+        };
+        dotsContainer.appendChild(dot);
+    }
+}
+
+// Auto-slide every 6 seconds
+setInterval(() => { moveFeaturedSlide(1); }, 6000);
+</script>
+
+
+{% endblock %}

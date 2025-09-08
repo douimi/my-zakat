@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myzakat-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - DATABASE_URL=sqlite:///instance/contacts.db
+      - MAIL_SERVER=${MAIL_SERVER:-smtp.gmail.com}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USE_TLS=true
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-jwt-secret}
+      - CORS_ORIGINS=http://localhost,http://localhost:80,http://localhost:4200
+    volumes:
+      - ./backend/instance:/app/instance
+      - ./backend/uploads:/app/uploads
+      - ./app/static/images:/app/static/images:ro
+    networks:
+      - myzakat-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: myzakat-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - myzakat-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Database service for production
+  # Uncomment if you want to use PostgreSQL instead of SQLite
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: myzakat-db
+  #   environment:
+  #     - POSTGRES_DB=myzakat
+  #     - POSTGRES_USER=${DB_USER:-myzakat}
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD:-secure-password}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - myzakat-network
+  #   restart: unless-stopped
+
+networks:
+  myzakat-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

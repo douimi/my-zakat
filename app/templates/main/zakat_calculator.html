@@ -1,0 +1,343 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="zakat-calculator-section">
+    <div class="zakat-title-area">
+        <h2><i class="fas fa-balance-scale" style="color:#28a745;"></i> Zakat Calculator</h2>
+        <p class="zakat-subtitle">Easily estimate your annual Zakat in a few simple steps.</p>
+    </div>
+    <p class="zakat-intro-text"><i class="fas fa-info-circle" style="color:#007bff;"></i> Use this calculator to estimate your Zakat obligation. Enter the value for each asset you own—no need to fill every field. The calculator will sum your zakatable assets automatically.</p>
+
+    {% if zakat_results %}
+    <a id="zakat-results"></a>
+    <div class="zakat-results-card" style="max-width:900px;margin:0 auto 2em auto;padding:2em 1.5em 1.5em 1.5em;background:#f6fff7;border-radius:16px;box-shadow:0 2px 12px rgba(40,167,69,0.10);">
+        <h3 style="color:#28a745;"><i class="fas fa-check-circle"></i> Zakat Calculation Results</h3>
+        <table class="zakat-results-table" style="width:100%;margin-top:1em;">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Zakat Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Zakat on Wealth</td>
+                    <td>${{ zakat_results['wealth'] | round(2) }}</td>
+                </tr>
+                <tr>
+                    <td>Zakat on Gold</td>
+                    <td>${{ zakat_results['gold'] | round(2) }}</td>
+                </tr>
+                <tr>
+                    <td>Zakat on Silver</td>
+                    <td>${{ zakat_results['silver'] | round(2) }}</td>
+                </tr>
+                <tr>
+                    <td>Zakat on Business Goods</td>
+                    <td>${{ zakat_results['business_goods'] | round(2) }}</td>
+                </tr>
+                <tr>
+                    <td>Zakat on Agricultural Produce</td>
+                    <td>${{ zakat_results['agriculture'] | round(2) }}</td>
+                </tr>
+                {% if zakat_results.total_eligible_wealth is defined %}
+                <tr>
+                    <td>Total Zakat-Eligible Wealth</td>
+                    <td>${{ zakat_results['total_eligible_wealth'] | round(2) }}</td>
+                </tr>
+                {% endif %}
+                <tr class="total-row">
+                    <th>Total Zakat Due</th>
+                    <th style="color:#218838;font-size:1.2em;">${{ zakat_results['total'] | round(2) }}</th>
+                </tr>
+            </tbody>
+        </table>
+        <div class="donate-section" style="margin-top:1.5em;text-align:center;">
+            <p>Would you like to donate your Zakat?</p>
+            <a href="{{ url_for('main.donate', zakat_amount=zakat_results['total']) }}" class="donate-button" style="background:#28a745;color:#fff;padding:0.7em 2em;border-radius:8px;font-weight:600;font-size:1.1em;text-decoration:none;display:inline-block;margin-top:0.5em;">
+                <i class="fas fa-donate"></i> Donate ${{ zakat_results['total'] | round(2) }}
+            </a>
+        </div>
+    </div>
+    <script>
+    // Scroll to results if present
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.location.hash === '#zakat-results' || document.getElementById('zakat-results')) {
+            document.getElementById('zakat-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+    </script>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('main.zakat_calculator') }}#zakat-results" class="zakat-form zakat-form-card zakat-form-large">
+        
+        <!-- 🔹 Liabilities Section -->
+        <fieldset>
+            <legend>Liabilities <span class="info-tooltip" title="Debts or obligations due within the year. These are subtracted from your zakatable assets."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="liabilities">
+                        <i class="fa-solid fa-scale-balanced" aria-hidden="true"></i> Liabilities
+                        <span class="tooltip" title="Debts and obligations due within the year."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="liabilities" name="liabilities" step="0.01" placeholder="Enter total liabilities">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Cash & Receivables Section -->
+        <fieldset>
+            <legend>Cash & Receivables <span class="info-tooltip" title="Include all cash at home, in wallets, and in all bank accounts. Receivables are money owed to you that you expect to receive."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cash">
+                        <i class="fa-solid fa-money-bill-wave" aria-hidden="true"></i> Cash
+                        <span class="tooltip" title="Cash in hand, bank accounts, wallets, etc."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="cash" name="cash" step="0.01" placeholder="Enter total cash">
+                </div>
+                <div class="form-group">
+                    <label for="receivables">
+                        <i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i> Receivables
+                        <span class="tooltip" title="Money owed to you that you expect to receive."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="receivables" name="receivables" step="0.01" placeholder="Enter receivables">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Investments Section -->
+        <fieldset>
+            <legend>Investments <span class="info-tooltip" title="Market value of stocks, bonds, mutual funds, and retirement accounts (if zakatable). Exclude non-zakatable pensions."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="stocks">
+                        <i class="fa-solid fa-chart-line" aria-hidden="true"></i> Stocks & Investments
+                        <span class="tooltip" title="Market value of stocks, mutual funds, etc."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="stocks" name="stocks" step="0.01" placeholder="Enter total value">
+                </div>
+                <div class="form-group">
+                    <label for="retirement">
+                        <i class="fa-solid fa-piggy-bank" aria-hidden="true"></i> Retirement Accounts
+                        <span class="tooltip" title="Zakatable portion of retirement funds (401k, IRA, etc.)"><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="retirement" name="retirement" step="0.01" placeholder="Enter value (if applicable)">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Gold & Silver Section -->
+        <fieldset>
+            <legend>Gold & Silver <span class="info-tooltip" title="Enter the weight and current price per gram for gold and silver you own. Personal jewelry is zakatable according to most scholars."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="gold_weight">
+                        <i class="fa-solid fa-coins" aria-hidden="true"></i> Gold (grams)
+                        <span class="tooltip" title="Total weight of gold in grams."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="gold_weight" name="gold_weight" step="0.01" placeholder="Enter gold weight">
+                </div>
+                <div class="form-group">
+                    <label for="gold_price_per_gram">
+                        <i class="fa-solid fa-dollar-sign" aria-hidden="true"></i> Gold Price/Gram
+                        <span class="tooltip" title="Current price per gram of gold."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="gold_price_per_gram" step="0.01" name="gold_price_per_gram" placeholder="Enter gold price per gram">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="silver_weight">
+                        <i class="fa-solid fa-coins" aria-hidden="true"></i> Silver (grams)
+                        <span class="tooltip" title="Total weight of silver in grams."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="silver_weight" name="silver_weight" step="0.01" placeholder="Enter silver weight">
+                </div>
+                <div class="form-group">
+                    <label for="silver_price_per_gram">
+                        <i class="fa-solid fa-dollar-sign" aria-hidden="true"></i> Silver Price/Gram
+                        <span class="tooltip" title="Current price per gram of silver."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="silver_price_per_gram" step="0.01" name="silver_price_per_gram" placeholder="Enter silver price per gram">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Business & Agriculture Section -->
+        <fieldset>
+            <legend>Business & Agriculture <span class="info-tooltip" title="Value of business inventory, goods for sale, and agricultural produce ready for sale."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-group">
+                <label for="business_goods">
+                    <i class="fa-solid fa-store" aria-hidden="true"></i> Business Goods
+                    <span class="tooltip" title="Value of inventory and goods for sale."><i class="fa-solid fa-circle-info"></i></span>
+                </label>
+                <input type="number" id="business_goods" name="business_goods" step="0.01" placeholder="Enter business goods value">
+            </div>
+            <div class="form-group">
+                <label for="agriculture_value">
+                    <i class="fa-solid fa-wheat-awn" aria-hidden="true"></i> Agriculture Produce
+                    <span class="tooltip" title="Market value of crops and produce."><i class="fa-solid fa-circle-info"></i></span>
+                </label>
+                <input type="number" id="agriculture_value" name="agriculture_value" step="0.01" placeholder="Enter agricultural produce value">
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Property & Other Assets Section -->
+        <fieldset>
+            <legend>Property & Other Assets <span class="info-tooltip" title="Only include property held for investment or resale, not your personal residence. Include other zakatable valuables and livestock."><i class="fas fa-info-circle"></i></span></legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="investment_property">
+                        <i class="fa-solid fa-building" aria-hidden="true"></i> Investment Property
+                        <span class="tooltip" title="Value of property held for investment (not personal residence)."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="investment_property" name="investment_property" step="0.01" placeholder="Enter value">
+                </div>
+                <div class="form-group">
+                    <label for="other_valuables">
+                        <i class="fa-solid fa-gem" aria-hidden="true"></i> Other Valuables
+                        <span class="tooltip" title="Jewelry, collectibles, or other valuable items."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="other_valuables" name="other_valuables" step="0.01" placeholder="Enter value">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="livestock">
+                        <i class="fa-solid fa-cow" aria-hidden="true"></i> Livestock
+                        <span class="tooltip" title="Value of zakatable livestock (cows, sheep, camels, etc.)"><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="livestock" name="livestock" step="0.01" placeholder="Enter value">
+                </div>
+                <div class="form-group">
+                    <label for="other_assets">
+                        <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Other Assets
+                        <span class="tooltip" title="Any other zakatable assets not listed above."><i class="fa-solid fa-circle-info"></i></span>
+                    </label>
+                    <input type="number" id="other_assets" name="other_assets" step="0.01" placeholder="Enter value">
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 🔹 Nisab Display -->
+        <div class="nisab-info">
+            <strong>Nisab (minimum threshold):</strong> <span id="nisab-value">87.48g gold or 612.36g silver (or their cash equivalent)</span>
+            <span class="info-tooltip" title="If your total zakatable assets are below the Nisab, zakat is not obligatory."><i class="fas fa-info-circle"></i></span>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="calculate-btn"><i class="fas fa-calculator"></i> Calculate Zakat</button>
+            <button type="reset" class="reset-btn" style="margin-left:12px;"><i class="fas fa-undo"></i> Clear</button>
+        </div>
+    </form>
+
+    <style>
+.zakat-title-area {
+  text-align: center;
+  margin-bottom: 0.5em;
+}
+.zakat-title-area h2 {
+  font-size: 2.2em;
+  font-weight: 700;
+  margin-bottom: 0.2em;
+  letter-spacing: 0.01em;
+}
+.zakat-subtitle {
+  color: #555;
+  font-size: 1.1em;
+  margin-bottom: 0.5em;
+}
+.zakat-intro-text {
+  text-align: center;
+  font-size: 1.08em;
+  margin-bottom: 1.2em;
+  color: #333;
+}
+.zakat-form-card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 2px 16px rgba(40,167,69,0.08);
+  padding: 2.5em 2.5em 2em 2.5em;
+  max-width: 800px;
+  margin: 0 auto 2em auto;
+}
+.zakat-form-large {
+  max-width: 900px;
+  padding: 3em 2.5em 2.5em 2.5em;
+}
+.zakat-form-card fieldset {
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  margin-bottom: 1.2em;
+  padding: 1em 1em 0.5em 1em;
+  background: #f9fafb;
+}
+.zakat-form-card legend {
+  font-weight: 600;
+  color: #28a745;
+  font-size: 1.08em;
+  margin-bottom: 0.5em;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.zakat-form-card .form-group label {
+  font-weight: 500;
+  color: #333;
+}
+.zakat-form-card input[type="number"] {
+  border-radius: 8px;
+  border: 1px solid #cfd8dc;
+  padding: 0.5em 0.8em;
+  font-size: 1em;
+  width: 100%;
+  margin-bottom: 0.5em;
+  background: #fff;
+  transition: border 0.2s;
+}
+.zakat-form-card input[type="number"]:focus {
+  border: 1.5px solid #28a745;
+  outline: none;
+}
+.calculate-btn {
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7em 1.5em;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 8px rgba(40,167,69,0.08);
+}
+.calculate-btn:hover {
+  background: #218838;
+}
+.reset-btn {
+  background: #f8f9fa;
+  color: #333;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  padding: 0.7em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.reset-btn:hover {
+  background: #e0e0e0;
+}
+@media (max-width: 900px) {
+  .zakat-form-card, .zakat-form-large {
+    max-width: 98vw;
+    padding: 1em 0.5em 1em 0.5em;
+  }
+  .zakat-title-area h2 {
+    font-size: 1.3em;
+  }
+}
+</style>
+</section>
+{% endblock %}

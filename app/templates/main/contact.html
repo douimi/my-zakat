@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="contact-container fade-in">
+    <h2 class="section-title"><span class="section-icon"><i class="fas fa-envelope"></i></span>Contact Us</h2>
+    <p class="section-tagline">
+        We’d love to hear from you! Whether you have questions about our work, want to learn more about how your
+        contributions are making a difference, or need assistance, feel free to reach out to us.
+    </p>
+    <div class="contact-flex">
+        <!-- Contact Info Card -->
+        <section class="contact-section contact-info-card">
+            <h3>Our Office</h3>
+            <div class="contact-info">
+                <p><strong>Zakat Distribution Foundation</strong></p>
+                <p>123 Charity Lane<br>Alexandria, VA, USA</p>
+                <p>Email: <a href="mailto:info@myzakat.org">info@myzakat.org</a></p>
+                <p>Phone: <a href="tel:+15551234567">+1 (555) 123-4567</a></p>
+                <div class="footer-social">
+                    <a href="https://twitter.com/YOURHANDLE" target="_blank" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="https://facebook.com/YOURPAGE" target="_blank" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                    <a href="https://instagram.com/YOURHANDLE" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                    <a href="https://linkedin.com/YOURPAGE" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                    <a href="https://youtube.com/YOURCHANNEL" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+                </div>
+                <div class="faq-link">
+                    <a href="{{ url_for('main.home') }}#faq"><i class="fas fa-question-circle"></i> Visit our FAQ</a>
+                </div>
+            </div>
+            <div class="map-embed">
+                <!-- Optional: Embed a map or static image here -->
+                <!-- <iframe src="https://www.google.com/maps/embed?..." width="100%" height="180" style="border:0;" allowfullscreen="" loading="lazy"></iframe> -->
+            </div>
+        </section>
+        <!-- Contact Form Card -->
+        <section class="contact-section contact-form-card">
+            <h3>Get in Touch</h3>
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash-message">
+                        {% for message in messages %}
+                            <p>{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            <form action="/submit-contact" method="POST" class="contact-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Your Name:</label>
+                        <input type="text" id="name" name="name" placeholder="Enter your name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Your Email:</label>
+                        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="phone">Phone (optional):</label>
+                        <input type="tel" id="phone" name="phone" placeholder="(optional)">
+                    </div>
+                    <div class="form-group">
+                        <label for="inquiry">Inquiry Type:</label>
+                        <select id="inquiry" name="inquiry" required>
+                            <option value="General">General</option>
+                            <option value="Donation">Donation</option>
+                            <option value="Volunteering">Volunteering</option>
+                            <option value="Support">Support</option>
+                        </select>
+                    </div>
+                </div>
+                <label for="message">Your Message:</label>
+                <textarea id="message" name="message" rows="5" placeholder="Write your message here..." required></textarea>
+                <button type="submit" class="submit-button">Send Message</button>
+            </form>
+        </section>
+    </div>
+    <!-- Subscribe Section -->
+    <section class="contact-section subscribe-section fade-in">
+        <h3 class="section-title"><span class="section-icon"><i class="fas fa-bell"></i></span>Subscribe for Updates</h3>
+        <form action="{{ url_for('main.subscribe') }}" method="POST" class="subscribe-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="sub_name">Name (optional):</label>
+                    <input type="text" id="sub_name" name="name" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label for="sub_email">Email:</label>
+                    <input type="email" id="sub_email" name="email" placeholder="Your email" required>
+                </div>
+            </div>
+            <button type="submit" class="submit-button">Subscribe</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

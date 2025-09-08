@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Donations{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">Manage Donations</h1>
+
+    <!-- Search and Filter Form -->
+    <form method="GET" action="{{ url_for('admin.manage_donations') }}" class="search-filter-form">
+        <input type="text" name="query" placeholder="Search by Name or Email" value="{{ request.args.get('query', '') }}">
+        <select name="frequency">
+            <option value="">All Frequencies</option>
+            <option value="One-Time" {% if request.args.get('frequency') == 'One-Time' %}selected{% endif %}>One-Time</option>
+            <option value="Monthly" {% if request.args.get('frequency') == 'Monthly' %}selected{% endif %}>Monthly</option>
+            <option value="Yearly" {% if request.args.get('frequency') == 'Yearly' %}selected{% endif %}>Yearly</option>
+        </select>
+        <button type="submit">Filter</button>
+    </form>
+
+    <!-- Donations Summary -->
+    <div class="summary-cards">
+        <div class="summary-card green">
+            <h2>Total Donations</h2>
+            <p>${{ total_donations }}</p>
+        </div>
+        <div class="summary-card blue">
+            <h2>Ramadan Donations</h2>
+            <p>${{ total_ramadan_donations }}</p>
+        </div>
+    </div>
+
+    <!-- Donations Table -->
+    <div class="table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Amount</th>
+                    <th>Frequency</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for donation in donations.items %}
+                <tr>
+                    <td>{{ donation.id }}</td>
+                    <td>{{ donation.name }}</td>
+                    <td>{{ donation.email }}</td>
+                    <td>${{ donation.amount }}</td>
+                    <td>
+                        {% if donation.frequency == 'Monthly' %}
+                            <span class="status-badge status-monthly">📅 Monthly</span>
+                        {% elif donation.frequency == 'Yearly' %}
+                            <span class="status-badge status-yearly">📆 Yearly</span>
+                        {% elif donation.frequency == 'One-Time' %}
+                            <span class="status-badge status-onetime">🎁 One-Time</span>
+                        {% else %}
+                            <span class="status-badge status-onetime">🎁 One-Time</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ donation.donated_at.strftime('%Y-%m-%d %H:%M')}}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls">
+        {% if donations.has_prev %}
+            <a href="{{ url_for('admin.manage_donations', page=donations.prev_num, query=request.args.get('query', ''), frequency=request.args.get('frequency', '')) }}" class="pagination-button">
+                ← Previous
+            </a>
+        {% endif %}
+        <span>Page {{ donations.page }} of {{ donations.pages }}</span>
+        {% if donations.has_next %}
+            <a href="{{ url_for('admin.manage_donations', page=donations.next_num, query=request.args.get('query', ''), frequency=request.args.get('frequency', '')) }}" class="pagination-button">
+                Next →
+            </a>
+        {% endif %}
+    </div>
+
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="btn-back">
+        ⬅️ Back to Admin Dashboard
+    </a>
+</div>
+{% endblock %}

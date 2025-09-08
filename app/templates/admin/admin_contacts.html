@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Contacts Submission{% endblock %}
+
+{% block content %}
+<!-- 🔹 Contact Submissions Search & Filter -->
+<form method="GET" action="{{ url_for('admin.manage_contacts') }}" class="filter-form">
+    <input type="text" name="query" placeholder="Search submissions..." value="{{ request.args.get('query', '') }}">
+    <select name="filter">
+        <option value="" {% if not request.args.get('filter') %}selected{% endif %}>All</option>
+        <option value="pending" {% if request.args.get('filter') == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="resolved" {% if request.args.get('filter') == 'resolved' %}selected{% endif %}>Resolved</option>
+    </select>
+    <button type="submit">Filter</button>
+</form>
+
+<!-- 🔹 Contact Submissions Table -->
+<h3 class="text-2xl font-bold my-4">Contact Submissions</h3>
+{% if contacts %}
+<table class="admin-table w-full text-left">
+    <thead class="bg-gray-100">
+        <tr>
+            <th class="px-4 py-2 border">ID</th>
+            <th class="px-4 py-2 border">Name</th>
+            <th class="px-4 py-2 border">Email</th>
+            <th class="px-4 py-2 border">Message</th>
+            <th class="px-4 py-2 border">Status</th>
+            <th class="px-4 py-2 border">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for contact in contacts %}
+        <tr class="hover:bg-gray-50">
+            <td class="border px-4 py-2">{{ contact.id }}</td>
+            <td class="border px-4 py-2">{{ contact.name }}</td>
+            <td class="border px-4 py-2">{{ contact.email }}</td>
+            <td class="border px-4 py-2">{{ contact.message }}</td>
+            <td class="border px-4 py-2">
+                {% if contact.resolved %}
+                    <span class="badge badge-resolved">Resolved</span>
+                {% else %}
+                    <span class="badge badge-pending">Pending</span>
+                {% endif %}
+            </td>
+            <td class="border px-4 py-2 text-center">
+                <button type="button" class="bg-blue-500 hover:bg-blue-700 text-white py-1 px-3 rounded" onclick="openModal('{{ contact.name }}', '{{ contact.email }}', `{{ contact.message|e }}`)">
+                    View
+                </button>
+                {% if not contact.resolved %}
+                    <a href="{{ url_for('admin.resolve_submission', submission_id=contact.id) }}" class="bg-green-500 hover:bg-green-700 text-white py-1 px-2 rounded ml-2">Resolve</a>
+                {% endif %}
+                <a href="{{ url_for('admin.delete_submission', submission_id=contact.id) }}" class="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded ml-2">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+    <p class="no-data mt-4">No contact submissions found.</p>
+{% endif %}
+
+<!-- Contact Submission Modal -->
+<div id="submissionModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+    <div class="modal-content bg-white p-6 rounded shadow-lg w-96 relative">
+      <span class="close absolute top-2 right-4 text-2xl cursor-pointer" onclick="closeModal()">&times;</span>
+      <h2 class="text-xl font-bold mb-4">Contact Submission Details</h2>
+      <p><strong>Name:</strong> <span id="modalName"></span></p>
+      <p><strong>Email:</strong> <span id="modalEmail"></span></p>
+      <p><strong>Message:</strong></p>
+      <p id="modalMessage"></p>
+    </div>
+</div>
+
+<!-- 🔙 Back to Dashboard -->
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+</div>
+
+<script>
+function openModal(name, email, message) {
+    document.getElementById("modalName").innerText = name;
+    document.getElementById("modalEmail").innerText = email;
+    document.getElementById("modalMessage").innerText = message;
+    document.getElementById("submissionModal").style.display = "flex";
+}
+
+function closeModal() {
+    document.getElementById("submissionModal").style.display = "none";
+}
+
+// Close modal if clicking outside of it
+window.onclick = function(event) {
+    var modal = document.getElementById("submissionModal");
+    if (event.target == modal) {
+        modal.style.display = "none";
+    }
+}
+</script>
+
+{% endblock %}

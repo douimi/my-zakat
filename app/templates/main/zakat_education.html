@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="zakat-education modern-education">
+    <h2><i class="fas fa-balance-scale"></i> Understanding Zakat</h2>
+    <p class="zakat-intro">Zakat is one of the five pillars of Islam and is obligatory for every eligible Muslim. It purifies wealth and uplifts communities.</p>
+
+    <!-- 🔹 Visual 5 Pillars -->
+    <div class="pillars-visual">
+        <img src="{{ url_for('static', filename='images/5pillars.jpg') }}" alt="Five Pillars of Islam" style="max-width:220px;">
+        <div class="pillars-labels">
+            <span>Shahada</span><span>Salah</span><span>Zakat</span><span>Sawm</span><span>Hajj</span>
+        </div>
+    </div>
+
+    <!-- 🔹 Eligibility Section -->
+    <section class="zakat-section card">
+        <h3><i class="fas fa-user-check"></i> Eligibility</h3>
+        <ul>
+            <li><strong>Who Pays:</strong> Sane, adult Muslims who own wealth above the Nisab.</li>
+            <li><strong>Nisab:</strong> The minimum wealth required for Zakat is the value of 87.48g of gold or 612.36g of silver.</li>
+            <li><strong>Payment Timing:</strong> Paid annually after one lunar year of exceeding Nisab.</li>
+        </ul>
+    </section>
+
+    <!-- 🔹 Assets Section -->
+    <section class="zakat-section card">
+        <h3><i class="fas fa-coins"></i> What Assets Are Eligible?</h3>
+        <ul>
+            <li><strong>Gold & Silver:</strong> Physical gold and silver in any form.</li>
+            <li><strong>Cash & Savings:</strong> Including bank deposits, investments, and digital currency.</li>
+            <li><strong>Livestock:</strong> Cattle, sheep, camels, and other livestock meeting minimum thresholds.</li>
+            <li><strong>Agricultural Produce:</strong> Crops and farm yields.</li>
+            <li><strong>Business Assets:</strong> Inventory and trade goods.</li>
+        </ul>
+    </section>
+
+    <!-- 🔹 Zakat Thresholds (Nisab) -->
+    <section class="zakat-section card">
+        <h3><i class="fas fa-gem"></i> Zakat Threshold (Nisab)</h3>
+        <p>The minimum wealth before Zakat is due:</p>
+        <ul>
+            <li><strong>Gold:</strong> 85 grams</li>
+            <li><strong>Silver:</strong> 595 grams</li>
+        </ul>
+    </section>
+
+    <!-- 🔹 Step-by-Step Example -->
+    <section class="zakat-section card highlight">
+        <h3><i class="fas fa-calculator"></i> Example: Zakat Calculation</h3>
+        <ol>
+            <li><strong>Total Assets:</strong> $10,000 (cash, gold, investments, etc.)</li>
+            <li><strong>Debts:</strong> $2,000 (deductible debts)</li>
+            <li><strong>Net Zakatable Wealth:</strong> $8,000</li>
+            <li><strong>Zakat Due (2.5%):</strong> $8,000 × 0.025 = <b>$200</b></li>
+        </ol>
+        <a href="{{ url_for('main.zakat_calculator') }}" class="cta-button">Try Our Zakat Calculator</a>
+    </section>
+
+    <!-- 🔹 Additional Considerations -->
+    <section class="zakat-section card">
+        <h3><i class="fas fa-info-circle"></i> Additional Considerations</h3>
+        <ul>
+            <li><strong>Exclusions:</strong> Personal necessities like homes, primary vehicles, and appliances are exempt.</li>
+            <li><strong>Second Homes & Vehicles:</strong> If for investment or resale, they are Zakat-eligible.</li>
+            <li><strong>Zakat al-Fitr:</strong> A separate form of Zakat to be paid before Eid prayer.</li>
+        </ul>
+    </section>
+
+    <!-- 🔹 FAQ Section -->
+    <section class="zakat-section card faq">
+        <h3><i class="fas fa-question-circle"></i> Frequently Asked Questions</h3>
+        <ul>
+            <li><b>Q:</b> Do I pay Zakat on jewelry I wear? <br><b>A:</b> Yes, if it is gold or silver and above the Nisab.</li>
+            <li><b>Q:</b> Can I pay Zakat in advance? <br><b>A:</b> Yes, but you should keep records and adjust if your wealth changes.</li>
+            <li><b>Q:</b> Can I give Zakat to family? <br><b>A:</b> Yes, except parents, children, and spouse.</li>
+        </ul>
+    </section>
+
+    <!-- 🔹 Impact Highlight -->
+    <section class="zakat-section card impact-highlight">
+        <h3><i class="fas fa-hands-helping"></i> The Impact of Your Zakat</h3>
+        <blockquote>“Last year, your Zakat provided food and shelter to over 2,000 families in need.”</blockquote>
+        <img src="{{ url_for('static', filename='images/impact1.jpeg') }}" alt="Zakat Impact" style="max-width:220px;border-radius:1rem;margin:1rem 0;">
+    </section>
+
+    <!-- 🔹 External Guide -->
+    <p style="margin-top:2rem;">For more details, visit <a href="https://www.islamic-relief.org/zakat/" target="_blank">this Zakat guide</a>.</p>
+</section>
+{% endblock %}

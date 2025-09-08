@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Login - Zakat Distribution Foundation{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Admin Login</h2>
+
+    {% if error %}
+        <div class="flash-error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form action="{{ url_for('auth.login') }}" method="POST">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+
+        <button type="submit" class="button">Login</button>
+    </form>
+</div>
+{% endblock %}
+

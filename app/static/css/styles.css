@@ -1,0 +1,3286 @@
+/* 🔹 General Styling */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f7f7f7;
+    color: #333;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+
+@media (max-width: 480px) {
+    body {
+        font-size: 15px;
+    }
+
+    h1,
+    h2 {
+        font-size: 1.6rem;
+    }
+
+
+}
+
+/* === Section Visual Separation & Gradients === */
+.section-visual-sep {
+    margin: 0;
+    padding: 0;
+}
+
+.section-gradient-blue {
+    background: linear-gradient(120deg, #e3f0ff 0%, #cce0f5 100%);
+    padding: 60px 0 40px 0;
+}
+
+.section-gradient-light {
+    background: linear-gradient(120deg, #f7f7f7 0%, #eaf6fb 100%);
+    padding: 60px 0 40px 0;
+}
+
+.section-gradient-gold {
+    background: linear-gradient(120deg, #fffbe6 0%, #ffe9b3 100%);
+    padding: 60px 0 40px 0;
+}
+
+.section-tagline {
+    font-size: 1.15rem;
+    color: #666;
+    margin-top: -10px;
+    margin-bottom: 30px;
+    font-style: italic;
+    text-align: center;
+}
+
+/* 🔹 Section Separators */
+.section-separator {
+    width: 100%;
+    height: 2px;
+    background-color: #ccc;
+    margin: 40px 0;
+}
+
+
+.dotted-separator {
+    border-top: 2px dotted #0056b3;
+    margin: 40px auto;
+    width: 80%;
+}
+
+.wave-separator {
+    background: url('../images/wave.svg') repeat-x bottom;
+    height: 30px;
+    margin-bottom: -5px;
+}
+
+.gradient-section {
+    background: linear-gradient(to bottom, #0056b3, #003f7d);
+    color: white;
+    padding: 50px 20px;
+}
+
+.gradient-section.slim {
+    padding: 10px 0;
+    background: linear-gradient(to right, #cce0f5, #99c2eb);
+    box-shadow: 0 2px 5px rgba(0, 86, 179, 0.2);
+}
+
+
+
+.icon-title {
+    text-align: center;
+    font-size: 1.5rem;
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.icon-title::before {
+    content: '\2764';
+    display: block;
+    font-size: 2rem;
+    color: #e44d26;
+    margin-bottom: 5px;
+}
+
+
+.urgent-banner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: #ff4c4c;
+    color: white;
+    font-weight: bold;
+    font-size: 1rem;
+    position: relative;
+}
+
+.urgent-banner .urgent-content {
+    text-align: center;
+    flex-grow: 1;
+}
+
+.urgent-banner a {
+    color: red;
+    text-decoration: underline;
+    font-weight: bold;
+}
+
+.urgent-banner a:hover {
+    color: white;
+}
+
+.dark-toggle-btn {
+    position: absolute;
+    right: 15px;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: white;
+    cursor: pointer;
+}
+
+body.dark-mode .dark-toggle-btn {
+    color: #FFD700;
+}
+
+
+/* 🔹 Header Section */
+.header {
+    background-color: #0056b3;
+    padding: 15px 20px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 🔹 Make Logo Stick to the Left */
+.logo-nav-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+/* 🔹 Force Logo to the Leftmost Side */
+.logo-header-container {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    /* ⬅️ more space between logo and text */
+}
+
+.logo-header-container img {
+    height: 80px;
+    /* ⬆️ slightly larger */
+    width: 80px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.logo-header-container h1 {
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+    margin: 0;
+}
+
+
+/* 🔹 Enhanced Navbar */
+.navbar {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    margin-left: 250px;
+}
+
+
+
+.navbar a {
+    color: white;
+    background: transparent;
+    font-size: 1.3rem;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.navbar a:hover {
+    background-color: #003f7d;
+    transform: translateY(-2px);
+}
+
+/* 🔹 Highlighted Donate Button */
+.navbar a[href*="donate"] {
+    background-color: #FFD700;
+    color: #003f7d;
+    font-weight: bold;
+}
+
+.navbar a[href*="donate"]:hover {
+    background-color: #ffc107;
+    color: #001f3f;
+}
+
+/* 🔹 Dark Mode Compatibility */
+body.dark-mode .navbar a {
+    color: #f0f0f0;
+}
+
+body.dark-mode .navbar a:hover {
+    background-color: #333;
+}
+
+body.dark-mode .navbar a[href*="donate"] {
+    background-color: #FFD700;
+    color: #222;
+}
+
+
+@media (max-width: 600px) {
+    .logo-header-container img {
+        height: 48px;
+        width: 48px;
+    }
+
+    .logo-header-container h1 {
+        font-size: 1rem;
+    }
+}
+
+
+
+/* 🔹 Footer */
+.footer-container {
+    background: #0056b3;
+    color: white;
+    text-align: center;
+    padding: 15px;
+    font-size: 0.9rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.welcome-message {
+    text-align: center;
+    color: #0056b3;
+    margin: 30px auto;
+    padding: 10px;
+}
+
+.hero-section {
+    position: relative;
+    height: 450px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: white;
+    overflow: hidden;
+}
+
+.hero-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+    pointer-events: none;
+    background: #222;
+}
+
+.hero-image {
+    display: none;
+}
+
+.hero-overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    top: 0;
+    left: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+
+/* 🔹 Hero Content */
+.hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.hero-content h1 {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+}
+
+.hero-content p {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+}
+
+/* 🔹 Hero Button */
+.hero-content .button {
+    background-color: #FFD700;
+    color: black;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+    transition: 0.3s ease;
+}
+
+.hero-content .button:hover {
+    background-color: #0056b3;
+    color: white;
+}
+
+/* --- Mobile Polish for Hero Section --- */
+@media (max-width: 600px) {
+    .hero-section {
+        min-height: 340px;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .hero-video {
+        min-height: 220px;
+        max-height: 260px;
+        object-fit: cover;
+        border-radius: 0;
+    }
+
+    .hero-content {
+        padding: 18px 8px 12px 8px;
+        top: 40%;
+        left: 0;
+        right: 0;
+        width: 100vw;
+        border-radius: 0;
+    }
+
+    .hero-content h1 {
+        font-size: 1.35rem;
+        margin-bottom: 8px;
+        text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.18);
+    }
+
+    .hero-content p {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .hero-content .button {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 12px 0;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+    .trust-message {
+        font-size: 0.97rem;
+        margin-top: 6px;
+    }
+
+    .scroll-down-indicator.fixed-outside {
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 12px;
+        z-index: 10;
+    }
+
+    .scroll-down-indicator.fixed-outside a {
+        font-size: 1.5rem;
+        padding: 8px 12px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.7);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+}
+
+/* 🔹 Quick Actions Section */
+
+
+.quick-actions {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.action-button {
+    background-color: #0056b3;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    transition: 0.3s ease;
+    flex: 1;
+    /* Makes all buttons equal size */
+    max-width: 200px;
+    /* Limits width */
+    text-align: center;
+}
+
+.action-button:hover {
+    background-color: #003f7d;
+}
+
+
+
+/* 🔹 Responsive Fix */
+
+
+
+/* 🔹 Zakat Calculator Section - Centered & Bigger */
+.zakat-calculator-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 0;
+}
+
+
+
+/* 🔹 Zakat Education Section */
+
+
+/* 🔹 External Link Formatting */
+
+
+/* 🔹 About Us Container */
+.about-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 🔹 About Sections */
+.about-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.about-section.reverse {
+    flex-direction: row-reverse;
+}
+
+.about-text {
+    flex: 1;
+    text-align: left;
+}
+
+.about-text h3 {
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.about-text p {
+    font-size: 1.1rem;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* 🔹 About Section Images */
+.about-image {
+    flex: 1;
+    text-align: right;
+}
+
+.about-image img {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 🔹 Why Choose Us */
+.about-text ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.about-text ul li {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+}
+
+/* 🔹 CTA Section */
+.cta {
+    background: #0056b3;
+    color: white;
+    padding: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cta-text {
+    flex: 1;
+    text-align: left;
+}
+
+.cta .button {
+    background-color: #FFD700;
+    color: black;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 10px;
+    transition: 0.3s ease;
+}
+
+.cta .button:hover {
+    background-color: white;
+    color: #0056b3;
+}
+
+/* 🔹 Responsive Fix */
+@media (max-width: 768px) {
+    .about-container {
+        padding: 20px;
+    }
+
+    .about-section {
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .about-section.reverse {
+        flex-direction: column;
+    }
+
+    .about-image {
+        text-align: center;
+    }
+
+    .cta {
+        flex-direction: column;
+        text-align: center;
+    }
+}
+
+/* 🔹 Contact Page Container */
+.contact-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 🔹 Contact Sections */
+.contact-section {
+    margin-bottom: 30px;
+}
+
+/* 🔹 Flash Message Styling */
+.flash-message {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    padding: 12px;
+    margin: 20px 0;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* 🔹 Contact Info */
+.contact-info {
+    background: #f7f7f7;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.contact-info a {
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.contact-info a:hover {
+    text-decoration: underline;
+}
+
+/* 🔹 Responsive Fix */
+@media (max-width: 768px) {
+    .contact-container {
+        padding: 20px;
+    }
+
+}
+
+
+/* 🔹 Responsive Fix */
+@media (max-width: 768px) {
+    .donate-container {
+        padding: 20px;
+    }
+}
+
+/* 🔹 Donation Page Container */
+.donate-container {
+    max-width: 500px;
+    margin: 40px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.donate-section {
+    text-align: center;
+    margin-top: 20px;
+    padding: 15px;
+    background: #f7f7f7;
+    border-radius: 8px;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+
+
+/* 🔹 Press Release Section */
+.press-release-section {
+    padding: 50px 20px;
+    background-color: #f7f7f7;
+    text-align: center;
+}
+
+.press-release-section h2 {
+    color: #0056b3;
+    margin-bottom: 30px;
+    font-size: 2rem;
+}
+
+/* 🔹 Press Container (Three-Column Layout) */
+.press-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+/* 🔹 Individual Press Box */
+.press-box {
+    flex: 1;
+    max-width: 300px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+
+/* 🔹 Hover Effect */
+.press-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* 🔹 Press Box Image */
+.press-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+/* 🔹 Press Box Text */
+.press-box h3 {
+    color: #0056b3;
+    margin-bottom: 5px;
+    font-size: 1.2rem;
+}
+
+.press-date {
+    font-size: 0.9rem;
+    color: #777;
+    margin-bottom: 10px;
+}
+
+/* 🔹 Responsive Fix: Stack Columns on Mobile */
+@media (max-width: 768px) {
+    .press-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .press-box {
+        max-width: 100%;
+        width: 90%;
+    }
+}
+
+/* 🔹 Our Programs Section */
+.programs-section {
+    padding: 50px 20px;
+    background-color: white;
+    text-align: center;
+}
+
+.programs-section h2 {
+    color: #0056b3;
+    margin-bottom: 30px;
+    font-size: 2rem;
+}
+
+/* 🔹 Programs Container (Three-Column Layout) */
+.programs-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+/* 🔹 Individual Program Box */
+.program-box {
+    flex: 1;
+    max-width: 300px;
+    background: #f7f7f7;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+
+/* 🔹 Hover Effect */
+.program-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* 🔹 Program Box Image */
+.program-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+/* 🔹 Program Box Text */
+.program-box h3 {
+    color: #0056b3;
+    margin-bottom: 5px;
+    font-size: 1.2rem;
+}
+
+/* 🔹 Responsive Fix: Stack Columns on Mobile */
+/* --- Mobile Polish for Programs Section --- */
+@media (max-width: 600px) {
+    .programs-section {
+        padding: 24px 6px;
+        border-radius: 0;
+    }
+
+    .programs-section h2 {
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+    }
+
+    .programs-section .section-tagline {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .programs-container {
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+        padding: 0;
+    }
+
+    .program-box {
+        max-width: 98vw;
+        width: 100%;
+        padding: 14px 8px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        margin: 0 auto;
+    }
+
+    .program-box img {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+    .program-box h3 {
+        font-size: 1.05rem;
+        margin-bottom: 6px;
+    }
+
+    .program-box p {
+        font-size: 0.97rem;
+        margin-bottom: 10px;
+    }
+
+    .program-learn-more {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 10px 0;
+        border-radius: 8px;
+        display: inline-block;
+        text-align: center;
+    }
+}
+
+
+/* 🔹 Individual Impact Box */
+.impact-box {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.impact-box:hover {
+    transform: scale(1.03);
+    box-shadow: 0px 8px 20px rgba(0, 86, 179, 0.4);
+    /* Stronger blue glow */
+}
+
+/* 🔹 Impact of Your Zakat Section */
+/* 🔹 Impact of Your Zakat Section */
+.impact-section {
+    background-color: #f7f7f7;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.impact-section h2 {
+    color: #0056b3;
+    font-size: 2rem;
+    margin-bottom: 30px;
+}
+
+/* Layout */
+.impact-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 40px;
+    max-width: 1100px;
+    margin: auto;
+    padding: 0 20px;
+    flex-wrap: nowrap;
+    text-align: left;
+}
+
+.impact-video {
+    flex: 1.2;
+    min-width: 500px;
+    max-width: 60%;
+}
+
+
+.impact-video video {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Text Block */
+.impact-text {
+    flex: .8;
+    max-width: 40%;
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.impact-text p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #333;
+    text-decoration: none;
+}
+
+.impact-heading {
+    color: #0056b3;
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+}
+
+.impact-heading i {
+    margin-right: 8px;
+    color: #28a745;
+}
+
+/* Donate Button Below */
+.impact-donate-wrapper {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.impact-donate-button {
+    display: inline-block;
+    background-color: #28a745;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+}
+
+.impact-donate-button:hover {
+    background-color: #218838;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .impact-container {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .impact-video,
+    .impact-text {
+        max-width: 100%;
+    }
+}
+
+
+.impact-section h2,
+.impact-section h3,
+.impact-section p,
+.impact-section a {
+    text-decoration: none !important;
+}
+
+
+/* 🔹 Impact Box Image */
+.impact-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+/* 🔹 Impact Box Text */
+.impact-box h3 {
+    color: #0056b3;
+    margin-bottom: 5px;
+    font-size: 1.2rem;
+}
+
+/* 🔹 Responsive Fix: Stack Columns on Mobile */
+@media (max-width: 768px) {
+    .impact-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .impact-box {
+        max-width: 100%;
+        width: 90%;
+    }
+}
+
+/* 🔹 Testimonials Section */
+.testimonials {
+    text-align: center;
+    padding: 50px 20px;
+    background-color: #f7f7f7;
+}
+
+.testimonials h2 {
+    color: #0056b3;
+    font-size: 2rem;
+    margin-bottom: 20px;
+}
+
+.testimonials-title {
+    color: #0056b3;
+    text-align: center;
+}
+
+.testimonials-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.testimonial {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.15);
+    max-width: 300px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.testimonial:hover {
+    transform: scale(1.05) translateY(-8px);
+    box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+}
+
+
+.testimonial img {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 10px;
+    transition: transform 0.3s ease;
+}
+
+.testimonial:hover img {
+    transform: scale(1.05) translateY(-4px);
+}
+
+
+.testimonial p {
+    font-size: 1.1rem;
+    color: #333;
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+.testimonial h4 {
+    font-size: 1rem;
+    color: #0056b3;
+}
+
+
+/* --- Mobile Polish for Testimonials Section --- */
+@media (max-width: 600px) {
+    .testimonials-cards-container {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        align-items: center;
+        padding: 0 4px;
+    }
+
+    .testimonial-card {
+        max-width: 98vw;
+        width: 100%;
+        padding: 14px 8px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        margin: 0 auto;
+    }
+
+    .testimonial-img-oval {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 8px auto;
+    }
+
+    .testimonial-img-oval img {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .testimonial-text {
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .testimonial-name {
+        font-size: 0.97rem;
+        color: #0056b3;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+
+    .testimonial-share-container .button {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 12px 0;
+        border-radius: 8px;
+    }
+}
+
+.section-subtitle {
+    font-size: 1.2rem;
+    color: #555;
+    margin-top: -10px;
+    margin-bottom: 30px;
+    font-style: italic;
+}
+
+/* 🔹 Real Stories Section */
+.real-stories {
+    padding: 60px 20px;
+    background-color: #f9f9f9;
+    text-align: center;
+}
+
+.real-stories h2 {
+    color: #0056b3;
+    font-size: 2.2rem;
+    margin-bottom: 40px;
+}
+
+.story-card-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+}
+
+.story-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    width: 300px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.story-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.story-card img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+}
+
+.story-card h3 {
+    font-size: 1.25rem;
+    margin: 15px;
+    color: #333;
+}
+
+.story-card p {
+    font-size: 1rem;
+    margin: 0 15px 20px 15px;
+    color: #555;
+}
+
+.story-card .read-more {
+    display: inline-block;
+    margin: 0 15px 20px;
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.story-card .read-more:hover {
+    color: #003f7d;
+}
+
+.story-detail {
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.story-content-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.story-content-container img {
+    width: 100%;
+    max-height: 400px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.story-content-container p {
+    font-size: 1.2rem;
+    line-height: 1.7;
+    color: #333;
+    text-align: left;
+}
+
+.story-content-container .read-more {
+    display: inline-block;
+    margin-top: 20px;
+    background-color: #0056b3;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+
+
+/* 🔹 CTA (Call-to-Action) Section */
+.cta-section {
+    background: url('../images/cta-background.jpeg') center/cover no-repeat;
+    color: white;
+    text-align: center;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    margin: 40px auto;
+    max-width: 1000px;
+}
+
+.cta-section h2 {
+    font-size: 2rem;
+    margin-bottom: 15px;
+}
+
+.cta-section p {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    max-width: 700px;
+}
+
+.cta-buttons {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.cta-buttons .cta-button {
+    background-color: #FFD700;
+    color: black;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-weight: bold;
+    text-decoration: none;
+    font-size: 1.1rem;
+    transition: 0.3s ease;
+}
+
+.cta-buttons .cta-button:hover {
+    background-color: #0056b3;
+    color: white;
+}
+
+
+
+
+/* 🔹 Responsive Adjustments */
+/* --- Mobile Polish for CTA Section --- */
+@media (max-width: 600px) {
+    .cta-section {
+        padding: 24px 6px;
+        border-radius: 0;
+        margin: 18px 0;
+        background-size: cover;
+        background-position: center;
+    }
+
+    .cta-section h2 {
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+    }
+
+    .cta-section p {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .cta-buttons {
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .cta-buttons .cta-button {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 12px 0;
+        border-radius: 8px;
+        margin-bottom: 0;
+    }
+}
+
+/* 🔹 Monthly Donors (Sadaqa Jariya) Section */
+.sadaqa-jariya {
+    text-align: center;
+    padding: 50px 20px;
+    background: #f9f9f9;
+}
+
+.sadaqa-jariya h2 {
+    font-size: 2rem;
+    color: #0056b3;
+    margin-bottom: 15px;
+}
+
+.sadaqa-jariya p {
+    font-size: 1.2rem;
+    max-width: 800px;
+    margin: 0 auto 30px auto;
+    color: #555;
+}
+
+/* 🔹 Donor Cards Grid */
+.donor-grid {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.donor-card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    max-width: 300px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.donor-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+
+.donor-card img {
+    width: 100%;
+    max-width: 150px;
+    height: auto;
+    border-radius: 50%;
+    margin-bottom: 10px;
+}
+
+.donor-card p {
+    font-size: 1rem;
+    color: #333;
+}
+
+.monthly-count {
+    font-size: 1.1rem;
+    color: #555;
+    margin: 10px auto 30px auto;
+    font-weight: 600;
+}
+
+.donor-impact-badge {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    background-color: #28a745;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 15px;
+    display: inline-block;
+    font-weight: bold;
+}
+
+.big-donate-button {
+    font-size: 1.3rem;
+    padding: 14px 28px;
+    background-color: #28a745;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.big-donate-button:hover {
+    background-color: #218838;
+}
+
+
+/* 🔹 CTA Button */
+.donate-monthly {
+    margin-top: 30px;
+}
+
+.donate-monthly .cta-button {
+    background-color: #28a745;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    text-decoration: none;
+    font-weight: bold;
+    transition: 0.3s ease;
+}
+
+.donate-monthly .cta-button:hover {
+    background-color: #218838;
+}
+
+/* 🔹 Responsive */
+@media (max-width: 768px) {
+    .donor-grid {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+/* 🔹 Social Media & Latest News Section */
+.news-social-section {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 40px;
+    background-color: #f7f7f7;
+}
+
+/* 🔹 News Container */
+.news-container {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.news-item {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.news-item img {
+    width: 100px;
+    height: 100px;
+    border-radius: 8px;
+}
+
+.news-content h4 {
+    margin: 0;
+    color: #0056b3;
+}
+
+.news-content p {
+    font-size: 0.9rem;
+}
+
+.news-content a {
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.news-content a:hover {
+    text-decoration: underline;
+}
+
+/* 🔹 Social Media Container */
+.social-container {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.social-feed a {
+    display: block;
+    margin-bottom: 10px;
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.social-feed a:hover {
+    text-decoration: underline;
+}
+
+/* 🔹 Responsive Design */
+@media (max-width: 768px) {
+    .news-social-section {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+/* 🔹 Sponsorship Section */
+.sponsorship-section {
+    text-align: center;
+    padding: 50px 20px;
+    background-color: #f7f7f7;
+}
+
+.sponsorship-section h2 {
+    font-size: 2rem;
+    color: #0056b3;
+    margin-bottom: 15px;
+}
+
+.sponsorship-section p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+/* 🔹 Sponsorship Boxes Container */
+.sponsorship-container {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+/* 🔹 Individual Sponsorship Box */
+.sponsorship-box {
+    flex: 1;
+    max-width: 300px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+
+.sponsorship-box:hover {
+    transform: translateY(-5px);
+}
+
+/* 🔹 Sponsorship Images */
+.sponsorship-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+/* 🔹 Sponsorship Titles */
+.sponsorship-box h3 {
+    font-size: 1.5rem;
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+/* 🔹 Sponsorship Text */
+.sponsorship-box p {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+/* 🔹 Sponsorship Button */
+.sponsor-button {
+    display: inline-block;
+    background-color: #0056b3;
+    color: white;
+    padding: 10px 18px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: 0.3s ease;
+}
+
+.sponsor-button:hover {
+    background-color: #003f7d;
+}
+
+/* --- Mobile Polish for Sponsorship Section --- */
+@media (max-width: 480px) {
+    .sponsorship-section {
+        padding: 30px 5px;
+    }
+
+    .sponsorship-section h2 {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+    }
+
+    .sponsorship-section p {
+        font-size: 1rem;
+        margin-bottom: 18px;
+    }
+
+    .sponsorship-container {
+        gap: 18px;
+    }
+
+    .sponsorship-box {
+        max-width: 98%;
+        padding: 12px 8px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sponsorship-box img {
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .sponsorship-box h3 {
+        font-size: 1.1rem;
+        margin-bottom: 6px;
+    }
+
+    .sponsorship-box p {
+        font-size: 0.97rem;
+        margin-bottom: 10px;
+    }
+
+    .sponsor-button {
+        width: 100%;
+        padding: 12px 0;
+        font-size: 1rem;
+        border-radius: 8px;
+    }
+}
+
+/* 🔹 Ramadan Giving Campaign */
+.ramadan-campaign {
+    background-color: #f8f9fa;
+    padding: 50px 20px;
+    display: flex;
+    justify-content: center;
+}
+
+/* 🔹 Flexbox for Horizontal Layout */
+.campaign-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    /* Ensures a balanced width */
+    width: 100%;
+    gap: 40px;
+    /* Adds spacing between image and text */
+}
+
+/* 🔹 Image and Text Take Equal Space */
+.campaign-image {
+    width: 45%;
+    /* Ensures both image and text take up similar space */
+    max-width: 500px;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 🔹 Text Section with Progress Bar */
+.campaign-text {
+    width: 50%;
+    max-width: 600px;
+    text-align: left;
+}
+
+/* 🔹 Heading */
+.campaign-text h2 {
+    color: #0056b3;
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+/* 🔹 Progress Bar */
+
+
+
+
+/* 🔹 Call-to-Action Button */
+.campaign-button {
+    background-color: #0056b3;
+    color: white;
+    padding: 15px 25px;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: bold;
+    display: inline-block;
+    font-size: 1.2rem;
+    margin-top: 15px;
+}
+
+.campaign-button:hover {
+    background-color: #003f7d;
+}
+
+/* 🔹 Responsive Adjustments */
+@media (max-width: 900px) {
+    .campaign-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 20px;
+    }
+
+    .campaign-image {
+        width: 100%;
+        max-width: 90%;
+    }
+
+    .campaign-text {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* 🔹 The Impact of Your Zakat Section */
+.impact-section {
+    background-color: #f8f9fa;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.impact-section h2 {
+    color: #0056b3;
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 2rem;
+}
+
+.impact-section p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+/* --- Mobile Polish for Impact Section --- */
+@media (max-width: 600px) {
+    .impact-section {
+        padding: 24px 6px;
+        border-radius: 0;
+    }
+
+    .impact-section h2 {
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+    }
+
+    .impact-section p {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .impact-container {
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+        padding: 0;
+    }
+
+    .impact-video {
+        width: 100%;
+        max-width: 100vw;
+        margin-bottom: 10px;
+    }
+
+    .impact-video video {
+        width: 100%;
+        max-width: 100vw;
+        min-height: 160px;
+        border-radius: 8px;
+    }
+
+    .impact-text {
+        padding: 0 4px;
+        text-align: center;
+    }
+
+    .impact-donate-wrapper {
+        margin-top: 10px;
+    }
+
+    .impact-donate-button {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 12px 0;
+        border-radius: 8px;
+    }
+}
+
+
+/* 🔹 Stats Counter Section */
+
+
+/* 🔹 Stats Container */
+
+
+/* 🔹 Individual Stat Box */
+
+
+/* 🔹 Icons */
+
+
+/* 🔹 Number Styling */
+
+
+/* 🔹 Label Styling */
+
+
+/* 🔹 Responsive Fix */
+@media (max-width: 768px) {}
+
+/* 🔹 Volunteer Opportunities Section */
+.volunteer-section {
+    background-color: #f7f7f7;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.volunteer-section h2 {
+    color: #0056b3;
+    margin-bottom: 15px;
+    font-size: 2rem;
+}
+
+.volunteer-section p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+.volunteer-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.volunteer-box {
+    flex: 1;
+    max-width: 300px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+
+.volunteer-box:hover {
+    transform: translateY(-5px);
+}
+
+.volunteer-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.volunteer-box h3 {
+    font-size: 1.5rem;
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.volunteer-box p {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.volunteer-button {
+    display: inline-block;
+    background-color: #0056b3;
+    color: white;
+    padding: 10px 18px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: 0.3s ease;
+}
+
+.volunteer-button:hover {
+    background-color: #003f7d;
+}
+
+@media (max-width: 768px) {
+    .volunteer-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .volunteer-box {
+        max-width: 90%;
+    }
+}
+
+/* 🔹 Newsletter Subscription Section */
+.newsletter-section {
+    background-color: #f8f9fa;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.newsletter-content {
+    max-width: 600px;
+    margin: auto;
+}
+
+.newsletter-content h2 {
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.newsletter-content p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+/* 🔹 Upcoming Events Section */
+.events-section {
+    background-color: #f8f9fa;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.events-section h2 {
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.events-section p {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+/* 🔹 Event Boxes */
+.events-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.event-box {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    text-align: center;
+    max-width: 300px;
+    transition: 0.3s ease-in-out;
+}
+
+.event-box img {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.event-box h3 {
+    color: #0056b3;
+    margin-top: 10px;
+}
+
+.event-box p {
+    font-size: 1rem;
+    color: #555;
+    margin: 10px 0;
+}
+
+.event-button {
+    background-color: #0056b3;
+    color: white;
+    padding: 10px 15px;
+    text-decoration: none;
+    border-radius: 6px;
+    display: inline-block;
+    margin-top: 10px;
+}
+
+.event-button:hover {
+    background-color: #003f7d;
+}
+
+/* 🔹 Responsive Fix */
+@media (max-width: 768px) {
+    .events-container {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+/* 🔹 Event Submission Section */
+.event-submission-section {
+    max-width: 600px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+/* 🔹 Events Grid Styling */
+.events-container {
+    text-align: center;
+    padding: 40px;
+}
+
+.events-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+}
+
+.event-card {
+    width: 300px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    text-align: left;
+}
+
+.event-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+}
+
+.event-details {
+    padding: 15px;
+}
+
+.event-details h3 {
+    color: #0056b3;
+}
+
+.event-button {
+    display: inline-block;
+    background-color: #0056b3;
+    color: white;
+    padding: 8px 15px;
+    text-decoration: none;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.event-button:hover {
+    background-color: #003f7d;
+}
+
+/* 🔹 Event Details Styling */
+.event-details-container {
+    max-width: 800px;
+    margin: auto;
+    text-align: left;
+    padding: 20px;
+}
+
+.event-details-container img {
+    width: 100%;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+/* 🔹 Event Detail Page Styling */
+.event-detail-container {
+    max-width: 1100px;
+    /* Wider container for a more spacious layout */
+    margin: 50px auto;
+    text-align: center;
+}
+
+.event-title {
+    color: #0056b3;
+    font-size: 2.2rem;
+    margin-bottom: 25px;
+}
+
+.event-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 40px;
+}
+
+.event-image {
+    width: 100%;
+    max-width: 550px;
+    /* Increased size for better visibility */
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.15);
+}
+
+.event-info {
+    max-width: 500px;
+    text-align: left;
+}
+
+.event-description {
+    font-size: 1.2rem;
+    color: #333;
+    line-height: 1.8;
+}
+
+/* 🔹 Responsive Adjustments */
+@media (max-width: 768px) {
+    .event-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .event-image {
+        max-width: 100%;
+        /* Makes image take full width on smaller screens */
+    }
+
+    .event-info {
+        text-align: center;
+        max-width: 100%;
+    }
+}
+
+.confirmation-section {
+    text-align: center;
+    padding: 50px;
+}
+
+.confirmation-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.badge {
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.badge-outreach {
+    background-color: #3498db;
+    /* Blue */
+}
+
+.badge-event {
+    background-color: #2ecc71;
+    /* Green */
+}
+
+.badge-fundraising {
+    background-color: #f1c40f;
+    /* Yellow */
+    color: black;
+    /* better contrast for yellow */
+}
+
+.badge {
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: white;
+    display: inline-block;
+}
+
+.badge-resolved {
+    background-color: #28a745;
+    /* Green */
+}
+
+.badge-pending {
+    background-color: #ffc107;
+    /* Yellow */
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 50%;
+    position: relative;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.status-monthly {
+    background-color: #17a2b8;
+    /* blue */
+}
+
+.status-yearly {
+    background-color: #6f42c1;
+    /* purple */
+}
+
+.status-onetime {
+    background-color: #fd7e14;
+    /* orange */
+}
+
+.btn-back {
+    display: inline-block;
+    margin: 20px 0;
+    padding: 10px 18px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.btn-back:hover {
+    background-color: #0056b3;
+}
+
+/* 🔹 Smooth Scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* 🔹 Fade-In Animation on Scroll */
+/* 🔹 Fade-In Animation */
+.fade-in {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* 🔹 Button Glow Hover Effect */
+.button,
+.cta-button,
+.sponsor-button,
+.event-button {
+    box-shadow: 0 0 0 transparent;
+    transition: box-shadow 0.3s ease;
+}
+
+.button:hover,
+.cta-button:hover,
+.sponsor-button:hover,
+.event-button:hover {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+}
+
+
+/* 🔹 Dark Mode Styles */
+body.dark-mode {
+    background-color: #121212;
+    color: #f0f0f0;
+}
+
+body.dark-mode .header,
+body.dark-mode .footer-container,
+body.dark-mode .urgent-banner {
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+}
+
+body.dark-mode .navbar a {
+    color: #f0f0f0;
+}
+
+body.dark-mode .navbar a:hover {
+    background-color: #333;
+}
+
+body.dark-mode .section,
+body.dark-mode section,
+body.dark-mode .press-box,
+body.dark-mode .program-box,
+body.dark-mode .impact-box,
+body.dark-mode .testimonial,
+body.dark-mode .donor-card,
+body.dark-mode .sponsorship-box,
+body.dark-mode .volunteer-card,
+body.dark-mode .newsletter-section,
+body.dark-mode .event-box {
+    background-color: #1a1a1a;
+    color: #ddd;
+    box-shadow: none;
+}
+
+/* Optional: Dark glow for buttons */
+body.dark-mode .button,
+body.dark-mode .cta-button,
+body.dark-mode .event-button,
+body.dark-mode .sponsor-button {
+    background-color: #333;
+    color: #fff;
+}
+
+body.dark-mode .button:hover,
+body.dark-mode .cta-button:hover,
+body.dark-mode .event-button:hover,
+body.dark-mode .sponsor-button:hover {
+    background-color: #555;
+}
+
+#darkModeToggle {
+    background-color: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: white;
+    cursor: pointer;
+}
+
+body.dark-mode #darkModeToggle {
+    color: #FFD700;
+
+}
+
+/* Smooth Scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Sub-Navigation Buttons */
+.sub-nav-inline {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.sub-nav-inline a {
+    background-color: #0056b3;
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    padding: 10px 16px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease, transform 0.2s ease-in-out;
+}
+
+.sub-nav-inline a:hover {
+    background-color: #003f7d;
+    transform: translateY(-2px);
+}
+
+/* Dark Mode Variants */
+body.dark-mode .sub-nav-inline a {
+    background-color: #333;
+    color: #f0f0f0;
+}
+
+body.dark-mode .sub-nav-inline a:hover {
+    background-color: #555;
+}
+
+/* Scroll Down Indicator */
+.scroll-down-indicator.fixed-outside {
+    position: absolute;
+    top: 430px;
+    right: 30px;
+    font-size: 64px;
+    z-index: 10000;
+    color: white;
+    animation: bounceArrow 2s infinite;
+    pointer-events: auto;
+}
+
+.scroll-down-indicator.fixed-outside a {
+    color: white;
+    text-decoration: none;
+}
+
+/* Bounce Animation */
+@keyframes bounceArrow {
+
+    0%,
+    20%,
+    50%,
+    80%,
+    100% {
+        transform: translateY(0);
+    }
+
+    40% {
+        transform: translateY(-10px);
+    }
+
+    60% {
+        transform: translateY(-5px);
+    }
+}
+
+/* 🔹 Progress Tracker + Stats Section */
+.impact-summary {
+    background-color: #f8f9fa;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.impact-summary h2 {
+    color: #0056b3;
+    font-size: 2rem;
+    margin-bottom: 30px;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+    max-width: 700px;
+    margin: 0 auto 40px auto;
+}
+
+.progress-label {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.progress-bar {
+    background: #ddd;
+    width: 100%;
+    height: 25px;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    background: #28a745;
+    height: 100%;
+    width: 75%;
+    /* you can adjust or set dynamically later */
+    transition: width 0.8s ease-in-out;
+    border-radius: 12px;
+}
+
+/* Stat Boxes */
+.stats-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 30px;
+    margin-top: 40px;
+}
+
+.stat-box {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 200px;
+    text-align: center;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .stat-box {
+        width: 90%;
+    }
+
+    .progress-bar-container {
+        max-width: 90%;
+    }
+}
+
+
+.stat-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.stat-box i {
+    font-size: 2rem;
+    color: #0056b3;
+    margin-bottom: 10px;
+}
+
+.stat-box h3 {
+    font-size: 2rem;
+    color: #28a745;
+    margin-bottom: 5px;
+}
+
+.stat-box p {
+    font-size: 1.1rem;
+    color: #333;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .stats-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .progress-bar-container {
+        max-width: 90%;
+    }
+}
+
+
+/* 🔹 Carousel Section - Centered with Padding */
+.carousel-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 50px 0;
+    background-color: #f7f7f7;
+}
+
+/* 🔹 Carousel Wrapper */
+.carousel-wrapper {
+    position: relative;
+    max-width: 1500px;
+    width: 90%;
+    overflow: hidden;
+    border-radius: 0;
+
+    margin: 0 auto;
+}
+
+/* 🔹 Carousel Track */
+.carousel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.5s ease-in-out;
+}
+
+/* 🔹 Individual Slide */
+.carousel-slide {
+    opacity: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    transition: opacity 0.6s ease;
+    width: 100%;
+    text-align: center;
+    z-index: 0;
+}
+
+.carousel-slide.active {
+    opacity: 1;
+    position: relative;
+    z-index: 1;
+}
+
+
+
+/* 🔹 Slide Image */
+.carousel-slide img {
+
+    max-width: 1000px;
+
+    max-height: 500px;
+    object-fit: cover;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    margin-top: 10px;
+}
+
+
+/* 🔹 Slide Text */
+.carousel-text {
+    margin-top: 15px;
+    padding: 12px 18px;
+    border-radius: 6px;
+    font-size: 1.3rem;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    text-align: center;
+    max-width: 700px;
+}
+
+@media (max-width: 768px) {
+    .carousel-slide img {
+        max-width: 90%;
+        height: auto;
+    }
+
+    .carousel-text {
+        font-size: 1rem;
+        padding: 10px;
+    }
+}
+
+
+/* 🔹 Navigation Buttons */
+.carousel-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    padding: 12px 15px;
+    font-size: 1.8rem;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease-in-out;
+    z-index: 10;
+}
+
+.carousel-btn.prev {
+    left: 15px;
+}
+
+.carousel-btn.next {
+    right: 15px;
+}
+
+.carousel-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+/* 🔹 Dot Indicators */
+.carousel-dots {
+    text-align: center;
+    margin-top: 10px;
+}
+
+.carousel-dots .dot {
+    height: 12px;
+    width: 12px;
+    margin: 0 5px;
+    background-color: #ccc;
+    border-radius: 50%;
+    display: inline-block;
+    transition: background-color 0.3s ease;
+    cursor: pointer;
+}
+
+.carousel-dots .active {
+    background-color: #555;
+}
+
+/* 🔹 Responsive Fixes */
+@media (max-width: 768px) {
+    .carousel-wrapper {
+        max-width: 95%;
+    }
+
+    .carousel-slide img {
+        max-height: 400px;
+    }
+
+    .carousel-text {
+        font-size: 1.1rem;
+        width: 90%;
+    }
+
+    .carousel-btn {
+        font-size: 1.5rem;
+        padding: 10px 12px;
+    }
+}
+
+.view-more-stories {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.story-button {
+    display: inline-block;
+    padding: 12px 24px;
+    background-color: #007BFF;
+    color: white;
+    font-size: 1.1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.3s ease;
+}
+
+.story-button:hover {
+    background-color: #0056b3;
+}
+
+.back-to-home {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.back-button {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #28a745;
+    color: white;
+    font-size: 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.back-button:hover {
+    background-color: #1e7e34;
+}
+
+.view-more-press {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.story-button {
+    display: inline-block;
+    padding: 12px 24px;
+    background-color: #007BFF;
+    color: white;
+    font-size: 1.1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.3s ease;
+}
+
+.story-button:hover {
+    background-color: #0056b3;
+}
+
+.recent-donations {
+    padding: 40px 20px;
+    background-color: #fefefe;
+    text-align: center;
+}
+
+.recent-donations h2 {
+    font-size: 1.8rem;
+    color: #0056b3;
+    margin-bottom: 20px;
+}
+
+.donation-feed {
+    list-style: none;
+    padding: 0;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.donation-feed li {
+    background: #e6f0ff;
+    padding: 12px 18px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 86, 179, 0.1);
+    font-size: 1.1rem;
+}
+
+.donation-feed .amount {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.donation-feed .time {
+    font-size: 0.9rem;
+    color: #777;
+    margin-left: 10px;
+}
+
+section {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.zakat-reasons {
+    list-style: none;
+    padding: 0;
+    margin: 30px 0;
+    font-size: 1.2rem;
+    color: white;
+    text-align: left;
+    max-width: 700px;
+}
+
+.zakat-reasons li {
+    margin-bottom: 12px;
+    line-height: 1.6;
+    padding-left: 20px;
+    position: relative;
+}
+
+.zakat-reasons li::before {
+    content: "✔️";
+    position: absolute;
+    left: 0;
+    color: #FFD700;
+}
+
+.cta-section {
+    background: linear-gradient(to right, #003f7d, #0056b3);
+}
+
+/* Hero Slideshow Styles */
+.hero-slideshow {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hero-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    z-index: -2;
+    pointer-events: none;
+    transition: opacity 0.8s;
+    background: #222;
+}
+
+.hero-slide.active {
+    opacity: 1;
+    pointer-events: auto;
+    z-index: -2;
+}
+
+.hero-overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    top: 0;
+    left: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.hero-dots {
+    position: absolute;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    gap: 10px;
+}
+
+.hero-dots .dot {
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    opacity: 0.6;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: opacity 0.3s, background 0.3s;
+    border: 2px solid #FFD700;
+}
+
+.hero-dots .dot.active {
+    background: #FFD700;
+    opacity: 1;
+}
+
+
+
+/* Team Section Styles */
+.team-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    justify-content: center;
+    margin: 2rem 0;
+}
+
+.team-member.card {
+    background: #fff;
+    border-radius: 1.2rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    padding: 2rem 1.5rem 1.5rem 1.5rem;
+    max-width: 260px;
+    min-width: 220px;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.team-member.card:hover {
+    transform: translateY(-8px) scale(1.03);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.13);
+}
+
+.team-img-wrapper {
+    width: 110px;
+    height: 110px;
+    margin: 0 auto 1rem auto;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 4px solid #f2f2f2;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    background: #f9f9f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.team-img-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+}
+
+.team-member h4 {
+    margin: 0.7rem 0 0.2rem 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1a2a36;
+}
+
+.team-role {
+    font-size: 0.98rem;
+    color: #3a7ca5;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.team-bio {
+    font-size: 0.95rem;
+    color: #444;
+    margin-bottom: 0;
+}
+
+/* Partners Section Styles */
+.partners-section {
+    margin-top: 2.5rem;
+}
+
+.partners-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.5rem;
+    justify-content: center;
+    align-items: stretch;
+    margin: 2rem 0 1rem 0;
+}
+
+.partner-card {
+    background: #fff;
+    border-radius: 1.2rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+    max-width: 320px;
+    min-width: 220px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.partner-card:hover {
+    transform: translateY(-6px) scale(1.03);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.13);
+}
+
+.partner-card img {
+    width: 130px;
+    height: 130px;
+    object-fit: contain;
+    margin-bottom: 1rem;
+    background: #f9f9f9;
+    border-radius: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    padding: 0.5rem;
+}
+
+.partner-info h4 {
+    margin: 0.2rem 0 0.3rem 0;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: #1a2a36;
+}
+
+.partner-info p {
+    font-size: 0.97rem;
+    color: #444;
+    margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+    .partners-list {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+@media (max-width: 900px) {
+    .team-list {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+/* Modern Zakat Education Styles */
+.zakat-education.modern-education {
+    max-width: 800px;
+    margin: 2.5rem auto;
+    background: #fff;
+    border-radius: 1.5rem;
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.07);
+    padding: 2.5rem 2rem 2rem 2rem;
+}
+
+.zakat-education h2 {
+    text-align: center;
+    color: #1a2a36;
+    margin-bottom: 1.2rem;
+}
+
+.zakat-intro {
+    text-align: center;
+    font-size: 1.1rem;
+    color: #3a7ca5;
+    margin-bottom: 2rem;
+}
+
+.pillars-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.pillars-labels {
+    display: flex;
+    gap: 1.2rem;
+    margin-top: 0.5rem;
+    font-size: 0.98rem;
+    color: #888;
+    justify-content: center;
+}
+
+.pillars-labels span {
+    min-width: 60px;
+    text-align: center;
+}
+
+.zakat-section.card {
+    background: #f7fafd;
+    border-radius: 1rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    padding: 1.3rem 1.2rem 1.1rem 1.2rem;
+    margin-bottom: 1.5rem;
+}
+
+.zakat-section.card h3 {
+    color: #1a2a36;
+    margin-bottom: 0.7rem;
+    font-size: 1.13rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.zakat-section.card ul,
+.zakat-section.card ol {
+    margin-left: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.zakat-section.card.highlight {
+    background: #eaf6fb;
+    border-left: 5px solid #3a7ca5;
+}
+
+.zakat-section.card.faq {
+    background: #f9f6ff;
+    border-left: 5px solid #a57cca;
+}
+
+.zakat-section.card.impact-highlight {
+    background: #f6fff7;
+    border-left: 5px solid #28a745;
+    text-align: center;
+}
+
+.zakat-section.card.impact-highlight blockquote {
+    font-style: italic;
+    color: #28a745;
+    margin: 0.7rem 0 1rem 0;
+}
+
+.cta-button {
+    display: inline-block;
+    background: #3a7ca5;
+    color: #fff;
+    border: none;
+    border-radius: 2rem;
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    margin-top: 0.7rem;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.cta-button:hover {
+    background: #28a745;
+    color: #fff;
+}
+
+.zakat-education,
+.zakat-education * {
+    color: #222 !important;
+}
+
+@media (max-width: 600px) {
+    .zakat-education.modern-education {
+        padding: 1.2rem 0.5rem;
+    }
+}
+
+.hamburger {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .hamburger {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 40px;
+        height: 40px;
+        background: white;
+        border: red;
+        z-index: 1001;
+        position: static;
+        margin-left: auto;
+    }
+
+    .hamburger .bar {
+        display: block;
+        height: 4px;
+        width: 28px;
+        background: #222;
+        margin: 4px 0;
+        border-radius: 2px;
+        transition: 0.3s;
+        opacity: 1;
+    }
+
+    .navbar {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 70px;
+        right: 20px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        padding: 20px 0;
+        min-width: 180px;
+        z-index: 1000;
+    }
+
+    .navbar.navbar-active {
+        display: flex;
+    }
+
+    .navbar a {
+        color: #007bff !important;
+        font-weight: 600;
+        padding: 12px 20px;
+        text-align: right;
+        display: block;
+        background: none !important;
+    }
+
+    .navbar a[href*="donate"] {
+        color: #ffc107 !important;
+        background: none !important;
+    }
+
+    .logo-nav-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 0 10px;
+        position: relative;
+    }
+
+    .logo-header-container {
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+    }
+}

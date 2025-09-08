@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Newsletter & SMS Subscribers{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Newsletter & SMS Subscribers</h2>
+    <form method="GET" action="{{ url_for('admin.manage_subscriptions') }}" class="filter-form">
+        <input type="text" name="query" placeholder="Search by name, email, or phone" value="{{ request.args.get('query', '') }}">
+        <button type="submit">Search</button>
+    </form>
+    {% if subs %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Email Newsletter</th>
+                <th>SMS Alerts</th>
+                <th>Subscribed At</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sub in subs %}
+            <tr>
+                <td>{{ sub.id }}</td>
+                <td>{{ sub.name or '-' }}</td>
+                <td>{{ sub.email }}</td>
+                <td>{{ sub.phone or '-' }}</td>
+                <td>{% if sub.wants_email %}<span class="badge badge-success">Yes</span>{% else %}No{% endif %}</td>
+                <td>{% if sub.wants_sms %}<span class="badge badge-success">Yes</span>{% else %}No{% endif %}</td>
+                <td>{{ sub.subscribed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <a href="{{ url_for('admin.delete_subscription', sub_id=sub.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Delete this subscription?')">Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p>No subscriptions found.</p>
+    {% endif %}
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

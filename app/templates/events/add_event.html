@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="event-form-container">
+    <h2>Add a New Event</h2>
+    <form method="POST" action="{{ url_for('admin.add_event') }}" enctype="multipart/form-data">
+        <label for="title">Event Title:</label>
+        <input type="text" id="title" name="title" required>
+
+        <label for="date">Date:</label>
+        <input type="date" id="date" name="date" required>
+
+        <label for="location">Location:</label>
+        <input type="text" id="location" name="location" required>
+
+        <label for="description">Description:</label>
+        <textarea id="description" name="description" rows="4" required></textarea>
+
+        <label for="image">Upload Image:</label>
+        <input type="file" id="image" name="image" accept="image/*" required>
+
+        <button type="submit">Submit Event</button>
+    </form>
+</section>
+{% endblock %}

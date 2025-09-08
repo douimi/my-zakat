@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>{{ title | default("Zakat Distribution Foundation") }}</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/testimonials.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sections.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stories.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/make_difference.css') }}">
+
+</head>
+
+<body>
+    <!-- 🔹 Urgent Message Banner -->
+    <div class="urgent-banner">
+        <div class="urgent-content">
+            🚨 Emergency Relief Needed: Support families affected by the crisis. 
+            <a href="{{ url_for('main.donate') }}">Donate Now</a>
+        </div>
+        <button id="darkModeToggle" class="dark-toggle-btn">🌙</button>
+    </div>
+    
+    
+
+    <header class="header">
+        <div class="logo-nav-container">
+            <div class="logo-header-container">
+                <a href="{{ url_for('main.home') }}">
+                    <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Zakat Distribution Foundation Logo">
+                </a>
+                <h1>Zakat Distribution Foundation</h1>
+            </div>
+            <button class="hamburger" id="hamburger-menu" aria-label="Open navigation" aria-controls="main-navbar" aria-expanded="false">
+                <span class="bar">--</span>
+                <span class="bar">--</span>
+                <span class="bar">--</span>
+            </button>
+
+            <nav class="navbar"  id="main-navbar">
+                <a href="{{ url_for('main.home') }}">Home</a>
+                <a href="{{ url_for('main.about') }}">About</a>
+                <a href="{{ url_for('main.donate') }}">Donate</a>
+                <a href="{{ url_for('main.contact') }}">Contact</a>
+                <a href="{{ url_for('main.zakat_calculator') }}">Zakat Calculator</a>
+                <a href="{{ url_for('main.zakat_education') }}">Zakat Education</a>
+                
+
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('admin.admin_dashboard') }}">Admin</a>
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('auth.login') }}">Login</a>
+                {% endif %}
+                
+            </nav>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-top">
+            <div class="footer-brand">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Zakat Distribution Foundation Logo" class="footer-logo">
+                <div class="footer-mission">Empowering communities through Zakat, Sadaqa, and compassion.</div>
+            </div>
+            <div class="footer-links">
+                <h4>Quick Links</h4>
+                <ul>
+                    <li><a href="{{ url_for('main.home') }}">Home</a></li>
+                    <li><a href="{{ url_for('main.about') }}">About</a></li>
+                    <li><a href="{{ url_for('main.donate') }}">Donate</a></li>
+                    <li><a href="{{ url_for('main.zakat_calculator') }}">Zakat Calculator</a></li>
+                    <li><a href="{{ url_for('main.stories') }}">Stories</a></li>
+                    <li><a href="{{ url_for('main.contact') }}">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-contact">
+                <h4>Contact Us</h4>
+                <p><i class="fas fa-envelope"></i> info@zdfoundation.org</p>
+                <p><i class="fas fa-phone"></i> +1 (555) 123-4567</p>
+                <p><i class="fas fa-map-marker-alt"></i> 123 Charity Ave, City, Country</p>
+                <div class="footer-social">
+                    <a href="https://twitter.com/YOURHANDLE" target="_blank" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="https://facebook.com/YOURPAGE" target="_blank" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                    <a href="https://instagram.com/YOURHANDLE" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                    <a href="https://linkedin.com/YOURPAGE" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                    <a href="https://youtube.com/YOURCHANNEL" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            &copy; 2024 Zakat Distribution Foundation. All rights reserved.
+        </div>
+    </footer>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const hamburger = document.getElementById('hamburger-menu');
+        const navbar = document.getElementById('main-navbar');
+        hamburger.addEventListener('click', function() {
+            navbar.classList.toggle('navbar-active');
+            const expanded = hamburger.getAttribute('aria-expanded') === 'true';
+            hamburger.setAttribute('aria-expanded', !expanded);
+        });
+    });
+    </script>
+
+    <script>
+    // Load user's theme preference from localStorage
+    if (localStorage.getItem("darkMode") === "true") {
+        document.body.classList.add("dark-mode");
+    }
+
+    document.getElementById("darkModeToggle").addEventListener("click", function () {
+        document.body.classList.toggle("dark-mode");
+        localStorage.setItem("darkMode", document.body.classList.contains("dark-mode"));
+    });
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const fadeEls = document.querySelectorAll(".fade-in");
+    
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add("visible");
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+    
+        fadeEls.forEach(el => observer.observe(el));
+    });
+    </script>
+    
+
+
+</body>
+
+</html>

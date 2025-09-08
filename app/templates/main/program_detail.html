@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="program-detail-outer fade-in">
+  <div class="program-detail-card">
+    <img src="{{ url_for('static', filename=program.image) }}" alt="{{ program.title }}" class="program-detail-img">
+    <h1 class="program-detail-title">{{ program.title }}</h1>
+    <div class="program-detail-desc">
+      <p>{{ program.description }}</p>
+    </div>
+    <a href="{{ url_for('main.donate') }}" class="cta-button big-donate-button">Support This Program</a>
+    <div class="back-to-home">
+      <a href="{{ url_for('main.home') }}" class="btn-back">&larr; Back to Home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Admin Dashboard</h2>
+
+    <hr>
+
+    <!-- 🔹 Donation Summary -->
+  
+    <div class="stats-grid">
+
+        <!-- 💰 Donation Summary Card -->
+        <div class="card donations">
+            <h3>💰 Donations</h3>
+            <p>Total Donors: {{ total_donors }}</p>
+            <p><strong>Total Donations:</strong> ${{ "{:,.2f}".format(total_donations) }}</p>
+            {% if top_donor %}
+            <p><strong>Top Donor:</strong> {{ top_donor.name }} (${{ "{:,.2f}".format(top_donor.amount) }})</p>
+            {% else %}
+            <p>No donations yet.</p>
+            {% endif %}
+        </div>
+
+        
+
+        <!-- 📩 Contact Submissions Card -->
+        <div class="card contacts">
+            <h3>📩 Contact Submissions</h3>
+            <p>Total Messages: {{ total_messages }}</p>
+            <p>Unique Contacts: {{ total_unique_contacts }}</p>
+            <p><strong>Pending:</strong> {{ pending_contacts_count }}</p>
+            <p><strong>Resolved:</strong> {{ resolved_contacts_count }}</p>
+        </div>
+
+        <!-- 👥 Volunteers Card -->
+
+        <div class="card volunteers">
+            <h3>👥 Volunteers</h3>
+            <p><strong>Total Volunteers:</strong> {{ total_volunteers }}</p>
+            <ul style="list-style-type: none; padding: 0;">
+                {% for interest, count in volunteers_by_interest.items() %}
+                    <li>{{ interest }}: {{ count }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+    </div>
+
+
+    <!-- 🔹 Donation Filter -->
+    <form method="GET" action="{{ url_for('admin.admin_dashboard') }}" class="filter-form">
+        <label for="donation_filter">Filter by Frequency:</label>
+        <select name="donation_filter">
+            <option value="" {% if not request.args.get('donation_filter') %}selected{% endif %}>All</option>
+            <option value="One-Time" {% if request.args.get('donation_filter') == 'One-Time' %}selected{% endif %}>One-Time</option>
+            <option value="Monthly" {% if request.args.get('donation_filter') == 'Monthly' %}selected{% endif %}>Monthly</option>
+            <option value="Yearly" {% if request.args.get('donation_filter') == 'Yearly' %}selected{% endif %}>Yearly</option>
+        </select>
+        <button type="submit" class="admin-button">Filter</button>
+    </form>
+
+    <!-- 🔹 Donation History Table -->
+    <h3>Donation History</h3>
+    {% if donations.items %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Amount</th>
+                <th>Frequency</th>
+                <th>Donated At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for donation in donations.items %}
+            <tr>
+                <td>{{ donation.id }}</td>
+                <td>{{ donation.name }}</td>
+                <td>{{ donation.email }}</td>
+                <td>${{ "{:,.2f}".format(donation.amount) }}</td>
+                <td>
+                    {% if donation.frequency == 'Monthly' %}
+                        <span class="status-badge status-monthly">📅 Monthly</span>
+                    {% elif donation.frequency == 'Yearly' %}
+                        <span class="status-badge status-yearly">📆 Yearly</span>
+                    {% elif donation.frequency == 'One-Time' %}
+                        <span class="status-badge status-onetime">🎁 One-Time</span>
+                    {% else %}
+                        <span class="status-badge status-onetime">🎁 One-Time</span>
+                    {% endif %}
+                </td>
+                <td>{{ donation.donated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p class="no-data">No donations found.</p>
+    {% endif %}
+
+    <!-- 🔹 Donation Pagination -->
+    <div class="pagination-controls">
+        {% if donations.has_prev %}
+            <a class="pagination-button" href="{{ url_for('admin.admin_dashboard', donation_page=donations.prev_num, query=request.args.get('query', ''), filter=request.args.get('filter', ''), donation_filter=request.args.get('donation_filter', '')) }}">← Previous</a>
+        {% endif %}
+        <span>Page {{ donations.page }} of {{ donations.pages }}</span>
+        {% if donations.has_next %}
+            <a class="pagination-button" href="{{ url_for('admin.admin_dashboard', donation_page=donations.next_num, query=request.args.get('query', ''), filter=request.args.get('filter', ''), donation_filter=request.args.get('donation_filter', '')) }}">Next →</a>
+        {% endif %}
+    </div>
+
+    <!-- 🔹 Admin Action Buttons -->
+    <div class="admin-actions">
+        {% if current_user.is_authenticated and current_user.username == "Admin" %}
+        <a href="{{ url_for('admin.add_event') }}" class="admin-button">➕ Add Upcoming Event</a>
+        {% endif %}
+        <a href="{{ url_for('admin.admin_volunteers') }}" class="admin-button">👥 Manage Volunteers</a>
+        <a href="{{ url_for('admin.manage_contacts') }}" class="admin-button">📩 Manage Contacts</a>
+        <a href="{{ url_for('admin.admin_events') }}" class="admin-button">📅 Manage Events</a>
+        <a href="{{ url_for('admin.manage_donations') }}" class="admin-button">💰 Manage Donations</a>
+        <a href="{{ url_for('admin.manage_stories') }}" class="admin-button">📚 Manage Stories</a>
+        <a href="{{ url_for('admin.admin_testimonials') }}" class="admin-button">🌟 Manage Testimonials</a>
+        <a href="{{ url_for('admin.manage_subscriptions') }}" class="admin-button">🔔 Manage Subscribers</a>
+        <a href="{{ url_for('admin.send_newsletter') }}" class="admin-button">📧 Send Newsletter</a>
+    </div>
+
+</div>
+{% endblock %}

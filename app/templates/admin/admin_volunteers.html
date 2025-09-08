@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Volunteer Signups{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Volunteer Signups</h2>
+
+    <form method="GET" action="{{ url_for('admin.admin_volunteers') }}" class="filter-form">
+        <input type="text" name="query" placeholder="Search by name or email" value="{{ request.args.get('query', '') }}">
+        <select name="interest">
+            <option value="" {% if not request.args.get('interest') %}selected{% endif %}>All Interests</option>
+            <option value="Outreach" {% if request.args.get('interest') == 'Outreach' %}selected{% endif %}>Outreach</option>
+            <option value="Event" {% if request.args.get('interest') == 'Event' %}selected{% endif %}>Event</option>
+            <option value="Fundraising" {% if request.args.get('interest') == 'Fundraising' %}selected{% endif %}>Fundraising</option>
+        </select>        
+        
+        <button type="submit">Filter</button>
+    </form>
+
+    {% if volunteers %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Interest Area</th>
+                <th>Submitted At</th>
+                <th>Action</th> <!-- ✅ Add a column for actions -->
+            </tr>
+        </thead>
+        <tbody>
+            {% for volunteer in volunteers %}
+            <tr>
+                <td>{{ volunteer.id }}</td>
+                <td>{{ volunteer.name }}</td>
+                <td>{{ volunteer.email }}</td>
+                <td>
+                    {% if volunteer.interest == "Outreach" %}
+                        <span class="badge badge-outreach">Outreach</span>
+                    {% elif volunteer.interest == "Event" %}
+                        <span class="badge badge-event">Event</span>
+                    {% elif volunteer.interest == "Fundraising" %}
+                        <span class="badge badge-fundraising">Fundraising</span>
+                    {% else %}
+                        {{ volunteer.interest }}
+                    {% endif %}
+                </td>
+                
+                <td>{{ volunteer.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <form action="{{ url_for('admin.delete_volunteer', volunteer_id=volunteer.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this submission?')">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <!-- 🔹 Volunteer Pagination -->
+    <!-- 🔹 Pagination -->
+    <div class="pagination">
+        {% if volunteers.has_prev %}
+            <a href="{{ url_for('admin.admin_volunteers', page=volunteers.prev_num, query=request.args.get('query', ''), interest=request.args.get('interest', '')) }}">← Previous</a>
+        {% endif %}
+
+        <span>Page {{ volunteers.page }} of {{ volunteers.pages }}</span>
+
+        {% if volunteers.has_next %}
+            <a href="{{ url_for('admin.admin_volunteers', page=volunteers.next_num, query=request.args.get('query', ''), interest=request.args.get('interest', '')) }}">Next →</a>
+        {% endif %}
+    </div>
+        {% else %}
+            <p class="no-data">No volunteer signups yet.</p>
+        {% endif %}
+</div>   
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="donate-container modern-donate">
+    <h2 class="donate-title"><i class="fas fa-donate" style="color:#28a745;"></i> Make a Donation</h2>
+    <p class="donate-subtitle">Your generosity changes lives. Complete the form below to give Zakat, Sadaqa, or support a cause.</p>
+    <form id="donate-form" class="donate-form">
+        <label for="amount">Donation Amount:</label>
+        <div class="quick-amounts">
+            <button type="button" class="quick-amount-btn" onclick="setAmount(25)">$25</button>
+            <button type="button" class="quick-amount-btn" onclick="setAmount(50)">$50</button>
+            <button type="button" class="quick-amount-btn" onclick="setAmount(100)">$100</button>
+            <button type="button" class="quick-amount-btn" onclick="setAmount(250)">$250</button>
+        </div>
+        <input type="number" id="amount" name="amount" step="0.01" min="1" placeholder="Enter amount" required value="{{ zakat_amount if zakat_amount else '' }}">
+
+        <label for="purpose">Donation Purpose:</label>
+        <select id="purpose" name="purpose" required>
+            <option value="Zakat">Zakat</option>
+            <option value="Sadaqa">Sadaqa</option>
+            <option value="Orphan Sponsorship">Orphan Sponsorship</option>
+            <option value="General">General Fund</option>
+        </select>
+
+        <label for="frequency">Donation Frequency:</label>
+        <select id="frequency" name="frequency">
+            <option value="One-Time">One-Time</option>
+            <option value="Monthly">Monthly</option>
+            <option value="Yearly">Yearly</option>
+        </select>
+
+        <div class="form-row">
+            <div>
+                <label for="name">Your Name:</label>
+                <input type="text" id="name" name="name" placeholder="Your name" required>
+            </div>
+            <div>
+                <label for="email">Your Email:</label>
+                <input type="email" id="email" name="email" placeholder="Your email" required>
+            </div>
+        </div>
+        <button type="submit" class="donate-button" style="background:#635bff;">Donate with Card</button>
+    </form>
+</div>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+function setAmount(val) {
+    document.getElementById('amount').value = val;
+}
+const stripe = Stripe("pk_test_51RV9fwR1hj91PidGsJlrpy77xd4ZfqMF5qKTXBmSEmvQ70j7AUPp6uRZHR2IQ93DBOYt7KrsLhhzHMKLP1FF5T0600nsAuHGl5");
+document.getElementById("donate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = document.getElementById("donate-form");
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    const response = await fetch("/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
+    const session = await response.json();
+    if (session.error) {
+        alert("Payment failed: " + session.error);
+        return;
+    }
+    stripe.redirectToCheckout({ sessionId: session.id });
+});
+</script>
+{% endblock %}

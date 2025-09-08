@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- 🔹 Volunteer Hero Section -->
+<section class="volunteer-section">
+    <h2>Join Us as a Volunteer</h2>
+    <p>Make a difference in the lives of those in need by offering your time and skills.</p>
+
+    <!-- 🔹 Horizontal Volunteer Cards -->
+    <div class="volunteer-container">
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/volunteer.jpg') }}" alt="Community Outreach">
+            <h3>Community Outreach</h3>
+            <p>Help distribute food, water, and essential supplies to those in need.</p>
+        </div>
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/outreach_coordinator.jpg') }}" alt="Event Coordinator">
+            <h3>Event Coordination</h3>
+            <p>Assist in organizing fundraising events and awareness campaigns.</p>
+        </div>
+        <div class="volunteer-box">
+            <img src="{{ url_for('static', filename='images/fundraiser.jpg') }}" alt="Fundraising">
+            <h3>Fundraising & Donations</h3>
+            <p>Support fundraising efforts to help sustain our mission and programs.</p>
+        </div>
+    </div>
+</section>
+
+<!-- 🔹 Volunteer Signup Form Centered -->
+<section class="volunteer-section">
+    <h3>Volunteer Sign-Up</h3>
+    <form method="POST" action="{{ url_for('main.volunteer') }}" class="zakat-form" style="margin: auto;">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="name">Full Name:</label>
+                <input type="text" id="name" name="name" placeholder="Enter your full name" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address:</label>
+                <input type="email" id="email" name="email" placeholder="Enter your email" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="interest">Area of Interest:</label>
+            <select id="interest" name="interest" required>
+                <option value="">Select...</option>
+                <option value="Outreach">Community Outreach</option>
+                <option value="Event">Event Coordination</option>
+                <option value="Fundraising">Fundraising & Donations</option>
+            </select>
+        </div>
+        <div class="form-actions">
+            <button type="submit">Sign Up</button>
+        </div>
+    </form>
+</section>
+
+{% endblock %}

@@ -1,0 +1,143 @@
+/* Testimonials Section */
+.testimonials {
+    text-align: center;
+    padding: 50px 20px;
+    background-color: #f7f7f7;
+}
+
+.testimonials-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.testimonial {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.15);
+    max-width: 300px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.testimonial:hover {
+    transform: scale(1.05) translateY(-8px);
+    box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+}
+
+.testimonial img {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 10px;
+    transition: transform 0.3s ease;
+}
+
+.testimonial:hover img {
+    transform: scale(1.05) translateY(-4px);
+}
+
+.testimonial p {
+    font-size: 1.1rem;
+    color: #333;
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+.testimonial h4 {
+    font-size: 1rem;
+    color: #0056b3;
+}
+
+/* Testimonial Cards Modern Layout */
+.testimonials-cards-container {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin: 32px 0 16px 0;
+}
+
+.testimonial-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.10), 0 1.5px 6px rgba(40, 167, 69, 0.08);
+    padding: 28px 22px 18px 22px;
+    max-width: 320px;
+    min-width: 240px;
+    flex: 1 1 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 18px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.testimonial-card:hover {
+    transform: translateY(-6px) scale(1.03);
+    box-shadow: 0 8px 32px rgba(40, 167, 69, 0.16);
+}
+
+.testimonial-img-oval {
+    width: 96px;
+    height: 128px;
+    border-radius: 50% / 55%;
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.10);
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.testimonial-img-oval img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.testimonial-text {
+    font-size: 1.08rem;
+    color: #333;
+    font-style: italic;
+    margin-bottom: 12px;
+    text-align: center;
+    min-height: 48px;
+}
+
+.testimonial-name {
+    font-size: 1.05rem;
+    color: #28a745;
+    font-weight: 600;
+    margin-top: 2px;
+    text-align: center;
+}
+
+@media (max-width: 900px) {
+    .testimonials-cards-container {
+        gap: 18px;
+    }
+
+    .testimonial-card {
+        max-width: 98vw;
+        min-width: 180px;
+        padding: 18px 8px 12px 8px;
+    }
+
+    .testimonial-img-oval {
+        width: 72px;
+        height: 96px;
+    }
+}
+
+/* Remove .testimonials-cards-container~h2, .testimonials-cards-container~.section-subtitle, .testimonials-cards-container { text-align: center !important; } since .section-title and .section-subtitle are now handled globally in sections.css */
+
+/* Remove .testimonials h2 and .testimonials-title from here, as they are now handled by .section-title in sections.css */
+
+/* Remove testimonial carousel styles since testimonial section does not use a carousel currently */

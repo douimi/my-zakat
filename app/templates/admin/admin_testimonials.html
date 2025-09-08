@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Manage Testimonials{% endblock %}
+{% block content %}
+<div class="container">
+    <h2>Manage Testimonials</h2>
+    {% if testimonials %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Country</th>
+                <th>Text</th>
+                <th>Rating</th>
+                <th>Category</th>
+                <th>Approved</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in testimonials %}
+            <tr>
+                <td>{{ t.id }}</td>
+                <td>{{ t.name }}</td>
+                <td>{{ t.country or '' }}</td>
+                <td>{{ t.text[:60] }}{% if t.text|length > 60 %}...{% endif %}</td>
+                <td>{% if t.rating %}{{ t.rating }}{% endif %}</td>
+                <td>{{ t.category|capitalize }}</td>
+                <td>{% if t.is_approved %}✅{% else %}❌{% endif %}</td>
+                <td>
+                    {% if not t.is_approved %}
+                    <form method="POST" action="{{ url_for('admin.approve_testimonial', testimonial_id=t.id) }}" style="display:inline;">
+                        <button type="submit" class="admin-button">Approve</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('admin.delete_testimonial', testimonial_id=t.id) }}" style="display:inline;">
+                        <button type="submit" class="admin-button btn-danger" onclick="return confirm('Delete this testimonial?')">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No testimonials found.</p>
+    {% endif %}
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-button">← Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
