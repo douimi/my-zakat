@@ -34,6 +34,40 @@ def create_app(config_name=None):
          allow_headers=['Content-Type', 'Authorization'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     
+    # Initialize database
+    with app.app_context():
+        try:
+            # Create instance directory if it doesn't exist
+            instance_dir = os.path.join(os.path.dirname(__file__), 'instance')
+            if not os.path.exists(instance_dir):
+                os.makedirs(instance_dir)
+                print(f"Created instance directory: {instance_dir}")
+            
+            # Import models to ensure they're registered
+            from models import (Admin, ContactSubmission, Donation, Story, 
+                              Event, Testimonial, Volunteer, Subscription)
+            
+            # Create all database tables
+            db.create_all()
+            print("✅ Database tables created/verified")
+            
+            # Create default admin user if it doesn't exist
+            from werkzeug.security import generate_password_hash
+            existing_admin = Admin.query.filter_by(username='admin').first()
+            if not existing_admin:
+                admin_user = Admin(
+                    username='admin',
+                    email='admin@myzakat.org',
+                    password=generate_password_hash('admin'),
+                    is_active=True
+                )
+                db.session.add(admin_user)
+                db.session.commit()
+                print("✅ Default admin user created (admin/admin)")
+            
+        except Exception as e:
+            print(f"⚠️  Database initialization warning: {str(e)}")
+    
     # Register blueprints
     from api import api_bp
     app.register_blueprint(api_bp, url_prefix='/api/v1')

@@ -229,3 +229,6 @@ class Subscription(db.Model):
             'subscribed_at': self.subscribed_at.isoformat() if self.subscribed_at else None,
             'is_active': self.is_active
         }
+
+# Alias for backwards compatibility
+NewsletterSubscription = Subscription

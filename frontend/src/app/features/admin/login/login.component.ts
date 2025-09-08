@@ -102,24 +102,13 @@ export class LoginComponent {
     this.isLoading = true;
     this.errorMessage = '';
 
-    // For development/demo purposes, let's add a simple check
-    if (this.loginData.username === 'admin' && this.loginData.password === 'admin') {
-      // Simulate successful login
-      localStorage.setItem('admin_token', 'demo-token');
-      localStorage.setItem('admin_user', JSON.stringify({ username: 'admin' }));
-      this.router.navigate(['/admin/dashboard']);
-      this.isLoading = false;
-      return;
-    }
-
-    // Try the actual API call
     this.apiService.post('/auth/login', this.loginData).subscribe({
       next: (response: any) => {
         console.log('Login successful:', response);
         
         // Store authentication token if provided
-        if (response.token) {
-          localStorage.setItem('admin_token', response.token);
+        if (response.access_token) {
+          localStorage.setItem('admin_token', response.access_token);
         }
         
         // Store user info if provided
@@ -135,11 +124,13 @@ export class LoginComponent {
         
         // Handle different types of errors
         if (error.status === 500) {
-          this.errorMessage = 'Server error occurred. Please try again later or use demo login (admin/admin).';
+          this.errorMessage = 'Server error occurred. Please try again later.';
         } else if (error.status === 0) {
-          this.errorMessage = 'Cannot connect to server. Please check your connection or use demo login (admin/admin).';
+          this.errorMessage = 'Cannot connect to server. Please check your connection.';
+        } else if (error.status === 401) {
+          this.errorMessage = 'Invalid username or password. Please try again.';
         } else {
-          this.errorMessage = error.error?.message || 'Invalid username or password. Try demo login (admin/admin).';
+          this.errorMessage = error.error?.message || 'Login failed. Please try again.';
         }
       },
       complete: () => {

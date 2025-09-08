@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
 
 interface DashboardStats {
@@ -15,7 +15,7 @@ interface DashboardStats {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="dashboard-container">
       <!-- Dashboard Header -->
@@ -79,40 +79,46 @@ interface DashboardStats {
       <div class="quick-actions">
         <h2>Quick Actions</h2>
         <div class="actions-grid">
-          <a href="/admin/stories" class="action-card">
+          <a routerLink="/admin/stories" class="action-card">
             <i class="fas fa-plus-circle"></i>
-            <h4>Add Story</h4>
-            <p>Share a new success story</p>
+            <h4>Manage Stories</h4>
+            <p>Add and edit success stories</p>
           </a>
 
-          <a href="/admin/events" class="action-card">
+          <a routerLink="/admin/events" class="action-card">
             <i class="fas fa-calendar-plus"></i>
-            <h4>Create Event</h4>
-            <p>Schedule a new event</p>
+            <h4>Manage Events</h4>
+            <p>Schedule and manage events</p>
           </a>
 
-          <a href="/admin/contacts" class="action-card">
-            <i class="fas fa-inbox"></i>
-            <h4>View Messages</h4>
-            <p>Check contact submissions</p>
+          <a routerLink="/admin/testimonials" class="action-card">
+            <i class="fas fa-star"></i>
+            <h4>Testimonials</h4>
+            <p>Approve and manage testimonials</p>
           </a>
 
-          <a href="/admin/donations" class="action-card">
-            <i class="fas fa-chart-line"></i>
-            <h4>Donation Reports</h4>
-            <p>View donation analytics</p>
+          <a routerLink="/admin/media" class="action-card">
+            <i class="fas fa-photo-video"></i>
+            <h4>Media Library</h4>
+            <p>Upload photos and videos</p>
           </a>
 
-          <a href="/admin/volunteers" class="action-card">
+          <a routerLink="/admin/volunteers" class="action-card">
             <i class="fas fa-user-friends"></i>
-            <h4>Manage Volunteers</h4>
+            <h4>Volunteers</h4>
             <p>Review volunteer applications</p>
           </a>
 
-          <a href="/admin/testimonials" class="action-card">
-            <i class="fas fa-star"></i>
-            <h4>Testimonials</h4>
-            <p>Approve testimonials</p>
+          <a routerLink="/admin/contacts" class="action-card">
+            <i class="fas fa-inbox"></i>
+            <h4>Messages</h4>
+            <p>Check contact submissions</p>
+          </a>
+
+          <a routerLink="/admin/donations" class="action-card">
+            <i class="fas fa-chart-line"></i>
+            <h4>Donations</h4>
+            <p>View donation reports</p>
           </a>
         </div>
       </div>

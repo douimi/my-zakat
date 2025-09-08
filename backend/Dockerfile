@@ -15,10 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create instance directory for SQLite database
-RUN mkdir -p instance
-
-# Create uploads directory
-RUN mkdir -p uploads
+RUN mkdir -p instance uploads
+RUN chmod 755 instance uploads
 
 # Set environment variables
 ENV FLASK_APP=app.py

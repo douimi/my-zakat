@@ -29,8 +29,8 @@ class Login(Resource):
         admin.last_login = datetime.utcnow()
         db.session.commit()
         
-        access_token = create_access_token(identity=admin.id)
-        refresh_token = create_refresh_token(identity=admin.id)
+        access_token = create_access_token(identity=str(admin.id))
+        refresh_token = create_refresh_token(identity=str(admin.id))
         
         return {
             'access_token': access_token,
@@ -69,7 +69,7 @@ class Refresh(Resource):
     @jwt_required(refresh=True)
     def post(self):
         identity = get_jwt_identity()
-        access_token = create_access_token(identity=identity)
+        access_token = create_access_token(identity=str(identity))
         return {'access_token': access_token}, 200
 
 class Logout(Resource):
@@ -81,7 +81,7 @@ class Logout(Resource):
 class Profile(Resource):
     @jwt_required()
     def get(self):
-        admin_id = get_jwt_identity()
+        admin_id = int(get_jwt_identity())
         admin = Admin.query.get(admin_id)
         
         if not admin:
@@ -91,7 +91,7 @@ class Profile(Resource):
     
     @jwt_required()
     def put(self):
-        admin_id = get_jwt_identity()
+        admin_id = int(get_jwt_identity())
         admin = Admin.query.get(admin_id)
         
         if not admin:
