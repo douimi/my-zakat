@@ -42,6 +42,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/testimonials/testimonials.component').then(m => m.TestimonialsComponent)
   },
   {
+    path: 'zakat-calculator',
+    loadComponent: () => import('./features/zakat-calculator/zakat-calculator.component').then(m => m.ZakatCalculatorComponent)
+  },
+  {
+    path: 'zakat-education',
+    loadComponent: () => import('./features/zakat-education/zakat-education.component').then(m => m.ZakatEducationComponent)
+  },
+  {
     path: 'admin',
     loadChildren: () => import('./features/admin/admin.routes').then(m => m.ADMIN_ROUTES)
   },

@@ -41,6 +41,15 @@ import { RouterModule } from '@angular/router';
               <li><a routerLink="/testimonials" (click)="closeMobileMenu()">Testimonials</a></li>
             </ul>
           </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link" (click)="toggleDropdown('zakat')">
+              Zakat <i class="arrow-down"></i>
+            </a>
+            <ul class="dropdown-menu" [class.show]="activeDropdown === 'zakat'">
+              <li><a routerLink="/zakat-calculator" (click)="closeMobileMenu()">Zakat Calculator</a></li>
+              <li><a routerLink="/zakat-education" (click)="closeMobileMenu()">Zakat Education</a></li>
+            </ul>
+          </li>
           <li class="nav-item">
             <a routerLink="/volunteer" routerLinkActive="active" class="nav-link" 
                (click)="closeMobileMenu()">Volunteer</a>
