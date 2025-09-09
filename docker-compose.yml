@@ -38,7 +38,7 @@ services:
       - STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-jwt-secret}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:4200}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:4200,http://38.242.253.204,https://38.242.253.204}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./app/static/images:/app/static/images:ro

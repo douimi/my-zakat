@@ -12,8 +12,8 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application for production
+RUN npm run build --configuration=production
 
 # Production stage
 FROM nginx:alpine
