@@ -1,0 +1,302 @@
+.stats-summary {
+  display: flex;
+  gap: 2rem;
+  margin-left: auto;
+}
+
+.stat-item {
+  text-align: center;
+  
+  .stat-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #28a745;
+  }
+  
+  .stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+}
+
+.controls-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tab-button {
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  color: #6c757d;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+  font-size: 0.9rem;
+  
+  &:hover {
+    color: #007bff;
+  }
+  
+  &.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+  }
+}
+
+.export-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.donor-info {
+  h4 {
+    margin: 0 0 0.25rem 0;
+    color: #2c3e50;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  
+  p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    
+    i {
+      color: #007bff;
+      width: 14px;
+    }
+  }
+}
+
+.donation-details {
+  .donation-type {
+    margin-bottom: 0.25rem;
+    
+    strong {
+      color: #2c3e50;
+      font-size: 0.9rem;
+    }
+  }
+  
+  .payment-method {
+    color: #6c757d;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    
+    i {
+      color: #007bff;
+      width: 16px;
+    }
+  }
+}
+
+.amount {
+  .amount-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #28a745;
+  }
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  
+  &.status-completed {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  &.status-pending {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  &.status-failed {
+    background: #f8d7da;
+    color: #721c24;
+  }
+}
+
+.status-completed {
+  background: rgba(212, 237, 218, 0.2);
+}
+
+.status-pending {
+  background: rgba(255, 243, 205, 0.2);
+}
+
+.status-failed {
+  background: rgba(248, 215, 218, 0.2);
+}
+
+.receipt-status {
+  .receipt-sent {
+    color: #28a745;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .receipt-pending {
+    color: #ffc107;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+}
+
+.btn-receipt {
+  background: #e3f2fd;
+  color: #1976d2;
+  
+  &:hover {
+    background: #bbdefb;
+  }
+}
+
+.btn-email {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  
+  &:hover {
+    background: #e1bee7;
+  }
+}
+
+.btn-retry {
+  background: #fff3e0;
+  color: #f57c00;
+  
+  &:hover {
+    background: #ffe0b2;
+  }
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  
+  &.btn-outline {
+    background: transparent;
+    color: #007bff;
+    border: 1px solid #007bff;
+    
+    &:hover {
+      background: #007bff;
+      color: white;
+    }
+  }
+}
+
+.charts-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  
+  h3 {
+    margin: 0 0 1rem 0;
+    color: #2c3e50;
+    font-size: 1.1rem;
+  }
+}
+
+.chart-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  color: #6c757d;
+  
+  i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  p {
+    margin: 0 0 0.25rem 0;
+    font-weight: 500;
+  }
+  
+  small {
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .stats-summary {
+    flex-direction: column;
+    gap: 1rem;
+    margin-left: 0;
+    margin-top: 1rem;
+  }
+  
+  .page-header {
+    align-items: flex-start;
+  }
+  
+  .controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filter-tabs {
+    flex-wrap: wrap;
+  }
+  
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .admin-table {
+    font-size: 0.875rem;
+    
+    th, td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+}
