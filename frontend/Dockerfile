@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:18-alpine as build
 
 WORKDIR /app
 
@@ -7,24 +7,24 @@ WORKDIR /app
 COPY package.json ./
 
 # Install dependencies
-RUN npm install --legacy-peer-deps
+RUN npm install
 
 # Copy source code
 COPY . .
 
-# Build the application for production
-RUN npm run build --configuration=production
+# Build the application
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy built assets from build stage
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist/myzakat-frontend /usr/share/nginx/html
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port
+# Expose port 80
 EXPOSE 80
 
 # Start nginx

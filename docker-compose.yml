@@ -1,80 +1,66 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: myzakat-db
+    restart: unless-stopped
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-myzakat}
-      - POSTGRES_USER=${POSTGRES_USER:-myzakat_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_password_2024}
+      POSTGRES_DB: myzakat
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - myzakat-network
-    restart: unless-stopped
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myzakat_user} -d ${POSTGRES_DB:-myzakat}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # FastAPI Backend
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: myzakat-backend
+    build: ./backend
+    restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "8000:8000"
     environment:
-      - FLASK_ENV=production
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD:-secure_password_2024}@db:5432/${POSTGRES_DB:-myzakat}
-      - MAIL_SERVER=${MAIL_SERVER:-smtp.gmail.com}
-      - MAIL_PORT=${MAIL_PORT:-587}
-      - MAIL_USE_TLS=true
-      - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD=${MAIL_PASSWORD}
-      - STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY}
+      - DATABASE_URL=postgresql://postgres:password@db:5432/myzakat
+      - SECRET_KEY=your-super-secret-key-change-in-production
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-jwt-secret}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:4200,http://38.242.253.204,https://38.242.253.204}
-    volumes:
-      - ./backend/uploads:/app/uploads
-      - ./app/static/images:/app/static/images:ro
-    networks:
-      - myzakat-network
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
 
+  # React Frontend
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: myzakat-frontend
+    build: ./frontend
+    restart: unless-stopped
     ports:
-      - "80:80"
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
     depends_on:
       - backend
-    networks:
-      - myzakat-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-networks:
-  myzakat-network:
-    driver: bridge
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
 
 volumes:
   postgres_data:
+  redis_data:
+  backend_uploads:

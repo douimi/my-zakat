@@ -7,23 +7,18 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create instance directory for SQLite database
-RUN mkdir -p instance uploads
-RUN chmod 755 instance uploads
-
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV PYTHONUNBUFFERED=1
+# Create uploads directory
+RUN mkdir -p uploads/images uploads/videos
 
 # Expose port
-EXPOSE 5000
+EXPOSE 8000
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gevent", "--timeout", "120", "app:create_app()"]
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
