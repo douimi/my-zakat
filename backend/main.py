@@ -96,10 +96,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware - Allow both local development and production
+allowed_origins = [
+    "http://localhost:3000",  # Local React dev
+    "http://localhost:5173",  # Local Vite dev
+    "http://38.242.253.204:3000",  # Your VPS frontend
+    "https://38.242.253.204:3000",  # HTTPS version if needed
+]
+
+# Add custom domain if environment variable is set
+custom_origin = os.getenv("FRONTEND_URL")
+if custom_origin:
+    allowed_origins.append(custom_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
