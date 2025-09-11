@@ -1,8 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-import stripe
+try:
+    import stripe
+    # Try to access the Session class directly
+    try:
+        from stripe.checkout import Session as StripeSession
+    except ImportError:
+        StripeSession = None
+except ImportError as e:
+    stripe = None
+    StripeSession = None
 import os
 from dotenv import load_dotenv
 
@@ -12,7 +21,11 @@ from schemas import DonationCreate, DonationResponse, PaymentCreate, PaymentSess
 from auth_utils import get_current_admin
 
 load_dotenv()
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+stripe_secret_key = os.getenv("STRIPE_SECRET_KEY")
+
+# Configure Stripe API key
+if stripe is not None and stripe_secret_key and stripe_secret_key.startswith(('sk_test_', 'sk_live_')):
+    stripe.api_key = stripe_secret_key
 
 router = APIRouter()
 
@@ -124,10 +137,20 @@ async def create_payment_session(payment: PaymentCreate):
             detail="Invalid amount"
         )
     
+    if stripe is None or not stripe.api_key or not stripe_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Payment processing is not configured. Please contact support."
+        )
+    
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
+        # Get frontend URL from environment or use default
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        
+        # Create session parameters
+        session_params = {
+            "payment_method_types": ["card"],
+            "line_items": [{
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
@@ -138,26 +161,93 @@ async def create_payment_session(payment: PaymentCreate):
                 },
                 "quantity": 1,
             }],
-            mode="payment",
-            customer_email=payment.email,
-            metadata={
+            "mode": "payment",
+            "customer_email": payment.email,
+            "metadata": {
                 "purpose": payment.purpose,
                 "frequency": payment.frequency,
                 "donor_name": payment.name
             },
-            success_url="http://localhost:3000/donation-success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="http://localhost:3000/donate",
-        )
+            "success_url": f"{frontend_url}/donation-success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{frontend_url}/donate",
+        }
+
+        # Create Stripe checkout session
+        if StripeSession:
+            session = StripeSession.create(**session_params)
+        else:
+            session = stripe.checkout.Session.create(**session_params)
+        
         return PaymentSession(id=session.id)
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stripe error: {str(e)}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="Payment processing error"
         )
 
 
 @router.post("/stripe-webhook")
-async def stripe_webhook(request, db: Session = Depends(get_db)):
-    # This would handle Stripe webhooks for payment confirmation
-    # Implementation would depend on your webhook configuration
-    pass
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle Stripe webhooks for payment confirmation"""
+    
+    try:
+        payload = await request.body()
+        sig_header = request.headers.get("stripe-signature")
+        webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+        
+        if not webhook_secret:
+            return {"status": "webhook secret not configured"}
+        
+        # Verify webhook signature
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+        
+        # Process webhook event
+        
+        # Handle successful payment
+        if event["type"] == "checkout.session.completed":
+            session = event["data"]["object"]
+            
+            # Extract payment details
+            customer_email = session.get("customer_email", "")
+            amount = session.get("amount_total", 0) / 100.0  # Convert from cents
+            
+            # Get donor name from metadata or customer details
+            donor_name = ""
+            if "metadata" in session and session["metadata"]:
+                donor_name = session["metadata"].get("donor_name", "")
+            elif "customer_details" in session and session["customer_details"]:
+                donor_name = session["customer_details"].get("name", "")
+            
+            purpose = session.get("metadata", {}).get("purpose", "General Donation")
+            frequency = session.get("metadata", {}).get("frequency", "One-Time")
+            
+            # Save donation to database
+            try:
+                donation = Donation(
+                    name=donor_name,
+                    email=customer_email,
+                    amount=amount,
+                    frequency=frequency
+                )
+                db.add(donation)
+                db.commit()
+                # TODO: Send confirmation email
+                # This would require email configuration
+                
+            except Exception as db_error:
+                db.rollback()
+                return {"status": "database error"}, 500
+        
+        return {"status": "success"}
+        
+    except stripe.error.SignatureVerificationError:
+        return {"status": "signature verification failed"}, 400
+    except Exception:
+        return {"status": "webhook error"}, 500
