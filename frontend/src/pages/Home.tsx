@@ -16,6 +16,8 @@ import {
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI } from '../utils/api'
 
 const Home = () => {
+  const [showHeroVideoModal, setShowHeroVideoModal] = useState(false)
+
   const { data: donationStats, error: statsError } = useQuery('donation-stats', donationsAPI.getStats, {
     retry: false,
     onError: (error) => console.error('Stats error:', error)
@@ -148,6 +150,37 @@ const Home = () => {
     return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com')
   }
 
+  const isYouTubeUrl = (url: string) => {
+    return url.includes('youtube.com') || url.includes('youtu.be')
+  }
+
+  const getYouTubeVideoId = (url: string) => {
+    if (url.includes('youtube.com/watch?v=')) {
+      return url.split('v=')[1].split('&')[0]
+    }
+    if (url.includes('youtu.be/')) {
+      return url.split('youtu.be/')[1].split('?')[0]
+    }
+    return null
+  }
+
+  const getYouTubeThumbnail = (url: string) => {
+    const videoId = getYouTubeVideoId(url)
+    return videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null
+  }
+
+  const getHeroVideoData = () => {
+    const videoUrl = getVideoUrl()
+    if (!videoUrl) return null
+
+    return {
+      url: videoUrl,
+      embedUrl: getEmbedVideoUrl(videoUrl),
+      thumbnail: isYouTubeUrl(videoUrl) ? getYouTubeThumbnail(videoUrl) : 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center',
+      isEmbeddable: isEmbeddableVideo(videoUrl)
+    }
+  }
+
   const programs = [
     {
       title: 'Emergency Relief',
@@ -202,48 +235,54 @@ const Home = () => {
 
             <div className="relative animate-fade-in">
               <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-                {getVideoUrl() ? (
-                  <div className="relative">
-                    {isEmbeddableVideo(getVideoUrl()!) ? (
-                      // Embedded video (YouTube, Vimeo, etc.)
-                      <div className="aspect-video">
-                        <iframe
-                          src={getEmbedVideoUrl(getVideoUrl()!)}
-                          className="w-full h-full"
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title="Hero Video"
-                        ></iframe>
+                {(() => {
+                  const heroVideo = getHeroVideoData()
+                  
+                  if (!heroVideo) {
+                    return (
+                      <>
+                        <img 
+                          src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center" 
+                          alt="Children receiving aid"
+                          className="w-full h-auto"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4">
+                              <Play className="w-8 h-8 text-white ml-1" />
+                            </div>
+                            <p className="text-white text-lg font-semibold">Video Coming Soon</p>
+                          </div>
+                        </div>
+                      </>
+                    )
+                  }
+
+                  // Always show thumbnail with play button - opens modal when clicked
+                  return (
+                    <div 
+                      className="relative cursor-pointer group"
+                      onClick={() => setShowHeroVideoModal(true)}
+                    >
+                      <div className="aspect-video bg-gray-200">
+                        <img 
+                          src={heroVideo.thumbnail}
+                          alt="Hero Video Thumbnail"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center'
+                          }}
+                        />
                       </div>
-                    ) : (
-                      // Direct video file
-                      <video 
-                        className="w-full h-auto"
-                        poster="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&h=400&fit=crop&crop=center"
-                        controls
-                        preload="metadata"
-                      >
-                        <source src={getVideoUrl()!} type="video/mp4" />
-                        Your browser does not support the video tag.
-                      </video>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <img 
-                      src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&h=400&fit=crop&crop=center" 
-                      alt="Children receiving aid"
-                      className="w-full h-auto"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                    <button className="absolute inset-0 flex items-center justify-center group">
-                      <div className="w-20 h-20 bg-white/90 rounded-full flex items-center justify-center group-hover:bg-white transition-colors">
-                        <Play className="w-8 h-8 text-primary-600 ml-1" />
+                      <div className="absolute inset-0 bg-black bg-opacity-40 group-hover:bg-opacity-50 flex items-center justify-center transition-all duration-300">
+                        <div className="bg-white bg-opacity-90 group-hover:bg-opacity-100 rounded-full p-6 group-hover:scale-110 transition-all duration-300 shadow-2xl">
+                          <Play className="w-16 h-16 text-primary-600 ml-2" />
+                        </div>
                       </div>
-                    </button>
-                  </>
-                )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -452,6 +491,52 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* Hero Video Modal */}
+      {showHeroVideoModal && (() => {
+        const heroVideo = getHeroVideoData()
+        if (!heroVideo) return null
+        
+        return (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowHeroVideoModal(false)}
+          >
+            <div className="relative max-w-4xl max-h-full w-full">
+              {heroVideo.isEmbeddable ? (
+                <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                  <iframe
+                    src={heroVideo.embedUrl}
+                    className="w-full h-full"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="Hero Video"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              ) : (
+                <video 
+                  className="w-full h-auto max-h-full rounded-lg"
+                  controls
+                  autoPlay
+                  preload="metadata"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <source src={heroVideo.url} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              )}
+              <button
+                onClick={() => setShowHeroVideoModal(false)}
+                className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -461,17 +546,44 @@ interface GallerySectionProps {
 }
 
 const GallerySection = ({ settings }: GallerySectionProps) => {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedMedia, setSelectedMedia] = useState<{url: string, type: 'image' | 'video'} | null>(null)
+
+  const isYouTubeUrl = (url: string) => {
+    return url.includes('youtube.com') || url.includes('youtu.be')
+  }
+
+  const getYouTubeVideoId = (url: string) => {
+    if (url.includes('youtube.com/watch?v=')) {
+      return url.split('v=')[1].split('&')[0]
+    }
+    if (url.includes('youtu.be/')) {
+      return url.split('youtu.be/')[1].split('?')[0]
+    }
+    return null
+  }
+
+  const getYouTubeThumbnail = (url: string) => {
+    const videoId = getYouTubeVideoId(url)
+    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null
+  }
+
+  const getYouTubeEmbedUrl = (url: string) => {
+    const videoId = getYouTubeVideoId(url)
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : url
+  }
 
   const getGalleryItems = () => {
     const items = []
     for (let i = 1; i <= 6; i++) {
       const setting = settings?.find(s => s.key === `gallery_item_${i}`)
       if (setting?.value) {
+        const isVideo = isYouTubeUrl(setting.value)
         items.push({
           id: i,
-          url: setting.value.startsWith('http') ? setting.value : `/api/uploads/media/images/${setting.value}`,
-          isUrl: setting.value.startsWith('http')
+          url: setting.value,
+          type: isVideo ? 'video' : 'image',
+          thumbnail: isVideo ? getYouTubeThumbnail(setting.value) : setting.value,
+          embedUrl: isVideo ? getYouTubeEmbedUrl(setting.value) : null
         })
       }
     }
@@ -497,33 +609,58 @@ const GallerySection = ({ settings }: GallerySectionProps) => {
         {galleryItems.map((item) => (
           <div 
             key={item.id}
-            className="aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow duration-300"
-            onClick={() => setSelectedImage(item.url)}
+            className="aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow duration-300 relative group"
+            onClick={() => setSelectedMedia({url: item.embedUrl || item.url, type: item.type})}
           >
             <img 
-              src={item.url}
-              alt={`Gallery image ${item.id}`}
+              src={item.thumbnail}
+              alt={`Gallery ${item.type} ${item.id}`}
               className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                // Fallback for broken images
+                e.currentTarget.src = 'https://via.placeholder.com/400x400/e5e7eb/9ca3af?text=Media+Not+Available'
+              }}
             />
+            {item.type === 'video' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-40 transition-all duration-300">
+                <div className="bg-white bg-opacity-90 rounded-full p-3 group-hover:bg-opacity-100 transition-all duration-300">
+                  <Play className="w-8 h-8 text-primary-600 ml-1" />
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Lightbox Modal */}
-      {selectedImage && (
+      {/* Media Modal */}
+      {selectedMedia && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedImage(null)}
+          onClick={() => setSelectedMedia(null)}
         >
-          <div className="relative max-w-4xl max-h-full">
-            <img 
-              src={selectedImage}
-              alt="Gallery image"
-              className="max-w-full max-h-full object-contain"
-            />
+          <div className="relative max-w-4xl max-h-full w-full">
+            {selectedMedia.type === 'video' ? (
+              <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                <iframe
+                  src={selectedMedia.url}
+                  className="w-full h-full"
+                  frameBorder="0"
+                  allowFullScreen
+                  title="Gallery Video"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            ) : (
+              <img 
+                src={selectedMedia.url}
+                alt="Gallery image"
+                className="max-w-full max-h-full object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
             <button
-              onClick={() => setSelectedImage(null)}
-              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75"
+              onClick={() => setSelectedMedia(null)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200"
             >
               <X className="w-6 h-6" />
             </button>

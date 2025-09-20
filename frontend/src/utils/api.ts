@@ -108,21 +108,13 @@ export const eventsAPI = {
     return response.data
   },
   
-  create: async (eventData: FormData) => {
-    const response = await api.post('/api/events/', eventData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  create: async (eventData: any) => {
+    const response = await api.post('/api/events/', eventData)
     return response.data
   },
   
-  update: async (id: number, eventData: FormData) => {
-    const response = await api.put(`/api/events/${id}`, eventData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  update: async (id: number, eventData: any) => {
+    const response = await api.put(`/api/events/${id}`, eventData)
     return response.data
   },
   
@@ -145,21 +137,13 @@ export const storiesAPI = {
     return response.data
   },
   
-  create: async (storyData: FormData) => {
-    const response = await api.post('/api/stories/', storyData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  create: async (storyData: any) => {
+    const response = await api.post('/api/stories/', storyData)
     return response.data
   },
   
-  update: async (id: number, storyData: FormData) => {
-    const response = await api.put(`/api/stories/${id}`, storyData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  update: async (id: number, storyData: any) => {
+    const response = await api.put(`/api/stories/${id}`, storyData)
     return response.data
   },
   
@@ -177,21 +161,13 @@ export const testimonialsAPI = {
     return response.data
   },
   
-  create: async (testimonialData: FormData) => {
-    const response = await api.post('/api/testimonials/', testimonialData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  create: async (testimonialData: any) => {
+    const response = await api.post('/api/testimonials/', testimonialData)
     return response.data
   },
   
-  update: async (id: number, testimonialData: FormData) => {
-    const response = await api.put(`/api/testimonials/${id}`, testimonialData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  update: async (id: number, testimonialData: any) => {
+    const response = await api.put(`/api/testimonials/${id}`, testimonialData)
     return response.data
   },
   

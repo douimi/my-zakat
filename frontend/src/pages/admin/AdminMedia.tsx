@@ -8,12 +8,11 @@ interface MediaItem {
   key: string
   value: string
   description: string
-  type: 'image' | 'video'
+  type: 'image' | 'video' | 'mixed'
   displayName: string
 }
 
 const AdminMedia = () => {
-  const [uploading, setUploading] = useState<string | null>(null)
   const [showUrlInput, setShowUrlInput] = useState<string | null>(null)
   const [urlValue, setUrlValue] = useState('')
   
@@ -29,7 +28,6 @@ const AdminMedia = () => {
         queryClient.invalidateQueries('admin-media-settings')
         queryClient.invalidateQueries('admin-settings')
         queryClient.invalidateQueries('home-media-settings') // Refresh home page
-        setUploading(null)
         setShowUrlInput(null)
         setUrlValue('')
       }
@@ -71,92 +69,126 @@ const AdminMedia = () => {
     {
       key: 'gallery_item_1',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_1')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 1'
     },
     {
       key: 'gallery_item_2',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_2')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 2'
     },
     {
       key: 'gallery_item_3',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_3')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 3'
     },
     {
       key: 'gallery_item_4',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_4')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 4'
     },
     {
       key: 'gallery_item_5',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_5')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 5'
     },
     {
       key: 'gallery_item_6',
       value: settings?.find((s: Setting) => s.key === 'gallery_item_6')?.value || '',
-      description: 'Gallery image/video showcasing operations and aid activities',
-      type: 'image',
+      description: 'Gallery photo or YouTube video showcasing operations and aid activities',
+      type: 'mixed',
       displayName: 'Gallery Item 6'
     }
   ]
 
-  const handleFileUpload = async (file: File, mediaKey: string, description: string) => {
-    setUploading(mediaKey)
-    
+  const isValidImageUrl = (url: string) => {
+    if (!url) return true // Empty URL is valid
     try {
-      // Get admin token
-      const token = localStorage.getItem('admin_token')
-      
-      if (!token) {
-        throw new Error('No admin token found. Please log in again.')
-      }
-      
-      // Create FormData for file upload
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('type', mediaKey)
-      
-      // Upload file to media endpoint
-      const response = await fetch('/api/admin/upload-media', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      })
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Upload failed: ${response.status} - ${errorText}`)
-      }
-      
-      const result = await response.json()
-      
-      // Update setting with new file path
-      updateMutation.mutate({
-        key: mediaKey,
-        data: {
-          value: result.filename,
-          description: description
-        }
-      })
-    } catch (error) {
-      console.error('Upload error:', error)
-      alert(`Upload failed: ${error.message}`)
-      setUploading(null)
+      const validUrl = new URL(url)
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+      const hasValidExtension = validExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
+    } catch {
+      return false
     }
+  }
+
+  const isValidVideoUrl = (url: string) => {
+    if (!url) return true // Empty URL is valid
+    try {
+      const validUrl = new URL(url)
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      
+      // Check for YouTube URLs
+      const isYoutube = url.includes('youtube.com') || url.includes('youtu.be')
+      
+      // Check for Vimeo URLs
+      const isVimeo = url.includes('vimeo.com')
+      
+      // Check for direct video file extensions
+      const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov']
+      const hasVideoExtension = videoExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      
+      return isValidDomain && (isYoutube || isVimeo || hasVideoExtension)
+    } catch {
+      return false
+    }
+  }
+
+  const isValidMixedUrl = (url: string) => {
+    return isValidImageUrl(url) || isValidVideoUrl(url)
+  }
+
+  const getValidationFunction = (type: string) => {
+    switch (type) {
+      case 'image': return isValidImageUrl
+      case 'video': return isValidVideoUrl
+      case 'mixed': return isValidMixedUrl
+      default: return isValidImageUrl
+    }
+  }
+
+  const getEmbedVideoUrl = (url: string) => {
+    // YouTube URL conversion
+    if (url.includes('youtube.com/watch?v=')) {
+      const videoId = url.split('v=')[1].split('&')[0]
+      return `https://www.youtube.com/embed/${videoId}`
+    }
+    if (url.includes('youtu.be/')) {
+      const videoId = url.split('youtu.be/')[1].split('?')[0]
+      return `https://www.youtube.com/embed/${videoId}`
+    }
+    
+    // Vimeo URL conversion
+    if (url.includes('vimeo.com/')) {
+      const videoId = url.split('vimeo.com/')[1].split('?')[0]
+      return `https://player.vimeo.com/video/${videoId}`
+    }
+    
+    // Return original URL for direct video files
+    return url
+  }
+
+  const isEmbeddableVideo = (url: string) => {
+    return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com')
+  }
+
+  const isVideoUrl = (url: string) => {
+    return isValidVideoUrl(url) && url.trim() !== ''
   }
 
   const handleRemoveMedia = (mediaKey: string, description: string) => {
@@ -216,11 +248,9 @@ const AdminMedia = () => {
             <MediaCard
               key={item.key}
               item={item}
-              isUploading={uploading === item.key}
               isUpdating={updateMutation.isLoading}
               showUrlInput={showUrlInput === item.key}
               urlValue={urlValue}
-              onUpload={(file) => handleFileUpload(file, item.key, item.description)}
               onRemove={() => handleRemoveMedia(item.key, item.description)}
               onUrlSubmit={() => handleUrlSubmit(item.key, item.description)}
               onOpenUrlInput={() => openUrlInput(item.key)}
@@ -243,11 +273,9 @@ const AdminMedia = () => {
             <MediaCard
               key={item.key}
               item={item}
-              isUploading={uploading === item.key}
               isUpdating={updateMutation.isLoading}
               showUrlInput={showUrlInput === item.key}
               urlValue={urlValue}
-              onUpload={(file) => handleFileUpload(file, item.key, item.description)}
               onRemove={() => handleRemoveMedia(item.key, item.description)}
               onUrlSubmit={() => handleUrlSubmit(item.key, item.description)}
               onOpenUrlInput={() => openUrlInput(item.key)}
@@ -300,11 +328,9 @@ const AdminMedia = () => {
 
 interface MediaCardProps {
   item: MediaItem
-  isUploading: boolean
   isUpdating: boolean
   showUrlInput: boolean
   urlValue: string
-  onUpload: (file: File) => void
   onRemove: () => void
   onUrlSubmit: () => void
   onOpenUrlInput: () => void
@@ -314,77 +340,23 @@ interface MediaCardProps {
 
 const MediaCard = ({ 
   item, 
-  isUploading, 
   isUpdating, 
   showUrlInput, 
   urlValue, 
-  onUpload, 
   onRemove, 
   onUrlSubmit, 
   onOpenUrlInput, 
   onCloseUrlInput, 
   onUrlChange 
 }: MediaCardProps) => {
-  const [dragOver, setDragOver] = useState(false)
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    
-    const files = Array.from(e.dataTransfer.files)
-    const file = files[0]
-    
-    if (file) {
-      const isValidType = item.type === 'video' 
-        ? file.type.startsWith('video/')
-        : file.type.startsWith('image/')
-      
-      if (isValidType) {
-        onUpload(file)
-      } else {
-        alert(`Please select a valid ${item.type} file`)
-      }
-    }
-  }
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Validate file type
-      const isValidType = item.type === 'video' 
-        ? file.type.startsWith('video/')
-        : file.type.startsWith('image/')
-      
-      if (!isValidType) {
-        alert(`Please select a valid ${item.type} file`)
-        return
-      }
-      
-      onUpload(file)
-    }
-    
-    // Reset the input value so the same file can be selected again
-    e.target.value = ''
-  }
 
   const isUrl = (value: string) => {
     return value.startsWith('http://') || value.startsWith('https://')
   }
 
   const getDisplayUrl = (value: string) => {
-    if (isUrl(value)) return value
     if (!value) return null
-    return `/api/uploads/media/${item.type === 'video' ? 'videos' : 'images'}/${value}`
+    return value // All values should be URLs now
   }
 
   const getEmbedVideoUrl = (url: string) => {
@@ -411,6 +383,57 @@ const MediaCard = ({
   const isEmbeddableVideo = (url: string) => {
     return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com')
   }
+
+  const isValidImageUrl = (url: string) => {
+    if (!url) return true
+    try {
+      const validUrl = new URL(url)
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+      const hasValidExtension = validExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
+    } catch {
+      return false
+    }
+  }
+
+  const isValidVideoUrl = (url: string) => {
+    if (!url) return true
+    try {
+      const validUrl = new URL(url)
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      
+      const isYoutube = url.includes('youtube.com') || url.includes('youtu.be')
+      const isVimeo = url.includes('vimeo.com')
+      const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov']
+      const hasVideoExtension = videoExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      
+      return isValidDomain && (isYoutube || isVimeo || hasVideoExtension)
+    } catch {
+      return false
+    }
+  }
+
+  const isValidMixedUrl = (url: string) => {
+    return isValidImageUrl(url) || isValidVideoUrl(url)
+  }
+
+  const getValidationFunction = () => {
+    switch (item.type) {
+      case 'image': return isValidImageUrl
+      case 'video': return isValidVideoUrl
+      case 'mixed': return isValidMixedUrl
+      default: return isValidImageUrl
+    }
+  }
+
+  const isValidUrl = getValidationFunction()
+  const isVideoContent = isValidVideoUrl(urlValue) && urlValue.trim() !== ''
+
 
   return (
     <div className="card">
@@ -444,7 +467,9 @@ const MediaCard = ({
       {showUrlInput && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-blue-900">Add {item.type === 'video' ? 'Video' : 'Image'} URL</h4>
+            <h4 className="font-semibold text-blue-900">
+              Add {item.type === 'video' ? 'Video' : item.type === 'mixed' ? 'Photo/Video' : 'Photo'} URL
+            </h4>
             <button
               onClick={onCloseUrlInput}
               className="text-blue-600 hover:text-blue-700"
@@ -457,13 +482,61 @@ const MediaCard = ({
               type="url"
               value={urlValue}
               onChange={(e) => onUrlChange(e.target.value)}
-              placeholder={`Enter ${item.type} URL (https://...)`}
-              className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={
+                item.type === 'video' 
+                  ? "Enter video URL (https://youtube.com/watch?v=...)" 
+                  : item.type === 'mixed'
+                  ? "Enter photo or YouTube video URL"
+                  : "Enter photo URL (https://example.com/photo.jpg)"
+              }
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                !isValidUrl(urlValue) && urlValue ? 'border-red-300' : 'border-blue-300'
+              }`}
             />
+            {!isValidUrl(urlValue) && urlValue && (
+              <p className="text-red-600 text-sm">
+                {item.type === 'video' 
+                  ? "Please enter a valid video URL (YouTube, Vimeo, or direct video file)"
+                  : item.type === 'mixed'
+                  ? "Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg) or YouTube video URL"
+                  : "Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)"
+                }
+              </p>
+            )}
+            {urlValue && isValidUrl(urlValue) && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-600 mb-2">Preview:</p>
+                {isVideoContent && isEmbeddableVideo(urlValue) ? (
+                  <iframe
+                    src={getEmbedVideoUrl(urlValue)}
+                    className="w-full h-32 rounded"
+                    frameBorder="0"
+                    allowFullScreen
+                    title="Video Preview"
+                  />
+                ) : isVideoContent ? (
+                  <video 
+                    src={urlValue} 
+                    controls
+                    className="w-full h-32 rounded"
+                    preload="metadata"
+                  />
+                ) : (
+                  <img 
+                    src={urlValue} 
+                    alt="Preview" 
+                    className="w-24 h-24 object-cover rounded"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                )}
+              </div>
+            )}
             <div className="flex space-x-2">
               <button
                 onClick={onUrlSubmit}
-                disabled={!urlValue.trim() || isUpdating}
+                disabled={!urlValue.trim() || !isValidUrl(urlValue) || isUpdating}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUpdating ? (
@@ -474,7 +547,7 @@ const MediaCard = ({
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Save URL
+                    Save {item.type === 'video' ? 'Video' : item.type === 'mixed' ? 'Media' : 'Photo'} URL
                   </>
                 )}
               </button>
@@ -485,6 +558,14 @@ const MediaCard = ({
                 Cancel
               </button>
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {item.type === 'video' 
+                ? "Supports: YouTube, Vimeo, MP4, WebM, OGG"
+                : item.type === 'mixed'
+                ? "Supports: Photos (JPG, PNG, GIF, WebP, SVG) and YouTube videos"
+                : "Supports: JPG, JPEG, PNG, GIF, WebP, SVG from any website"
+              }
+            </p>
           </div>
         </div>
       )}
@@ -493,110 +574,99 @@ const MediaCard = ({
       {item.value && (
         <div className="mb-4">
           <div className="bg-gray-100 rounded-lg p-4">
-            {item.type === 'video' ? (
-              <div>
-                <div className="flex items-center mb-3">
+            <div>
+              <div className="flex items-center mb-3">
+                {isValidVideoUrl(item.value) && item.value.trim() !== '' ? (
                   <Video className="w-6 h-6 text-gray-600 mr-2" />
-                  <p className="font-medium text-gray-900">Current Video</p>
-                  {isUrl(item.value) && <LinkIcon className="w-4 h-4 text-blue-600 ml-2" />}
-                </div>
-                {getDisplayUrl(item.value) && (
-                  <div className="mb-3">
-                    {isUrl(item.value) && isEmbeddableVideo(item.value) ? (
-                      // Embedded video preview (YouTube, Vimeo, etc.)
-                      <div className="aspect-video max-h-48">
-                        <iframe
-                          src={getEmbedVideoUrl(item.value)}
-                          className="w-full h-full rounded"
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title="Video Preview"
-                        ></iframe>
-                      </div>
+                ) : (
+                  <ImageIcon className="w-6 h-6 text-gray-600 mr-2" />
+                )}
+                <p className="font-medium text-gray-900">
+                  Current {isValidVideoUrl(item.value) && item.value.trim() !== '' ? 'Video' : 'Photo'}
+                </p>
+                {isUrl(item.value) && <LinkIcon className="w-4 h-4 text-blue-600 ml-2" />}
+              </div>
+              {getDisplayUrl(item.value) && (
+                <div className="mb-3">
+                  {isValidVideoUrl(item.value) && item.value.trim() !== '' ? (
+                    isEmbeddableVideo(item.value) ? (
+                      <iframe
+                        src={getEmbedVideoUrl(item.value)}
+                        className="w-full h-48 rounded"
+                        frameBorder="0"
+                        allowFullScreen
+                        title="Current Video"
+                      />
                     ) : (
-                      // Direct video file
                       <video 
                         src={getDisplayUrl(item.value)!}
                         controls
                         className="w-full max-h-48 rounded"
                         preload="metadata"
                       />
-                    )}
-                  </div>
-                )}
-                <p className="text-sm text-gray-600 break-all">{item.value}</p>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center mb-3">
-                  <ImageIcon className="w-6 h-6 text-gray-600 mr-2" />
-                  <p className="font-medium text-gray-900">Current Image</p>
-                  {isUrl(item.value) && <LinkIcon className="w-4 h-4 text-blue-600 ml-2" />}
-                </div>
-                {getDisplayUrl(item.value) && (
-                  <div className="mb-3">
+                    )
+                  ) : (
                     <img 
                       src={getDisplayUrl(item.value)!}
                       alt={item.displayName}
                       className="w-full max-h-48 object-cover rounded"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
                     />
-                  </div>
-                )}
-                <p className="text-sm text-gray-600 break-all">{item.value}</p>
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+              <p className="text-sm text-gray-600 break-all">{item.value}</p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Upload Area */}
-      <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          dragOver
-            ? 'border-primary-400 bg-primary-50'
-            : 'border-gray-300 hover:border-gray-400'
-        } ${(isUploading || isUpdating) ? 'opacity-50 pointer-events-none' : ''}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {isUploading ? (
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-4"></div>
-            <p className="text-primary-600 font-medium">Uploading {item.type}...</p>
-            <p className="text-gray-500 text-sm mt-1">Please wait while we process your file</p>
-          </div>
-        ) : isUpdating ? (
+      {/* Media URL Input Area */}
+      <div className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors border-gray-300 hover:border-gray-400 ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}>
+        {isUpdating ? (
           <div className="flex flex-col items-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-blue-600 font-medium">Updating media...</p>
+            <p className="text-blue-600 font-medium">Updating {item.type === 'video' ? 'video' : 'media'}...</p>
           </div>
         ) : (
           <>
             <div className="flex justify-center mb-4">
               {item.type === 'video' ? (
                 <Video className="w-12 h-12 text-gray-400" />
+              ) : item.type === 'mixed' ? (
+                <div className="flex space-x-2">
+                  <ImageIcon className="w-12 h-12 text-gray-400" />
+                  <Video className="w-12 h-12 text-gray-400" />
+                </div>
               ) : (
                 <ImageIcon className="w-12 h-12 text-gray-400" />
               )}
             </div>
-            <p className="text-gray-600 mb-2">
-              Drag and drop your {item.type} here, or
+            <p className="text-gray-600 mb-4">
+              {item.type === 'video' 
+                ? "Enter a video URL to set this video"
+                : item.type === 'mixed'
+                ? "Enter a photo or YouTube video URL"
+                : "Enter a photo URL to set this image"
+              }
             </p>
-            <div className="flex flex-col space-y-2">
-              <label className="btn-primary inline-flex items-center cursor-pointer">
-                <Upload className="w-4 h-4 mr-2" />
-                Choose {item.type === 'video' ? 'Video' : 'Image'}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept={item.type === 'video' ? 'video/*' : 'image/*'}
-                  onChange={handleFileSelect}
-                />
-              </label>
-              <p className="text-gray-500 text-sm">or use the URL button above to add a link</p>
-            </div>
+            <button
+              onClick={onOpenUrlInput}
+              className="btn-primary inline-flex items-center"
+            >
+              <LinkIcon className="w-4 h-4 mr-2" />
+              Add {item.type === 'video' ? 'Video' : item.type === 'mixed' ? 'Media' : 'Photo'} URL
+            </button>
+            <p className="text-gray-500 text-sm mt-2">
+              {item.type === 'video' 
+                ? "Supports: YouTube, Vimeo, MP4, WebM, OGG"
+                : item.type === 'mixed'
+                ? "Supports: Photos (JPG, PNG, GIF, WebP, SVG) and YouTube videos"
+                : "Supports: JPG, JPEG, PNG, GIF, WebP, SVG"
+              }
+            </p>
           </>
         )}
       </div>

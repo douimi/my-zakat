@@ -12,7 +12,7 @@ interface TestimonialFormData {
   video_url: string
   category: string
   is_approved: boolean
-  image?: File | null
+  image_url: string
 }
 
 const AdminTestimonials = () => {
@@ -27,7 +27,7 @@ const AdminTestimonials = () => {
     video_url: '',
     category: 'donor',
     is_approved: false,
-    image: null
+    image_url: ''
   })
   
   const queryClient = useQueryClient()
@@ -44,7 +44,7 @@ const AdminTestimonials = () => {
   })
   
   const updateMutation = useMutation(
-    ({ id, data }: { id: number; data: FormData }) => testimonialsAPI.update(id, data),
+    ({ id, data }: { id: number; data: any }) => testimonialsAPI.update(id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('admin-testimonials')
@@ -74,7 +74,7 @@ const AdminTestimonials = () => {
       video_url: '',
       category: 'donor',
       is_approved: false,
-      image: null
+      image_url: ''
     })
     setEditingTestimonial(null)
     setShowForm(false)
@@ -90,7 +90,7 @@ const AdminTestimonials = () => {
       video_url: testimonial.video_url || '',
       category: testimonial.category || 'donor',
       is_approved: testimonial.is_approved,
-      image: null
+      image_url: testimonial.image_filename || ''
     })
     setShowForm(true)
   }
@@ -98,17 +98,15 @@ const AdminTestimonials = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const submitData = new FormData()
-    submitData.append('name', formData.name)
-    submitData.append('country', formData.country)
-    submitData.append('text', formData.text)
-    submitData.append('rating', formData.rating.toString())
-    submitData.append('video_url', formData.video_url)
-    submitData.append('category', formData.category)
-    submitData.append('is_approved', formData.is_approved.toString())
-    
-    if (formData.image) {
-      submitData.append('image', formData.image)
+    const submitData = {
+      name: formData.name,
+      country: formData.country,
+      text: formData.text,
+      rating: formData.rating,
+      video_url: formData.video_url,
+      category: formData.category,
+      is_approved: formData.is_approved,
+      image_filename: formData.image_url
     }
 
     if (editingTestimonial) {
@@ -122,16 +120,27 @@ const AdminTestimonials = () => {
     approveMutation.mutate(id)
   }
 
+  const isValidImageUrl = (url: string) => {
+    if (!url) return true // Empty URL is valid
+    try {
+      const validUrl = new URL(url)
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+      const hasValidExtension = validExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
+    } catch {
+      return false
+    }
+  }
+
   const handleDelete = (id: number) => {
     if (window.confirm('Are you sure you want to delete this testimonial?')) {
       deleteMutation.mutate(id)
     }
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null
-    setFormData(prev => ({ ...prev, image: file }))
-  }
 
   const filteredTestimonials = testimonials?.filter((testimonial: Testimonial) => {
     if (filter === 'pending') return !testimonial.is_approved
@@ -292,24 +301,36 @@ const AdminTestimonials = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Profile Image
+                  Profile Photo URL
                 </label>
                 <input
-                  type="file"
-                  onChange={handleImageChange}
-                  accept="image/*"
-                  className="input-field"
+                  type="url"
+                  value={formData.image_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
+                  placeholder="https://example.com/photo.jpg"
+                  className={`input-field ${!isValidImageUrl(formData.image_url) ? 'border-red-300' : ''}`}
                 />
-                {editingTestimonial?.image && (
+                {!isValidImageUrl(formData.image_url) && formData.image_url && (
+                  <p className="text-red-600 text-sm mt-1">
+                    Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)
+                  </p>
+                )}
+                {formData.image_url && isValidImageUrl(formData.image_url) && (
                   <div className="mt-2">
-                    <p className="text-sm text-gray-600">Current image:</p>
+                    <p className="text-sm text-gray-600">Preview:</p>
                     <img 
-                      src={`/api/uploads/testimonials/${editingTestimonial.image}`} 
-                      alt="Current testimonial" 
+                      src={formData.image_url} 
+                      alt="Profile preview" 
                       className="w-20 h-20 object-cover rounded-full mt-1"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
                     />
                   </div>
                 )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter a direct URL to a photo (supports jpg, jpeg, png, gif, webp, svg)
+                </p>
               </div>
 
               <div>
@@ -387,14 +408,23 @@ const AdminTestimonials = () => {
                   <tr key={testimonial.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-4 px-4">
                       <div className="flex items-center">
-                        {testimonial.image ? (
+                        {testimonial.image_filename ? (
                           <img 
-                            src={`/api/uploads/testimonials/${testimonial.image}`} 
+                            src={testimonial.image_filename} 
                             alt={testimonial.name}
                             className="w-10 h-10 object-cover rounded-full mr-3"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                            }}
                           />
                         ) : (
                           <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3">
+                            <User className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                        {testimonial.image_filename && (
+                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3 hidden">
                             <User className="w-5 h-5 text-gray-400" />
                           </div>
                         )}
@@ -433,10 +463,10 @@ const AdminTestimonials = () => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-2">
-                        {testimonial.image && (
+                        {testimonial.image_filename && (
                           <div className="flex items-center text-green-600">
                             <ImageIcon className="w-4 h-4" />
-                            <span className="ml-1 text-xs">Image</span>
+                            <span className="ml-1 text-xs">Photo</span>
                           </div>
                         )}
                         {testimonial.video_url && (

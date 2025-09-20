@@ -11,7 +11,7 @@ interface StoryFormData {
   is_active: boolean
   is_featured: boolean
   video_url: string
-  image?: File | null
+  image_url: string
 }
 
 const AdminStories = () => {
@@ -24,7 +24,7 @@ const AdminStories = () => {
     is_active: true,
     is_featured: false,
     video_url: '',
-    image: null
+    image_url: ''
   })
   
   const queryClient = useQueryClient()
@@ -41,7 +41,7 @@ const AdminStories = () => {
   })
   
   const updateMutation = useMutation(
-    ({ id, data }: { id: number; data: FormData }) => storiesAPI.update(id, data),
+    ({ id, data }: { id: number; data: any }) => storiesAPI.update(id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('admin-stories')
@@ -64,7 +64,7 @@ const AdminStories = () => {
       is_active: true,
       is_featured: false,
       video_url: '',
-      image: null
+      image_url: ''
     })
     setEditingStory(null)
     setShowForm(false)
@@ -79,7 +79,7 @@ const AdminStories = () => {
       is_active: story.is_active,
       is_featured: story.is_featured,
       video_url: story.video_url || '',
-      image: null
+      image_url: story.image_filename || ''
     })
     setShowForm(true)
   }
@@ -87,16 +87,14 @@ const AdminStories = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const submitData = new FormData()
-    submitData.append('title', formData.title)
-    submitData.append('summary', formData.summary)
-    submitData.append('content', formData.content)
-    submitData.append('is_active', formData.is_active.toString())
-    submitData.append('is_featured', formData.is_featured.toString())
-    submitData.append('video_url', formData.video_url)
-    
-    if (formData.image) {
-      submitData.append('image', formData.image)
+    const submitData = {
+      title: formData.title,
+      summary: formData.summary,
+      content: formData.content,
+      is_active: formData.is_active,
+      is_featured: formData.is_featured,
+      video_url: formData.video_url,
+      image_filename: formData.image_url
     }
 
     if (editingStory) {
@@ -112,9 +110,19 @@ const AdminStories = () => {
     }
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null
-    setFormData(prev => ({ ...prev, image: file }))
+  const isValidImageUrl = (url: string) => {
+    if (!url) return true // Empty URL is valid
+    try {
+      const validUrl = new URL(url)
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+      const hasValidExtension = validExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
+    } catch {
+      return false
+    }
   }
 
   if (isLoading) {
@@ -196,24 +204,36 @@ const AdminStories = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Story Image
+                    Story Photo URL
                   </label>
                   <input
-                    type="file"
-                    onChange={handleImageChange}
-                    accept="image/*"
-                    className="input-field"
+                    type="url"
+                    value={formData.image_url}
+                    onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
+                    placeholder="https://example.com/photo.jpg"
+                    className={`input-field ${!isValidImageUrl(formData.image_url) ? 'border-red-300' : ''}`}
                   />
-                  {editingStory?.image_filename && (
+                  {!isValidImageUrl(formData.image_url) && formData.image_url && (
+                    <p className="text-red-600 text-sm mt-1">
+                      Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)
+                    </p>
+                  )}
+                  {formData.image_url && isValidImageUrl(formData.image_url) && (
                     <div className="mt-2">
-                      <p className="text-sm text-gray-600">Current image:</p>
+                      <p className="text-sm text-gray-600">Preview:</p>
                       <img 
-                        src={`/api/uploads/stories/${editingStory.image_filename}`} 
-                        alt="Current story" 
+                        src={formData.image_url} 
+                        alt="Story preview" 
                         className="w-20 h-20 object-cover rounded mt-1"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
                       />
                     </div>
                   )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter a direct URL to a photo (supports jpg, jpeg, png, gif, webp, svg)
+                  </p>
                 </div>
 
                 <div>

@@ -9,7 +9,7 @@ interface EventFormData {
   description: string
   date: string
   location: string
-  image?: File | null
+  image_url: string
 }
 
 const AdminEvents = () => {
@@ -20,7 +20,7 @@ const AdminEvents = () => {
     description: '',
     date: '',
     location: '',
-    image: null
+    image_url: ''
   })
   
   const queryClient = useQueryClient()
@@ -44,7 +44,7 @@ const AdminEvents = () => {
   })
   
   const updateMutation = useMutation(
-    ({ id, data }: { id: number; data: FormData }) => eventsAPI.update(id, data),
+    ({ id, data }: { id: number; data: any }) => eventsAPI.update(id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('admin-events')
@@ -65,7 +65,7 @@ const AdminEvents = () => {
       description: '',
       date: '',
       location: '',
-      image: null
+      image_url: ''
     })
     setEditingEvent(null)
     setShowForm(false)
@@ -78,7 +78,7 @@ const AdminEvents = () => {
       description: event.description,
       date: event.date.split('T')[0], // Convert to YYYY-MM-DD format
       location: event.location,
-      image: null
+      image_url: event.image || ''
     })
     setShowForm(true)
   }
@@ -86,14 +86,12 @@ const AdminEvents = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const submitData = new FormData()
-    submitData.append('title', formData.title)
-    submitData.append('description', formData.description)
-    submitData.append('date', formData.date)
-    submitData.append('location', formData.location)
-    
-    if (formData.image) {
-      submitData.append('image', formData.image)
+    const submitData = {
+      title: formData.title,
+      description: formData.description,
+      date: formData.date,
+      location: formData.location,
+      image: formData.image_url
     }
 
     if (editingEvent) {
@@ -109,9 +107,19 @@ const AdminEvents = () => {
     }
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null
-    setFormData(prev => ({ ...prev, image: file }))
+  const isValidImageUrl = (url: string) => {
+    if (!url) return true // Empty URL is valid
+    try {
+      const validUrl = new URL(url)
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+      const hasValidExtension = validExtensions.some(ext => 
+        validUrl.pathname.toLowerCase().includes(ext)
+      )
+      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
+      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
+    } catch {
+      return false
+    }
   }
 
   // Debug: Log the events data
@@ -226,24 +234,36 @@ const AdminEvents = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Event Image
+                  Event Photo URL
                 </label>
                 <input
-                  type="file"
-                  onChange={handleImageChange}
-                  accept="image/*"
-                  className="input-field"
+                  type="url"
+                  value={formData.image_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
+                  placeholder="https://example.com/photo.jpg"
+                  className={`input-field ${!isValidImageUrl(formData.image_url) ? 'border-red-300' : ''}`}
                 />
-                {editingEvent?.image && (
+                {!isValidImageUrl(formData.image_url) && formData.image_url && (
+                  <p className="text-red-600 text-sm mt-1">
+                    Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)
+                  </p>
+                )}
+                {formData.image_url && isValidImageUrl(formData.image_url) && (
                   <div className="mt-2">
-                    <p className="text-sm text-gray-600">Current image:</p>
+                    <p className="text-sm text-gray-600">Preview:</p>
                     <img 
-                      src={`/api/uploads/events/${editingEvent.image}`} 
-                      alt="Current event" 
+                      src={formData.image_url} 
+                      alt="Event preview" 
                       className="w-20 h-20 object-cover rounded mt-1"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
                     />
                   </div>
                 )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter a direct URL to a photo (supports jpg, jpeg, png, gif, webp, svg)
+                </p>
               </div>
 
               <div className="flex justify-end space-x-4 pt-4">
@@ -318,12 +338,21 @@ const AdminEvents = () => {
                     <td className="py-4 px-4">
                       {event.image ? (
                         <img 
-                          src={`/api/uploads/events/${event.image}`} 
+                          src={event.image} 
                           alt={event.title}
                           className="w-16 h-16 object-cover rounded"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                          }}
                         />
                       ) : (
                         <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
+                          <ImageIcon className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                      {event.image && (
+                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center hidden">
                           <ImageIcon className="w-6 h-6 text-gray-400" />
                         </div>
                       )}

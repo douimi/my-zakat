@@ -33,6 +33,7 @@ services:
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_your_stripe_publishable_key_here}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-whsec_your_webhook_secret_here}
       - FRONTEND_URL=http://localhost:3000
+      - ENVIRONMENT=development
     depends_on:
       db:
         condition: service_healthy
