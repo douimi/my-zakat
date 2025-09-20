@@ -97,6 +97,7 @@ app = FastAPI(
 )
 
 # CORS middleware - Allow both local development and production
+# For production deployment, we need to be more permissive to allow mobile access
 allowed_origins = [
     "http://localhost:3000",  # Local React dev
     "http://localhost:5173",  # Local Vite dev
@@ -109,13 +110,27 @@ custom_origin = os.getenv("FRONTEND_URL")
 if custom_origin:
     allowed_origins.append(custom_origin)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Check if we're in production mode (based on environment)
+is_production = os.getenv("ENVIRONMENT", "development") == "production"
+
+if is_production:
+    # In production, allow all origins to support mobile devices and different network contexts
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow all origins for production
+        allow_credentials=False,  # Must be False when allow_origins=["*"]
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # In development, use specific origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Mount static files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
