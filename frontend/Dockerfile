@@ -3,9 +3,11 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
-# Accept API URL as build argument
+# Accept build arguments
 ARG VITE_API_URL=http://localhost:8000
+ARG VITE_STRIPE_PUBLISHABLE_KEY=pk_test_default
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
 
 # Copy package files
 COPY package.json ./
