@@ -23,8 +23,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik.rule=Host(`traefik.myzakat.org`)"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.entrypoints=web"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.middlewares=auth"
       - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$K8V2VzMrCOWQ8gF8qGWoVeF8WGqJ8Wq8WGqJ8Wq8WGqJ8Wq8WGqJ8W"
@@ -90,7 +89,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: https://myzakat.org/api
+        VITE_API_URL: https://myzakat.org
         VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
     container_name: myzakat-frontend
     restart: unless-stopped
