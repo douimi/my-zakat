@@ -54,7 +54,9 @@ docker network create traefik-network 2>/dev/null || print_warning "Traefik netw
 
 # Check if environment file exists
 if [ ! -f "env.production" ]; then
-    print_error "env.production file not found. Please create it with your production settings."
+    print_error "env.production file not found. Please create it from env.example with your actual values."
+    print_status "Run: cp env.example env.production"
+    print_status "Then edit env.production with your actual Stripe keys and other credentials."
     exit 1
 fi
 

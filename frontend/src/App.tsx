@@ -29,8 +29,8 @@ import AdminMedia from './pages/admin/AdminMedia'
 import AdminRoute from './components/AdminRoute'
 import AdminLayout from './components/AdminLayout'
 
-// Initialize Stripe (you'll need to set your publishable key)
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_...')
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
 
 function App() {
   return (

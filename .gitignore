@@ -1,10 +1,11 @@
 .env
+.env.*
+env.production
 __pycache__/
 instance/
 *.pyc
 *.pyo
 *.pyd
-.env.*
 # Ignore all video files in the repository
 *.mp4
 *.mov

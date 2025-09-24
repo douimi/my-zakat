@@ -2,16 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-try:
-    import stripe
-    # Try to access the Session class directly
-    try:
-        from stripe.checkout import Session as StripeSession
-    except ImportError:
-        StripeSession = None
-except ImportError as e:
-    stripe = None
-    StripeSession = None
+import stripe
 import os
 from dotenv import load_dotenv
 
@@ -21,10 +12,10 @@ from schemas import DonationCreate, DonationResponse, PaymentCreate, PaymentSess
 from auth_utils import get_current_admin
 
 load_dotenv()
-stripe_secret_key = os.getenv("STRIPE_SECRET_KEY")
 
 # Configure Stripe API key
-if stripe is not None and stripe_secret_key and stripe_secret_key.startswith(('sk_test_', 'sk_live_')):
+stripe_secret_key = os.getenv("STRIPE_SECRET_KEY")
+if stripe_secret_key and stripe_secret_key.startswith(('sk_test_', 'sk_live_')):
     stripe.api_key = stripe_secret_key
 
 router = APIRouter()
@@ -131,63 +122,63 @@ async def calculate_zakat(calculation: ZakatCalculation):
 
 @router.post("/create-payment-session", response_model=PaymentSession)
 async def create_payment_session(payment: PaymentCreate):
+    # Validate amount
     if not payment.amount or payment.amount < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid amount"
         )
     
-    if stripe is None or not stripe.api_key or not stripe_secret_key:
+    # Check if Stripe is configured
+    if not stripe.api_key or not stripe_secret_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Payment processing is not configured. Please contact support."
         )
     
     try:
-        # Get frontend URL from environment or use default
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        # Get frontend URL from environment
+        frontend_url = os.getenv("FRONTEND_URL", "https://myzakat.org")
         
-        # Create session parameters
-        session_params = {
-            "payment_method_types": ["card"],
-            "line_items": [{
+        # Create Stripe checkout session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
-                        "name": f"{payment.purpose} ({payment.frequency})",
-                        "description": f"Donor: {payment.name}, Email: {payment.email}",
+                        "name": f"{payment.purpose} - {payment.frequency}",
+                        "description": f"Donation from {payment.name}",
                     },
-                    "unit_amount": int(payment.amount * 100),
+                    "unit_amount": int(payment.amount * 100),  # Convert to cents
                 },
                 "quantity": 1,
             }],
-            "mode": "payment",
-            "customer_email": payment.email,
-            "metadata": {
+            mode="payment",
+            customer_email=payment.email,
+            metadata={
                 "purpose": payment.purpose,
                 "frequency": payment.frequency,
-                "donor_name": payment.name
+                "donor_name": payment.name,
+                "donor_email": payment.email
             },
-            "success_url": f"{frontend_url}/donation-success?session_id={{CHECKOUT_SESSION_ID}}",
-            "cancel_url": f"{frontend_url}/donate",
-        }
-
-        # Create Stripe checkout session
-        if StripeSession:
-            session = StripeSession.create(**session_params)
-        else:
-            session = stripe.checkout.Session.create(**session_params)
+            success_url=f"{frontend_url}/donation-success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{frontend_url}/donate",
+        )
         
-        return PaymentSession(id=session.id)
+        return PaymentSession(id=checkout_session.id)
+        
     except stripe.error.StripeError as e:
+        print(f"Stripe error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stripe error: {str(e)}"
         )
     except Exception as e:
+        print(f"Payment processing error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Payment processing error"
+            detail=f"Payment processing error: {str(e)}"
         )
 
 
