@@ -11,8 +11,6 @@ interface DonationForm {
   amount: number
   frequency: string
   purpose: string
-  payment_day?: number
-  payment_month?: number
 }
 
 const Donate = () => {
@@ -22,24 +20,6 @@ const Donate = () => {
     searchParams.get('zakat_amount') ? parseFloat(searchParams.get('zakat_amount')!) : null
   )
 
-  // Helper functions
-  const getOrdinalSuffix = (day: number): string => {
-    if (day >= 11 && day <= 13) return 'th'
-    switch (day % 10) {
-      case 1: return 'st'
-      case 2: return 'nd'
-      case 3: return 'rd'
-      default: return 'th'
-    }
-  }
-
-  const getMonthName = (month: number): string => {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ]
-    return months[month - 1] || ''
-  }
   
   const stripe = useStripe()
   const elements = useElements()
@@ -80,8 +60,8 @@ const Donate = () => {
           email: data.email,
           purpose: data.purpose,
           interval: data.frequency === 'Monthly' ? 'month' : 'year',
-          payment_day: data.payment_day || 1,
-          payment_month: data.frequency === 'Annually' ? data.payment_month : undefined
+          payment_day: 1,  // Default to 1st of month
+          payment_month: undefined  // Not used anymore
         })
 
         // Redirect to Stripe Checkout
@@ -224,73 +204,11 @@ const Donate = () => {
                 {/* Payment Schedule - Show only for recurring payments */}
                 {(watch('frequency') === 'Monthly' || watch('frequency') === 'Annually') && (
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h4 className="text-lg font-semibold text-blue-900 mb-3">Payment Schedule</h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Payment Day */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Day of Month *
-                        </label>
-                        <select 
-                          {...register('payment_day', { 
-                            required: watch('frequency') === 'Monthly' || watch('frequency') === 'Annually',
-                            valueAsNumber: true 
-                          })} 
-                          className="input-field"
-                        >
-                          <option value="">Select day</option>
-                          {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                            <option key={day} value={day}>{day}</option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {watch('frequency') === 'Monthly' 
-                            ? 'Payment will be processed on this day each month'
-                            : 'Payment will be processed on this day each year'
-                          }
-                        </p>
-                      </div>
-
-                      {/* Payment Month - Only for Annual */}
-                      {watch('frequency') === 'Annually' && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Month *
-                          </label>
-                          <select 
-                            {...register('payment_month', { 
-                              required: watch('frequency') === 'Annually',
-                              valueAsNumber: true 
-                            })} 
-                            className="input-field"
-                          >
-                            <option value="">Select month</option>
-                            {[
-                              'January', 'February', 'March', 'April', 'May', 'June',
-                              'July', 'August', 'September', 'October', 'November', 'December'
-                            ].map((month, index) => (
-                              <option key={month} value={index + 1}>{month}</option>
-                            ))}
-                          </select>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Payment will be processed in this month each year
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-3 p-3 bg-white rounded border border-blue-100">
-                      <p className="text-sm text-blue-800">
-                        <strong>Next Payment:</strong> Your first payment will be processed on the next occurrence of your selected date.
-                        {watch('frequency') === 'Monthly' && watch('payment_day') && 
-                          ` (${new Date().getDate() > watch('payment_day') ? 'Next month' : 'This month'} on the ${watch('payment_day')}${getOrdinalSuffix(watch('payment_day'))})`
-                        }
-                        {watch('frequency') === 'Annually' && watch('payment_day') && watch('payment_month') &&
-                          ` (${getMonthName(watch('payment_month'))} ${watch('payment_day')}${getOrdinalSuffix(watch('payment_day'))})`
-                        }
-                      </p>
-                    </div>
+                    <h4 className="text-lg font-semibold text-blue-900 mb-3">Recurring Payment</h4>
+                    <p className="text-sm text-blue-800">
+                      <strong>Payment Schedule:</strong> Your first payment will be processed immediately. 
+                      Future payments will occur {watch('frequency') === 'Monthly' ? 'monthly' : 'annually'} from today's date.
+                    </p>
                   </div>
                 )}
 

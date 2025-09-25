@@ -702,22 +702,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 amount = subscription["items"]["data"][0]["price"]["unit_amount"] / 100.0
                 interval = subscription["items"]["data"][0]["price"]["recurring"]["interval"]
                 
-                # Calculate next payment date
-                payment_day = int(metadata.get("payment_day", 1))
-                payment_month = metadata.get("payment_month")
-                payment_month = int(payment_month) if payment_month and payment_month.isdigit() else None
-                
-                next_payment = calculate_next_payment_date(payment_day, payment_month, interval)
-                
-                # Update the subscription's billing cycle to match the desired payment date
-                try:
-                    stripe.Subscription.modify(
-                        subscription_id,
-                        billing_cycle_anchor=int(next_payment.timestamp()),
-                        proration_behavior="none"
-                    )
-                except stripe.error.StripeError as e:
-                    print(f"Warning: Could not update billing cycle: {e}")
+                # No custom billing cycle - payments will occur naturally from today
                 
                 # Find existing pending subscription by customer email or create new one
                 existing_subscription = db.query(DonationSubscription).filter(
@@ -730,7 +715,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     existing_subscription.stripe_subscription_id = subscription_id
                     existing_subscription.stripe_customer_id = customer_id
                     existing_subscription.status = "active"
-                    existing_subscription.next_payment_date = next_payment
+                    existing_subscription.next_payment_date = None  # Will be set by Stripe naturally
                 else:
                     # Create new subscription record
                     db_subscription = DonationSubscription(
@@ -738,27 +723,34 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         stripe_customer_id=customer_id,
                         name=metadata.get("donor_name", customer.name or ""),
                         email=customer.email,
-                    amount=amount,
+                        amount=amount,
                         purpose=metadata.get("purpose", "General Donation"),
                         interval=interval,
-                        payment_day=payment_day,
-                        payment_month=payment_month,
+                        payment_day=1,  # Default value
+                        payment_month=None,  # Not used
                         status="active",
-                        next_payment_date=next_payment
+                        next_payment_date=None  # Will be set by Stripe naturally
                     )
                     db.add(db_subscription)
                 
-                # Handle the initial payment donation record
-                # For subscriptions, we should not create a "Setup" donation
-                # The actual payment will be handled by invoice.payment_succeeded
+                # Create initial donation record for the subscription
                 existing_donation = db.query(Donation).filter(
                     Donation.email == customer.email,
                     Donation.frequency.like("Recurring%Pending")
                 ).first()
                 
                 if existing_donation:
-                    # Remove the pending donation - it will be replaced by the actual payment
-                    db.delete(existing_donation)
+                    # Update existing pending donation
+                    existing_donation.frequency = f"Recurring {interval}ly"
+                else:
+                    # Create new donation record for the subscription
+                    donation = Donation(
+                        name=metadata.get("donor_name", customer.name or ""),
+                        email=customer.email,
+                        amount=amount,
+                        frequency=f"Recurring {interval}ly"
+                    )
+                    db.add(donation)
                 
                 db.commit()
             except Exception as db_error:
