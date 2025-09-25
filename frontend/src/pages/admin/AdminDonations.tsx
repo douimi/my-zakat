@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
 import { Heart, Search, Filter, Download, Eye, RefreshCw } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
@@ -12,21 +12,25 @@ const AdminDonations = () => {
   const queryClient = useQueryClient()
 
   const { data: donations, isLoading } = useQuery(
-    ['admin-donations', searchTerm, frequencyFilter, page],
+    ['admin-donations'],
     () => donationsAPI.getAll()
   )
 
   const { data: stats } = useQuery('donation-stats', donationsAPI.getStats)
 
-  const filteredDonations = donations?.filter((donation: Donation) => {
-    const matchesSearch = !searchTerm || 
-      donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      donation.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredDonations = useMemo(() => {
+    if (!donations) return []
     
-    const matchesFrequency = !frequencyFilter || donation.frequency === frequencyFilter
+    return donations.filter((donation: Donation) => {
+      const matchesSearch = !searchTerm || 
+        donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        donation.email.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesFrequency = !frequencyFilter || donation.frequency === frequencyFilter
 
-    return matchesSearch && matchesFrequency
-  }) || []
+      return matchesSearch && matchesFrequency
+    })
+  }, [donations, searchTerm, frequencyFilter])
 
   const handleSyncStripeData = async () => {
     setSyncing(true)

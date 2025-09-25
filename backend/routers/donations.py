@@ -168,20 +168,19 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             cancel_url=f"{frontend_url}/donate",
         )
         
-        # For development: Create a pending donation record immediately
+        # Create a pending donation record immediately (fallback for webhook issues)
         # This will be updated by webhook when payment is confirmed
-        if os.getenv("ENVIRONMENT", "development") == "development":
-            try:
-                pending_donation = Donation(
-                    name=payment.name,
-                    email=payment.email,
-                    amount=payment.amount,
-                    frequency=f"Pending - {payment.frequency}"
-                )
-                db.add(pending_donation)
-                db.commit()
-            except Exception as e:
-                db.rollback()
+        try:
+            pending_donation = Donation(
+                name=payment.name,
+                email=payment.email,
+                amount=payment.amount,
+                frequency=f"Pending - {payment.frequency}"
+            )
+            db.add(pending_donation)
+            db.commit()
+        except Exception as e:
+            db.rollback()
         
         return PaymentSession(id=checkout_session.id)
         
@@ -366,43 +365,43 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             }
         )
         
-        # For development: Create a pending subscription record immediately
-        if os.getenv("ENVIRONMENT", "development") == "development":
-            try:
-                # Calculate next payment for pending record
-                next_payment = calculate_next_payment_date(
-                    subscription.payment_day,
-                    subscription.payment_month,
-                    subscription.interval
-                )
-                
-                pending_subscription = DonationSubscription(
-                    stripe_subscription_id=f"pending_{checkout_session.id}",
-                    stripe_customer_id=customer.id,
-                    name=subscription.name,
-                    email=subscription.email,
-                    amount=subscription.amount,
-                    purpose=subscription.purpose,
-                    interval=subscription.interval,
-                    payment_day=subscription.payment_day,
-                    payment_month=subscription.payment_month,
-                    status="pending",
-                    next_payment_date=next_payment
-                )
-                db.add(pending_subscription)
-                
-                # Also create a donation record for the subscription
-                pending_donation = Donation(
-                    name=subscription.name,
-                    email=subscription.email,
-                    amount=subscription.amount,
-                    frequency=f"Recurring {subscription.interval}ly - Pending"
-                )
-                db.add(pending_donation)
-                
-                db.commit()
-            except Exception as e:
-                db.rollback()
+        # Create pending subscription record immediately (fallback for webhook issues)
+        # This will be updated by webhook when subscription is confirmed
+        try:
+            # Calculate next payment for pending record
+            next_payment = calculate_next_payment_date(
+                subscription.payment_day,
+                subscription.payment_month,
+                subscription.interval
+            )
+            
+            pending_subscription = DonationSubscription(
+                stripe_subscription_id=f"pending_{checkout_session.id}",
+                stripe_customer_id=customer.id,
+                name=subscription.name,
+                email=subscription.email,
+                amount=subscription.amount,
+                purpose=subscription.purpose,
+                interval=subscription.interval,
+                payment_day=subscription.payment_day,
+                payment_month=subscription.payment_month,
+                status="pending",
+                next_payment_date=next_payment
+            )
+            db.add(pending_subscription)
+            
+            # Also create a donation record for the subscription
+            pending_donation = Donation(
+                name=subscription.name,
+                email=subscription.email,
+                amount=subscription.amount,
+                frequency=f"Recurring {subscription.interval}ly - Pending"
+            )
+            db.add(pending_donation)
+            
+            db.commit()
+        except Exception as e:
+            db.rollback()
         
         return SubscriptionSession(id=checkout_session.id)
         
@@ -604,6 +603,7 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
         )
 
 
+
 @router.post("/stripe-webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhooks for payment confirmation"""
@@ -612,6 +612,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         payload = await request.body()
         sig_header = request.headers.get("stripe-signature")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+        
         
         if not webhook_secret:
             return {"status": "webhook secret not configured"}
@@ -654,7 +655,6 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     db.commit()
                 except Exception as db_error:
                     db.rollback()
-                    print(f"Database error for one-time payment: {db_error}")
                     
             elif session_mode == "subscription":
                 # Subscription setup completed
