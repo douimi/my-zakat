@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-    import stripe
+import stripe
 import os
 from datetime import datetime, timedelta
 from calendar import monthrange
@@ -654,16 +654,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             
             if session_mode == "payment":
                 # One-time payment - update existing pending donation
-            customer_email = session.get("customer_email", "")
+                customer_email = session.get("customer_email", "")
                 amount = session.get("amount_total", 0) / 100.0
-            
-            donor_name = ""
-            if "metadata" in session and session["metadata"]:
-                donor_name = session["metadata"].get("donor_name", "")
-            elif "customer_details" in session and session["customer_details"]:
-                donor_name = session["customer_details"].get("name", "")
-            
-            frequency = session.get("metadata", {}).get("frequency", "One-Time")
+                
+                donor_name = ""
+                if "metadata" in session and session["metadata"]:
+                    donor_name = session["metadata"].get("donor_name", "")
+                elif "customer_details" in session and session["customer_details"]:
+                    donor_name = session["customer_details"].get("name", "")
+                
+                frequency = session.get("metadata", {}).get("frequency", "One-Time")
                 
                 try:
                     # Find and update existing pending donation by session ID
