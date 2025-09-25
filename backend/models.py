@@ -23,6 +23,7 @@ class Donation(Base):
     email = Column(String(100), nullable=False)
     amount = Column(Float, nullable=False)
     frequency = Column(String(50), nullable=False)
+    stripe_session_id = Column(String(255), nullable=True)  # Track Stripe session for updates
     donated_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -113,6 +114,7 @@ class DonationSubscription(Base):
     id = Column(Integer, primary_key=True, index=True)
     stripe_subscription_id = Column(String(255), unique=True, nullable=False)
     stripe_customer_id = Column(String(255), nullable=False)
+    stripe_session_id = Column(String(255), nullable=True)  # Track Stripe session for updates
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
     amount = Column(Float, nullable=False)

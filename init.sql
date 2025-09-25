@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS donations (
     email VARCHAR(100) NOT NULL,
     amount FLOAT NOT NULL,
     frequency VARCHAR(50) NOT NULL,
+    stripe_session_id VARCHAR(255),
     donated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -162,6 +163,7 @@ CREATE TABLE IF NOT EXISTS donation_subscriptions (
     id SERIAL PRIMARY KEY,
     stripe_subscription_id VARCHAR(255) UNIQUE NOT NULL,
     stripe_customer_id VARCHAR(255) NOT NULL,
+    stripe_session_id VARCHAR(255),
     name VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL,
     amount DECIMAL(10,2) NOT NULL,

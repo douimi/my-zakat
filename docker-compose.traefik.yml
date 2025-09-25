@@ -32,6 +32,8 @@ services:
     image: postgres:15-alpine
     container_name: myzakat-db
     restart: unless-stopped
+    ports:
+      - "5432:5432"  # Expose PostgreSQL port for external access
     environment:
       POSTGRES_DB: myzakat
       POSTGRES_USER: ${POSTGRES_USER:-myzakat_user}
