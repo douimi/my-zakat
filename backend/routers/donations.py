@@ -255,6 +255,7 @@ def calculate_next_payment_date(payment_day: int, payment_month: Optional[int] =
 @router.post("/create-subscription", response_model=SubscriptionSession)
 async def create_subscription(subscription: SubscriptionCreate, db: Session = Depends(get_db)):
     # Validate input
+    print(f"DEBUG: Creating subscription for {subscription.email} - ${subscription.amount}")
     if not subscription.amount or subscription.amount < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -289,8 +290,10 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
     
     try:
         frontend_url = os.getenv("FRONTEND_URL", "https://myzakat.org")
+        print("DEBUG: Starting subscription creation process")
         
         # Create or retrieve customer
+        print("DEBUG: Creating Stripe customer")
         customer = stripe.Customer.create(
             email=subscription.email,
             name=subscription.name,
@@ -300,6 +303,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
             }
         )
+        print(f"DEBUG: Customer created: {customer.id}")
         
         # Create product first
         product = stripe.Product.create(
@@ -402,11 +406,15 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
         return SubscriptionSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
+        print(f"DEBUG: Stripe error in subscription: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stripe error: {str(e)}"
         )
     except Exception as e:
+        print(f"DEBUG: Unexpected error in subscription: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Subscription processing error: {str(e)}"
