@@ -330,14 +330,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             }
         )
         
-        # Calculate billing cycle anchor for specific day/month
-        next_payment = calculate_next_payment_date(
-            subscription.payment_day, 
-            subscription.payment_month, 
-            subscription.interval
-        )
-        
-        # Create checkout session for subscription with no proration
+        # Create checkout session for subscription - charge immediately, set billing cycle after
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
@@ -347,7 +340,6 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             mode="subscription",
             customer=customer.id,
             subscription_data={
-                "billing_cycle_anchor": int(next_payment.timestamp()),
                 "proration_behavior": "none",  # Disable proration - charge full amount immediately
                 "metadata": {
                     "purpose": subscription.purpose,
@@ -717,6 +709,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 payment_month = int(payment_month) if payment_month and payment_month.isdigit() else None
                 
                 next_payment = calculate_next_payment_date(payment_day, payment_month, interval)
+                
+                # Update the subscription's billing cycle to match the desired payment date
+                try:
+                    stripe.Subscription.modify(
+                        subscription_id,
+                        billing_cycle_anchor=int(next_payment.timestamp()),
+                        proration_behavior="none"
+                    )
+                except stripe.error.StripeError as e:
+                    print(f"Warning: Could not update billing cycle: {e}")
                 
                 # Find existing pending subscription by customer email or create new one
                 existing_subscription = db.query(DonationSubscription).filter(
