@@ -156,3 +156,26 @@ BEGIN
     
     RAISE NOTICE 'You can now log in with: username=admin, password=admin';
 END $$;
+
+-- Create donation_subscriptions table for recurring payments
+CREATE TABLE IF NOT EXISTS donation_subscriptions (
+    id SERIAL PRIMARY KEY,
+    stripe_subscription_id VARCHAR(255) UNIQUE NOT NULL,
+    stripe_customer_id VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    purpose VARCHAR(100) NOT NULL,
+    interval VARCHAR(20) NOT NULL, -- 'month' or 'year'
+    payment_day INTEGER NOT NULL, -- Day of month (1-31)
+    payment_month INTEGER, -- Month for annual (1-12)
+    status VARCHAR(50) DEFAULT 'active', -- active, canceled, past_due
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    next_payment_date TIMESTAMP
+);
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_donation_subscriptions_stripe_id ON donation_subscriptions(stripe_subscription_id);
+CREATE INDEX IF NOT EXISTS idx_donation_subscriptions_status ON donation_subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_donation_subscriptions_email ON donation_subscriptions(email);

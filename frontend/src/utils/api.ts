@@ -69,6 +69,39 @@ export const donationsAPI = {
     const response = await api.post('/api/donations/create-payment-session', payment)
     return response.data
   },
+  
+  createSubscription: async (subscription: {
+    amount: number
+    name: string
+    email: string
+    purpose?: string
+    interval: 'month' | 'year'
+    payment_day: number
+    payment_month?: number
+  }): Promise<{ id: string }> => {
+    const response = await api.post('/api/donations/create-subscription', subscription)
+    return response.data
+  },
+  
+  cancelSubscription: async (subscriptionId: string) => {
+    const response = await api.post('/api/donations/cancel-subscription', { subscription_id: subscriptionId })
+    return response.data
+  },
+  
+  getSubscriptions: async () => {
+    const response = await api.get('/api/donations/subscriptions')
+    return response.data
+  },
+  
+  syncStripeData: async () => {
+    const response = await api.post('/api/donations/sync-stripe-data')
+    return response.data
+  },
+  
+  updateSubscriptionStatus: async () => {
+    const response = await api.post('/api/donations/update-subscription-status')
+    return response.data
+  },
 }
 
 // Contact API

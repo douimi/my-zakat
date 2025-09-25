@@ -7,7 +7,7 @@ import {
   BookOpen, 
   MessageSquare, 
   Star,
-  Mail,
+  CreditCard,
   Settings,
   LogOut,
   Menu,
@@ -31,7 +31,7 @@ const AdminLayout = () => {
     { name: 'Stories', href: '/admin/stories', icon: BookOpen },
     { name: 'Testimonials', href: '/admin/testimonials', icon: Star },
     { name: 'Volunteers', href: '/admin/volunteers', icon: Users },
-    { name: 'Subscriptions', href: '/admin/subscriptions', icon: Mail },
+    { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
     { name: 'Media', href: '/admin/media', icon: Image },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
   ]

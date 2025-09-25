@@ -222,10 +222,27 @@ class PaymentCreate(BaseModel):
     email: EmailStr
     purpose: str = "Donation"
     frequency: str = "One-Time"
+    payment_day: Optional[int] = None  # Day of month for monthly (1-31)
+    payment_month: Optional[int] = None  # Month for annual (1-12)
+
+
+class SubscriptionCreate(BaseModel):
+    amount: float
+    name: str
+    email: EmailStr
+    purpose: str = "Donation"
+    interval: str  # "month" or "year"
+    payment_day: int  # Day of month (1-31)
+    payment_month: Optional[int] = None  # Month for annual payments (1-12)
 
 
 class PaymentSession(BaseModel):
     id: str
+    
+    
+class SubscriptionSession(BaseModel):
+    id: str
+    subscription_id: Optional[str] = None
 
 
 # Settings schemas

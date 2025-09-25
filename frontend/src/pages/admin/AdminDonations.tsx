@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from 'react-query'
-import { Heart, Search, Filter, Download, Eye } from 'lucide-react'
+import { useQuery, useQueryClient } from 'react-query'
+import { Heart, Search, Filter, Download, Eye, RefreshCw } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 
@@ -8,6 +8,8 @@ const AdminDonations = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState('')
   const [page, setPage] = useState(1)
+  const [syncing, setSyncing] = useState(false)
+  const queryClient = useQueryClient()
 
   const { data: donations, isLoading } = useQuery(
     ['admin-donations', searchTerm, frequencyFilter, page],
@@ -25,6 +27,21 @@ const AdminDonations = () => {
 
     return matchesSearch && matchesFrequency
   }) || []
+
+  const handleSyncStripeData = async () => {
+    setSyncing(true)
+    try {
+      const result = await donationsAPI.syncStripeData()
+      alert(`Successfully synced ${result.synced} records from Stripe`)
+      queryClient.invalidateQueries(['admin-donations'])
+      queryClient.invalidateQueries('donation-stats')
+    } catch (error) {
+      console.error('Sync failed:', error)
+      alert('Failed to sync data from Stripe')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const exportToCsv = () => {
     const csvContent = [
@@ -65,13 +82,25 @@ const AdminDonations = () => {
             <Heart className="w-8 h-8 text-primary-600 mr-3" />
             <h1 className="text-3xl font-bold text-gray-900">Donations</h1>
           </div>
-          <button
-            onClick={exportToCsv}
-            className="btn-primary flex items-center"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </button>
+          <div className="flex space-x-3">
+            {window.location.hostname === 'localhost' && (
+              <button
+                onClick={handleSyncStripeData}
+                disabled={syncing}
+                className="btn-secondary flex items-center"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync Stripe'}
+              </button>
+            )}
+            <button
+              onClick={exportToCsv}
+              className="btn-primary flex items-center"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </button>
+          </div>
         </div>
         <p className="text-gray-600">Manage and track all donations</p>
       </div>
