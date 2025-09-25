@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-import stripe
+    import stripe
 import os
 from datetime import datetime, timedelta
 from calendar import monthrange
@@ -607,6 +607,23 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
 
 
 
+@router.get("/debug-subscriptions")
+async def debug_subscriptions(db: Session = Depends(get_db)):
+    """Debug endpoint to check subscription records"""
+    subscriptions = db.query(DonationSubscription).all()
+    return {
+        "total_subscriptions": len(subscriptions),
+        "subscriptions": [
+            {
+                "id": sub.id,
+                "stripe_subscription_id": sub.stripe_subscription_id,
+                "stripe_session_id": sub.stripe_session_id,
+                "status": sub.status,
+                "email": sub.email
+            } for sub in subscriptions
+        ]
+    }
+
 @router.post("/stripe-webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhooks for payment confirmation"""
@@ -636,18 +653,18 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             if session_mode == "payment":
                 # One-time payment - update existing pending donation
                 session_id = session.get("id")
-                customer_email = session.get("customer_email", "")
+            customer_email = session.get("customer_email", "")
                 amount = session.get("amount_total", 0) / 100.0
-                
-                donor_name = ""
-                if "metadata" in session and session["metadata"]:
-                    donor_name = session["metadata"].get("donor_name", "")
-                elif "customer_details" in session and session["customer_details"]:
-                    donor_name = session["customer_details"].get("name", "")
-                
-                purpose = session.get("metadata", {}).get("purpose", "General Donation")
-                frequency = session.get("metadata", {}).get("frequency", "One-Time")
-                
+            
+            donor_name = ""
+            if "metadata" in session and session["metadata"]:
+                donor_name = session["metadata"].get("donor_name", "")
+            elif "customer_details" in session and session["customer_details"]:
+                donor_name = session["customer_details"].get("name", "")
+            
+            purpose = session.get("metadata", {}).get("purpose", "General Donation")
+            frequency = session.get("metadata", {}).get("frequency", "One-Time")
+            
                 try:
                     # Try to find and update existing pending donation
                     existing_donation = db.query(Donation).filter(
@@ -662,10 +679,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         existing_donation.frequency = frequency  # Remove "Pending -" prefix
                     else:
                         # Create new donation if no pending record found
-                        donation = Donation(
-                            name=donor_name,
-                            email=customer_email,
-                            amount=amount,
+                donation = Donation(
+                    name=donor_name,
+                    email=customer_email,
+                    amount=amount,
                             frequency=frequency,
                             stripe_session_id=session_id
                         )
@@ -702,6 +719,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         existing_subscription = db.query(DonationSubscription).filter(
                             DonationSubscription.stripe_session_id == session_id
                         ).first()
+                        
+                        # Also try to find by the pending subscription ID pattern
+                        if not existing_subscription:
+                            existing_subscription = db.query(DonationSubscription).filter(
+                                DonationSubscription.stripe_subscription_id == f"pending_{session_id}"
+                            ).first()
                         
                         if existing_subscription:
                             # Update existing pending subscription
@@ -753,10 +776,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                                 amount=amount,
                                 frequency=f"Recurring {interval}ly - Setup",
                                 stripe_session_id=session_id
-                            )
-                            db.add(donation)
+                )
+                db.add(donation)
                         
-                        db.commit()
+                db.commit()
                     except Exception as db_error:
                         db.rollback()
         
@@ -776,14 +799,20 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 
                 if db_subscription:
                     try:
-                        # Create donation record for this payment
-                        donation = Donation(
-                            name=db_subscription.name,
-                            email=db_subscription.email,
-                            amount=amount,
-                            frequency=f"Recurring {db_subscription.interval}ly"
-                        )
-                        db.add(donation)
+                        # Only create donation record for recurring payments (not the initial setup)
+                        # Check if this is the first payment by looking at invoice number or period
+                        invoice_number = invoice.get("number", "")
+                        
+                        # Skip creating donation for the first invoice (setup payment)
+                        # The setup payment donation is already created in checkout.session.completed
+                        if not invoice_number.endswith("-0001"):  # First invoice typically ends with -0001
+                            donation = Donation(
+                                name=db_subscription.name,
+                                email=db_subscription.email,
+                                amount=amount,
+                                frequency=f"Recurring {db_subscription.interval}ly"
+                            )
+                            db.add(donation)
                         
                         # Update next payment date
                         next_payment = calculate_next_payment_date(
@@ -795,8 +824,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         db_subscription.updated_at = datetime.utcnow()
                         
                         db.commit()
-                    except Exception as db_error:
-                        db.rollback()
+            except Exception as db_error:
+                db.rollback()
         
         # Handle failed subscription payment
         elif event_type == "invoice.payment_failed":
