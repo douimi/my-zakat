@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-import stripe
+    import stripe
 import os
 from datetime import datetime, timedelta
 from calendar import monthrange
@@ -337,7 +337,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             subscription.interval
         )
         
-        # Create checkout session for subscription
+        # Create checkout session for subscription with no proration
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
@@ -348,6 +348,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             customer=customer.id,
             subscription_data={
                 "billing_cycle_anchor": int(next_payment.timestamp()),
+                "proration_behavior": "none",  # Disable proration - charge full amount immediately
                 "metadata": {
                     "purpose": subscription.purpose,
                     "donor_name": subscription.name,
@@ -653,16 +654,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             
             if session_mode == "payment":
                 # One-time payment - update existing pending donation
-                customer_email = session.get("customer_email", "")
+            customer_email = session.get("customer_email", "")
                 amount = session.get("amount_total", 0) / 100.0
-                
-                donor_name = ""
-                if "metadata" in session and session["metadata"]:
-                    donor_name = session["metadata"].get("donor_name", "")
-                elif "customer_details" in session and session["customer_details"]:
-                    donor_name = session["customer_details"].get("name", "")
-                
-                frequency = session.get("metadata", {}).get("frequency", "One-Time")
+            
+            donor_name = ""
+            if "metadata" in session and session["metadata"]:
+                donor_name = session["metadata"].get("donor_name", "")
+            elif "customer_details" in session and session["customer_details"]:
+                donor_name = session["customer_details"].get("name", "")
+            
+            frequency = session.get("metadata", {}).get("frequency", "One-Time")
                 
                 try:
                     # Find and update existing pending donation by session ID
@@ -736,7 +737,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         stripe_customer_id=customer_id,
                         name=metadata.get("donor_name", customer.name or ""),
                         email=customer.email,
-                        amount=amount,
+                    amount=amount,
                         purpose=metadata.get("purpose", "General Donation"),
                         interval=interval,
                         payment_day=payment_day,
@@ -746,24 +747,17 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     )
                     db.add(db_subscription)
                 
-                # Create or update corresponding donation record
+                # Handle the initial payment donation record
+                # For subscriptions, we should not create a "Setup" donation
+                # The actual payment will be handled by invoice.payment_succeeded
                 existing_donation = db.query(Donation).filter(
                     Donation.email == customer.email,
                     Donation.frequency.like("Recurring%Pending")
                 ).first()
                 
                 if existing_donation:
-                    # Update existing pending donation
-                    existing_donation.frequency = f"Recurring {interval}ly - Setup"
-                else:
-                    # Create new donation record
-                    donation = Donation(
-                        name=metadata.get("donor_name", customer.name or ""),
-                        email=customer.email,
-                        amount=amount,
-                        frequency=f"Recurring {interval}ly - Setup"
-                    )
-                    db.add(donation)
+                    # Remove the pending donation - it will be replaced by the actual payment
+                    db.delete(existing_donation)
                 
                 db.commit()
             except Exception as db_error:
@@ -775,8 +769,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             subscription_id = invoice.get("subscription")
             
             if subscription_id:
-                # Only process if this is for a subscription (not one-time payment)
-                amount = invoice.get("amount_paid", 0) / 100.0
+                # Get the actual amount paid (this could be prorated)
+                amount_paid = invoice.get("amount_paid", 0) / 100.0
+                billing_reason = invoice.get("billing_reason")
                 
                 # Get subscription details from database
                 db_subscription = db.query(DonationSubscription).filter(
@@ -785,18 +780,21 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 
                 if db_subscription:
                     try:
-                        # Create donation record for this recurring payment
-                        # Skip the very first payment as it's already recorded during setup
-                        billing_reason = invoice.get("billing_reason")
+                        # Create donation record for the actual payment
+                        if billing_reason == "subscription_create":
+                            # Initial payment (full amount - no proration)
+                            frequency_label = f"Recurring {db_subscription.interval}ly - Initial Payment"
+                        else:
+                            # Regular recurring payment
+                            frequency_label = f"Recurring {db_subscription.interval}ly"
                         
-                        if billing_reason != "subscription_create":  # Not the initial setup payment
-                            donation = Donation(
-                                name=db_subscription.name,
-                                email=db_subscription.email,
-                                amount=amount,
-                                frequency=f"Recurring {db_subscription.interval}ly"
-                            )
-                            db.add(donation)
+                        donation = Donation(
+                            name=db_subscription.name,
+                            email=db_subscription.email,
+                            amount=amount_paid,  # Use actual amount paid, not subscription amount
+                            frequency=frequency_label
+                        )
+                        db.add(donation)
                         
                         # Update next payment date
                         next_payment = calculate_next_payment_date(
