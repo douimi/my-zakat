@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, X, Heart } from 'lucide-react'
+import { Menu, X, Heart, User } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useAuthStore } from '../store/authStore'
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const location = useLocation()
+  const { isAuthenticated, isAdmin } = useAuthStore()
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -51,7 +53,7 @@ const Header = () => {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-8">
+            <nav className="hidden md:flex items-center space-x-8 flex-1">
               {navigation.map((item) => (
                 <Link
                   key={item.name}
@@ -69,7 +71,24 @@ const Header = () => {
             </nav>
 
             {/* CTA Button */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-3 ml-8">
+              {isAuthenticated ? (
+                <Link 
+                  to="/dashboard" 
+                  className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200"
+                >
+                  <User className="w-4 h-4" />
+                  <span>My Account</span>
+                </Link>
+              ) : (
+                <Link 
+                  to="/login" 
+                  className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Login</span>
+                </Link>
+              )}
               <Link to="/donate" className="btn-primary text-sm">
                 Donate Now
               </Link>
@@ -111,6 +130,25 @@ const Header = () => {
                   </Link>
                 ))}
                 <div className="flex flex-col space-y-3 pt-4 border-t border-gray-200">
+                  {isAuthenticated ? (
+                    <Link
+                      to="/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50"
+                    >
+                      <User className="w-4 h-4" />
+                      <span>My Account</span>
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/login"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      <User className="w-4 h-4" />
+                      <span>Login</span>
+                    </Link>
+                  )}
                   <Link
                     to="/donate"
                     onClick={() => setIsMobileMenuOpen(false)}

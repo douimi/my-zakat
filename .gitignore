@@ -16,3 +16,19 @@ instance/
 *.wmv
 app/static/videos/
 static/videos/
+
+# Coverage files
+htmlcov/
+.coverage
+coverage/
+*.coverage
+.pytest_cache/
+
+# Node modules and frontend build artifacts
+node_modules/
+dist/
+build/
+
+# Test results
+test-results/
+.vitest/

@@ -22,18 +22,45 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token')
+  const token = localStorage.getItem('auth_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
+// Handle 401 responses by clearing invalid tokens
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear invalid token and redirect to login
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_data')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 // Auth API
 export const authAPI = {
-  login: async (username: string, password: string) => {
-    const response = await api.post('/api/auth/login', { username, password })
+  login: async (email: string, password: string) => {
+    const response = await api.post('/api/auth/login', { email, password })
     return response.data
+  },
+  register: async (email: string, password: string, name?: string) => {
+    const response = await api.post('/api/auth/register', { email, password, name })
+    return response.data
+  },
+  userLogin: async (email: string, password: string) => {
+    const response = await api.post('/api/auth/login', { email, password })
+    const loginData = response.data
+    // Fetch user details
+    const userResponse = await api.get('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${loginData.access_token}` }
+    })
+    return { ...loginData, user: userResponse.data }
   },
 }
 
@@ -260,6 +287,50 @@ export const subscriptionsAPI = {
 export const adminAPI = {
   getDashboardStats: async (): Promise<DashboardStats> => {
     const response = await api.get('/api/admin/dashboard')
+    return response.data
+  },
+  getAllUsers: async () => {
+    const response = await api.get('/api/admin/users')
+    return response.data
+  },
+  getUserDetails: async (userId: number) => {
+    const response = await api.get(`/api/admin/users/${userId}`)
+    return response.data
+  },
+  toggleUserActive: async (userId: number) => {
+    const response = await api.patch(`/api/admin/users/${userId}/toggle-active`)
+    return response.data
+  },
+  toggleUserAdmin: async (userId: number) => {
+    const response = await api.patch(`/api/admin/users/${userId}/toggle-admin`)
+    return response.data
+  },
+  deleteUser: async (userId: number) => {
+    const response = await api.delete(`/api/admin/users/${userId}`)
+    return response.data
+  },
+}
+
+// User API
+export const userAPI = {
+  getDashboardStats: async () => {
+    const response = await api.get('/api/user/dashboard-stats')
+    return response.data
+  },
+  getDonations: async () => {
+    const response = await api.get('/api/user/donations')
+    return response.data
+  },
+  getActiveSubscriptions: async () => {
+    const response = await api.get('/api/user/subscriptions')
+    return response.data
+  },
+  getAllSubscriptions: async () => {
+    const response = await api.get('/api/user/all-subscriptions')
+    return response.data
+  },
+  cancelSubscription: async (subscriptionId: string) => {
+    const response = await api.post(`/api/user/cancel-subscription/${subscriptionId}`)
     return response.data
   },
 }

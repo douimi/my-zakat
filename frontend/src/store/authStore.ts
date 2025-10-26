@@ -1,28 +1,76 @@
 import { create } from 'zustand'
-import type { Admin } from '../types'
+
+export interface User {
+  id: number
+  email: string
+  name?: string
+  is_active: boolean
+  is_admin: boolean
+  created_at: string
+}
 
 interface AuthState {
-  admin: Admin | null
+  user: User | null
   token: string | null
   isAuthenticated: boolean
-  login: (admin: Admin, token: string) => void
+  isAdmin: boolean
+  login: (user: User, token: string) => void
   logout: () => void
+  initFromStorage: () => void
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  admin: null,
+  user: null,
   token: null,
   isAuthenticated: false,
-  login: (admin, token) => {
+  isAdmin: false,
+  
+  login: (user, token) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('admin_token', token)
+      localStorage.setItem('auth_token', token)
+      localStorage.setItem('user_data', JSON.stringify(user))
     }
-    set({ admin, token, isAuthenticated: true })
+    set({ 
+      user, 
+      token,
+      isAuthenticated: true,
+      isAdmin: user.is_admin 
+    })
   },
+  
   logout: () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('admin_token')
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_data')
     }
-    set({ admin: null, token: null, isAuthenticated: false })
+    set({ 
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isAdmin: false 
+    })
+  },
+  
+  initFromStorage: () => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token')
+      const userData = localStorage.getItem('user_data')
+      
+      if (token && userData) {
+        try {
+          const user = JSON.parse(userData)
+          set({ 
+            user, 
+            token,
+            isAuthenticated: true,
+            isAdmin: user.is_admin 
+          })
+        } catch (error) {
+          console.error('Error parsing user data:', error)
+          localStorage.removeItem('auth_token')
+          localStorage.removeItem('user_data')
+        }
+      }
+    }
   },
 }))

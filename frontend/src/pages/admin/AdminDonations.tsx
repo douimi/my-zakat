@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from 'react-query'
 import { Heart, Search, Filter, Download, Eye, RefreshCw } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
+import { useToast } from '../../contexts/ToastContext'
 
 const AdminDonations = () => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -10,6 +11,7 @@ const AdminDonations = () => {
   const [page, setPage] = useState(1)
   const [syncing, setSyncing] = useState(false)
   const queryClient = useQueryClient()
+  const { showSuccess, showError } = useToast()
 
   const { data: donations, isLoading } = useQuery(
     ['admin-donations'],
@@ -36,12 +38,12 @@ const AdminDonations = () => {
     setSyncing(true)
     try {
       const result = await donationsAPI.syncStripeData()
-      alert(`Successfully synced ${result.synced} records from Stripe`)
+      showSuccess('Sync Complete', `Successfully synced ${result.synced} records from Stripe`)
       queryClient.invalidateQueries(['admin-donations'])
       queryClient.invalidateQueries('donation-stats')
     } catch (error) {
       console.error('Sync failed:', error)
-      alert('Failed to sync data from Stripe')
+      showError('Sync Failed', 'Failed to sync data from Stripe')
     } finally {
       setSyncing(false)
     }

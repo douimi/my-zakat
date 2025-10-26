@@ -529,9 +529,34 @@ async def update_subscription_status(db: Session = Depends(get_db)):
         )
 
 
+@router.get("/sync-debug")
+async def sync_debug_info(current_admin = Depends(get_current_admin)):
+    """Debug info for Stripe sync (development only)"""
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debug endpoint disabled in production"
+        )
+    
+    return {
+        "environment": environment,
+        "stripe_configured": bool(stripe.api_key),
+        "stripe_key_prefix": stripe.api_key[:7] + "..." if stripe.api_key else None,
+        "stripe_secret_key_env": bool(os.getenv("STRIPE_SECRET_KEY"))
+    }
+
 @router.post("/sync-stripe-data")
 async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
     """Manually sync recent Stripe data (development helper)"""
+    # Only allow in development/local environment
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Stripe sync is disabled in production"
+        )
+    
     if not stripe.api_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -553,8 +578,13 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
                     ).first()
                     
                     if not existing:
+                        # Handle missing customer details gracefully
+                        customer_name = "Unknown"
+                        if session.customer_details and hasattr(session.customer_details, 'name'):
+                            customer_name = session.customer_details.name or "Unknown"
+                        
                         donation = Donation(
-                            name=session.customer_details.name if session.customer_details else "Unknown",
+                            name=customer_name,
                             email=session.customer_email or "unknown@example.com",
                             amount=session.amount_total / 100.0,
                             frequency="One-Time (Synced)"
@@ -569,29 +599,58 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
                     ).first()
                     
                     if not existing:
-                        stripe_sub = stripe.Subscription.retrieve(session.subscription)
-                        customer = stripe.Customer.retrieve(session.customer)
-                        
-                        subscription = DonationSubscription(
-                            stripe_subscription_id=session.subscription,
-                            stripe_customer_id=session.customer,
-                            name=customer.name or "Unknown",
-                            email=customer.email or "unknown@example.com",
-                            amount=stripe_sub.items.data[0].price.unit_amount / 100.0,
-                            purpose="General Donation (Synced)",
-                            interval=stripe_sub.items.data[0].price.recurring.interval,
-                            payment_day=1,  # Default
-                            status=stripe_sub.status,
-                            next_payment_date=datetime.utcfromtimestamp(stripe_sub.current_period_end)
-                        )
-                        db.add(subscription)
-                        synced_count += 1
+                        try:
+                            stripe_sub = stripe.Subscription.retrieve(session.subscription)
+                            customer = stripe.Customer.retrieve(session.customer)
+                            
+                            # Handle missing customer data gracefully
+                            customer_name = "Unknown"
+                            customer_email = "unknown@example.com"
+                            
+                            if hasattr(customer, 'name') and customer.name:
+                                customer_name = customer.name
+                            if hasattr(customer, 'email') and customer.email:
+                                customer_email = customer.email
+                            
+                            # Handle subscription data safely
+                            amount = 0.0
+                            interval = "month"
+                            if stripe_sub.items and stripe_sub.items.data:
+                                price = stripe_sub.items.data[0].price
+                                if price.unit_amount:
+                                    amount = price.unit_amount / 100.0
+                                if price.recurring and price.recurring.interval:
+                                    interval = price.recurring.interval
+                            
+                            subscription = DonationSubscription(
+                                stripe_subscription_id=session.subscription,
+                                stripe_customer_id=session.customer,
+                                name=customer_name,
+                                email=customer_email,
+                                amount=amount,
+                                purpose="General Donation (Synced)",
+                                interval=interval,
+                                payment_day=1,  # Default
+                                status=stripe_sub.status,
+                                next_payment_date=datetime.utcfromtimestamp(stripe_sub.current_period_end) if stripe_sub.current_period_end else None
+                            )
+                            db.add(subscription)
+                            synced_count += 1
+                        except Exception as sub_error:
+                            # Log subscription sync error but continue with other sessions
+                            print(f"Error syncing subscription {session.subscription}: {str(sub_error)}")
+                            continue
         
         db.commit()
         return {"status": "success", "synced": synced_count}
         
     except Exception as e:
         db.rollback()
+        # Log the full error for debugging
+        import traceback
+        print(f"Stripe sync error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Sync failed: {str(e)}"

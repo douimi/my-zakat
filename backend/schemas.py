@@ -169,22 +169,59 @@ class SubscriptionResponse(BaseModel):
 
 
 # Auth schemas
-class AdminLogin(BaseModel):
-    username: str
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+# User schemas
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    name: Optional[str] = None
+
+    @validator('password')
+    def password_length(cls, v):
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters long')
+        if len(v) > 72:
+            raise ValueError('Password cannot be longer than 72 characters')
+        return v
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
     password: str
 
 
-class AdminResponse(BaseModel):
+class UserResponse(BaseModel):
     id: int
-    username: str
+    email: str
+    name: Optional[str] = None
+    is_active: bool
+    is_admin: bool
+    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    password: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+    @validator('new_password')
+    def password_length(cls, v):
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters long')
+        if len(v) > 72:
+            raise ValueError('Password cannot be longer than 72 characters')
+        return v
 
 
 # Zakat Calculator schemas

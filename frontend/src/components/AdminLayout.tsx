@@ -12,7 +12,9 @@ import {
   LogOut,
   Menu,
   X,
-  Image
+  Image,
+  UserCog,
+  UserPlus
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
@@ -22,16 +24,17 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const location = useLocation()
-  const { logout, admin } = useAuthStore()
+  const { logout, user } = useAuthStore()
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Donations', href: '/admin/donations', icon: Heart },
+    { name: 'Users', href: '/admin/users', icon: UserCog },
     { name: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
     { name: 'Events', href: '/admin/events', icon: Calendar },
     { name: 'Stories', href: '/admin/stories', icon: BookOpen },
     { name: 'Testimonials', href: '/admin/testimonials', icon: Star },
-    { name: 'Volunteers', href: '/admin/volunteers', icon: Users },
+    { name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
     { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
     { name: 'Media', href: '/admin/media', icon: Image },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
@@ -123,8 +126,15 @@ const AdminLayout = () => {
               <div className="mt-2 space-y-1">
                 <div className="flex items-center px-3 py-2 text-sm text-gray-600">
                   <Users className="w-5 h-5 mr-3" />
-                  {admin?.username}
+                  {user?.name || user?.email}
                 </div>
+                <Link
+                  to="/dashboard"
+                  className="flex items-center w-full px-3 py-2 text-sm font-medium text-blue-600 rounded-lg hover:bg-blue-50"
+                >
+                  <Heart className="w-5 h-5 mr-3" />
+                  My Donations
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 hover:text-gray-900"
@@ -138,6 +148,13 @@ const AdminLayout = () => {
           {sidebarCollapsed && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <div className="space-y-1">
+                <Link
+                  to="/dashboard"
+                  className="flex items-center justify-center w-full px-2 py-2 text-sm font-medium text-blue-600 rounded-lg hover:bg-blue-50"
+                  title="My Donations"
+                >
+                  <Heart className="w-5 h-5" />
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center justify-center w-full px-2 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 hover:text-gray-900"

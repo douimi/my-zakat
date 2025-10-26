@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import aiofiles
@@ -6,8 +6,9 @@ import os
 from datetime import datetime
 
 from database import get_db
-from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting
-from auth_utils import get_current_admin
+from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting, User
+from schemas import UserResponse, PasswordChange
+from auth_utils import get_current_admin, verify_password, get_password_hash
 
 router = APIRouter()
 
@@ -114,3 +115,173 @@ async def upload_media(
         "path": f"/uploads/media/{'videos' if type == 'hero_video' else 'images'}/{filename}",
         "type": type
     }
+
+
+# User Management Endpoints
+@router.get("/users")
+async def get_all_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Get all registered users"""
+    users = db.query(User).offset(skip).limit(limit).all()
+    
+    return [{
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at
+    } for user in users]
+
+
+@router.get("/users/{user_id}")
+async def get_user_details(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Get detailed information about a specific user"""
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get user's donation history
+    donations = db.query(Donation).filter(Donation.email == user.email).all()
+    
+    # Get user's subscriptions
+    from models import DonationSubscription
+    subscriptions = db.query(DonationSubscription).filter(
+        DonationSubscription.email == user.email
+    ).all()
+    
+    # Calculate stats
+    total_donated = sum(d.amount for d in donations)
+    
+    return {
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "is_active": user.is_active,
+            "is_admin": user.is_admin,
+            "created_at": user.created_at
+        },
+        "donations": [{
+            "id": d.id,
+            "amount": d.amount,
+            "frequency": d.frequency,
+            "donated_at": d.donated_at
+        } for d in donations],
+        "subscriptions": [{
+            "id": s.id,
+            "stripe_subscription_id": s.stripe_subscription_id,
+            "amount": s.amount,
+            "purpose": s.purpose,
+            "interval": s.interval,
+            "status": s.status,
+            "created_at": s.created_at
+        } for s in subscriptions],
+        "stats": {
+            "total_donated": total_donated,
+            "donation_count": len(donations),
+            "active_subscriptions": len([s for s in subscriptions if s.status == "active"])
+        }
+    }
+
+
+@router.patch("/users/{user_id}/toggle-active")
+async def toggle_user_active(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Toggle user active status"""
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent admins from deactivating themselves
+    if current_admin.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+    
+    user.is_active = not user.is_active
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": f"User {'activated' if user.is_active else 'deactivated'} successfully", "is_active": user.is_active}
+
+
+@router.patch("/users/{user_id}/toggle-admin")
+async def toggle_user_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Toggle user admin status"""
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent admins from modifying their own admin privileges
+    if current_admin.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot modify your own admin privileges")
+    
+    user.is_admin = not user.is_admin
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": f"User admin status {'granted' if user.is_admin else 'revoked'} successfully", "is_admin": user.is_admin}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin)
+):
+    """Delete a user account"""
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent admins from deleting themselves
+    if current_admin.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    
+    db.delete(user)
+    db.commit()
+    
+    return {"message": "User deleted successfully"}
+
+
+@router.post("/change-password")
+async def change_password(
+    password_data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Change the current admin user's password"""
+    # Verify the old password
+    if not verify_password(password_data.old_password, current_admin.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect old password"
+        )
+    
+    # Hash the new password
+    hashed_password = get_password_hash(password_data.new_password)
+    
+    # Update the password
+    current_admin.password = hashed_password
+    current_admin.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Password changed successfully"}

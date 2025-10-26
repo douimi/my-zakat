@@ -1,6 +1,7 @@
 import { useForm } from 'react-hook-form'
 import { Mail, Phone, MapPin } from 'lucide-react'
 import { contactAPI } from '../utils/api'
+import { useToast } from '../contexts/ToastContext'
 
 interface ContactForm {
   name: string
@@ -10,14 +11,15 @@ interface ContactForm {
 
 const Contact = () => {
   const { register, handleSubmit, reset } = useForm<ContactForm>()
+  const { showSuccess, showError } = useToast()
 
   const onSubmit = async (data: ContactForm) => {
     try {
       await contactAPI.create(data)
-      alert('Thank you for your message! We will get back to you soon.')
+      showSuccess('Message Sent', 'Thank you for your message! We will get back to you soon.')
       reset()
     } catch (error) {
-      alert('Error sending message. Please try again.')
+      showError('Error', 'Error sending message. Please try again.')
     }
   }
 

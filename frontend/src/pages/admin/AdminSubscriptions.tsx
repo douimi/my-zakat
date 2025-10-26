@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Calendar, CreditCard, User, DollarSign, AlertCircle, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
+import { useToast } from '../../contexts/ToastContext'
 
 interface Subscription {
   id: number
@@ -22,6 +23,7 @@ const AdminSubscriptions = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const { showSuccess, showError } = useToast()
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   useEffect(() => {
@@ -45,7 +47,7 @@ const AdminSubscriptions = () => {
     try {
       const result = await donationsAPI.updateSubscriptionStatus()
       await fetchSubscriptions() // Refresh the list
-      alert(`Updated ${result.updated} subscription statuses`)
+      showSuccess('Status Updated', `Updated ${result.updated} subscription statuses`)
     } catch (err) {
       setError('Failed to update subscription status')
       console.error('Error updating status:', err)

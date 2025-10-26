@@ -6,35 +6,40 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from database import engine, Base, get_db
-from models import Admin, Setting
+from models import User, Setting
 from auth_utils import get_password_hash
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user
 
 load_dotenv()
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Check if running in test mode
+TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
+
+# Create database tables only if not in test mode
+if not TESTING_MODE:
+    Base.metadata.create_all(bind=engine)
 
 def ensure_admin_user():
-    """Ensure admin user exists as backup to SQL initialization"""
+    """Ensure at least one admin user exists"""
     db = next(get_db())
     try:
-        # Check if admin user exists
-        admin_user = db.query(Admin).filter(Admin.username == "admin").first()
+        # Check if any admin user exists
+        admin_user = db.query(User).filter(User.is_admin == True).first()
         if not admin_user:
-            print("🔧 Creating default admin user (admin/admin)...")
-            hashed_password = get_password_hash("admin")
-            admin_user = Admin(username="admin", password=hashed_password)
+            # Creating default admin user
+            hashed_password = get_password_hash("admin123")
+            admin_user = User(
+                email="admin@example.com",
+                password=hashed_password,
+                name="Super Admin",
+                is_active=True,
+                is_admin=True
+            )
             db.add(admin_user)
             db.commit()
-            print("✅ Admin user created successfully!")
+            pass  # Admin user created successfully
         else:
-            print("✅ Admin user already exists")
-            # Verify the password hash is correct by updating it
-            print("🔧 Updating admin password hash to ensure compatibility...")
-            admin_user.password = get_password_hash("admin")
-            db.commit()
-            print("✅ Admin password hash updated!")
+            pass  # Admin user exists
             
         # Ensure default settings exist
         default_settings = [
@@ -61,7 +66,7 @@ def ensure_admin_user():
                 db.add(setting)
         
         db.commit()
-        print("✅ Default settings ensured")
+        # Default settings ensured
         
     except Exception as e:
         print(f"❌ Error ensuring admin user: {e}")
@@ -69,8 +74,9 @@ def ensure_admin_user():
     finally:
         db.close()
 
-# Ensure admin user exists on startup
-ensure_admin_user()
+# Ensure admin user exists on startup (skip in test mode)
+if not TESTING_MODE:
+    ensure_admin_user()
 
 # Ensure media directories exist
 def ensure_media_directories():
@@ -86,9 +92,11 @@ def ensure_media_directories():
     
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-        print(f"✅ Directory ensured: {directory}")
+        # Directory ensured
 
-ensure_media_directories()
+# Ensure media directories (skip in test mode)
+if not TESTING_MODE:
+    ensure_media_directories()
 
 app = FastAPI(
     title="MyZakat API",
@@ -138,6 +146,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(user.router, prefix="/api/user", tags=["user"])
 app.include_router(donations.router, prefix="/api/donations", tags=["donations"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(stories.router, prefix="/api/stories", tags=["stories"])
