@@ -47,8 +47,24 @@ const UserLogin = () => {
       })
 
       if (!loginResponse.ok) {
-        const errorData = await loginResponse.json()
-        throw new Error(errorData.detail || 'Login failed')
+        const errorData = await loginResponse.json().catch(() => ({ detail: 'Login failed' }))
+        
+        if (loginResponse.status === 422) {
+          // Validation error
+          if (errorData.detail && Array.isArray(errorData.detail)) {
+            // Pydantic validation errors
+            const validationErrors = errorData.detail.map((error: any) => error.msg).join(', ')
+            throw new Error(`Validation error: ${validationErrors}`)
+          } else {
+            throw new Error('Please check your email format and try again')
+          }
+        } else if (loginResponse.status === 401) {
+          throw new Error('Incorrect email or password')
+        } else if (loginResponse.status === 403) {
+          throw new Error('Account is inactive. Please contact support.')
+        } else {
+          throw new Error(errorData.detail || 'Login failed')
+        }
       }
 
       const loginData = await loginResponse.json()
@@ -69,7 +85,8 @@ const UserLogin = () => {
       // Store user data and token
       login(userData, loginData.access_token)
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password')
+      console.error('Login error:', err)
+      setError(err.message || 'An unexpected error occurred')
     } finally {
       setIsLoading(false)
     }
