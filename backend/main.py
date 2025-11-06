@@ -33,7 +33,8 @@ def ensure_admin_user():
                 password=hashed_password,
                 name="Super Admin",
                 is_active=True,
-                is_admin=True
+                is_admin=True,
+                email_verified=True  # Admin users don't need email verification
             )
             db.add(admin_user)
             db.commit()

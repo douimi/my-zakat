@@ -19,6 +19,7 @@ import Volunteer from './pages/Volunteer'
 import Testimonials from './pages/Testimonials'
 import UserLogin from './pages/UserLogin'
 import UserRegister from './pages/UserRegister'
+import VerifyEmail from './pages/VerifyEmail'
 import UserDashboard from './pages/UserDashboard'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminSettings from './pages/admin/AdminSettings'
@@ -83,6 +84,7 @@ function App() {
         {/* User authentication routes */}
         <Route path="/login" element={<UserLogin />} />
         <Route path="/register" element={<UserRegister />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         
         {/* User dashboard route */}
         <Route path="/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />

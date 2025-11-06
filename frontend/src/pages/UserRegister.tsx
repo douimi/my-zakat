@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { UserPlus, Mail, Lock, User } from 'lucide-react'
+import { UserPlus, Mail, Lock, User, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
 interface RegisterForm {
@@ -14,6 +14,7 @@ interface RegisterForm {
 const UserRegister = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
   const { register, handleSubmit, watch, formState: { errors } } = useForm<RegisterForm>()
   const { isAuthenticated, userType } = useAuthStore()
   const navigate = useNavigate()
@@ -47,13 +48,108 @@ const UserRegister = () => {
         throw new Error(errorData.detail || 'Registration failed')
       }
 
-      // After successful registration, redirect to login
-      navigate('/login', { state: { message: 'Registration successful! Please log in.' } })
+      // Show verification message
+      setRegisteredEmail(data.email)
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleResendVerification = async () => {
+    if (!registeredEmail) return
+    
+    setIsLoading(true)
+    setError('')
+    
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: registeredEmail }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to resend verification email')
+      }
+
+      setError('')
+      alert('Verification email sent successfully! Please check your inbox.')
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Show verification message after successful registration
+  if (registeredEmail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-6">
+              <CheckCircle className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900">Registration Successful!</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Please verify your email address to continue
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-8">
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                <p className="font-medium mb-2">We've sent a verification email to:</p>
+                <p className="font-semibold">{registeredEmail}</p>
+              </div>
+
+              <p className="text-gray-600 text-sm">
+                Please check your inbox and click on the verification link to activate your account. 
+                The link will expire in 7 days.
+              </p>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <button
+                  onClick={handleResendVerification}
+                  disabled={isLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-5 h-5 mr-2" />
+                      Resend Verification Email
+                    </>
+                  )}
+                </button>
+
+                <div className="text-center">
+                  <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                    Back to Login
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

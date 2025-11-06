@@ -13,6 +13,8 @@ const UserLogin = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>()
   const { login, isAuthenticated, isAdmin } = useAuthStore()
   const location = useLocation()
@@ -29,10 +31,42 @@ const UserLogin = () => {
     return <Navigate to="/" replace />
   }
 
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return
+    
+    setResending(true)
+    setError('')
+    
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: unverifiedEmail }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to resend verification email' }))
+        throw new Error(errorData.detail || 'Failed to resend verification email')
+      }
+
+      setError('')
+      setSuccessMessage('Verification email sent successfully! Please check your inbox.')
+      setUnverifiedEmail(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email. Please try again.')
+    } finally {
+      setResending(false)
+    }
+  }
+
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true)
     setError('')
     setSuccessMessage('')
+    setUnverifiedEmail(null)
     
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -61,7 +95,13 @@ const UserLogin = () => {
         } else if (loginResponse.status === 401) {
           throw new Error('Incorrect email or password')
         } else if (loginResponse.status === 403) {
-          throw new Error('Account is inactive. Please contact support.')
+          // Check if it's an unverified email error
+          if (errorData.detail && errorData.detail.includes('Email not verified')) {
+            setUnverifiedEmail(data.email)
+            throw new Error('Email not verified. Please check your email for the verification link.')
+          } else {
+            throw new Error('Account is inactive. Please contact support.')
+          }
         } else {
           throw new Error(errorData.detail || 'Login failed')
         }
@@ -116,6 +156,19 @@ const UserLogin = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
                 {error}
+                {unverifiedEmail && (
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <p className="mb-2">Need a new verification email?</p>
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resending}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 text-sm"
+                    >
+                      {resending ? 'Sending...' : 'Resend Verification Email'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -194,12 +194,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
 class UserResponse(BaseModel):
     id: int
     email: str
     name: Optional[str] = None
     is_active: bool
     is_admin: bool
+    email_verified: bool
     created_at: datetime
 
     class Config:
