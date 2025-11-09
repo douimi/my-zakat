@@ -882,6 +882,20 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             existing_donation.certificate_filename = "available"
                             db.commit()
                         logger.info(f"Donation {existing_donation.id} marked as having certificate available")
+                        
+                        # Automatically send certificate via email
+                        db.refresh(existing_donation)
+                        try:
+                            email_success = email_certificate(existing_donation)
+                            if email_success:
+                                logger.info(f"Certificate automatically emailed to {existing_donation.email} for donation {existing_donation.id}")
+                            else:
+                                logger.warning(f"Failed to automatically email certificate for donation {existing_donation.id}")
+                        except Exception as email_error:
+                            import traceback
+                            logger.error(f"Error automatically emailing certificate for donation {existing_donation.id}: {str(email_error)}")
+                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            # Don't fail the webhook if email fails
                     else:
                         logger.info(f"No existing donation found, creating new donation...")
                         # Create new donation if not found (fallback)
@@ -898,6 +912,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         db.commit()
                         db.refresh(new_donation)
                         logger.info(f"Created new donation ID {new_donation.id} for email {customer_email}")
+                        
+                        # Automatically send certificate via email
+                        try:
+                            email_success = email_certificate(new_donation)
+                            if email_success:
+                                logger.info(f"Certificate automatically emailed to {new_donation.email} for donation {new_donation.id}")
+                            else:
+                                logger.warning(f"Failed to automatically email certificate for donation {new_donation.id}")
+                        except Exception as email_error:
+                            import traceback
+                            logger.error(f"Error automatically emailing certificate for donation {new_donation.id}: {str(email_error)}")
+                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            # Don't fail the webhook if email fails
                             
                 except Exception as db_error:
                     import traceback
@@ -1047,6 +1074,20 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         donation.certificate_filename = "available"
                         db.commit()
                         logger.info(f"Subscription donation {donation.id} marked as having certificate available")
+                        
+                        # Automatically send certificate via email
+                        db.refresh(donation)
+                        try:
+                            email_success = email_certificate(donation)
+                            if email_success:
+                                logger.info(f"Certificate automatically emailed to {donation.email} for subscription donation {donation.id}")
+                            else:
+                                logger.warning(f"Failed to automatically email certificate for subscription donation {donation.id}")
+                        except Exception as email_error:
+                            import traceback
+                            logger.error(f"Error automatically emailing certificate for subscription donation {donation.id}: {str(email_error)}")
+                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            # Don't fail the webhook if email fails
                     except Exception as db_error:
                         import traceback
                         logger.error(f"Error processing subscription payment: {str(db_error)}")
