@@ -61,6 +61,11 @@ const UserDashboard = () => {
     return <Navigate to="/login" replace />
   }
 
+  const handle401Error = () => {
+    logout()
+    navigate('/login')
+  }
+
   const fetchDashboardData = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -71,6 +76,10 @@ const UserDashboard = () => {
           'Authorization': `Bearer ${token}`,
         },
       })
+      if (statsResponse.status === 401) {
+        handle401Error()
+        return
+      }
       if (statsResponse.ok) {
         const statsData = await statsResponse.json()
         setStats(statsData)
@@ -82,6 +91,10 @@ const UserDashboard = () => {
           'Authorization': `Bearer ${token}`,
         },
       })
+      if (donationsResponse.status === 401) {
+        handle401Error()
+        return
+      }
       if (donationsResponse.ok) {
         const donationsData = await donationsResponse.json()
         setDonations(donationsData)
@@ -93,6 +106,10 @@ const UserDashboard = () => {
           'Authorization': `Bearer ${token}`,
         },
       })
+      if (subscriptionsResponse.status === 401) {
+        handle401Error()
+        return
+      }
       if (subscriptionsResponse.ok) {
         const subscriptionsData = await subscriptionsResponse.json()
         setSubscriptions(subscriptionsData)
@@ -119,6 +136,11 @@ const UserDashboard = () => {
         },
       })
 
+      if (response.status === 401) {
+        handle401Error()
+        return
+      }
+
       if (response.ok) {
         showSuccess('Success', 'Subscription canceled successfully')
         fetchDashboardData() // Refresh data
@@ -141,6 +163,11 @@ const UserDashboard = () => {
           'Authorization': `Bearer ${token}`,
         },
       })
+
+      if (response.status === 401) {
+        handle401Error()
+        return
+      }
 
       if (response.ok) {
         const blob = await response.blob()
@@ -173,6 +200,11 @@ const UserDashboard = () => {
         },
       })
 
+      if (response.status === 401) {
+        handle401Error()
+        return
+      }
+
       if (response.ok) {
         showSuccess('Success', 'Certificate regenerated successfully')
         fetchDashboardData() // Refresh data
@@ -197,6 +229,11 @@ const UserDashboard = () => {
           'Authorization': `Bearer ${token}`,
         },
       })
+
+      if (response.status === 401) {
+        handle401Error()
+        return
+      }
 
       if (response.ok) {
         showSuccess('Success', 'Certificate emailed successfully')
@@ -405,52 +442,33 @@ const UserDashboard = () => {
                         {donation.frequency}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {donation.certificate_filename ? (
-                          <div className="flex items-center space-x-3">
-                            <button
-                              onClick={() => handleDownloadCertificate(donation.id)}
-                              className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              <Download className="w-4 h-4" />
-                              <span>Download</span>
-                            </button>
-                            <button
-                              onClick={() => handleEmailCertificate(donation.id)}
-                              disabled={emailingId === donation.id}
-                              className="flex items-center space-x-1 text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
-                            >
-                              {emailingId === donation.id ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
-                                  <span>Sending...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Mail className="w-4 h-4" />
-                                  <span>Email</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        ) : (
+                        {/* Certificates are now generated on-the-fly, so they're always available */}
+                        <div className="flex items-center space-x-3">
                           <button
-                            onClick={() => handleRegenerateCertificate(donation.id)}
-                            disabled={regeneratingId === donation.id}
-                            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                            onClick={() => handleDownloadCertificate(donation.id)}
+                            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium"
                           >
-                            {regeneratingId === donation.id ? (
+                            <Download className="w-4 h-4" />
+                            <span>Download</span>
+                          </button>
+                          <button
+                            onClick={() => handleEmailCertificate(donation.id)}
+                            disabled={emailingId === donation.id}
+                            className="flex items-center space-x-1 text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                          >
+                            {emailingId === donation.id ? (
                               <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                                <span>Generating...</span>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                                <span>Sending...</span>
                               </>
                             ) : (
                               <>
-                                <Download className="w-4 h-4" />
-                                <span>Generate</span>
+                                <Mail className="w-4 h-4" />
+                                <span>Email</span>
                               </>
                             )}
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}

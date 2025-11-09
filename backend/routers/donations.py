@@ -12,7 +12,7 @@ from database import get_db
 from models import Donation, DonationSubscription
 from schemas import DonationCreate, DonationResponse, PaymentCreate, PaymentSession, ZakatCalculation, ZakatResult, SubscriptionCreate, SubscriptionSession
 from auth_utils import get_current_admin
-from pdf_service import generate_donation_certificate
+from pdf_service import generate_donation_certificate, generate_donation_certificate_to_bytes
 from email_service import send_donation_certificate_email
 
 load_dotenv()
@@ -82,41 +82,66 @@ def generate_certificate(donation: Donation, db: Session) -> str:
 
 def email_certificate(donation: Donation) -> bool:
     """
-    Send certificate via email for a donation
+    Send certificate via email for a donation (generated on-the-fly)
     
     Args:
-        donation: Donation object with certificate_filename set
+        donation: Donation object
         
     Returns:
         True if email sent successfully, False otherwise
     """
     try:
-        if not donation.certificate_filename:
-            raise ValueError("Certificate not generated for this donation")
+        # Ensure donated_at is set
+        if not donation.donated_at:
+            donation.donated_at = datetime.utcnow()
         
-        # Get the certificate file path
-        certificates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certificates")
-        filepath = os.path.join(certificates_dir, donation.certificate_filename)
-        
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Certificate file not found: {filepath}")
-        
-        # Send email with PDF attachment
-        success = send_donation_certificate_email(
-            email=donation.email,
-            name=donation.name,
+        # Generate PDF certificate on-the-fly (no file storage)
+        pdf_bytes = generate_donation_certificate_to_bytes(
+            donor_name=donation.name,
             amount=donation.amount,
-            pdf_path=filepath
+            donation_date=donation.donated_at
         )
         
-        import logging
-        logger = logging.getLogger(__name__)
-        if success:
-            logger.info(f"Certificate emailed successfully for donation {donation.id}")
-        else:
-            logger.warning(f"Failed to email certificate for donation {donation.id}")
+        # Create temporary file for email attachment
+        import tempfile
+        certificates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certificates")
+        os.makedirs(certificates_dir, exist_ok=True)
         
-        return success
+        with tempfile.NamedTemporaryFile(
+            mode='wb',
+            suffix='.pdf',
+            dir=certificates_dir,
+            delete=False
+        ) as temp_file:
+            temp_file.write(pdf_bytes)
+            temp_path = temp_file.name
+        
+        try:
+            # Send email with PDF attachment
+            success = send_donation_certificate_email(
+                email=donation.email,
+                name=donation.name,
+                amount=donation.amount,
+                pdf_path=temp_path
+            )
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            if success:
+                logger.info(f"Certificate emailed successfully for donation {donation.id}")
+            else:
+                logger.warning(f"Failed to email certificate for donation {donation.id}")
+            
+            return success
+        finally:
+            # Clean up temporary file
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception as cleanup_error:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to delete temporary certificate file: {str(cleanup_error)}")
         
     except Exception as e:
         import logging
@@ -783,25 +808,39 @@ async def debug_subscriptions(db: Session = Depends(get_db)):
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhooks for payment confirmation"""
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         payload = await request.body()
         sig_header = request.headers.get("stripe-signature")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
         
+        logger.info(f"Webhook received: {request.headers.get('stripe-signature', 'no signature')}")
         
         if not webhook_secret:
+            logger.error("Webhook secret not configured")
             return {"status": "webhook secret not configured"}
         
         # Verify webhook signature
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
-        )
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, webhook_secret
+            )
+        except ValueError as e:
+            logger.error(f"Invalid webhook payload: {str(e)}")
+            return {"status": "invalid payload"}, 400
+        except stripe.error.SignatureVerificationError as e:
+            logger.error(f"Invalid webhook signature: {str(e)}")
+            return {"status": "invalid signature"}, 400
         
         # Process webhook event
         event_type = event["type"]
+        logger.info(f"Processing webhook event: {event_type}")
         
         # Handle successful checkout session (one-time or subscription setup)
         if event_type == "checkout.session.completed":
+            logger.info("Processing checkout.session.completed event")
             session = event["data"]["object"]
             session_mode = session.get("mode", "payment")
             session_id = session.get("id")
@@ -820,12 +859,15 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 frequency = session.get("metadata", {}).get("frequency", "One-Time")
                 
                 try:
+                    logger.info(f"Processing one-time payment: email={customer_email}, amount={amount}, session_id={session_id}")
+                    
                     # Find and update existing pending donation by session ID
                     existing_donation = db.query(Donation).filter(
                         Donation.stripe_session_id == session_id
                     ).first()
                     
                     if existing_donation:
+                        logger.info(f"Found existing donation ID {existing_donation.id}, updating...")
                         # Update existing pending donation
                         existing_donation.name = donor_name or existing_donation.name
                         existing_donation.email = customer_email or existing_donation.email
@@ -835,10 +877,13 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             existing_donation.donated_at = datetime.utcnow()
                         db.commit()
                         
-                        # Generate certificate (email is optional, user can request it)
-                        db.refresh(existing_donation)
-                        generate_certificate(existing_donation, db)
+                        # Mark certificate as available (certificates are now generated on-the-fly)
+                        if not existing_donation.certificate_filename:
+                            existing_donation.certificate_filename = "available"
+                            db.commit()
+                        logger.info(f"Donation {existing_donation.id} marked as having certificate available")
                     else:
+                        logger.info(f"No existing donation found, creating new donation...")
                         # Create new donation if not found (fallback)
                         new_donation = Donation(
                             name=donor_name or "Anonymous",
@@ -846,23 +891,24 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             amount=amount,
                             frequency=frequency,
                             stripe_session_id=session_id,
-                            donated_at=datetime.utcnow()
+                            donated_at=datetime.utcnow(),
+                            certificate_filename="available"  # Mark as available for on-the-fly generation
                         )
                         db.add(new_donation)
                         db.commit()
                         db.refresh(new_donation)
-                        
-                        # Generate certificate (email is optional, user can request it)
-                        generate_certificate(new_donation, db)
+                        logger.info(f"Created new donation ID {new_donation.id} for email {customer_email}")
+                            
                 except Exception as db_error:
-                    import logging
                     import traceback
-                    logger = logging.getLogger(__name__)
                     logger.error(f"Error processing donation webhook: {str(db_error)}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
                     db.rollback()
+                    # Re-raise to let Stripe know the webhook failed
+                    raise
                     
             elif session_mode == "subscription":
+                logger.info("Processing subscription checkout completion")
                 # Subscription checkout completed - just mark as processed
                 # The actual subscription will be handled by customer.subscription.created
                 try:
@@ -997,13 +1043,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         
                         db.commit()
                         
-                        # Generate certificate (email is optional, user can request it)
-                        db.refresh(donation)
-                        generate_certificate(donation, db)
+                        # Mark certificate as available (certificates are now generated on-the-fly)
+                        donation.certificate_filename = "available"
+                        db.commit()
+                        logger.info(f"Subscription donation {donation.id} marked as having certificate available")
                     except Exception as db_error:
-                        import logging
                         import traceback
-                        logger = logging.getLogger(__name__)
                         logger.error(f"Error processing subscription payment: {str(db_error)}")
                         logger.error(f"Traceback: {traceback.format_exc()}")
                         db.rollback()
@@ -1038,9 +1083,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     db_subscription.updated_at = datetime.utcnow()
                     db.commit()
         
+        logger.info(f"Webhook processed successfully: {event_type}")
         return {"status": "success"}
         
-    except stripe.error.SignatureVerificationError:
+    except stripe.error.SignatureVerificationError as e:
+        logger.error(f"Webhook signature verification failed: {str(e)}")
         return {"status": "signature verification failed"}, 400
-    except Exception:
-        return {"status": "webhook error"}, 500
+    except Exception as e:
+        import traceback
+        logger.error(f"Webhook processing error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return {"status": "webhook error", "error": str(e)}, 500

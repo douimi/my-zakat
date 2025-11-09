@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime
 import stripe
 import os
+from io import BytesIO
 from dotenv import load_dotenv
 
 from database import get_db
 from models import User, Donation, DonationSubscription
 from schemas import DonationResponse
 from auth_utils import get_current_user
+from pdf_service import generate_donation_certificate_to_bytes
 
 load_dotenv()
 
@@ -26,9 +29,18 @@ async def get_user_donations(
     db: Session = Depends(get_db)
 ):
     """Get all donations made by the current user"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Fetching donations for user: {current_user.email}")
+    
     donations = db.query(Donation).filter(
         Donation.email == current_user.email
     ).order_by(Donation.donated_at.desc()).all()
+    
+    logger.info(f"Found {len(donations)} donations for user {current_user.email}")
+    if len(donations) > 0:
+        logger.info(f"Sample donation emails: {[d.email for d in donations[:3]]}")
     
     return donations
 
@@ -177,7 +189,7 @@ async def download_certificate(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Download PDF certificate for a donation"""
+    """Download PDF certificate for a donation (generated on-the-fly)"""
     
     # Find the donation and verify ownership
     donation = db.query(Donation).filter(
@@ -191,28 +203,37 @@ async def download_certificate(
             detail="Donation not found or you don't have permission to access it"
         )
     
-    if not donation.certificate_filename:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Certificate not available for this donation"
+    # Ensure donated_at is set
+    if not donation.donated_at:
+        donation.donated_at = datetime.utcnow()
+        db.commit()
+    
+    try:
+        # Generate PDF certificate on-the-fly (no file storage)
+        pdf_bytes = generate_donation_certificate_to_bytes(
+            donor_name=donation.name,
+            amount=donation.amount,
+            donation_date=donation.donated_at
         )
-    
-    # Get the certificate file path
-    certificates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certificates")
-    filepath = os.path.join(certificates_dir, donation.certificate_filename)
-    
-    if not os.path.exists(filepath):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Certificate file not found"
+        
+        # Return PDF as streaming response
+        return StreamingResponse(
+            BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="donation_certificate_{donation.id}.pdf"'
+            }
         )
-    
-    # Return the file
-    return FileResponse(
-        filepath,
-        media_type="application/pdf",
-        filename=f"donation_certificate_{donation.id}.pdf"
-    )
+    except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to generate certificate for donation {donation.id}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate certificate: {str(e)}"
+        )
 
 
 @router.post("/regenerate-certificate/{donation_id}")
@@ -221,7 +242,7 @@ async def regenerate_certificate(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Regenerate certificate for an existing donation (without email)"""
+    """Regenerate certificate for an existing donation (no longer needed - certificates are generated on-the-fly)"""
     
     # Find the donation and verify ownership
     donation = db.query(Donation).filter(
@@ -235,18 +256,13 @@ async def regenerate_certificate(
             detail="Donation not found or you don't have permission to access it"
         )
     
-    # Import the certificate generation function
-    from routers.donations import generate_certificate
+    # Certificates are now generated on-the-fly, so this endpoint just confirms the donation exists
+    # We can optionally mark it as having a certificate available
+    if not donation.certificate_filename:
+        donation.certificate_filename = "available"  # Mark as available for download
+        db.commit()
     
-    try:
-        # Generate certificate
-        generate_certificate(donation, db)
-        return {"status": "success", "message": "Certificate regenerated successfully"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to regenerate certificate: {str(e)}"
-        )
+    return {"status": "success", "message": "Certificate is available for download"}
 
 
 @router.post("/email-certificate/{donation_id}")
@@ -255,7 +271,7 @@ async def email_certificate_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Send certificate via email for an existing donation"""
+    """Send certificate via email for an existing donation (generated on-the-fly)"""
     
     # Find the donation and verify ownership
     donation = db.query(Donation).filter(
@@ -269,17 +285,11 @@ async def email_certificate_endpoint(
             detail="Donation not found or you don't have permission to access it"
         )
     
-    if not donation.certificate_filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Certificate not generated for this donation. Please generate it first."
-        )
-    
     # Import the email function
     from routers.donations import email_certificate
     
     try:
-        # Send email with certificate
+        # Send email with certificate (generated on-the-fly)
         success = email_certificate(donation)
         if success:
             return {"status": "success", "message": "Certificate emailed successfully"}
