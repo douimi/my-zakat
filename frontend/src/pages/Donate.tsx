@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useSearchParams } from 'react-router-dom'
 import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js'
 import { Heart, Shield, CheckCircle, CreditCard } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
+import { useAuthStore } from '../store/authStore'
 
 interface DonationForm {
   name: string
@@ -16,6 +17,7 @@ interface DonationForm {
 const Donate = () => {
   const [searchParams] = useSearchParams()
   const [isProcessing, setIsProcessing] = useState(false)
+  const { isAuthenticated, user } = useAuthStore()
   const [selectedAmount, setSelectedAmount] = useState<number | null>(
     searchParams.get('zakat_amount') ? parseFloat(searchParams.get('zakat_amount')!) : null
   )
@@ -33,6 +35,18 @@ const Donate = () => {
       purpose: searchParams.get('zakat_amount') ? 'Zakat' : 'General Donation'
     }
   })
+
+  // Pre-fill form with user data if logged in
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.name) {
+        setValue('name', user.name)
+      }
+      if (user.email) {
+        setValue('email', user.email)
+      }
+    }
+  }, [isAuthenticated, user, setValue])
 
   const watchedAmount = watch('amount')
 
