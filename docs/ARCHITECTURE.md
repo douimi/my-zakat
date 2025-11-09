@@ -163,9 +163,15 @@ my-zakat/
 ├── docker-compose.yml        # Local development setup
 ├── docker-compose.prod.yml   # Production deployment setup
 ├── docker-compose.traefik.yml # Production with SSL/proxy
-├── init.sql                  # Initial database structure
+├── migrations/               # Database migration scripts
+│   ├── init.sql              # Initial database structure
+│   └── migration_*.sql       # Database migration scripts
+├── docs/                     # Documentation files
+│   ├── readme.md             # Developer documentation
+│   ├── ARCHITECTURE.md       # This file
+│   ├── DEPLOYMENT.md         # Deployment instructions
+│   └── *.md                  # Other documentation
 ├── .env                      # Environment variables (secrets)
-└── readme.md                 # Developer documentation
 ```
 
 ---
@@ -535,8 +541,8 @@ When you need to scale up:
    - Review API documentation: http://localhost:8000/docs
 
 2. **Documentation**
-   - `readme.md` - Developer guide
-   - `DEPLOYMENT.md` - Deployment instructions
+   - `docs/readme.md` - Developer guide
+   - `docs/DEPLOYMENT.md` - Deployment instructions
    - This file - Architecture overview
 
 3. **External Resources**

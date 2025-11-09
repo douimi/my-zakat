@@ -42,6 +42,7 @@ class DonationResponse(BaseModel):
     email: str
     amount: float
     frequency: str
+    certificate_filename: Optional[str] = None
     donated_at: datetime
 
     class Config:

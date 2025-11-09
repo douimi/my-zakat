@@ -152,7 +152,7 @@ my-zakat/
 │   ├── public/             # Static assets
 │   └── package.json        # Node.js dependencies
 ├── docker-compose.yml      # Docker orchestration
-└── README.md              # This file
+└── docs/README.md            # This file
 ```
 
 ## 🔒 Security Features

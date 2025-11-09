@@ -32,3 +32,6 @@ build/
 # Test results
 test-results/
 .vitest/
+
+# Certificates directory (generated PDFs)
+backend/certificates/

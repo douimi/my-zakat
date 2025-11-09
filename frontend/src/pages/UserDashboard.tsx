@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { DollarSign, Heart, CreditCard, Calendar, X, LogOut, User as UserIcon, Shield, Home } from 'lucide-react'
+import { DollarSign, Heart, CreditCard, Calendar, X, LogOut, User as UserIcon, Shield, Home, Download, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 
@@ -22,6 +22,7 @@ interface Donation {
   email: string
   amount: number
   frequency: string
+  certificate_filename: string | null
   donated_at: string
 }
 
@@ -44,6 +45,8 @@ const UserDashboard = () => {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState<number | null>(null)
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null)
+  const [emailingId, setEmailingId] = useState<number | null>(null)
   const { user, token, isAuthenticated, isAdmin, logout } = useAuthStore()
   const navigate = useNavigate()
   const { showSuccess, showError } = useToast()
@@ -127,6 +130,84 @@ const UserDashboard = () => {
       showError('Error', 'Failed to cancel subscription')
     } finally {
       setCancellingId(null)
+    }
+  }
+
+  const handleDownloadCertificate = async (donationId: number) => {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${API_URL}/api/user/certificate/${donationId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `donation_certificate_${donationId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        showSuccess('Success', 'Certificate downloaded successfully')
+      } else {
+        const error = await response.json()
+        showError('Error', error.detail || 'Failed to download certificate')
+      }
+    } catch (error) {
+      showError('Error', 'Failed to download certificate')
+    }
+  }
+
+  const handleRegenerateCertificate = async (donationId: number) => {
+    setRegeneratingId(donationId)
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${API_URL}/api/user/regenerate-certificate/${donationId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        showSuccess('Success', 'Certificate regenerated successfully')
+        fetchDashboardData() // Refresh data
+      } else {
+        const error = await response.json()
+        showError('Error', error.detail || 'Failed to regenerate certificate')
+      }
+    } catch (error) {
+      showError('Error', 'Failed to regenerate certificate')
+    } finally {
+      setRegeneratingId(null)
+    }
+  }
+
+  const handleEmailCertificate = async (donationId: number) => {
+    setEmailingId(donationId)
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${API_URL}/api/user/email-certificate/${donationId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        showSuccess('Success', 'Certificate emailed successfully')
+      } else {
+        const error = await response.json()
+        showError('Error', error.detail || 'Failed to email certificate')
+      }
+    } catch (error) {
+      showError('Error', 'Failed to email certificate')
+    } finally {
+      setEmailingId(null)
     }
   }
 
@@ -306,6 +387,9 @@ const UserDashboard = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Type
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Certificate
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -319,6 +403,54 @@ const UserDashboard = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {donation.frequency}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {donation.certificate_filename ? (
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={() => handleDownloadCertificate(donation.id)}
+                              className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              <Download className="w-4 h-4" />
+                              <span>Download</span>
+                            </button>
+                            <button
+                              onClick={() => handleEmailCertificate(donation.id)}
+                              disabled={emailingId === donation.id}
+                              className="flex items-center space-x-1 text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                            >
+                              {emailingId === donation.id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                                  <span>Sending...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Mail className="w-4 h-4" />
+                                  <span>Email</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleRegenerateCertificate(donation.id)}
+                            disabled={regeneratingId === donation.id}
+                            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                          >
+                            {regeneratingId === donation.id ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                <span>Generating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-4 h-4" />
+                                <span>Generate</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

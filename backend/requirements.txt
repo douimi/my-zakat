@@ -19,3 +19,4 @@ pytest-cov==4.1.0
 pytest-mock==3.12.0
 httpx==0.25.2
 factory-boy==3.3.0
+reportlab==4.0.7

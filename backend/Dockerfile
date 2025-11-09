@@ -17,6 +17,9 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p uploads/images uploads/videos
 
+# Create certificates directory
+RUN mkdir -p certificates
+
 # Expose port
 EXPOSE 8000
 

@@ -192,8 +192,8 @@ All `/api/admin/*` endpoints now require:
 
 ## Migration Files Created
 
-1. **`migration_consolidate_auth.sql`** - Database migration script
-2. **`AUTH_MIGRATION_SUMMARY.md`** - This document
+1. **`migrations/migration_consolidate_auth.sql`** - Database migration script
+2. **`docs/AUTH_MIGRATION_SUMMARY.md`** - This document
 
 ---
 

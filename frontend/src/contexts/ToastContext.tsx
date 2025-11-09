@@ -63,8 +63,8 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
     <ToastContext.Provider value={{ showToast, showSuccess, showError, showWarning, showInfo }}>
       {children}
       
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      {/* Toast Container - Positioned below header with proper spacing */}
+      <div className="fixed top-20 right-4 z-[100] space-y-2 max-h-[calc(100vh-6rem)] overflow-y-auto">
         {toasts.map(toast => (
           <ToastComponent
             key={toast.id}

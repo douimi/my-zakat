@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 import stripe
@@ -168,4 +169,128 @@ async def get_dashboard_stats(
             "donated_at": d.donated_at
         } for d in recent_donations]
     }
+
+
+@router.get("/certificate/{donation_id}")
+async def download_certificate(
+    donation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Download PDF certificate for a donation"""
+    
+    # Find the donation and verify ownership
+    donation = db.query(Donation).filter(
+        Donation.id == donation_id,
+        Donation.email == current_user.email
+    ).first()
+    
+    if not donation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Donation not found or you don't have permission to access it"
+        )
+    
+    if not donation.certificate_filename:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate not available for this donation"
+        )
+    
+    # Get the certificate file path
+    certificates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certificates")
+    filepath = os.path.join(certificates_dir, donation.certificate_filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate file not found"
+        )
+    
+    # Return the file
+    return FileResponse(
+        filepath,
+        media_type="application/pdf",
+        filename=f"donation_certificate_{donation.id}.pdf"
+    )
+
+
+@router.post("/regenerate-certificate/{donation_id}")
+async def regenerate_certificate(
+    donation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Regenerate certificate for an existing donation (without email)"""
+    
+    # Find the donation and verify ownership
+    donation = db.query(Donation).filter(
+        Donation.id == donation_id,
+        Donation.email == current_user.email
+    ).first()
+    
+    if not donation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Donation not found or you don't have permission to access it"
+        )
+    
+    # Import the certificate generation function
+    from routers.donations import generate_certificate
+    
+    try:
+        # Generate certificate
+        generate_certificate(donation, db)
+        return {"status": "success", "message": "Certificate regenerated successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate certificate: {str(e)}"
+        )
+
+
+@router.post("/email-certificate/{donation_id}")
+async def email_certificate_endpoint(
+    donation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send certificate via email for an existing donation"""
+    
+    # Find the donation and verify ownership
+    donation = db.query(Donation).filter(
+        Donation.id == donation_id,
+        Donation.email == current_user.email
+    ).first()
+    
+    if not donation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Donation not found or you don't have permission to access it"
+        )
+    
+    if not donation.certificate_filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Certificate not generated for this donation. Please generate it first."
+        )
+    
+    # Import the email function
+    from routers.donations import email_certificate
+    
+    try:
+        # Send email with certificate
+        success = email_certificate(donation)
+        if success:
+            return {"status": "success", "message": "Certificate emailed successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send email. Please check server logs."
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to email certificate: {str(e)}"
+        )
 

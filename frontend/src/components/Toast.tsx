@@ -28,13 +28,13 @@ const ToastComponent = ({ toast, onClose }: ToastProps) => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-600" />
+        return <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
       case 'error':
-        return <XCircle className="w-5 h-5 text-red-600" />
+        return <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-600" />
+        return <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
       case 'info':
-        return <Info className="w-5 h-5 text-blue-600" />
+        return <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
     }
   }
 
@@ -52,26 +52,27 @@ const ToastComponent = ({ toast, onClose }: ToastProps) => {
   }
 
   return (
-    <div className={`max-w-sm w-full shadow-lg rounded-lg border ${getStyles()} transform transition-all duration-300 ease-in-out`}>
+    <div className={`max-w-sm w-full min-w-[300px] shadow-lg rounded-lg border ${getStyles()} transform transition-all duration-300 ease-in-out`}>
       <div className="p-4">
-        <div className="flex items-start">
+        <div className="flex items-start gap-3">
           <div className="flex-shrink-0">
             {getIcon()}
           </div>
-          <div className="ml-3 w-0 flex-1">
-            <p className="text-sm font-medium">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium break-words">
               {toast.title}
             </p>
             {toast.message && (
-              <p className="mt-1 text-sm opacity-90">
+              <p className="mt-1 text-sm opacity-90 break-words">
                 {toast.message}
               </p>
             )}
           </div>
-          <div className="ml-4 flex-shrink-0 flex">
+          <div className="flex-shrink-0">
             <button
               className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
               onClick={() => onClose(toast.id)}
+              aria-label="Close notification"
             >
               <X className="w-4 h-4" />
             </button>

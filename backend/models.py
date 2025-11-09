@@ -24,6 +24,7 @@ class Donation(Base):
     amount = Column(Float, nullable=False)
     frequency = Column(String(50), nullable=False)
     stripe_session_id = Column(String(255), nullable=True)  # Track Stripe session for updates
+    certificate_filename = Column(String(255), nullable=True)  # PDF certificate filename
     donated_at = Column(DateTime, default=datetime.utcnow)
 
 
