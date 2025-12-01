@@ -14,7 +14,11 @@ import {
   X,
   Image,
   UserCog,
-  UserPlus
+  UserPlus,
+  Film,
+  AlertCircle,
+  Video,
+  TrendingUp
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
@@ -36,7 +40,11 @@ const AdminLayout = () => {
     { name: 'Testimonials', href: '/admin/testimonials', icon: Star },
     { name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
     { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
-    { name: 'Media', href: '/admin/media', icon: Image },
+    { name: 'Programs', href: '/admin/programs', icon: TrendingUp },
+    { name: 'Gallery', href: '/admin/gallery', icon: Film },
+    { name: 'Videos', href: '/admin/videos', icon: Video },
+    { name: 'Slideshow', href: '/admin/slideshow', icon: Film },
+    { name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
   ]
 

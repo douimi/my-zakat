@@ -11,12 +11,14 @@ import {
   CheckCircle,
   Star,
   Image as ImageIcon,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
-import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI } from '../utils/api'
+import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI } from '../utils/api'
+import Slideshow from '../components/Slideshow'
 
 const Home = () => {
-  const [showHeroVideoModal, setShowHeroVideoModal] = useState(false)
 
   const { data: donationStats, error: statsError } = useQuery('donation-stats', donationsAPI.getStats, {
     retry: false,
@@ -109,208 +111,109 @@ const Home = () => {
     }
     
     // If it's a filename, construct the API path
-    return `/api/uploads/media/images/${setting.value}`
+    return getStaticFileUrl(`/api/uploads/media/images/${setting.value}`)
   }
 
-  const getVideoUrl = () => {
-    const setting = settings?.find(s => s.key === 'hero_video')
-    if (!setting?.value) return null
+  // Helper function to get video URL - check if it's a filename or URL
+  const getVideoUrl = (value?: string) => {
+    if (!value) return null
+    // Check if it's a full URL (starts with http:// or https://)
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value
+    }
+    // Otherwise, treat it as a filename and load from uploads
+    return getStaticFileUrl(`/api/uploads/media/videos/${value}`)
+  }
+
+  const getSettingValue = (key: string): string => {
+    const setting = settings?.find(s => s.key === key)
+    return setting?.value || ''
+  }
+
+  // Helper to get program media - checks video first, then image
+  const getProgramMedia = (programNum: number) => {
+    const videoValue = getSettingValue(`program_video_${programNum}`)
+    const imageValue = getSettingValue(`program_image_${programNum}`)
     
-    // If it's a URL, return as-is
-    if (setting.value.startsWith('http://') || setting.value.startsWith('https://')) {
-      return setting.value
+    if (videoValue) {
+      // Video takes priority
+      const videoUrl = getVideoUrl(videoValue)
+      return { url: videoUrl, type: 'video' as const }
+    } else if (imageValue) {
+      // Fallback to image - check if it's a URL or needs to be constructed
+      if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+        return { url: imageValue, type: 'image' as const }
+      }
+      const imageUrl = getMediaUrl(`program_image_${programNum}`, '')
+      return { url: imageUrl, type: 'image' as const }
     }
     
-    // If it's a filename, construct the API path
-    return `/api/uploads/media/videos/${setting.value}`
-  }
-
-  const getEmbedVideoUrl = (url: string) => {
-    // YouTube URL conversion
-    if (url.includes('youtube.com/watch?v=')) {
-      const videoId = url.split('v=')[1].split('&')[0]
-      return `https://www.youtube.com/embed/${videoId}`
-    }
-    if (url.includes('youtu.be/')) {
-      const videoId = url.split('youtu.be/')[1].split('?')[0]
-      return `https://www.youtube.com/embed/${videoId}`
-    }
-    
-    // Vimeo URL conversion
-    if (url.includes('vimeo.com/')) {
-      const videoId = url.split('vimeo.com/')[1].split('?')[0]
-      return `https://player.vimeo.com/video/${videoId}`
-    }
-    
-    // Return original URL for direct video files
-    return url
-  }
-
-  const isEmbeddableVideo = (url: string) => {
-    return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com')
-  }
-
-  const isYouTubeUrl = (url: string) => {
-    return url.includes('youtube.com') || url.includes('youtu.be')
-  }
-
-  const getYouTubeVideoId = (url: string) => {
-    if (url.includes('youtube.com/watch?v=')) {
-      return url.split('v=')[1].split('&')[0]
-    }
-    if (url.includes('youtu.be/')) {
-      return url.split('youtu.be/')[1].split('?')[0]
-    }
-    return null
-  }
-
-  const getYouTubeThumbnail = (url: string) => {
-    const videoId = getYouTubeVideoId(url)
-    return videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null
-  }
-
-  const getHeroVideoData = () => {
-    const videoUrl = getVideoUrl()
-    if (!videoUrl) return null
-
-    return {
-      url: videoUrl,
-      embedUrl: getEmbedVideoUrl(videoUrl),
-      thumbnail: isYouTubeUrl(videoUrl) ? getYouTubeThumbnail(videoUrl) : 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center',
-      isEmbeddable: isEmbeddableVideo(videoUrl)
-    }
+    return { url: null, type: 'image' as const }
   }
 
   const programs = [
     {
-      title: 'Emergency Relief',
-      description: 'Immediate assistance for families in crisis situations',
-      image: getMediaUrl('program_image_1', 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=400&h=300&fit=crop&crop=center'),
-      impact: 'Helped 1,200+ families this year'
+      title: getSettingValue('program_title_1'),
+      description: getSettingValue('program_description_1'),
+      media: getProgramMedia(1),
+      impact: getSettingValue('program_impact_1')
     },
     {
-      title: 'Orphan Care',
-      description: 'Educational support and care for orphaned children',
-      image: getMediaUrl('program_image_2', 'https://images.unsplash.com/photo-1497486751825-1233686d5d80?w=400&h=300&fit=crop&crop=center'),
-      impact: 'Supporting 800+ orphans'
+      title: getSettingValue('program_title_2'),
+      description: getSettingValue('program_description_2'),
+      media: getProgramMedia(2),
+      impact: getSettingValue('program_impact_2')
     },
     {
-      title: 'Food & Water Aid',
-      description: 'Essential nutrition and clean water access',
-      image: getMediaUrl('program_image_3', 'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&h=300&fit=crop&crop=center'),
-      impact: '50,000+ meals distributed'
+      title: getSettingValue('program_title_3'),
+      description: getSettingValue('program_description_3'),
+      media: getProgramMedia(3),
+      impact: getSettingValue('program_impact_3')
     }
-  ]
+  ].filter(program => program.title || program.description || program.impact) // Only show programs with at least some data
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative hero-gradient text-white py-20 lg:py-32 overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="section-container relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div className="animate-fade-in">
-              <h1 className="text-4xl lg:text-6xl font-heading font-bold mb-6 leading-tight">
-                Your Zakat,
-                <br />
-                <span className="text-blue-200">Their Lifeline</span>
-              </h1>
-              <p className="text-xl lg:text-2xl mb-8 text-blue-100 leading-relaxed">
-                Join thousands of donors making a real difference in the lives of those who need it most.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                <Link to="/donate" className="btn-primary bg-white text-primary-600 hover:bg-blue-50 text-lg px-8 py-4">
-                  Donate Now
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Link>
-                <Link to="/zakat-calculator" className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-primary-600 font-medium px-8 py-4 rounded-lg transition-colors duration-200 text-lg">
-                  Calculate Zakat
-                </Link>
-              </div>
-              <div className="flex items-center space-x-4 text-blue-100">
-                <CheckCircle className="w-5 h-5" />
-                <span>🌍 Trusted by 10,000+ donors worldwide</span>
-              </div>
-            </div>
-
-            <div className="relative animate-fade-in">
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-                {(() => {
-                  const heroVideo = getHeroVideoData()
-                  
-                  if (!heroVideo) {
-                    return (
-                      <>
-                        <img 
-                          src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center" 
-                          alt="Children receiving aid"
-                          className="w-full h-auto"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4">
-                              <Play className="w-8 h-8 text-white ml-1" />
-                            </div>
-                            <p className="text-white text-lg font-semibold">Video Coming Soon</p>
-                          </div>
-                        </div>
-                      </>
-                    )
-                  }
-
-                  // Always show thumbnail with play button - opens modal when clicked
-                  return (
-                    <div 
-                      className="relative cursor-pointer group"
-                      onClick={() => setShowHeroVideoModal(true)}
-                    >
-                      <div className="aspect-video bg-gray-200">
-                        <img 
-                          src={heroVideo.thumbnail}
-                          alt="Hero Video Thumbnail"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800&h=600&fit=crop&crop=center'
-                          }}
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-black bg-opacity-40 group-hover:bg-opacity-50 flex items-center justify-center transition-all duration-300">
-                        <div className="bg-white bg-opacity-90 group-hover:bg-opacity-100 rounded-full p-6 group-hover:scale-110 transition-all duration-300 shadow-2xl">
-                          <Play className="w-16 h-16 text-primary-600 ml-2" />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Slideshow Section */}
+      <Slideshow />
 
       {/* Impact Stats */}
-      <section className="py-16 bg-gray-50">
-        <div className="section-container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-heading font-bold text-gray-900 mb-4">
-              Real Impact, Real Lives Changed
+      <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
+        </div>
+        <div className="section-container relative z-10">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+              Our Impact
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+              Transforming Lives Through
+              <span className="block text-primary-600 mt-2">Generous Giving</span>
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              See how your donations are making a tangible difference in communities around the world
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              Every contribution creates a ripple effect of positive change, touching lives and building hope in communities worldwide
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {impactStats.map((stat, index) => (
               <div 
                 key={index}
-                className="card text-center hover:shadow-xl transition-shadow duration-300 animate-fade-in"
+                className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fade-in overflow-hidden"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                <stat.icon className={`w-12 h-12 ${stat.color} mx-auto mb-4`} />
-                <div className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</div>
-                <div className="text-gray-600 font-medium">{stat.label}</div>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-100 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="relative p-8">
+                  <div className={`w-16 h-16 ${stat.color.replace('text-', 'bg-').replace('-600', '-100')} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500`}>
+                    <stat.icon className={`w-8 h-8 ${stat.color}`} />
+                  </div>
+                  <div className="text-4xl lg:text-5xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors duration-300">
+                    {stat.value}
+                  </div>
+                  <div className="text-gray-600 font-semibold text-lg">{stat.label}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -318,64 +221,94 @@ const Home = () => {
       </section>
 
       {/* How It Works */}
-      <section className="py-16">
+      <section className="py-20 bg-white relative">
         <div className="section-container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-heading font-bold text-gray-900 mb-4">
-              How Your Donation Works
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-blue-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+              Simple Process
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+              Your Donation Journey
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Transparent, efficient, and direct impact - see exactly how your generosity creates change
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              From your click to their smile - discover the seamless path your contribution takes to create lasting change
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                step: '1',
-                title: 'You Donate',
-                description: 'Choose your cause and make a secure donation online with complete transparency.',
-                icon: Heart
-              },
-              {
-                step: '2',
-                title: 'We Deliver',
-                description: 'Our team ensures your donation reaches those most in need, quickly and efficiently.',
-                icon: Globe
-              },
-              {
-                step: '3',
-                title: 'Lives Change',
-                description: 'Your generosity provides food, water, education, and hope to families and children.',
-                icon: Users
-              }
-            ].map((item, index) => (
-              <div key={index} className="text-center animate-fade-in" style={{ animationDelay: `${index * 0.2}s` }}>
-                <div className="relative mb-6">
-                  <div className="w-20 h-20 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <item.icon className="w-10 h-10 text-white" />
+          <div className="relative">
+            {/* Connection Line - Hidden on mobile */}
+            <div className="hidden lg:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-200 via-primary-400 to-primary-200"></div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+              {[
+                {
+                  step: '1',
+                  title: 'You Donate',
+                  description: 'Choose your cause and make a secure donation online with complete transparency and peace of mind.',
+                  icon: Heart,
+                  gradient: 'from-red-500 to-pink-500'
+                },
+                {
+                  step: '2',
+                  title: 'We Deliver',
+                  description: 'Our dedicated team ensures your donation reaches those most in need, quickly and efficiently.',
+                  icon: Globe,
+                  gradient: 'from-blue-500 to-cyan-500'
+                },
+                {
+                  step: '3',
+                  title: 'Lives Change',
+                  description: 'Your generosity provides food, water, education, and hope to families and children in need.',
+                  icon: Users,
+                  gradient: 'from-green-500 to-emerald-500'
+                }
+              ].map((item, index) => (
+                <div 
+                  key={index} 
+                  className="relative group animate-fade-in" 
+                  style={{ animationDelay: `${index * 0.15}s` }}
+                >
+                  {/* Step Number Badge */}
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <div className={`w-12 h-12 bg-gradient-to-br ${item.gradient} rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                      <span className="text-white font-bold text-xl">{item.step}</span>
+                    </div>
                   </div>
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-100 text-primary-600 rounded-full flex items-center justify-center font-bold text-lg">
-                    {item.step}
+                  
+                  <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 p-8 pt-12 border border-gray-100 group-hover:border-primary-200">
+                    <div className={`w-20 h-20 bg-gradient-to-br ${item.gradient} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:rotate-6 transition-transform duration-500 shadow-lg`}>
+                      <item.icon className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center group-hover:text-primary-600 transition-colors">
+                      {item.title}
+                    </h3>
+                    <p className="text-gray-600 leading-relaxed text-center">
+                      {item.description}
+                    </p>
                   </div>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">{item.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{item.description}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Programs */}
-      <section className="py-16 bg-gray-50">
-        <div className="section-container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-heading font-bold text-gray-900 mb-4">
-              Our Programs
+      <section className="py-20 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+        </div>
+        <div className="section-container relative z-10">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+              Our Initiatives
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+              Programs That Make
+              <span className="block text-primary-600 mt-2">A Real Difference</span>
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Focused initiatives that address the most critical needs in underserved communities
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              Focused initiatives that address the most critical needs in underserved communities around the world
             </p>
           </div>
 
@@ -383,25 +316,64 @@ const Home = () => {
             {programs.map((program, index) => (
               <div 
                 key={index}
-                className="card hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 animate-fade-in"
+                className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                <div className="relative overflow-hidden rounded-lg mb-6">
-                  <img 
-                    src={program.image} 
-                    alt={program.title}
-                    className="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
-                  />
+                {/* Media Section */}
+                <div className="relative overflow-hidden h-64">
+                  {program.media.type === 'video' && program.media.url ? (
+                    <video
+                      src={program.media.url}
+                      className="w-full h-full object-cover"
+                      controls
+                      preload="metadata"
+                      playsInline
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  ) : program.media.url ? (
+                    <>
+                      <img 
+                        src={program.media.url} 
+                        alt={program.title || 'Program'}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                      {/* Overlay only for images, not videos */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    </>
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-400">No media</span>
+                    </div>
+                  )}
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">{program.title}</h3>
-                <p className="text-gray-600 mb-4 leading-relaxed">{program.description}</p>
-                <div className="text-sm text-primary-600 font-medium mb-4">{program.impact}</div>
-                <Link 
-                  to="/donate" 
-                  className="btn-primary w-full text-center"
-                >
-                  Support This Program
-                </Link>
+                
+                {/* Content Section */}
+                <div className="p-6">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+                    {program.title}
+                  </h3>
+                  {program.impact && (
+                    <div className="mb-3">
+                      <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
+                        {program.impact}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-gray-600 mb-6 leading-relaxed">{program.description}</p>
+                  <Link 
+                    to="/donate" 
+                    className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
+                  >
+                    Support This Program
+                    <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
               </div>
             ))}
           </div>
@@ -410,61 +382,132 @@ const Home = () => {
 
       {/* Testimonials */}
       {testimonials && testimonials.length > 0 && (
-        <section className="py-16">
-          <div className="section-container">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl lg:text-4xl font-heading font-bold text-gray-900 mb-4">
-                Stories of Hope
+        <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
+          </div>
+          <div className="section-container relative z-10">
+            <div className="text-center mb-16">
+              <div className="inline-block px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-4">
+                Testimonials
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+                Voices of
+                <span className="block text-primary-600 mt-2">Gratitude & Hope</span>
               </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Hear from those whose lives have been touched by your generosity
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                Hear from those whose lives have been transformed by your generous contributions
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {testimonials.slice(0, 3).map((testimonial, index) => (
+              {testimonials.slice(0, 3).map((testimonial, index) => {
+                // Helper function to get image URL - check if it's a full URL or a filename
+                const getImageUrl = (imageValue?: string) => {
+                  if (!imageValue) return null
+                  // Check if it's a full URL (starts with http:// or https://)
+                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+                    return imageValue
+                  }
+                  // Otherwise, treat it as a filename and load from uploads
+                  return getStaticFileUrl(`/api/uploads/testimonials/${imageValue}`)
+                }
+                
+                // Helper function to get video URL
+                const getVideoUrl = (videoFilename?: string) => {
+                  if (!videoFilename) return null
+                  return getStaticFileUrl(`/api/uploads/testimonials/${videoFilename}`)
+                }
+                
+                const imageUrl = getImageUrl(testimonial.image)
+                const videoUrl = getVideoUrl(testimonial.video_filename)
+                
+                return (
                 <div 
                   key={testimonial.id}
-                  className="card text-center hover:shadow-xl transition-shadow duration-300 animate-fade-in"
+                  className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fade-in p-8 border border-gray-100 relative overflow-hidden"
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
-                  {testimonial.image && (
-                    <img 
-                      src={testimonial.image} 
-                      alt={testimonial.name}
-                      className="w-16 h-16 rounded-full mx-auto mb-4 object-cover"
-                    />
-                  )}
-                  <div className="flex justify-center mb-4">
-                    {[...Array(testimonial.rating || 5)].map((_, i) => (
-                      <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                    ))}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-50 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  <div className="relative">
+                    {/* Video Display */}
+                    {videoUrl && (
+                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
+                        <video
+                          src={videoUrl}
+                          className="w-full aspect-video object-cover"
+                          controls
+                          preload="metadata"
+                          playsInline
+                          crossOrigin="anonymous"
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      </div>
+                    )}
+                    
+                    {/* Image Display (only if no video) */}
+                    {!videoUrl && imageUrl && (
+                      <div className="mb-6 flex justify-center">
+                        <div className="relative">
+                          <img 
+                            src={imageUrl} 
+                            alt={testimonial.name}
+                            className="w-20 h-20 rounded-full object-cover ring-4 ring-primary-100 group-hover:ring-primary-200 transition-all duration-300"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white"></div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-center mb-6">
+                      {[...Array(testimonial.rating || 5)].map((_, i) => (
+                        <Star key={i} className="w-5 h-5 text-yellow-400 fill-current mx-0.5" />
+                      ))}
+                    </div>
+                    <div className="relative mb-6">
+                      <div className="absolute top-0 left-0 text-6xl text-primary-200 font-serif leading-none opacity-50">"</div>
+                      <p className="text-gray-700 italic leading-relaxed relative z-10 pl-6 text-lg">
+                        {testimonial.text}
+                      </p>
+                    </div>
+                    <div className="border-t border-gray-100 pt-4">
+                      <div className="font-bold text-gray-900 text-lg">{testimonial.name}</div>
+                      {testimonial.country && (
+                        <div className="text-sm text-gray-500 mt-1">{testimonial.country}</div>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-gray-600 mb-4 italic leading-relaxed">"{testimonial.text}"</p>
-                  <div className="font-semibold text-gray-900">{testimonial.name}</div>
-                  {testimonial.country && (
-                    <div className="text-sm text-gray-500">{testimonial.country}</div>
-                  )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </section>
       )}
 
       {/* Gallery Section */}
-      <section className="py-16 bg-white">
-        <div className="section-container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-heading font-bold text-gray-900 mb-4">
+      <section className="py-20 bg-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+        </div>
+        <div className="section-container relative z-10">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+              Visual Impact
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
               Our Work in Action
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              See the impact of your donations through photos and videos of our ongoing aid activities and operations
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              Witness the real-world impact of your donations through photos and videos showcasing our ongoing aid activities
             </p>
           </div>
 
-          <GallerySection settings={settings} />
+          <GallerySection />
         </div>
       </section>
 
@@ -492,107 +535,72 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Hero Video Modal */}
-      {showHeroVideoModal && (() => {
-        const heroVideo = getHeroVideoData()
-        if (!heroVideo) return null
-        
-        return (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowHeroVideoModal(false)}
-          >
-            <div className="relative max-w-4xl max-h-full w-full">
-              {heroVideo.isEmbeddable ? (
-                <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                  <iframe
-                    src={heroVideo.embedUrl}
-                    className="w-full h-full"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title="Hero Video"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-              ) : (
-                <video 
-                  className="w-full h-auto max-h-full rounded-lg"
-                  controls
-                  autoPlay
-                  preload="metadata"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <source src={heroVideo.url} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
-              )}
-              <button
-                onClick={() => setShowHeroVideoModal(false)}
-                className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-        )
-      })()}
     </div>
   )
 }
 
-interface GallerySectionProps {
-  settings: any[]
-}
+const GallerySection = () => {
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null)
+  
+  const { data: galleryItems = [], isLoading } = useQuery('public-gallery', () => galleryAPI.getAll(true))
 
-const GallerySection = ({ settings }: GallerySectionProps) => {
-  const [selectedMedia, setSelectedMedia] = useState<{url: string, type: 'image' | 'video'} | null>(null)
-
-  const isYouTubeUrl = (url: string) => {
-    return url.includes('youtube.com') || url.includes('youtu.be')
-  }
-
-  const getYouTubeVideoId = (url: string) => {
-    if (url.includes('youtube.com/watch?v=')) {
-      return url.split('v=')[1].split('&')[0]
+  // Helper function to get media URL - check if it's a filename or URL
+  const getMediaUrl = (filename: string): { url: string; isVideo: boolean } => {
+    // Check if it's a full URL (starts with http:// or https://)
+    if (filename.startsWith('http://') || filename.startsWith('https://')) {
+      const isVideo = filename.includes('youtube.com') || filename.includes('youtu.be') || filename.includes('vimeo.com') || filename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
+      return { url: filename, isVideo: !!isVideo }
     }
-    if (url.includes('youtu.be/')) {
-      return url.split('youtu.be/')[1].split('?')[0]
+    
+    // Otherwise, treat it as a filename and determine if it's video or image
+    const isVideo = filename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
+    const url = isVideo 
+      ? getStaticFileUrl(`/api/uploads/media/videos/${filename}`)
+      : getStaticFileUrl(`/api/uploads/media/images/${filename}`)
+    
+    return { url, isVideo: !!isVideo }
+  }
+
+  const processedItems = galleryItems.map((item) => {
+    const mediaInfo = getMediaUrl(item.media_filename)
+    return {
+      id: item.id,
+      url: mediaInfo.url,
+      type: mediaInfo.isVideo ? 'video' : 'image' as 'image' | 'video',
+      thumbnail: mediaInfo.url,
     }
-    return null
+  })
+
+  const selectedMedia = selectedMediaIndex !== null ? processedItems[selectedMediaIndex] : null
+
+  const goToPrevious = () => {
+    if (selectedMediaIndex === null) return
+    const newIndex = selectedMediaIndex > 0 ? selectedMediaIndex - 1 : processedItems.length - 1
+    setSelectedMediaIndex(newIndex)
   }
 
-  const getYouTubeThumbnail = (url: string) => {
-    const videoId = getYouTubeVideoId(url)
-    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null
+  const goToNext = () => {
+    if (selectedMediaIndex === null) return
+    const newIndex = selectedMediaIndex < processedItems.length - 1 ? selectedMediaIndex + 1 : 0
+    setSelectedMediaIndex(newIndex)
   }
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    const videoId = getYouTubeVideoId(url)
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (selectedMediaIndex === null) return
+    if (e.key === 'ArrowLeft') goToPrevious()
+    if (e.key === 'ArrowRight') goToNext()
+    if (e.key === 'Escape') setSelectedMediaIndex(null)
   }
 
-  const getGalleryItems = () => {
-    const items = []
-    for (let i = 1; i <= 6; i++) {
-      const setting = settings?.find(s => s.key === `gallery_item_${i}`)
-      if (setting?.value) {
-        const isVideo = isYouTubeUrl(setting.value)
-        items.push({
-          id: i,
-          url: setting.value,
-          type: isVideo ? 'video' : 'image',
-          thumbnail: isVideo ? getYouTubeThumbnail(setting.value) : setting.value,
-          embedUrl: isVideo ? getYouTubeEmbedUrl(setting.value) : null
-        })
-      }
-    }
-    return items
+  if (isLoading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+      </div>
+    )
   }
 
-  const galleryItems = getGalleryItems()
-
-  if (galleryItems.length === 0) {
+  if (processedItems.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="w-24 h-24 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
@@ -606,25 +614,41 @@ const GallerySection = ({ settings }: GallerySectionProps) => {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {galleryItems.map((item) => (
+        {processedItems.map((item, index) => (
           <div 
             key={item.id}
-            className="aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow duration-300 relative group"
-            onClick={() => setSelectedMedia({url: item.embedUrl || item.url, type: item.type})}
+            className="group aspect-square bg-gray-200 rounded-2xl overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-500 relative animate-fade-in transform hover:-translate-y-2"
+            style={{ animationDelay: `${index * 0.1}s` }}
+            onClick={() => setSelectedMediaIndex(index)}
           >
-            <img 
-              src={item.thumbnail}
-              alt={`Gallery ${item.type} ${item.id}`}
-              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-              onError={(e) => {
-                // Fallback for broken images
-                e.currentTarget.src = 'https://via.placeholder.com/400x400/e5e7eb/9ca3af?text=Media+Not+Available'
-              }}
-            />
+            {item.type === 'video' ? (
+              <video
+                src={item.url}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                preload="metadata"
+                muted
+                playsInline
+                onError={(e) => {
+                  // Hide video if it fails to load
+                  e.currentTarget.style.display = 'none'
+                }}
+              />
+            ) : (
+              <img 
+                src={item.thumbnail}
+                alt={`Gallery ${item.type} ${item.id}`}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                onError={(e) => {
+                  // Hide image if it fails to load instead of trying placeholder
+                  e.currentTarget.style.display = 'none'
+                }}
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             {item.type === 'video' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-40 transition-all duration-300">
-                <div className="bg-white bg-opacity-90 rounded-full p-3 group-hover:bg-opacity-100 transition-all duration-300">
-                  <Play className="w-8 h-8 text-primary-600 ml-1" />
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-500">
+                <div className="bg-white rounded-full p-4 group-hover:scale-110 transition-all duration-300 shadow-xl">
+                  <Play className="w-10 h-10 text-primary-600 ml-1" />
                 </div>
               </div>
             )}
@@ -632,38 +656,85 @@ const GallerySection = ({ settings }: GallerySectionProps) => {
         ))}
       </div>
 
-      {/* Media Modal */}
-      {selectedMedia && (
+      {/* Media Modal with Navigation */}
+      {selectedMedia && selectedMediaIndex !== null && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedMedia(null)}
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedMediaIndex(null)}
+          onKeyDown={handleKeyDown}
+          tabIndex={0}
         >
-          <div className="relative max-w-4xl max-h-full w-full">
-            {selectedMedia.type === 'video' ? (
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                <iframe
+          <div className="relative max-w-6xl max-h-full w-full flex items-center">
+            {/* Previous Button */}
+            {processedItems.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  goToPrevious()
+                }}
+                className="absolute left-4 text-white bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-75 transition-all duration-200 z-10"
+                aria-label="Previous"
+              >
+                <ChevronLeft className="w-8 h-8" />
+              </button>
+            )}
+
+            {/* Media Content */}
+            <div className="flex-1 flex items-center justify-center">
+              {selectedMedia.type === 'video' ? (
+                <div className="aspect-video bg-black rounded-lg overflow-hidden w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+                  <video
+                    src={selectedMedia.url}
+                    controls
+                    className="w-full h-full"
+                    autoPlay
+                    preload="metadata"
+                    playsInline
+                    crossOrigin="anonymous"
+                  >
+                    <source src={selectedMedia.url} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              ) : (
+                <img 
                   src={selectedMedia.url}
-                  className="w-full h-full"
-                  frameBorder="0"
-                  allowFullScreen
-                  title="Gallery Video"
+                  alt={`Gallery image ${selectedMediaIndex + 1}`}
+                  className="max-w-full max-h-[90vh] object-contain rounded-lg"
                   onClick={(e) => e.stopPropagation()}
                 />
-              </div>
-            ) : (
-              <img 
-                src={selectedMedia.url}
-                alt="Gallery image"
-                className="max-w-full max-h-full object-contain rounded-lg"
-                onClick={(e) => e.stopPropagation()}
-              />
+              )}
+            </div>
+
+            {/* Next Button */}
+            {processedItems.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  goToNext()
+                }}
+                className="absolute right-4 text-white bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-75 transition-all duration-200 z-10"
+                aria-label="Next"
+              >
+                <ChevronRight className="w-8 h-8" />
+              </button>
             )}
+
+            {/* Close Button */}
             <button
-              onClick={() => setSelectedMedia(null)}
-              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200"
+              onClick={() => setSelectedMediaIndex(null)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200 z-10"
+              aria-label="Close"
             >
               <X className="w-6 h-6" />
             </button>
+
+            {/* Counter */}
+            {processedItems.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 rounded-full px-4 py-2 text-sm">
+                {selectedMediaIndex + 1} / {processedItems.length}
+              </div>
+            )}
           </div>
         </div>
       )}

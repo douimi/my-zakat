@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star } from 'lucide-react'
-import { storiesAPI } from '../../utils/api'
+import { storiesAPI, getStaticFileUrl } from '../../utils/api'
+import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { getImageUrl } from '../../utils/mediaHelpers'
 import type { Story } from '../../types'
+import axios from 'axios'
 
 interface StoryFormData {
   title: string
@@ -10,42 +14,109 @@ interface StoryFormData {
   content: string
   is_active: boolean
   is_featured: boolean
-  video_url: string
+  video_file: File | null
   image_url: string
+  remove_video: boolean
 }
 
 const AdminStories = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingStory, setEditingStory] = useState<Story | null>(null)
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const [formData, setFormData] = useState<StoryFormData>({
     title: '',
     summary: '',
     content: '',
     is_active: true,
     is_featured: false,
-    video_url: '',
-    image_url: ''
+    video_file: null,
+    image_url: '',
+    remove_video: false
   })
   
   const queryClient = useQueryClient()
+  const { showSuccess, showError } = useToast()
   
   const { data: stories, isLoading } = useQuery('admin-stories', () => 
     storiesAPI.getAll(false, false) // Get all stories, not just active/featured
   )
+
+  // Helper function to parse error messages from backend
+  const parseErrorMessage = (error: any): string => {
+    if (axios.isAxiosError(error)) {
+      const response = error.response
+      
+      if (response?.status === 422) {
+        // Validation error from FastAPI/Pydantic
+        const detail = response.data?.detail
+        
+        if (Array.isArray(detail)) {
+          // Pydantic validation errors format: [{ loc: ['field'], msg: 'message', type: 'type' }]
+          const errors = detail.map((err: any) => {
+            const field = err.loc && err.loc.length > 0 
+              ? err.loc[err.loc.length - 1].toString().replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+              : 'field'
+            const message = err.msg || 'Invalid value'
+            // Make field names more user-friendly
+            const friendlyField = field === 'title' ? 'Title' 
+              : field === 'summary' ? 'Summary'
+              : field === 'content' ? 'Content'
+              : field === 'image filename' ? 'Image'
+              : field === 'video url' ? 'Video URL'
+              : field
+            return `${friendlyField}: ${message}`
+          })
+          return errors.join('. ')
+        } else if (typeof detail === 'string') {
+          return detail
+        } else if (detail?.message) {
+          return detail.message
+        }
+        
+        return 'Please check all required fields are filled correctly'
+      } else if (response?.status === 400) {
+        return response.data?.detail || 'Invalid request. Please check your input.'
+      } else if (response?.status === 401) {
+        return 'You are not authorized to perform this action'
+      } else if (response?.status === 403) {
+        return 'You do not have permission to perform this action'
+      } else if (response?.status === 404) {
+        return 'Story not found'
+      } else if (response?.status === 500) {
+        return 'Server error. Please try again later.'
+      }
+      
+      return response?.data?.detail || error.message || 'An error occurred. Please try again.'
+    }
+    
+    return error?.message || 'An unexpected error occurred. Please try again.'
+  }
   
-  const createMutation = useMutation(storiesAPI.create, {
+  const createMutation = useMutation(
+    (data: FormData) => storiesAPI.create(data),
+    {
     onSuccess: () => {
       queryClient.invalidateQueries('admin-stories')
       resetForm()
+      showSuccess('Success', 'Story created successfully!')
+    },
+    onError: (error: any) => {
+      const errorMessage = parseErrorMessage(error)
+      showError('Failed to Create Story', errorMessage)
     }
   })
   
   const updateMutation = useMutation(
-    ({ id, data }: { id: number; data: any }) => storiesAPI.update(id, data),
+    ({ id, data }: { id: number; data: FormData }) => storiesAPI.update(id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('admin-stories')
         resetForm()
+        showSuccess('Success', 'Story updated successfully!')
+      },
+      onError: (error: any) => {
+        const errorMessage = parseErrorMessage(error)
+        showError('Failed to Update Story', errorMessage)
       }
     }
   )
@@ -53,6 +124,11 @@ const AdminStories = () => {
   const deleteMutation = useMutation(storiesAPI.delete, {
     onSuccess: () => {
       queryClient.invalidateQueries('admin-stories')
+      showSuccess('Success', 'Story deleted successfully!')
+    },
+    onError: (error: any) => {
+      const errorMessage = parseErrorMessage(error)
+      showError('Failed to Delete Story', errorMessage)
     }
   })
 
@@ -63,8 +139,9 @@ const AdminStories = () => {
       content: '',
       is_active: true,
       is_featured: false,
-      video_url: '',
-      image_url: ''
+      video_file: null,
+      image_url: '',
+      remove_video: false
     })
     setEditingStory(null)
     setShowForm(false)
@@ -72,29 +149,40 @@ const AdminStories = () => {
 
   const handleEdit = (story: Story) => {
     setEditingStory(story)
-    setFormData({
-      title: story.title,
-      summary: story.summary,
-      content: story.content,
-      is_active: story.is_active,
-      is_featured: story.is_featured,
-      video_url: story.video_url || '',
-      image_url: story.image_filename || ''
-    })
+      setFormData({
+        title: story.title,
+        summary: story.summary,
+        content: story.content,
+        is_active: story.is_active,
+        is_featured: story.is_featured,
+        video_file: null,
+        image_url: story.image_filename || '',
+        remove_video: false
+      })
     setShowForm(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const submitData = {
-      title: formData.title,
-      summary: formData.summary,
-      content: formData.content,
-      is_active: formData.is_active,
-      is_featured: formData.is_featured,
-      video_url: formData.video_url,
-      image_filename: formData.image_url
+    // Backend expects multipart/form-data
+    const submitData = new FormData()
+    submitData.append('title', formData.title.trim())
+    submitData.append('summary', formData.summary.trim())
+    submitData.append('content', formData.content.trim())
+    submitData.append('is_active', formData.is_active.toString())
+    submitData.append('is_featured', formData.is_featured.toString())
+    
+    if (formData.image_url.trim()) {
+      submitData.append('image_filename', formData.image_url.trim())
+    }
+    
+    if (formData.video_file) {
+      submitData.append('video', formData.video_file)
+    }
+    
+    if (formData.remove_video && editingStory) {
+      submitData.append('remove_video', 'true')
     }
 
     if (editingStory) {
@@ -104,8 +192,15 @@ const AdminStories = () => {
     }
   }
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this story?')) {
+  const handleDelete = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Story',
+      message: 'Are you sure you want to delete this story? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    })
+    if (confirmed) {
       deleteMutation.mutate(id)
     }
   }
@@ -238,15 +333,57 @@ const AdminStories = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Video URL (optional)
+                    Video File (optional)
                   </label>
                   <input
-                    type="url"
-                    value={formData.video_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      setFormData(prev => ({ ...prev, video_file: file }))
+                    }}
                     className="input-field"
-                    placeholder="https://... or videos/story1.mp4"
                   />
+                  {formData.video_file && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      Selected: {formData.video_file.name}
+                    </p>
+                  )}
+                  {editingStory?.video_filename && !formData.video_file && !formData.remove_video && (
+                    <div className="mt-2 flex items-center justify-between p-2 bg-gray-50 rounded border">
+                      <div className="flex items-center">
+                        <Video className="w-4 h-4 text-gray-600 mr-2" />
+                        <span className="text-sm text-gray-700">{editingStory.video_filename}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: 'Delete Video',
+                            message: 'Are you sure you want to delete this video? This will remove it from the story.',
+                            confirmText: 'Delete',
+                            cancelText: 'Cancel',
+                            variant: 'danger'
+                          })
+                          if (confirmed) {
+                            setFormData(prev => ({ ...prev, remove_video: true, video_file: null }))
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Delete video"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  {formData.remove_video && (
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                      <p className="text-sm text-red-700">Video will be deleted when you save the story.</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Upload a video file (MP4, WebM, etc.). Maximum size: 100MB
+                  </p>
                 </div>
               </div>
 
@@ -353,16 +490,23 @@ const AdminStories = () => {
                       <div className="flex items-center space-x-4">
                         {story.image_filename ? (
                           <img 
-                            src={`/api/uploads/stories/${story.image_filename}`} 
+                            src={
+                              story.image_filename.startsWith('http://') || story.image_filename.startsWith('https://')
+                                ? story.image_filename
+                                : getStaticFileUrl(`/api/uploads/stories/${story.image_filename}`)
+                            }
                             alt={story.title}
                             className="w-16 h-16 object-cover rounded"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
                           />
                         ) : (
                           <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
                             <ImageIcon className="w-6 h-6 text-gray-400" />
                           </div>
                         )}
-                        {story.video_url && (
+                        {story.video_filename && (
                           <div className="flex items-center text-purple-600">
                             <Video className="w-4 h-4" />
                             <span className="ml-1 text-sm">Video</span>
@@ -409,6 +553,8 @@ const AdminStories = () => {
           </div>
         )}
       </div>
+
+      <ConfirmationDialog />
     </div>
   )
 }

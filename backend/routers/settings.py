@@ -50,11 +50,20 @@ async def update_setting(
     current_admin = Depends(get_current_admin)
 ):
     setting = db.query(Setting).filter(Setting.key == key).first()
-    if not setting:
-        raise HTTPException(status_code=404, detail="Setting not found")
     
-    for field, value in setting_update.dict(exclude_unset=True).items():
-        setattr(setting, field, value)
+    # If setting doesn't exist, create it
+    if not setting:
+        setting_data = setting_update.dict(exclude_unset=True)
+        setting_data['key'] = key
+        # Set default description if not provided
+        if 'description' not in setting_data or not setting_data['description']:
+            setting_data['description'] = f"Setting for {key}"
+        setting = Setting(**setting_data)
+        db.add(setting)
+    else:
+        # Update existing setting
+        for field, value in setting_update.dict(exclude_unset=True).items():
+            setattr(setting, field, value)
     
     db.commit()
     db.refresh(setting)

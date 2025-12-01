@@ -1,14 +1,21 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { MessageSquare, Search, Check, Trash2, Mail, Download } from 'lucide-react'
+import { MessageSquare, Search, Check, Trash2, Mail, Download, Eye, Send, X } from 'lucide-react'
 import { contactAPI } from '../../utils/api'
+import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
 import type { ContactSubmission } from '../../types'
 
 const AdminContacts = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedContacts, setSelectedContacts] = useState<number[]>([])
+  const [selectedContact, setSelectedContact] = useState<ContactSubmission | null>(null)
+  const [showReplyModal, setShowReplyModal] = useState(false)
+  const [replyMessage, setReplyMessage] = useState('')
   const queryClient = useQueryClient()
+  const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmationDialog } = useConfirmation()
 
   const { data: contacts, isLoading } = useQuery(
     'admin-contacts',
@@ -27,6 +34,22 @@ const AdminContacts = () => {
     }
   })
 
+  const replyMutation = useMutation(
+    ({ id, message }: { id: number; message: string }) => contactAPI.reply(id, message),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('admin-contacts')
+        setShowReplyModal(false)
+        setReplyMessage('')
+        setSelectedContact(null)
+        showSuccess('Success', 'Reply email sent successfully!')
+      },
+      onError: (error: any) => {
+        showError('Failed to Send Reply', error?.response?.data?.detail || 'An error occurred while sending the reply')
+      }
+    }
+  )
+
   const filteredContacts = contacts?.filter((contact: ContactSubmission) => {
     const matchesSearch = !searchTerm || 
       contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -44,19 +67,50 @@ const AdminContacts = () => {
     resolveMutation.mutate(id)
   }
 
-  const handleDelete = (id: number) => {
-    if (confirm('Are you sure you want to delete this contact submission?')) {
+  const handleDelete = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Contact Submission',
+      message: 'Are you sure you want to delete this contact submission? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    })
+    if (confirmed) {
       deleteMutation.mutate(id)
     }
   }
 
-  const handleBulkAction = (action: 'resolve' | 'delete') => {
+  const handleViewContact = (contact: ContactSubmission) => {
+    setSelectedContact(contact)
+  }
+
+  const handleReply = (contact: ContactSubmission) => {
+    setSelectedContact(contact)
+    setShowReplyModal(true)
+  }
+
+  const handleSendReply = () => {
+    if (!selectedContact || !replyMessage.trim()) {
+      showError('Validation Error', 'Please enter a reply message')
+      return
+    }
+    replyMutation.mutate({ id: selectedContact.id, message: replyMessage })
+  }
+
+  const handleBulkAction = async (action: 'resolve' | 'delete') => {
     if (selectedContacts.length === 0) return
 
     if (action === 'resolve') {
       selectedContacts.forEach(id => resolveMutation.mutate(id))
     } else if (action === 'delete') {
-      if (confirm(`Are you sure you want to delete ${selectedContacts.length} contact submissions?`)) {
+      const confirmed = await confirm({
+        title: 'Delete Multiple Submissions',
+        message: `Are you sure you want to delete ${selectedContacts.length} contact submission(s)? This action cannot be undone.`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        variant: 'danger'
+      })
+      if (confirmed) {
         selectedContacts.forEach(id => deleteMutation.mutate(id))
       }
     }
@@ -284,6 +338,20 @@ const AdminContacts = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleViewContact(contact)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="View details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleReply(contact)}
+                        className="text-primary-600 hover:text-primary-900"
+                        title="Reply via email"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
                       {!contact.resolved && (
                         <button
                           onClick={() => handleResolve(contact.id)}
@@ -316,6 +384,170 @@ const AdminContacts = () => {
           </div>
         )}
       </div>
+
+      {/* View Contact Modal */}
+      {selectedContact && !showReplyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Contact Details</h2>
+              <button
+                onClick={() => setSelectedContact(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Name</label>
+                <p className="text-gray-900 font-medium">{selectedContact.name}</p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500">Email</label>
+                <p className="text-gray-900">
+                  <a href={`mailto:${selectedContact.email}`} className="text-primary-600 hover:text-primary-700">
+                    {selectedContact.email}
+                  </a>
+                </p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500">Submitted At</label>
+                <p className="text-gray-900">
+                  {new Date(selectedContact.submitted_at).toLocaleString()}
+                </p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500">Status</label>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  selectedContact.resolved
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-orange-100 text-orange-800'
+                }`}>
+                  {selectedContact.resolved ? 'Resolved' : 'Pending'}
+                </span>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500">Message</label>
+                <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-gray-900 whitespace-pre-wrap">{selectedContact.message}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowReplyModal(true)
+                }}
+                className="btn-primary flex items-center"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Reply via Email
+              </button>
+              <button
+                onClick={() => setSelectedContact(null)}
+                className="btn-outline"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reply Modal */}
+      {showReplyModal && selectedContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Reply to {selectedContact.name}</h2>
+              <button
+                onClick={() => {
+                  setShowReplyModal(false)
+                  setReplyMessage('')
+                  setSelectedContact(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">To</label>
+                <p className="text-gray-900">
+                  <a href={`mailto:${selectedContact.email}`} className="text-primary-600 hover:text-primary-700">
+                    {selectedContact.email}
+                  </a>
+                </p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500">Original Message</label>
+                <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
+                  <p className="text-gray-700 text-sm whitespace-pre-wrap">{selectedContact.message}</p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Reply *
+                </label>
+                <textarea
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  rows={8}
+                  className="input-field"
+                  placeholder="Type your reply message here..."
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This message will be sent via email to {selectedContact.email}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowReplyModal(false)
+                  setReplyMessage('')
+                }}
+                className="btn-outline"
+                disabled={replyMutation.isLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendReply}
+                disabled={!replyMessage.trim() || replyMutation.isLoading}
+                className="btn-primary flex items-center"
+              >
+                {replyMutation.isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Reply
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationDialog />
     </div>
   )
 }

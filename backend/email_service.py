@@ -284,3 +284,138 @@ May your generosity be rewarded abundantly.
         logger.error(f"Failed to send donation certificate email to {email}: {str(e)}")
         return False
 
+
+def send_contact_reply_email(recipient_email: str, recipient_name: str, original_message: str, reply_message: str) -> bool:
+    """
+    Send reply email to contact form submission
+    
+    Args:
+        recipient_email: Contact's email address
+        recipient_name: Contact's name
+        original_message: Original message from contact
+        reply_message: Admin's reply message
+        
+    Returns:
+        True if email sent successfully, False otherwise
+    """
+    try:
+        # Create email message with proper headers
+        msg = MIMEMultipart("alternative")
+        
+        # Essential headers for deliverability
+        msg["Subject"] = Header("Re: Your Contact Form Submission - My Zakat", "utf-8")
+        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
+        msg["To"] = recipient_email
+        msg["Reply-To"] = SMTP_USERNAME
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain="myzakat.org")
+        msg["MIME-Version"] = "1.0"
+        
+        # Add List-Unsubscribe header
+        msg["List-Unsubscribe"] = f"<mailto:{SMTP_USERNAME}?subject=Unsubscribe>"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+        
+        # X-Headers
+        msg["X-Mailer"] = "My Zakat Platform"
+        msg["X-Priority"] = "1"
+        msg["X-MSMail-Priority"] = "High"
+        
+        # Create HTML email body
+        html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Re: Your Contact Form Submission</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 20px 0; text-align: center;">
+                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #2563eb; color: #ffffff; padding: 30px 20px; text-align: center;">
+                            <h1 style="margin: 0; font-size: 24px; font-weight: bold;">My Zakat</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #2563eb; margin-top: 0; font-size: 20px;">Thank You for Contacting Us</h2>
+                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Hello {recipient_name or 'there'},</p>
+                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Thank you for reaching out to us. We have received your message and are responding below:</p>
+                            
+                            <!-- Original Message -->
+                            <div style="background-color: #f9fafb; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                                <p style="color: #666666; font-size: 12px; margin: 0 0 10px 0; font-weight: bold; text-transform: uppercase;">Your Original Message:</p>
+                                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">{original_message}</p>
+                            </div>
+                            
+                            <!-- Reply Message -->
+                            <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                                <p style="color: #1e40af; font-size: 12px; margin: 0 0 10px 0; font-weight: bold; text-transform: uppercase;">Our Response:</p>
+                                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">{reply_message}</p>
+                            </div>
+                            
+                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin-top: 30px;">If you have any further questions or concerns, please don't hesitate to contact us again.</p>
+                            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e5e5;">Best regards,<br>The My Zakat Team</p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e5e5;">
+                            <p style="color: #999999; font-size: 12px; margin: 0;">© {datetime.now().year} My Zakat. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+        
+        # Create plain text version
+        text_body = f"""My Zakat - Re: Your Contact Form Submission
+
+Hello {recipient_name or 'there'},
+
+Thank you for reaching out to us. We have received your message and are responding below:
+
+Your Original Message:
+{original_message}
+
+Our Response:
+{reply_message}
+
+If you have any further questions or concerns, please don't hesitate to contact us again.
+
+Best regards,
+The My Zakat Team
+
+---
+© {datetime.now().year} My Zakat. All rights reserved."""
+        
+        # Attach both versions
+        part1 = MIMEText(text_body, "plain", "utf-8")
+        part2 = MIMEText(html_body, "html", "utf-8")
+        
+        msg.attach(part1)
+        msg.attach(part2)
+        
+        # Send email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+            server.set_debuglevel(0)
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[recipient_email])
+        
+        logger.info(f"Contact reply email sent successfully to {recipient_email}")
+        return True
+        
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error sending contact reply email to {recipient_email}: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to send contact reply email to {recipient_email}: {str(e)}")
+        return False

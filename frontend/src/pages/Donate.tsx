@@ -18,8 +18,13 @@ const Donate = () => {
   const [searchParams] = useSearchParams()
   const [isProcessing, setIsProcessing] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
+  
+  // Get amount from URL params (supports both 'amount' and 'zakat_amount' for backward compatibility)
+  const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
+  const urlFrequency = searchParams.get('frequency')
+  
   const [selectedAmount, setSelectedAmount] = useState<number | null>(
-    searchParams.get('zakat_amount') ? parseFloat(searchParams.get('zakat_amount')!) : null
+    urlAmount ? parseFloat(urlAmount) : null
   )
 
   
@@ -31,10 +36,24 @@ const Donate = () => {
       name: '',
       email: '',
       amount: selectedAmount || 0,
-      frequency: 'One-Time',
+      frequency: urlFrequency || 'One-Time',
       purpose: searchParams.get('zakat_amount') ? 'Zakat' : 'General Donation'
     }
   })
+
+  // Pre-fill amount and frequency from URL params
+  useEffect(() => {
+    if (urlAmount) {
+      const amount = parseFloat(urlAmount)
+      if (!isNaN(amount) && amount > 0) {
+        setValue('amount', amount)
+        setSelectedAmount(amount)
+      }
+    }
+    if (urlFrequency && ['One-Time', 'Monthly', 'Annually'].includes(urlFrequency)) {
+      setValue('frequency', urlFrequency)
+    }
+  }, [urlAmount, urlFrequency, setValue])
 
   // Pre-fill form with user data if logged in
   useEffect(() => {

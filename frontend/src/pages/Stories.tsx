@@ -1,7 +1,7 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { Calendar, User, ArrowRight, Play, BookOpen, Heart } from 'lucide-react'
-import { storiesAPI } from '../utils/api'
+import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import type { Story } from '../types'
 
 const Stories = () => {
@@ -138,17 +138,33 @@ interface FeaturedStoryCardProps {
 }
 
 const FeaturedStoryCard = ({ story }: FeaturedStoryCardProps) => {
+  // Helper function to get image URL - check if it's a full URL or a filename
+  const getImageUrl = (imageFilename?: string) => {
+    if (!imageFilename) return null
+    // Check if it's a full URL (starts with http:// or https://)
+    if (imageFilename.startsWith('http://') || imageFilename.startsWith('https://')) {
+      return imageFilename
+    }
+    // Otherwise, treat it as a filename and load from uploads
+    return getStaticFileUrl(`/api/uploads/stories/${imageFilename}`)
+  }
+
+  const imageUrl = getImageUrl(story.image_filename)
+
   return (
     <div className="card hover:shadow-xl transition-shadow duration-300 overflow-hidden">
       {/* Story Image/Video */}
-      {story.image_filename && (
+      {imageUrl && (
         <div className="aspect-video bg-gray-200 relative overflow-hidden">
           <img 
-            src={`/api/uploads/stories/${story.image_filename}`} 
+            src={imageUrl} 
             alt={story.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
           />
-          {story.video_url && (
+          {story.video_filename && (
             <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
               <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
                 <Play className="w-8 h-8 text-primary-600 ml-1" />
@@ -190,17 +206,33 @@ interface StoryCardProps {
 }
 
 const StoryCard = ({ story }: StoryCardProps) => {
+  // Helper function to get image URL - check if it's a full URL or a filename
+  const getImageUrl = (imageFilename?: string) => {
+    if (!imageFilename) return null
+    // Check if it's a full URL (starts with http:// or https://)
+    if (imageFilename.startsWith('http://') || imageFilename.startsWith('https://')) {
+      return imageFilename
+    }
+    // Otherwise, treat it as a filename and load from uploads
+    return getStaticFileUrl(`/api/uploads/stories/${imageFilename}`)
+  }
+
+  const imageUrl = getImageUrl(story.image_filename)
+
   return (
     <div className="card hover:shadow-lg transition-shadow duration-300">
       {/* Story Image */}
-      {story.image_filename && (
+      {imageUrl && (
         <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden relative">
           <img 
-            src={`/api/uploads/stories/${story.image_filename}`} 
+            src={imageUrl} 
             alt={story.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
           />
-          {story.video_url && (
+          {story.video_filename && (
             <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
               <div className="w-12 h-12 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
                 <Play className="w-6 h-6 text-primary-600 ml-0.5" />

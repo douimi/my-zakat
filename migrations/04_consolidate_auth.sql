@@ -1,4 +1,4 @@
--- Migration: Consolidate authentication to use only users table
+-- Migration 04: Consolidate authentication to use only users table
 -- This migration:
 -- 1. Creates a super admin user from existing admin (if exists)
 -- 2. Drops the admins table
@@ -74,10 +74,5 @@ END $$;
 -- Now drop the admins table if it exists
 DROP TABLE IF EXISTS admins CASCADE;
 
--- Verify the migration
-SELECT 'Migration completed successfully!' as message;
-SELECT 'Admin users:' as info;
-SELECT id, email, name, is_admin, created_at 
-FROM users 
-WHERE is_admin = true;
+SELECT 'Migration 04 completed successfully!' as message;
 

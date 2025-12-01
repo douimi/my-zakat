@@ -4,6 +4,17 @@ from database import Base
 from datetime import datetime
 
 
+class GalleryItem(Base):
+    __tablename__ = "gallery_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    media_filename = Column(String(255), nullable=False)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ContactSubmission(Base):
     __tablename__ = "contact_submissions"
     
@@ -74,7 +85,7 @@ class Story(Base):
     summary = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
     image_filename = Column(String(200))
-    video_url = Column(String(255))
+    video_filename = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     is_featured = Column(Boolean, default=False)
 
@@ -99,7 +110,7 @@ class Testimonial(Base):
     image = Column(String(255), nullable=True)
     text = Column(Text, nullable=False)
     rating = Column(Integer, nullable=True)
-    video_url = Column(String(255), nullable=True)
+    video_filename = Column(String(255), nullable=True)
     category = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_approved = Column(Boolean, default=False)
@@ -144,4 +155,37 @@ class Setting(Base):
     key = Column(String(100), nullable=False, unique=True)
     value = Column(String(500), nullable=False)
     description = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SlideshowSlide(Base):
+    __tablename__ = "slideshow_slides"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    image_filename = Column(String(255), nullable=True)  # Deprecated - use image_url instead
+    image_url = Column(String(500), nullable=True)  # Preferred: direct image URL
+    cta_text = Column(String(100), nullable=True)
+    cta_url = Column(String(500), nullable=True)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UrgentNeed(Base):
+    __tablename__ = "urgent_needs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True, index=True)
+    short_description = Column(Text, nullable=True)
+    html_content = Column(Text, nullable=True)
+    css_content = Column(Text, nullable=True)
+    js_content = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

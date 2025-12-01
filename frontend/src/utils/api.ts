@@ -20,6 +20,21 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 })
 
+// Helper function to get the correct URL for static files (uploads)
+// In development, Vite proxy handles /api, but we need full URL for video elements
+export const getStaticFileUrl = (path: string): string => {
+  // If path is already a full URL, return it as-is
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  // If path starts with /api, prepend the API base URL
+  if (path.startsWith('/api/')) {
+    return `${API_BASE_URL}${path}`
+  }
+  // Otherwise, assume it's a relative path and prepend /api/uploads
+  return `${API_BASE_URL}/api/uploads/${path}`
+}
+
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token')
@@ -149,8 +164,98 @@ export const contactAPI = {
     return response.data
   },
   
+  reply: async (id: number, replyMessage: string) => {
+    const response = await api.post(`/api/contact/${id}/reply`, {
+      reply_message: replyMessage
+    })
+    return response.data
+  },
+  
   delete: async (id: number) => {
     const response = await api.delete(`/api/contact/${id}`)
+    return response.data
+  },
+}
+
+// Gallery API
+export const galleryAPI = {
+  getAll: async (activeOnly: boolean = true) => {
+    const response = await api.get(`/api/gallery/?active_only=${activeOnly}`)
+    return response.data
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/api/gallery/${id}`)
+    return response.data
+  },
+  
+  create: async (item: { media_filename: string; display_order?: number; is_active?: boolean }) => {
+    const formData = new FormData()
+    formData.append('media_filename', item.media_filename)
+    if (item.display_order !== undefined) formData.append('display_order', item.display_order.toString())
+    if (item.is_active !== undefined) formData.append('is_active', item.is_active.toString())
+    const response = await api.post('/api/gallery/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  
+  upload: async (params: { file: File; display_order?: number; is_active?: boolean }) => {
+    const formData = new FormData()
+    formData.append('file', params.file)
+    if (params.display_order !== undefined) formData.append('display_order', params.display_order.toString())
+    if (params.is_active !== undefined) formData.append('is_active', params.is_active.toString())
+    const response = await api.post('/api/gallery/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  
+  update: async (id: number, item: { media_filename?: string; display_order?: number; is_active?: boolean }) => {
+    const response = await api.put(`/api/gallery/${id}`, item)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/api/gallery/${id}`)
+    return response.data
+  },
+  
+  reorder: async (itemOrders: Array<{id: number; display_order: number}>) => {
+    const response = await api.post('/api/gallery/reorder', itemOrders)
+    return response.data
+  },
+}
+
+// Media API
+export const mediaAPI = {
+  uploadVideo: async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/api/media/upload-video', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  
+  listVideos: async () => {
+    const response = await api.get('/api/media/videos')
+    return response.data
+  },
+  
+  deleteVideo: async (filename: string) => {
+    const response = await api.delete(`/api/media/videos/${filename}`)
+    return response.data
+  },
+  
+  getVideoInfo: async (filename: string) => {
+    const response = await api.get(`/api/media/videos/${filename}/info`)
     return response.data
   },
 }
@@ -169,12 +274,50 @@ export const eventsAPI = {
   },
   
   create: async (eventData: any) => {
-    const response = await api.post('/api/events/', eventData)
+    // Backend expects multipart/form-data, not JSON
+    const formData = new FormData()
+    formData.append('title', eventData.title)
+    formData.append('description', eventData.description)
+    formData.append('date', eventData.date)
+    formData.append('location', eventData.location)
+    
+    // Handle image - if it's a File, send as file upload, otherwise send as image_url
+    if (eventData.image instanceof File) {
+      formData.append('image', eventData.image)
+    } else if (eventData.image && typeof eventData.image === 'string') {
+      // Send as image_url parameter
+      formData.append('image_url', eventData.image)
+    }
+    
+    const response = await api.post('/api/events/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
   update: async (id: number, eventData: any) => {
-    const response = await api.put(`/api/events/${id}`, eventData)
+    // Backend expects multipart/form-data, not JSON
+    const formData = new FormData()
+    formData.append('title', eventData.title)
+    formData.append('description', eventData.description)
+    formData.append('date', eventData.date)
+    formData.append('location', eventData.location)
+    
+    // Handle image - if it's a File, send as file upload, otherwise send as image_url
+    if (eventData.image instanceof File) {
+      formData.append('image', eventData.image)
+    } else if (eventData.image !== undefined) {
+      // Send as image_url parameter (can be empty string to clear)
+      formData.append('image_url', eventData.image || '')
+    }
+    
+    const response = await api.put(`/api/events/${id}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
@@ -197,13 +340,62 @@ export const storiesAPI = {
     return response.data
   },
   
-  create: async (storyData: any) => {
-    const response = await api.post('/api/stories/', storyData)
+  create: async (storyData: FormData | any) => {
+    // Backend expects multipart/form-data
+    const formData = storyData instanceof FormData 
+      ? storyData 
+      : (() => {
+          const fd = new FormData()
+          fd.append('title', storyData.title)
+          fd.append('summary', storyData.summary)
+          fd.append('content', storyData.content)
+          fd.append('is_active', (storyData.is_active ?? true).toString())
+          fd.append('is_featured', (storyData.is_featured ?? false).toString())
+          if (storyData.image_filename) {
+            fd.append('image_filename', storyData.image_filename)
+          }
+          if (storyData.video instanceof File) {
+            fd.append('video', storyData.video)
+          }
+          return fd
+        })()
+    
+    const response = await api.post('/api/stories/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
-  update: async (id: number, storyData: any) => {
-    const response = await api.put(`/api/stories/${id}`, storyData)
+  update: async (id: number, storyData: FormData | any) => {
+    // Backend expects multipart/form-data
+    const formData = storyData instanceof FormData 
+      ? storyData 
+      : (() => {
+          const fd = new FormData()
+          fd.append('title', storyData.title)
+          fd.append('summary', storyData.summary)
+          fd.append('content', storyData.content)
+          fd.append('is_active', (storyData.is_active ?? true).toString())
+          fd.append('is_featured', (storyData.is_featured ?? false).toString())
+          if (storyData.image_filename !== undefined) {
+            fd.append('image_filename', storyData.image_filename || '')
+          }
+          if (storyData.video instanceof File) {
+            fd.append('video', storyData.video)
+          }
+          if (storyData.remove_video) {
+            fd.append('remove_video', 'true')
+          }
+          return fd
+        })()
+    
+    const response = await api.put(`/api/stories/${id}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
@@ -222,12 +414,63 @@ export const testimonialsAPI = {
   },
   
   create: async (testimonialData: any) => {
-    const response = await api.post('/api/testimonials/', testimonialData)
+    // Backend expects multipart/form-data
+    const formData = testimonialData instanceof FormData 
+      ? testimonialData 
+      : (() => {
+          const fd = new FormData()
+          fd.append('name', testimonialData.name)
+          fd.append('country', testimonialData.country || '')
+          fd.append('text', testimonialData.text)
+          fd.append('rating', (testimonialData.rating || 5).toString())
+          fd.append('category', testimonialData.category || 'donor')
+          fd.append('is_approved', (testimonialData.is_approved || false).toString())
+          if (testimonialData.image_url) {
+            fd.append('image_url', testimonialData.image_url)
+          }
+          if (testimonialData.video instanceof File) {
+            fd.append('video', testimonialData.video)
+          }
+          return fd
+        })()
+    
+    const response = await api.post('/api/testimonials/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
   update: async (id: number, testimonialData: any) => {
-    const response = await api.put(`/api/testimonials/${id}`, testimonialData)
+    // Backend expects multipart/form-data
+    const formData = testimonialData instanceof FormData 
+      ? testimonialData 
+      : (() => {
+          const fd = new FormData()
+          fd.append('name', testimonialData.name)
+          fd.append('country', testimonialData.country || '')
+          fd.append('text', testimonialData.text)
+          fd.append('rating', (testimonialData.rating || 5).toString())
+          fd.append('category', testimonialData.category || 'donor')
+          fd.append('is_approved', (testimonialData.is_approved || false).toString())
+          if (testimonialData.image_url !== undefined) {
+            fd.append('image_url', testimonialData.image_url || '')
+          }
+          if (testimonialData.video instanceof File) {
+            fd.append('video', testimonialData.video)
+          }
+          if (testimonialData.remove_video) {
+            fd.append('remove_video', 'true')
+          }
+          return fd
+        })()
+    
+    const response = await api.put(`/api/testimonials/${id}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   },
   
@@ -285,6 +528,17 @@ export const subscriptionsAPI = {
 
 // Admin API
 export const adminAPI = {
+  uploadMedia: async (file: File, type: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', type)
+    const response = await api.post('/api/admin/upload-media', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
   getDashboardStats: async (): Promise<DashboardStats> => {
     const response = await api.get('/api/admin/dashboard')
     return response.data
@@ -359,6 +613,116 @@ export const settingsAPI = {
   
   delete: async (key: string) => {
     const response = await api.delete(`/api/settings/${key}`)
+    return response.data
+  },
+}
+
+// Slideshow API
+export const slideshowAPI = {
+  getAll: async (activeOnly: boolean = false) => {
+    const response = await api.get(`/api/slideshow/?active_only=${activeOnly}`)
+    return response.data
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/api/slideshow/${id}`)
+    return response.data
+  },
+  
+  create: async (slide: {
+    title: string
+    description?: string
+    image_filename?: string
+    image_url?: string
+    cta_text?: string
+    cta_url?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.post('/api/slideshow/', slide)
+    return response.data
+  },
+  
+  update: async (id: number, slide: {
+    title?: string
+    description?: string
+    image_filename?: string
+    image_url?: string
+    cta_text?: string
+    cta_url?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.put(`/api/slideshow/${id}`, slide)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/api/slideshow/${id}`)
+    return response.data
+  },
+  
+  uploadImage: async (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post(`/api/slideshow/${id}/upload-image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+}
+
+// Urgent Needs API
+export const urgentNeedsAPI = {
+  getAll: async (activeOnly: boolean = false) => {
+    const response = await api.get(`/api/urgent-needs/?active_only=${activeOnly}`)
+    return response.data
+  },
+  
+  getBySlug: async (slug: string) => {
+    const response = await api.get(`/api/urgent-needs/${slug}`)
+    return response.data
+  },
+  
+  getById: async (id: number) => {
+    const response = await api.get(`/api/urgent-needs/id/${id}`)
+    return response.data
+  },
+  
+  create: async (need: {
+    title: string
+    slug?: string
+    short_description?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    image_url?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.post('/api/urgent-needs/', need)
+    return response.data
+  },
+  
+  update: async (id: number, need: {
+    title?: string
+    slug?: string
+    short_description?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    image_url?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.put(`/api/urgent-needs/${id}`, need)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/api/urgent-needs/${id}`)
     return response.data
   },
 }

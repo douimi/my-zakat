@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { DollarSign, Heart, CreditCard, Calendar, X, LogOut, User as UserIcon, Shield, Home, Download, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirmation } from '../hooks/useConfirmation'
 
 interface DashboardStats {
   total_donated: number
@@ -121,8 +122,17 @@ const UserDashboard = () => {
     }
   }
 
+  const { confirm, ConfirmationDialog } = useConfirmation()
+
   const handleCancelSubscription = async (subscriptionId: number) => {
-    if (!confirm('Are you sure you want to cancel this subscription?')) {
+    const confirmed = await confirm({
+      title: 'Cancel Subscription',
+      message: 'Are you sure you want to cancel this subscription? This action cannot be undone.',
+      confirmText: 'Cancel Subscription',
+      cancelText: 'Keep Subscription',
+      variant: 'warning'
+    })
+    if (!confirmed) {
       return
     }
 
@@ -478,6 +488,8 @@ const UserDashboard = () => {
           )}
         </div>
       </div>
+
+      <ConfirmationDialog />
     </div>
   )
 }

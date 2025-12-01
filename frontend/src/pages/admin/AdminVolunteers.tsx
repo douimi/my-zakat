@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { Users, Trash2, Search, Filter, Calendar, Mail } from 'lucide-react'
 import { volunteersAPI } from '../../utils/api'
+import { useConfirmation } from '../../hooks/useConfirmation'
 import type { Volunteer } from '../../types'
 
 const AdminVolunteers = () => {
@@ -9,6 +10,7 @@ const AdminVolunteers = () => {
   const [interestFilter, setInterestFilter] = useState<string>('')
   
   const queryClient = useQueryClient()
+  const { confirm, ConfirmationDialog } = useConfirmation()
   
   const { data: volunteers, isLoading } = useQuery('admin-volunteers', volunteersAPI.getAll)
   
@@ -18,8 +20,15 @@ const AdminVolunteers = () => {
     }
   })
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this volunteer submission?')) {
+  const handleDelete = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Volunteer Submission',
+      message: 'Are you sure you want to delete this volunteer submission? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    })
+    if (confirmed) {
       deleteMutation.mutate(id)
     }
   }
@@ -234,6 +243,8 @@ const AdminVolunteers = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog />
     </div>
   )
 }

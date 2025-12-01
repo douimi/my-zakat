@@ -79,7 +79,7 @@ const UserRegister = () => {
       }
 
       setError('')
-      alert('Verification email sent successfully! Please check your inbox.')
+      // Success will be shown via toast if available, or user will see success message
     } catch (err: any) {
       setError(err.message || 'Failed to resend verification email. Please try again.')
     } finally {

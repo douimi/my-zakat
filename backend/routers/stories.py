@@ -18,18 +18,18 @@ async def create_story(
     title: str = Form(...),
     summary: str = Form(...),
     content: str = Form(...),
+    image_filename: Optional[str] = Form(None),
+    video: Optional[UploadFile] = File(None),
     is_active: bool = Form(True),
     is_featured: bool = Form(False),
-    video_url: str = Form(""),
-    image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    # Handle image upload if provided
-    image_filename = None
-    if image and image.filename:
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
+    # Handle video upload if provided
+    video_filename = None
+    if video and video.filename:
+        if not video.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="File must be a video")
         
         # Create uploads directory if it doesn't exist
         upload_dir = "uploads/stories"
@@ -37,13 +37,13 @@ async def create_story(
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
+        file_extension = os.path.splitext(video.filename)[1]
+        video_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
+        file_path = os.path.join(upload_dir, video_filename)
         
         # Save file
         async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await image.read()
+            content_bytes = await video.read()
             await f.write(content_bytes)
     
     # Create story in database
@@ -51,8 +51,8 @@ async def create_story(
         title=title,
         summary=summary,
         content=content,
-        image_filename=image_filename,
-        video_url=video_url if video_url else None,
+        image_filename=image_filename if image_filename else None,
+        video_filename=video_filename,
         is_active=is_active,
         is_featured=is_featured
     )
@@ -94,10 +94,11 @@ async def update_story(
     title: str = Form(...),
     summary: str = Form(...),
     content: str = Form(...),
+    image_filename: Optional[str] = Form(None),
+    video: Optional[UploadFile] = File(None),
+    remove_video: Optional[bool] = Form(False),
     is_active: bool = Form(True),
     is_featured: bool = Form(False),
-    video_url: str = Form(""),
-    image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
@@ -105,35 +106,54 @@ async def update_story(
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
     
+    # Handle video removal if requested
+    if remove_video:
+        if story.video_filename:
+            old_path = os.path.join("uploads/stories", story.video_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Error deleting video: {e}")
+        story.video_filename = None
+    # Handle video upload if provided
+    elif video and video.filename:
+        if not video.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="File must be a video")
+        
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads/stories"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Delete old video if it exists
+        if story.video_filename:
+            old_path = os.path.join(upload_dir, story.video_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Error deleting old video: {e}")
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = os.path.splitext(video.filename)[1]
+        video_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
+        file_path = os.path.join(upload_dir, video_filename)
+        
+        # Save file
+        async with aiofiles.open(file_path, 'wb') as f:
+            content_bytes = await video.read()
+            await f.write(content_bytes)
+        
+        story.video_filename = video_filename
+    
     # Update basic fields
     story.title = title
     story.summary = summary
     story.content = content
     story.is_active = is_active
     story.is_featured = is_featured
-    story.video_url = video_url if video_url else None
-    
-    # Handle image upload if provided
-    if image and image.filename:
-        if not image.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/stories"
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Generate unique filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
-        
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await image.read()
-            await f.write(content_bytes)
-        
-        # Update image filename
+    if image_filename is not None:
         story.image_filename = image_filename
     
     db.commit()

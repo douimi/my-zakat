@@ -30,8 +30,20 @@ import AdminStories from './pages/admin/AdminStories'
 import AdminTestimonials from './pages/admin/AdminTestimonials'
 import AdminVolunteers from './pages/admin/AdminVolunteers'
 import AdminSubscriptions from './pages/admin/AdminSubscriptions'
-import AdminMedia from './pages/admin/AdminMedia'
+import AdminPrograms from './pages/admin/AdminPrograms'
+import AdminGallery from './pages/admin/AdminGallery'
+import AdminVideos from './pages/admin/AdminVideos'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminSlideshow from './pages/admin/AdminSlideshow'
+import AdminUrgentNeeds from './pages/admin/AdminUrgentNeeds'
+import UrgentNeedDetail from './pages/UrgentNeedDetail'
+import QuickLinks from './pages/QuickLinks'
+import IslamicKnowledge from './pages/IslamicKnowledge'
+import BookOfDuas from './pages/BookOfDuas'
+import CharityInIslam from './pages/CharityInIslam'
+import KaffarahCalculator from './pages/KaffarahCalculator'
+import ZakatOnGold from './pages/ZakatOnGold'
+import UmrahGuidelines from './pages/UmrahGuidelines'
 import AdminRoute from './components/AdminRoute'
 import AdminLayout from './components/AdminLayout'
 import UserRoute from './components/UserRoute'
@@ -79,6 +91,14 @@ function App() {
           <Route path="contact" element={<Contact />} />
           <Route path="volunteer" element={<Volunteer />} />
           <Route path="testimonials" element={<Testimonials />} />
+          <Route path="urgent-needs/:slug" element={<UrgentNeedDetail />} />
+          <Route path="quick-links" element={<QuickLinks />} />
+          <Route path="islamic-knowledge" element={<IslamicKnowledge />} />
+          <Route path="book-of-duas" element={<BookOfDuas />} />
+          <Route path="charity-in-islam" element={<CharityInIslam />} />
+          <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
+          <Route path="zakat-on-gold" element={<ZakatOnGold />} />
+          <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
         </Route>
 
         {/* User authentication routes */}
@@ -100,7 +120,11 @@ function App() {
           <Route path="testimonials" element={<AdminTestimonials />} />
           <Route path="volunteers" element={<AdminVolunteers />} />
           <Route path="subscriptions" element={<AdminSubscriptions />} />
-          <Route path="media" element={<AdminMedia />} />
+          <Route path="programs" element={<AdminPrograms />} />
+          <Route path="gallery" element={<AdminGallery />} />
+            <Route path="videos" element={<AdminVideos />} />
+          <Route path="slideshow" element={<AdminSlideshow />} />
+          <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
         </Routes>

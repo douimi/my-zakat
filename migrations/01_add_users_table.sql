@@ -1,4 +1,4 @@
--- Migration: Add users table and ensure all schema updates
+-- Migration 01: Add users table and ensure all schema updates
 -- Run this script to add the users table and update existing tables
 
 -- Create users table
@@ -27,10 +27,5 @@ CREATE INDEX IF NOT EXISTS idx_donations_stripe_session_id ON donations(stripe_s
 CREATE INDEX IF NOT EXISTS idx_donation_subscriptions_stripe_session_id ON donation_subscriptions(stripe_session_id);
 
 -- Verify the migration
-SELECT 'Migration completed successfully!' as message;
-SELECT 'Users table:' as table_info;
-SELECT column_name, data_type, is_nullable 
-FROM information_schema.columns 
-WHERE table_name = 'users' 
-ORDER BY ordinal_position;
+SELECT 'Migration 01 completed successfully!' as message;
 

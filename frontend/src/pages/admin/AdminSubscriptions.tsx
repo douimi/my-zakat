@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Calendar, CreditCard, User, DollarSign, AlertCircle, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
 
 interface Subscription {
   id: number
@@ -56,8 +57,17 @@ const AdminSubscriptions = () => {
     }
   }
 
+  const { confirm, ConfirmationDialog } = useConfirmation()
+
   const handleCancelSubscription = async (subscriptionId: string) => {
-    if (!confirm('Are you sure you want to cancel this subscription?')) {
+    const confirmed = await confirm({
+      title: 'Cancel Subscription',
+      message: 'Are you sure you want to cancel this subscription? This action cannot be undone.',
+      confirmText: 'Cancel Subscription',
+      cancelText: 'Keep Subscription',
+      variant: 'warning'
+    })
+    if (!confirmed) {
       return
     }
 
@@ -355,6 +365,8 @@ const AdminSubscriptions = () => {
           )}
           </div>
         </div>
+
+      <ConfirmationDialog />
     </div>
   )
 }

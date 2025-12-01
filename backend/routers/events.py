@@ -20,6 +20,7 @@ async def create_event(
     date: str = Form(...),
     location: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
@@ -29,8 +30,8 @@ async def create_event(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    # Handle image upload if provided
-    image_filename = None
+    # Handle image - prioritize file upload over URL
+    image_value = None
     if image and image.filename:
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
@@ -49,6 +50,11 @@ async def create_event(
         async with aiofiles.open(file_path, 'wb') as f:
             content = await image.read()
             await f.write(content)
+        
+        image_value = image_filename
+    elif image_url and image_url.strip():
+        # Use image URL if provided and no file upload
+        image_value = image_url.strip()
     
     # Create event in database
     db_event = Event(
@@ -56,7 +62,7 @@ async def create_event(
         description=description,
         date=event_date,
         location=location,
-        image=image_filename
+        image=image_value
     )
     db.add(db_event)
     db.commit()
@@ -95,6 +101,7 @@ async def update_event(
     date: str = Form(...),
     location: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
@@ -114,7 +121,7 @@ async def update_event(
     event.date = event_date
     event.location = location
     
-    # Handle image upload if provided
+    # Handle image - prioritize file upload over URL
     if image and image.filename:
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
@@ -136,6 +143,9 @@ async def update_event(
         
         # Update image filename
         event.image = image_filename
+    elif image_url is not None:
+        # Update image URL if provided (empty string clears the image)
+        event.image = image_url.strip() if image_url.strip() else None
     
     db.commit()
     db.refresh(event)

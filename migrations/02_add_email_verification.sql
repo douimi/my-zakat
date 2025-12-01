@@ -1,5 +1,4 @@
--- Migration: Add email verification fields to users table
--- Date: 2024
+-- Migration 02: Add email verification fields to users table
 -- Description: Adds email_verified, verification_token, and verification_token_expires columns to support email verification
 
 -- Add email_verified column (defaults to false for existing users)
@@ -17,7 +16,5 @@ CREATE INDEX IF NOT EXISTS idx_users_verification_token ON users(verification_to
 -- Update existing users: mark admin users as verified (they don't need email verification)
 UPDATE users SET email_verified = TRUE WHERE is_admin = TRUE;
 
--- Optional: Mark all existing non-admin users as verified if you want to skip verification for them
--- Uncomment the line below if you want existing users to be automatically verified
--- UPDATE users SET email_verified = TRUE WHERE is_admin = FALSE;
+SELECT 'Migration 02 completed successfully!' as message;
 

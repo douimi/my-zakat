@@ -19,15 +19,16 @@ async def create_testimonial(
     country: str = Form(""),
     text: str = Form(...),
     rating: int = Form(5),
-    video_url: str = Form(""),
     category: str = Form("donor"),
     is_approved: bool = Form(False),
     image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    video: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    # Handle image upload if provided
-    image_filename = None
+    # Handle image - prioritize file upload over URL
+    image_value = None
     if image and image.filename:
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
@@ -46,15 +47,41 @@ async def create_testimonial(
         async with aiofiles.open(file_path, 'wb') as f:
             content_bytes = await image.read()
             await f.write(content_bytes)
+        
+        image_value = image_filename
+    elif image_url and image_url.strip():
+        # Use image URL if provided and no file upload
+        image_value = image_url.strip()
+    
+    # Handle video upload if provided
+    video_filename = None
+    if video and video.filename:
+        if not video.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="File must be a video")
+        
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads/testimonials"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = os.path.splitext(video.filename)[1]
+        video_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        file_path = os.path.join(upload_dir, video_filename)
+        
+        # Save file
+        async with aiofiles.open(file_path, 'wb') as f:
+            content_bytes = await video.read()
+            await f.write(content_bytes)
     
     # Create testimonial in database
     db_testimonial = Testimonial(
         name=name,
         country=country if country else None,
-        image=image_filename,
+        image=image_value,
         text=text,
         rating=rating,
-        video_url=video_url if video_url else None,
+        video_filename=video_filename,
         category=category,
         is_approved=is_approved
     )
@@ -86,10 +113,12 @@ async def update_testimonial(
     country: str = Form(""),
     text: str = Form(...),
     rating: int = Form(5),
-    video_url: str = Form(""),
     category: str = Form("donor"),
     is_approved: bool = Form(False),
     image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    video: Optional[UploadFile] = File(None),
+    remove_video: Optional[bool] = Form(False),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
@@ -102,11 +131,10 @@ async def update_testimonial(
     testimonial.country = country if country else None
     testimonial.text = text
     testimonial.rating = rating
-    testimonial.video_url = video_url if video_url else None
     testimonial.category = category
     testimonial.is_approved = is_approved
     
-    # Handle image upload if provided
+    # Handle image - prioritize file upload over URL
     if image and image.filename:
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
@@ -128,6 +156,50 @@ async def update_testimonial(
         
         # Update image filename
         testimonial.image = image_filename
+    elif image_url is not None:
+        # Update image URL if provided (empty string clears the image)
+        testimonial.image = image_url.strip() if image_url.strip() else None
+    
+    # Handle video removal if requested
+    if remove_video:
+        if testimonial.video_filename:
+            old_path = os.path.join("uploads/testimonials", testimonial.video_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Error deleting video: {e}")
+        testimonial.video_filename = None
+    # Handle video upload if provided
+    elif video and video.filename:
+        if not video.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="File must be a video")
+        
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads/testimonials"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Delete old video if it exists
+        if testimonial.video_filename:
+            old_path = os.path.join(upload_dir, testimonial.video_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Error deleting old video: {e}")
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = os.path.splitext(video.filename)[1]
+        video_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        file_path = os.path.join(upload_dir, video_filename)
+        
+        # Save file
+        async with aiofiles.open(file_path, 'wb') as f:
+            content_bytes = await video.read()
+            await f.write(content_bytes)
+        
+        testimonial.video_filename = video_filename
     
     db.commit()
     db.refresh(testimonial)

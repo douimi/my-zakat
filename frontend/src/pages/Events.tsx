@@ -145,17 +145,33 @@ const EventCard = ({ event, isUpcoming }: EventCardProps) => {
   const eventDate = new Date(event.date)
   const isToday = eventDate.toDateString() === new Date().toDateString()
 
+  // Helper function to get image URL - check if it's a full URL or a filename
+  const getImageUrl = (imageValue?: string) => {
+    if (!imageValue) return null
+    // Check if it's a full URL (starts with http:// or https://)
+    if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+      return imageValue
+    }
+    // Otherwise, treat it as a filename and load from uploads
+    return getStaticFileUrl(`/api/uploads/events/${imageValue}`)
+  }
+
+  const imageUrl = getImageUrl(event.image)
+
   return (
     <div className={`card hover:shadow-lg transition-shadow duration-300 ${
       isUpcoming ? 'border-l-4 border-l-primary-500' : 'opacity-75'
     }`}>
       {/* Event Image */}
-      {event.image && (
+      {imageUrl && (
         <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden">
           <img 
-            src={`/api/uploads/events/${event.image}`} 
+            src={imageUrl} 
             alt={event.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
           />
         </div>
       )}

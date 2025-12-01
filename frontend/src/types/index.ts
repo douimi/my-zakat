@@ -32,7 +32,7 @@ export interface Story {
   summary: string
   content: string
   image_filename?: string
-  video_url?: string
+  video_filename?: string
   is_active: boolean
   is_featured: boolean
 }
@@ -44,7 +44,7 @@ export interface Testimonial {
   image?: string
   text: string
   rating?: number
-  video_url?: string
+  video_filename?: string
   category?: string
   created_at: string
   is_approved: boolean
@@ -147,5 +147,14 @@ export interface Setting {
   key: string
   value: string
   description?: string
+  updated_at: string
+}
+
+export interface GalleryItem {
+  id: number
+  media_filename: string
+  display_order: number
+  is_active: boolean
+  created_at: string
   updated_at: string
 }

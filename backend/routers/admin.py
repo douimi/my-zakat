@@ -84,11 +84,26 @@ async def upload_media(
             raise HTTPException(status_code=400, detail="File must be a video")
         upload_dir = "uploads/media/videos"
         max_size = 50 * 1024 * 1024  # 50MB
-    elif type.startswith('program_image') or type.startswith('gallery_item'):
+    elif type.startswith('program_video'):
+        if not file.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="File must be a video")
+        upload_dir = "uploads/media/videos"
+        max_size = 100 * 1024 * 1024  # 100MB
+    elif type.startswith('program_image'):
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         upload_dir = "uploads/media/images"
         max_size = 5 * 1024 * 1024  # 5MB
+    elif type.startswith('gallery_item'):
+        # Gallery items can be either images or videos
+        if not (file.content_type.startswith('image/') or file.content_type.startswith('video/')):
+            raise HTTPException(status_code=400, detail="File must be an image or video")
+        if file.content_type.startswith('video/'):
+            upload_dir = "uploads/media/videos"
+            max_size = 100 * 1024 * 1024  # 100MB
+        else:
+            upload_dir = "uploads/media/images"
+            max_size = 5 * 1024 * 1024  # 5MB
     else:
         raise HTTPException(status_code=400, detail="Invalid media type")
     
@@ -110,10 +125,17 @@ async def upload_media(
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(file_content)
     
+    # Determine upload type for path
+    if type == 'hero_video' or type.startswith('program_video') or (type.startswith('gallery_item') and file.content_type.startswith('video/')):
+        media_type = 'videos'
+    else:
+        media_type = 'images'
+    
     return {
         "filename": filename,
-        "path": f"/uploads/media/{'videos' if type == 'hero_video' else 'images'}/{filename}",
-        "type": type
+        "path": f"/api/uploads/media/{media_type}/{filename}",
+        "type": type,
+        "content_type": file.content_type
     }
 
 

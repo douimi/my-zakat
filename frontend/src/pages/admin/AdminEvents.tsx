@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { Plus, Edit, Trash2, Calendar, MapPin, Image as ImageIcon } from 'lucide-react'
-import { eventsAPI } from '../../utils/api'
+import { eventsAPI, getStaticFileUrl } from '../../utils/api'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { isValidImageUrl, getImageUrl } from '../../utils/mediaHelpers'
 import type { Event } from '../../types'
 
 interface EventFormData {
@@ -15,6 +17,7 @@ interface EventFormData {
 const AdminEvents = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const [formData, setFormData] = useState<EventFormData>({
     title: '',
     description: '',
@@ -101,24 +104,16 @@ const AdminEvents = () => {
     }
   }
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this event?')) {
+  const handleDelete = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    })
+    if (confirmed) {
       deleteMutation.mutate(id)
-    }
-  }
-
-  const isValidImageUrl = (url: string) => {
-    if (!url) return true // Empty URL is valid
-    try {
-      const validUrl = new URL(url)
-      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
-      const hasValidExtension = validExtensions.some(ext => 
-        validUrl.pathname.toLowerCase().includes(ext)
-      )
-      const isValidDomain = validUrl.protocol === 'http:' || validUrl.protocol === 'https:'
-      return isValidDomain && (hasValidExtension || url.includes('unsplash') || url.includes('pexels') || url.includes('pixabay'))
-    } catch {
-      return false
     }
   }
 
@@ -336,23 +331,23 @@ const AdminEvents = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      {event.image ? (
-                        <img 
-                          src={event.image} 
-                          alt={event.title}
-                          className="w-16 h-16 object-cover rounded"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden')
-                          }}
-                        />
-                      ) : (
+                      {event.image ? (() => {
+                        // Check if it's a full URL or a filename
+                        const imageUrl = event.image.startsWith('http://') || event.image.startsWith('https://')
+                          ? event.image
+                          : getStaticFileUrl(`/api/uploads/events/${event.image}`)
+                        return (
+                          <img 
+                            src={imageUrl} 
+                            alt={event.title}
+                            className="w-16 h-16 object-cover rounded"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        )
+                      })() : (
                         <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-gray-400" />
-                        </div>
-                      )}
-                      {event.image && (
-                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center hidden">
                           <ImageIcon className="w-6 h-6 text-gray-400" />
                         </div>
                       )}
@@ -396,6 +391,8 @@ const AdminEvents = () => {
           </div>
         )}
       </div>
+
+      <ConfirmationDialog />
     </div>
   )
 }

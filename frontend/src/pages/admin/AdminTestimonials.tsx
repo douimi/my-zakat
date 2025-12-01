@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { Star, Trash2, Check, X, Image as ImageIcon, Video, User, Plus, Edit } from 'lucide-react'
-import { testimonialsAPI } from '../../utils/api'
+import { testimonialsAPI, getStaticFileUrl } from '../../utils/api'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { getImageUrl, getVideoUrl } from '../../utils/mediaHelpers'
 import type { Testimonial } from '../../types'
 
 interface TestimonialFormData {
@@ -9,25 +11,28 @@ interface TestimonialFormData {
   country: string
   text: string
   rating: number
-  video_url: string
+  video_file: File | null
   category: string
   is_approved: boolean
   image_url: string
+  remove_video: boolean
 }
 
 const AdminTestimonials = () => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null)
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const [formData, setFormData] = useState<TestimonialFormData>({
     name: '',
     country: '',
     text: '',
     rating: 5,
-    video_url: '',
+    video_file: null,
     category: 'donor',
     is_approved: false,
-    image_url: ''
+    image_url: '',
+    remove_video: false
   })
   
   const queryClient = useQueryClient()
@@ -71,10 +76,11 @@ const AdminTestimonials = () => {
       country: '',
       text: '',
       rating: 5,
-      video_url: '',
+      video_file: null,
       category: 'donor',
       is_approved: false,
-      image_url: ''
+      image_url: '',
+      remove_video: false
     })
     setEditingTestimonial(null)
     setShowForm(false)
@@ -87,10 +93,11 @@ const AdminTestimonials = () => {
       country: testimonial.country || '',
       text: testimonial.text,
       rating: testimonial.rating || 5,
-      video_url: testimonial.video_url || '',
+      video_file: null,
       category: testimonial.category || 'donor',
       is_approved: testimonial.is_approved,
-      image_url: testimonial.image_filename || ''
+      image_url: testimonial.image || '',
+      remove_video: false
     })
     setShowForm(true)
   }
@@ -98,15 +105,28 @@ const AdminTestimonials = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const submitData = {
-      name: formData.name,
-      country: formData.country,
-      text: formData.text,
-      rating: formData.rating,
-      video_url: formData.video_url,
-      category: formData.category,
-      is_approved: formData.is_approved,
-      image_filename: formData.image_url
+    // Backend expects multipart/form-data for testimonials
+    const submitData = new FormData()
+    submitData.append('name', formData.name)
+    submitData.append('country', formData.country)
+    submitData.append('text', formData.text)
+    submitData.append('rating', formData.rating.toString())
+    submitData.append('category', formData.category)
+    submitData.append('is_approved', formData.is_approved.toString())
+    
+    // Handle image URL - send as image_url parameter
+    if (formData.image_url && formData.image_url.trim()) {
+      submitData.append('image_url', formData.image_url.trim())
+    }
+    
+    // Handle video file upload
+    if (formData.video_file) {
+      submitData.append('video', formData.video_file)
+    }
+    
+    // Handle video removal
+    if (formData.remove_video && editingTestimonial) {
+      submitData.append('remove_video', 'true')
     }
 
     if (editingTestimonial) {
@@ -135,8 +155,15 @@ const AdminTestimonials = () => {
     }
   }
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this testimonial?')) {
+  const handleDelete = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Testimonial',
+      message: 'Are you sure you want to delete this testimonial? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    })
+    if (confirmed) {
       deleteMutation.mutate(id)
     }
   }
@@ -335,15 +362,57 @@ const AdminTestimonials = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Video URL (optional)
+                  Video File (optional)
                 </label>
                 <input
-                  type="url"
-                  value={formData.video_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    setFormData(prev => ({ ...prev, video_file: file, remove_video: false }))
+                  }}
                   className="input-field"
-                  placeholder="https://..."
                 />
+                {formData.video_file && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    Selected: {formData.video_file.name}
+                  </p>
+                )}
+                {editingTestimonial?.video_filename && !formData.video_file && !formData.remove_video && (
+                  <div className="mt-2 flex items-center justify-between p-2 bg-gray-50 rounded border">
+                    <div className="flex items-center">
+                      <Video className="w-4 h-4 text-gray-600 mr-2" />
+                      <span className="text-sm text-gray-700">{editingTestimonial.video_filename}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: 'Delete Video',
+                          message: 'Are you sure you want to delete this video? This will remove it from the testimonial.',
+                          confirmText: 'Delete',
+                          cancelText: 'Cancel',
+                          variant: 'danger'
+                        })
+                        if (confirmed) {
+                          setFormData(prev => ({ ...prev, remove_video: true, video_file: null }))
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                      title="Delete video"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                {formData.remove_video && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">Video will be deleted when you save the testimonial.</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Upload a video file (MP4, WebM, etc.). Maximum size: 100MB
+                </p>
               </div>
 
               <div className="flex items-center">
@@ -408,23 +477,23 @@ const AdminTestimonials = () => {
                   <tr key={testimonial.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-4 px-4">
                       <div className="flex items-center">
-                        {testimonial.image_filename ? (
-                          <img 
-                            src={testimonial.image_filename} 
-                            alt={testimonial.name}
-                            className="w-10 h-10 object-cover rounded-full mr-3"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden')
-                            }}
-                          />
-                        ) : (
+                        {testimonial.image ? (() => {
+                          // Check if it's a full URL or a filename
+                          const imageUrl = testimonial.image.startsWith('http://') || testimonial.image.startsWith('https://')
+                            ? testimonial.image
+                            : getStaticFileUrl(`/api/uploads/testimonials/${testimonial.image}`)
+                          return (
+                            <img 
+                              src={imageUrl} 
+                              alt={testimonial.name}
+                              className="w-10 h-10 object-cover rounded-full mr-3"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                          )
+                        })() : (
                           <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3">
-                            <User className="w-5 h-5 text-gray-400" />
-                          </div>
-                        )}
-                        {testimonial.image_filename && (
-                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3 hidden">
                             <User className="w-5 h-5 text-gray-400" />
                           </div>
                         )}
@@ -469,7 +538,7 @@ const AdminTestimonials = () => {
                             <span className="ml-1 text-xs">Photo</span>
                           </div>
                         )}
-                        {testimonial.video_url && (
+                        {testimonial.video_filename && (
                           <div className="flex items-center text-purple-600">
                             <Video className="w-4 h-4" />
                             <span className="ml-1 text-xs">Video</span>
@@ -574,7 +643,9 @@ const AdminTestimonials = () => {
             </div>
           </div>
         </div>
-      )}
+        )}
+
+      <ConfirmationDialog />
     </div>
   )
 }

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery
 
 load_dotenv()
 
@@ -58,6 +58,7 @@ def ensure_admin_user():
             ('gallery_item_4', '', 'Gallery image/video 4'),
             ('gallery_item_5', '', 'Gallery image/video 5'),
             ('gallery_item_6', '', 'Gallery image/video 6'),
+            ('sticky_donation_bar_enabled', 'false', 'Enable or disable the sticky donation bar on the homepage'),
         ]
         
         for key, value, description in default_settings:
@@ -94,6 +95,11 @@ def ensure_media_directories():
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
         # Directory ensured
+    
+    # Ensure video upload directory
+    video_dir = "uploads/media/videos"
+    if not os.path.exists(video_dir):
+        os.makedirs(video_dir, exist_ok=True)
 
 # Ensure media directories (skip in test mode)
 if not TESTING_MODE:
@@ -141,8 +147,9 @@ else:
         allow_headers=["*"],
     )
 
-# Mount static files
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Use router for all static file serving (videos with range support, images, etc.)
+# This ensures proper video streaming with range request support
+app.include_router(static_files.router, prefix="/api/uploads", tags=["static-files"])
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
@@ -150,12 +157,16 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(user.router, prefix="/api/user", tags=["user"])
 app.include_router(donations.router, prefix="/api/donations", tags=["donations"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
+app.include_router(media.router, prefix="/api/media", tags=["media"])
 app.include_router(stories.router, prefix="/api/stories", tags=["stories"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 app.include_router(testimonials.router, prefix="/api/testimonials", tags=["testimonials"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
 app.include_router(volunteers.router, prefix="/api/volunteers", tags=["volunteers"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(slideshow.router, prefix="/api/slideshow", tags=["slideshow"])
+app.include_router(urgent_needs.router, prefix="/api/urgent-needs", tags=["urgent-needs"])
+app.include_router(gallery.router, prefix="/api/gallery", tags=["gallery"])
 
 @app.get("/")
 async def root():
