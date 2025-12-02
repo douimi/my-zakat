@@ -262,11 +262,13 @@ class DonationResponse(BaseModel):
 
 class PaymentCreate(BaseModel):
     amount: float
+    name: str
+    email: EmailStr
+    purpose: Optional[str] = None
     frequency: str
 
 class PaymentSession(BaseModel):
-    session_id: str
-    url: str
+    id: str
 
 class ZakatCalculation(BaseModel):
     gold_value: Optional[float] = None
@@ -283,11 +285,13 @@ class SubscriptionCreate(BaseModel):
     name: str
     email: EmailStr
     amount: float
-    frequency: str
+    purpose: Optional[str] = None
+    interval: str
+    payment_day: int
+    payment_month: Optional[int] = None
 
 class SubscriptionSession(BaseModel):
-    session_id: str
-    url: str
+    id: str
 
 class SubscriptionResponse(BaseModel):
     id: int

@@ -272,13 +272,14 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         frontend_url = os.getenv("FRONTEND_URL", "https://myzakat.org")
         
         # Create Stripe checkout session
+        purpose = payment.purpose or "General Donation"
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
-                        "name": f"{payment.purpose} - {payment.frequency}",
+                        "name": f"{purpose} - {payment.frequency}",
                         "description": f"Donation from {payment.name}",
                     },
                     "unit_amount": int(payment.amount * 100),  # Convert to cents
@@ -288,7 +289,7 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             mode="payment",
             customer_email=payment.email,
             metadata={
-                "purpose": payment.purpose,
+                "purpose": purpose,
                 "frequency": payment.frequency,
                 "donor_name": payment.name,
                 "donor_email": payment.email
@@ -431,11 +432,12 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
         )
         
         # Create product first
+        purpose = subscription.purpose or "General Donation"
         product = stripe.Product.create(
-            name=f"{subscription.purpose} - {subscription.interval.title()}ly Donation",
-            description=f"Recurring {subscription.purpose} donation from {subscription.name}",
+            name=f"{purpose} - {subscription.interval.title()}ly Donation",
+            description=f"Recurring {purpose} donation from {subscription.name}",
             metadata={
-                "purpose": subscription.purpose,
+                "purpose": purpose,
                 "donor_name": subscription.name,
                 "payment_day": str(subscription.payment_day),
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
@@ -452,7 +454,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             },
             product=product.id,
             metadata={
-                "purpose": subscription.purpose,
+                "purpose": purpose,
                 "donor_name": subscription.name,
                 "payment_day": str(subscription.payment_day),
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
@@ -470,7 +472,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             customer=customer.id,
             subscription_data={
                 "metadata": {
-                    "purpose": subscription.purpose,
+                    "purpose": purpose,
                     "donor_name": subscription.name,
                     "payment_day": str(subscription.payment_day),
                     "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
@@ -480,7 +482,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             cancel_url=f"{frontend_url}/donate",
             metadata={
                 "type": "subscription",
-                "purpose": subscription.purpose,
+                "purpose": purpose,
                 "donor_name": subscription.name,
                 "payment_day": str(subscription.payment_day),
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
@@ -504,7 +506,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                 name=subscription.name,
                 email=subscription.email,
                 amount=subscription.amount,
-                purpose=subscription.purpose,
+                purpose=purpose,
                 interval=subscription.interval,
                 payment_day=subscription.payment_day,
                 payment_month=subscription.payment_month,
