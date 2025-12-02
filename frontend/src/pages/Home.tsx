@@ -326,8 +326,9 @@ const Home = () => {
                       src={program.media.url}
                       className="w-full h-full object-cover"
                       controls
-                      preload="metadata"
+                      preload="none"
                       playsInline
+                      loading="lazy"
                       crossOrigin="anonymous"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
@@ -438,8 +439,9 @@ const Home = () => {
                           src={videoUrl}
                           className="w-full aspect-video object-cover"
                           controls
-                          preload="metadata"
+                          preload="none"
                           playsInline
+                          loading="lazy"
                           crossOrigin="anonymous"
                         >
                           Your browser does not support the video tag.
@@ -625,9 +627,10 @@ const GallerySection = () => {
               <video
                 src={item.url}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                preload="metadata"
+                preload="none"
                 muted
                 playsInline
+                loading="lazy"
                 onError={(e) => {
                   // Hide video if it fails to load
                   e.currentTarget.style.display = 'none'

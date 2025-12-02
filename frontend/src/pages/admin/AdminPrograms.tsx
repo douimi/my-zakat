@@ -357,8 +357,9 @@ const AdminPrograms = () => {
                       src={videoUrl}
                       controls
                       className="w-full h-48 object-cover rounded-lg"
-                      preload="metadata"
+                      preload="none"
                       playsInline
+                      loading="lazy"
                     />
                     <p className="text-xs text-gray-500 mt-1">Video (takes priority over image)</p>
                   </div>

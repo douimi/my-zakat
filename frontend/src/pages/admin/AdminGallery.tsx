@@ -324,9 +324,10 @@ const AdminGallery = () => {
                       src={mediaUrl}
                       className="w-full h-full object-cover"
                       controls={false}
-                      preload="metadata"
+                      preload="none"
                       playsInline
                       muted
+                      loading="lazy"
                     >
                       <source src={mediaUrl} type="video/mp4" />
                     </video>

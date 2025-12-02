@@ -85,8 +85,9 @@ const Testimonials = () => {
                           src={videoUrl}
                           className="w-full aspect-video object-cover"
                           controls
-                          preload="metadata"
+                          preload="none"
                           playsInline
+                          loading="lazy"
                           crossOrigin="anonymous"
                         >
                           Your browser does not support the video tag.

@@ -69,6 +69,7 @@ async def head_video(filename: str):
             'Content-Length': str(file_size),
             'Accept-Ranges': 'bytes',
             'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',  # Cache for 1 day
         }
     )
 
@@ -121,6 +122,7 @@ async def serve_video(filename: str, request: Request):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
                 'Access-Control-Allow-Headers': 'Range',
+                'Cache-Control': 'public, max-age=86400',  # Cache for 1 day
             }
         )
     else:
@@ -132,6 +134,7 @@ async def serve_video(filename: str, request: Request):
                 'Accept-Ranges': 'bytes',
                 'Content-Length': str(file_size),
                 'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',  # Cache for 1 day
             }
         )
 

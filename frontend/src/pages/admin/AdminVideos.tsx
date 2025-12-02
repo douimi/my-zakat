@@ -200,9 +200,10 @@ const AdminVideos = () => {
                   src={getVideoUrl(video)}
                   className="w-full h-full object-contain"
                   controls={true}
-                  preload="metadata"
+                  preload="none"
                   playsInline
                   muted
+                  loading="lazy"
                 >
                   <source src={getVideoUrl(video)} type="video/mp4" />
                   Your browser does not support the video tag.
