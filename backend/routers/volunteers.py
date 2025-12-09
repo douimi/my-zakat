@@ -12,7 +12,12 @@ router = APIRouter()
 
 @router.post("/", response_model=VolunteerResponse)
 async def create_volunteer(volunteer: VolunteerCreate, db: Session = Depends(get_db)):
-    db_volunteer = Volunteer(**volunteer.dict())
+    # Only include fields that exist in the Volunteer model (exclude phone and message)
+    db_volunteer = Volunteer(
+        name=volunteer.name,
+        email=volunteer.email,
+        interest=volunteer.interest
+    )
     db.add(db_volunteer)
     db.commit()
     db.refresh(db_volunteer)

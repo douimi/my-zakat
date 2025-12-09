@@ -100,57 +100,59 @@ const Header = () => {
         </div>
       )}
 
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
-        <div className="section-container">
-          <div className="flex items-center justify-between h-20 py-3 min-w-0">
+      <header className="bg-white shadow-md border-b border-gray-100 sticky top-0 z-50 backdrop-blur-sm bg-white/95">
+        <div className="w-full px-2 sm:px-4 lg:px-6">
+          <div className="flex items-center justify-between h-24 md:h-28 lg:h-32 py-2 md:py-3 min-w-0">
             {/* Logo */}
-            <Link to="/" className="flex items-center space-x-2 md:space-x-3 flex-shrink-0 mr-4 md:mr-6 lg:mr-8">
-              <div className="w-9 h-9 md:w-10 md:h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Heart className="w-5 h-5 md:w-6 md:h-6 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-lg md:text-xl font-heading font-bold text-gray-900">MyZakat</h1>
-                <p className="text-xs text-gray-600">Distribution Foundation</p>
-              </div>
+            <Link to="/" className="flex items-center flex-shrink-0 mr-2 md:mr-4 lg:mr-6 transition-transform duration-200 hover:scale-105">
+              <img 
+                src="/logo.png" 
+                alt="MyZakat Logo" 
+                className="h-24 md:h-32 lg:h-44 w-auto object-contain"
+              />
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center space-x-5 xl:space-x-6 flex-1 justify-center min-w-0 px-4">
+            <nav className="hidden lg:flex items-center flex-1 justify-evenly min-w-0 px-4 xl:px-6">
               {/* Urgent Needs Dropdown */}
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
                   <button
                     onClick={() => setIsUrgentNeedsDropdownOpen(!isUrgentNeedsDropdownOpen)}
                     className={clsx(
-                      'flex items-center space-x-1 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                      'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                       isUrgentNeedsActive()
-                        ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                        : 'text-gray-700 hover:text-primary-600'
+                        ? 'text-primary-600 bg-primary-50 shadow-sm'
+                        : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                     )}
                   >
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Critical Causes</span>
+                    <AlertCircle className={clsx(
+                      'w-4 h-4 transition-transform duration-300',
+                      isUrgentNeedsActive() && 'text-primary-600'
+                    )} />
+                    <span>Urgent Needs</span>
                     <ChevronDown className={clsx(
-                      'w-4 h-4 transition-transform duration-200',
+                      'w-3.5 h-3.5 transition-transform duration-300',
                       isUrgentNeedsDropdownOpen && 'transform rotate-180'
                     )} />
                   </button>
                   
                   {isUrgentNeedsDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">
+                    <div className="absolute top-full left-0 mt-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-96 overflow-y-auto animate-fade-in">
                       {urgentNeeds.map((need: any) => (
                         <Link
                           key={need.id}
                           to={`/urgent-needs/${need.slug}`}
                           onClick={() => setIsUrgentNeedsDropdownOpen(false)}
                           className={clsx(
-                            'block px-4 py-2 text-sm transition-colors duration-200',
+                            'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
                             location.pathname === `/urgent-needs/${need.slug}`
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          {need.title}
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>{need.title}</span>
                         </Link>
                       ))}
                     </div>
@@ -162,10 +164,10 @@ const Header = () => {
               <Link
                 to="/stories"
                 className={clsx(
-                  'flex items-center space-x-1.5 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                   isActive('/stories')
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700 hover:text-primary-600'
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
                 <BookOpen className="w-4 h-4" />
@@ -176,10 +178,10 @@ const Header = () => {
               <Link
                 to="/events"
                 className={clsx(
-                  'flex items-center space-x-1.5 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                   isActive('/events')
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700 hover:text-primary-600'
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
                 <Calendar className="w-4 h-4" />
@@ -190,10 +192,10 @@ const Header = () => {
               <Link
                 to="/volunteer"
                 className={clsx(
-                  'flex items-center space-x-1.5 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                   isActive('/volunteer')
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700 hover:text-primary-600'
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
                 <Users className="w-4 h-4" />
@@ -205,134 +207,142 @@ const Header = () => {
                 <button
                   onClick={() => setIsQuickLinksDropdownOpen(!isQuickLinksDropdownOpen)}
                   className={clsx(
-                    'flex items-center space-x-1 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                    'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                     isZakatActive()
-                      ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
                   <span>Quick Links</span>
                   <ChevronDown className={clsx(
-                    'w-4 h-4 transition-transform duration-200',
+                    'w-3.5 h-3.5 transition-transform duration-300',
                     isQuickLinksDropdownOpen && 'transform rotate-180'
                   )} />
                 </button>
                 
                 {isQuickLinksDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-3 z-50">
+                  <div className="absolute top-full left-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 py-3 z-50 animate-fade-in">
                     {/* Islamic Section */}
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Islamic</p>
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Islamic</p>
                       <div className="space-y-1">
                         <Link
                           to="/islamic-knowledge"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/islamic-knowledge'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Islamic Knowledge Base
+                          <BookOpen className="w-4 h-4 flex-shrink-0" />
+                          <span>Islamic Knowledge Base</span>
                         </Link>
                         <Link
                           to="/book-of-duas"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/book-of-duas'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Book of Duas
+                          <BookOpen className="w-4 h-4 flex-shrink-0" />
+                          <span>Book of Duas</span>
                         </Link>
                         <Link
                           to="/charity-in-islam"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/charity-in-islam'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Charity in Islam
+                          <Heart className="w-4 h-4 flex-shrink-0" />
+                          <span>Charity in Islam</span>
                         </Link>
                       </div>
                     </div>
 
                     {/* Tools Section */}
-                    <div className="px-4 py-2 border-b border-gray-200">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tools</p>
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Tools</p>
                       <div className="space-y-1">
                         <Link
                           to="/zakat-calculator"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/zakat-calculator'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Zakat Calculator
+                          <Gift className="w-4 h-4 flex-shrink-0" />
+                          <span>Zakat Calculator</span>
                         </Link>
                         <Link
                           to="/kaffarah-calculator"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/kaffarah-calculator'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Kaffarah Calculator
+                          <Gift className="w-4 h-4 flex-shrink-0" />
+                          <span>Kaffarah Calculator</span>
                         </Link>
                         <Link
                           to="/donate"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/donate'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Ways to Donate
+                          <Heart className="w-4 h-4 flex-shrink-0" />
+                          <span>Ways to Donate</span>
                         </Link>
                       </div>
                     </div>
 
                     {/* Quick Links Section */}
-                    <div className="px-4 py-2">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Links</p>
+                    <div className="px-3 py-2">
+                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Quick Links</p>
                       <div className="space-y-1">
                         <Link
                           to="/zakat-on-gold"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/zakat-on-gold'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Zakat on Gold
+                          <Gift className="w-4 h-4 flex-shrink-0" />
+                          <span>Zakat on Gold</span>
                         </Link>
                         <Link
                           to="/umrah-guidelines"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
                           className={clsx(
-                            'block px-2 py-1.5 text-sm transition-colors duration-200 rounded',
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
                             location.pathname === '/umrah-guidelines'
-                              ? 'text-primary-600 bg-blue-50'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          Umrah Guidelines
+                          <Info className="w-4 h-4 flex-shrink-0" />
+                          <span>Umrah Guidelines</span>
                         </Link>
                       </div>
                     </div>
@@ -344,10 +354,10 @@ const Header = () => {
               <Link
                 to="/about"
                 className={clsx(
-                  'flex items-center space-x-1.5 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                   isActive('/about')
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700 hover:text-primary-600'
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
                 <Info className="w-4 h-4" />
@@ -358,10 +368,10 @@ const Header = () => {
               <Link
                 to="/contact"
                 className={clsx(
-                  'flex items-center space-x-1.5 text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
                   isActive('/contact')
-                    ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
-                    : 'text-gray-700 hover:text-primary-600'
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
                 <Mail className="w-4 h-4" />
@@ -374,42 +384,42 @@ const Header = () => {
               <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                  className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
+                  className="p-2.5 rounded-xl hover:bg-primary-50 transition-all duration-300 hover:scale-110"
                   aria-label="Profile menu"
                 >
-                  <User className="w-6 h-6 text-gray-700" />
+                  <User className="w-6 h-6 text-gray-700 hover:text-primary-600 transition-colors duration-200" />
                 </button>
                 
                 {isProfileDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  <div className="absolute top-full right-0 mt-3 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 animate-fade-in">
                     {isAuthenticated ? (
                       <>
                         <Link
                           to="/dashboard"
                           onClick={() => setIsProfileDropdownOpen(false)}
-                          className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                          className="flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
                         >
                           <Gift className="w-4 h-4" />
-                          <span>My Donations</span>
+                          <span className="font-medium">My Donations</span>
                         </Link>
                         {isAdmin && (
                           <Link
                             to="/admin"
                             onClick={() => setIsProfileDropdownOpen(false)}
-                            className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                            className="flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
                           >
                             <Shield className="w-4 h-4" />
-                            <span>Admin Console</span>
+                            <span className="font-medium">Admin Console</span>
                           </Link>
                         )}
-                        <div className="border-t border-gray-200 my-1"></div>
+                        <div className="border-t border-gray-100 my-2"></div>
                         <button
                           onClick={() => {
                             logout()
                             setIsProfileDropdownOpen(false)
                             navigate('/')
                           }}
-                          className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-200"
+                          className="w-full flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all duration-200 font-medium"
                         >
                           <X className="w-4 h-4" />
                           <span>Logout</span>
@@ -419,7 +429,7 @@ const Header = () => {
                       <Link
                         to="/login"
                         onClick={() => setIsProfileDropdownOpen(false)}
-                        className="block px-4 py-2 text-sm text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        className="block px-4 py-3 mx-2 rounded-lg text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200 font-medium"
                       >
                         Login
                       </Link>
@@ -432,13 +442,13 @@ const Header = () => {
             {/* Mobile menu button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-100 flex-shrink-0"
+              className="lg:hidden p-2.5 rounded-xl text-gray-700 hover:text-primary-600 hover:bg-primary-50 flex-shrink-0 transition-all duration-200"
               aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
-                <X className="w-6 h-6" />
+                <X className="w-6 h-6 transition-transform duration-200" />
               ) : (
-                <Menu className="w-6 h-6" />
+                <Menu className="w-6 h-6 transition-transform duration-200" />
               )}
             </button>
           </div>
@@ -446,15 +456,15 @@ const Header = () => {
 
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-200 bg-white">
-            <div className="section-container py-4">
-              <nav className="flex flex-col space-y-4">
+          <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg">
+            <div className="w-full px-2 sm:px-4 lg:px-6 py-6">
+              <nav className="flex flex-col space-y-3">
                 {/* Urgent Needs in mobile menu */}
                 {urgentNeeds && urgentNeeds.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-2" />
-                      Critical Causes
+                  <div className="space-y-2 bg-primary-50/30 rounded-xl p-4">
+                    <p className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-3 flex items-center">
+                      <AlertCircle className="w-5 h-5 mr-2" />
+                      Urgent Needs
                     </p>
                     {urgentNeeds.map((need: any) => (
                       <Link
@@ -462,13 +472,14 @@ const Header = () => {
                         to={`/urgent-needs/${need.slug}`}
                         onClick={() => setIsMobileMenuOpen(false)}
                         className={clsx(
-                          'block text-base font-medium transition-colors duration-200 pl-4',
+                          'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
                           location.pathname === `/urgent-needs/${need.slug}`
-                            ? 'text-primary-600'
-                            : 'text-gray-700 hover:text-primary-600'
+                            ? 'text-primary-600 bg-white shadow-sm'
+                            : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                         )}
                       >
-                        {need.title}
+                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        <span>{need.title}</span>
                       </Link>
                     ))}
                   </div>
@@ -479,10 +490,10 @@ const Header = () => {
                   to="/stories"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center space-x-2 text-base font-medium transition-colors duration-200',
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
                     isActive('/stories')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
                   <BookOpen className="w-5 h-5" />
@@ -492,10 +503,10 @@ const Header = () => {
                   to="/events"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center space-x-2 text-base font-medium transition-colors duration-200',
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
                     isActive('/events')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
                   <Calendar className="w-5 h-5" />
@@ -505,10 +516,10 @@ const Header = () => {
                   to="/volunteer"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center space-x-2 text-base font-medium transition-colors duration-200',
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
                     isActive('/volunteer')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
                   <Users className="w-5 h-5" />
@@ -516,117 +527,125 @@ const Header = () => {
                 </Link>
 
                 {/* Quick Links in mobile menu */}
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Links</p>
+                <div className="space-y-3 bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-3">Quick Links</p>
                   
                   {/* Islamic */}
-                  <div className="pl-4 space-y-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Islamic</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Islamic</p>
                     <Link
                       to="/islamic-knowledge"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/islamic-knowledge'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Islamic Knowledge Base
+                      <BookOpen className="w-4 h-4 flex-shrink-0" />
+                      <span>Islamic Knowledge Base</span>
                     </Link>
                     <Link
                       to="/book-of-duas"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/book-of-duas'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Book of Duas
+                      <BookOpen className="w-4 h-4 flex-shrink-0" />
+                      <span>Book of Duas</span>
                     </Link>
                     <Link
                       to="/charity-in-islam"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/charity-in-islam'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Charity in Islam
+                      <Heart className="w-4 h-4 flex-shrink-0" />
+                      <span>Charity in Islam</span>
                     </Link>
                   </div>
 
                   {/* Tools */}
-                  <div className="pl-4 space-y-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Tools</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Tools</p>
                     <Link
                       to="/zakat-calculator"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/zakat-calculator'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Zakat Calculator
+                      <Gift className="w-4 h-4 flex-shrink-0" />
+                      <span>Zakat Calculator</span>
                     </Link>
                     <Link
                       to="/kaffarah-calculator"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/kaffarah-calculator'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Kaffarah Calculator
+                      <Gift className="w-4 h-4 flex-shrink-0" />
+                      <span>Kaffarah Calculator</span>
                     </Link>
                     <Link
                       to="/donate"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/donate'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Ways to Donate
+                      <Heart className="w-4 h-4 flex-shrink-0" />
+                      <span>Ways to Donate</span>
                     </Link>
                   </div>
 
                   {/* Quick Links */}
-                  <div className="pl-4 space-y-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Quick Links</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Quick Links</p>
                     <Link
                       to="/zakat-on-gold"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/zakat-on-gold'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Zakat on Gold
+                      <Gift className="w-4 h-4 flex-shrink-0" />
+                      <span>Zakat on Gold</span>
                     </Link>
                     <Link
                       to="/umrah-guidelines"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={clsx(
-                        'block text-base font-medium transition-colors duration-200 pl-2',
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                         location.pathname === '/umrah-guidelines'
-                          ? 'text-primary-600'
-                          : 'text-gray-700 hover:text-primary-600'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      Umrah Guidelines
+                      <Info className="w-4 h-4 flex-shrink-0" />
+                      <span>Umrah Guidelines</span>
                     </Link>
                   </div>
                 </div>
@@ -635,10 +654,10 @@ const Header = () => {
                   to="/about"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center space-x-2 text-base font-medium transition-colors duration-200',
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
                     isActive('/about')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
                   <Info className="w-5 h-5" />
@@ -648,10 +667,10 @@ const Header = () => {
                   to="/contact"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center space-x-2 text-base font-medium transition-colors duration-200',
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
                     isActive('/contact')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
                   <Mail className="w-5 h-5" />

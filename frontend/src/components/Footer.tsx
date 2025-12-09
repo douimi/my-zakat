@@ -5,19 +5,17 @@ const Footer = () => {
   return (
     <footer className="bg-gray-900 text-white">
       <div className="section-container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
           {/* Brand */}
-          <div className="col-span-1 md:col-span-2">
-            <Link to="/" className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Heart className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-xl font-heading font-bold">MyZakat</h3>
-                <p className="text-sm text-gray-400">Distribution Foundation</p>
-              </div>
+          <div className="lg:col-span-2">
+            <Link to="/" className="inline-flex items-center mb-6 bg-white rounded-lg p-0.5 md:p-1">
+              <img 
+                src="/logo.png" 
+                alt="MyZakat Logo" 
+                className="h-16 md:h-20 lg:h-24 w-auto object-contain"
+              />
             </Link>
-            <p className="text-gray-300 mb-6 max-w-md">
+            <p className="text-gray-300 mb-6 max-w-md leading-relaxed">
               Empowering communities through Zakat, Sadaqa, and compassion. 
               Join us in making a meaningful difference in the lives of those in need.
             </p>
@@ -26,7 +24,7 @@ const Footer = () => {
                 href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-primary-400 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
                 aria-label="Facebook"
               >
                 <Facebook className="w-5 h-5" />
@@ -35,7 +33,7 @@ const Footer = () => {
                 href="https://twitter.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-primary-400 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
                 aria-label="Twitter"
               >
                 <Twitter className="w-5 h-5" />
@@ -44,7 +42,7 @@ const Footer = () => {
                 href="https://instagram.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-primary-400 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
                 aria-label="Instagram"
               >
                 <Instagram className="w-5 h-5" />
@@ -53,7 +51,7 @@ const Footer = () => {
                 href="https://youtube.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-primary-400 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
                 aria-label="YouTube"
               >
                 <Youtube className="w-5 h-5" />
@@ -63,58 +61,74 @@ const Footer = () => {
 
           {/* Quick Links */}
           <div>
-            <h4 className="text-lg font-semibold mb-4">Quick Links</h4>
-            <ul className="space-y-2">
+            <h4 className="text-lg font-bold mb-6 text-white">Quick Links</h4>
+            <ul className="space-y-3">
               <li>
-                <Link to="/" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   Home
                 </Link>
               </li>
               <li>
-                <Link to="/about" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/about" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   About
                 </Link>
               </li>
               <li>
-                <Link to="/donate" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/donate" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   Donate
                 </Link>
               </li>
               <li>
-                <Link to="/zakat-calculator" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/zakat-calculator" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   Zakat Calculator
                 </Link>
               </li>
               <li>
-                <Link to="/stories" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/stories" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   Stories
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="text-gray-300 hover:text-white transition-colors">
+                <Link to="/contact" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
                   Contact
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Contact Info */}
+          {/* Legal & Contact */}
           <div>
-            <h4 className="text-lg font-semibold mb-4">Contact Us</h4>
-            <ul className="space-y-3">
-              <li className="flex items-center space-x-3">
-                <Mail className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <span className="text-gray-300">info@myzakat.org</span>
+            <h4 className="text-lg font-bold mb-6 text-white">Legal & Contact</h4>
+            <ul className="space-y-3 mb-6">
+              <li>
+                <Link to="/privacy-policy" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
+                  Privacy Policy
+                </Link>
               </li>
-              <li className="flex items-center space-x-3">
-                <Phone className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <span className="text-gray-300">+1 (555) 123-4567</span>
-              </li>
-              <li className="flex items-start space-x-3">
-                <MapPin className="w-4 h-4 text-primary-400 flex-shrink-0 mt-1" />
-                <span className="text-gray-300">123 Charity Ave<br />City, Country</span>
+              <li>
+                <Link to="/donation-policy" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
+                  Donation Policy
+                </Link>
               </li>
             </ul>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <Mail className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                <a href="mailto:info@myzakat.org" className="text-gray-300 hover:text-white transition-colors duration-200">
+                  info@myzakat.org
+                </a>
+              </div>
+              <div className="flex items-center space-x-3">
+                <Phone className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                <a href="tel:+15551234567" className="text-gray-300 hover:text-white transition-colors duration-200">
+                  +1 (555) 123-4567
+                </a>
+              </div>
+              <div className="flex items-start space-x-3">
+                <MapPin className="w-4 h-4 text-primary-400 flex-shrink-0 mt-1" />
+                <span className="text-gray-300">123 Charity Ave<br />City, Country</span>
+              </div>
+            </div>
           </div>
         </div>
 

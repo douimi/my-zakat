@@ -67,6 +67,11 @@ const Donate = () => {
     }
   }, [isAuthenticated, user, setValue])
 
+  // Scroll to top when page loads (especially when coming from sticky bar)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
   const watchedAmount = watch('amount')
 
   const quickAmounts = [25, 50, 100, 250, 500, 1000]

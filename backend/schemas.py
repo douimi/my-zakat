@@ -129,15 +129,15 @@ class EventResponse(BaseModel):
 class VolunteerCreate(BaseModel):
     name: str
     email: EmailStr
-    phone: Optional[str] = None
-    message: Optional[str] = None
+    interest: str
+    phone: Optional[str] = None  # Optional field, not stored in model
+    message: Optional[str] = None  # Optional field, not stored in model
 
 class VolunteerResponse(BaseModel):
     id: int
     name: str
     email: str
-    phone: Optional[str]
-    message: Optional[str]
+    interest: str
     submitted_at: datetime
     
     class Config:

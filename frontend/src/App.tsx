@@ -44,6 +44,8 @@ import CharityInIslam from './pages/CharityInIslam'
 import KaffarahCalculator from './pages/KaffarahCalculator'
 import ZakatOnGold from './pages/ZakatOnGold'
 import UmrahGuidelines from './pages/UmrahGuidelines'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import DonationPolicy from './pages/DonationPolicy'
 import AdminRoute from './components/AdminRoute'
 import AdminLayout from './components/AdminLayout'
 import UserRoute from './components/UserRoute'
@@ -99,6 +101,8 @@ function App() {
           <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
           <Route path="zakat-on-gold" element={<ZakatOnGold />} />
           <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
+          <Route path="privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="donation-policy" element={<DonationPolicy />} />
         </Route>
 
         {/* User authentication routes */}

@@ -7,7 +7,7 @@ const About = () => {
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl font-heading font-bold mb-6">About MyZakat</h1>
+            <h1 className="text-5xl font-heading font-bold mb-6">About MyZakat – Zakat Distribution Foundation</h1>
             <p className="text-xl text-primary-100 leading-relaxed">
               Empowering communities through transparent and efficient distribution of Zakat and Sadaqa donations, 
               creating meaningful change in the lives of those who need it most.
@@ -25,7 +25,7 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Mission</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              To create a world where no one suffers from poverty or hunger by facilitating the efficient 
+              MyZakat – Zakat Distribution Foundation is committed to creating a world where no one suffers from poverty or hunger by facilitating the efficient 
               and transparent distribution of Islamic charitable donations. We strive to connect generous 
               hearts with those in need, following the principles of Zakat and Sadaqa as outlined in Islam.
             </p>
@@ -37,7 +37,7 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Vision</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              To be the leading platform for Islamic charitable giving, known for our transparency, 
+              MyZakat – Zakat Distribution Foundation envisions being the leading platform for Islamic charitable giving, known for our transparency, 
               efficiency, and impact. We envision a global community where charitable giving is 
               accessible, trusted, and creates lasting positive change in communities worldwide.
             </p>
@@ -47,8 +47,11 @@ const About = () => {
         {/* Core Values */}
         <div className="text-center mb-12">
           <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">Our Core Values</h2>
-          <p className="text-gray-600 max-w-3xl mx-auto">
+          <p className="text-gray-600 max-w-3xl mx-auto mb-4">
             These fundamental principles guide everything we do and shape our approach to charitable giving
+          </p>
+          <p className="text-gray-700 font-semibold max-w-3xl mx-auto">
+            MyZakat – Zakat Distribution Foundation
           </p>
         </div>
 

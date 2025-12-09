@@ -75,13 +75,13 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`myzakat.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.rule=(Host(`myzakat.org`) || Host(`www.myzakat.org`)) && PathPrefix(`/api`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE,PATCH"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowheaders=*"
-      - "traefik.http.middlewares.backend-cors.headers.accesscontrolalloworiginlist=https://myzakat.org"
+      - "traefik.http.middlewares.backend-cors.headers.accesscontrolalloworiginlist=https://myzakat.org,https://www.myzakat.org"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolmaxage=100"
       - "traefik.http.middlewares.backend-cors.headers.addvaryheader=true"
       - "traefik.http.routers.backend.middlewares=backend-cors"
@@ -101,7 +101,7 @@ services:
       - traefik-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`myzakat.org`)"
+      - "traefik.http.routers.frontend.rule=Host(`myzakat.org`) || Host(`www.myzakat.org`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
