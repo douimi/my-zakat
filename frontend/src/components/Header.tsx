@@ -123,7 +123,11 @@ const Header = () => {
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
                   <button
-                    onClick={() => setIsUrgentNeedsDropdownOpen(!isUrgentNeedsDropdownOpen)}
+                    onClick={() => {
+                      setIsUrgentNeedsDropdownOpen(!isUrgentNeedsDropdownOpen)
+                      setIsQuickLinksDropdownOpen(false)
+                      setIsToolsDropdownOpen(false)
+                    }}
                     className={clsx(
                       'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                       isUrgentNeedsActive()
@@ -212,7 +216,11 @@ const Header = () => {
               {/* Tools & Donate Dropdown */}
               <div className="relative" ref={toolsRef}>
                 <button
-                  onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
+                  onClick={() => {
+                    setIsToolsDropdownOpen(!isToolsDropdownOpen)
+                    setIsUrgentNeedsDropdownOpen(false)
+                    setIsQuickLinksDropdownOpen(false)
+                  }}
                   className={clsx(
                     'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isActive('/zakat-calculator') || isActive('/kaffarah-calculator') || isActive('/donate')
@@ -277,7 +285,11 @@ const Header = () => {
               {/* Quick Links Dropdown */}
               <div className="relative" ref={quickLinksRef}>
                 <button
-                  onClick={() => setIsQuickLinksDropdownOpen(!isQuickLinksDropdownOpen)}
+                  onClick={() => {
+                    setIsQuickLinksDropdownOpen(!isQuickLinksDropdownOpen)
+                    setIsUrgentNeedsDropdownOpen(false)
+                    setIsToolsDropdownOpen(false)
+                  }}
                   className={clsx(
                     'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isZakatActive()
