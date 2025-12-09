@@ -72,9 +72,14 @@
   background: #94a3b8;
 }
 
-/* Smooth scrolling */
+/* Smooth scrolling - only for manual scrolling, not programmatic */
 html {
   scroll-behavior: smooth;
+}
+
+/* Ensure body starts at top on page load */
+body {
+  scroll-behavior: auto;
 }
 
 /* Focus styles for accessibility */

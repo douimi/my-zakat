@@ -19,6 +19,7 @@ const VideoThumbnail = ({
   const [hasError, setHasError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Check if thumbnail is cached in localStorage
@@ -32,6 +33,41 @@ const VideoThumbnail = ({
       }
       return
     }
+
+    // Use Intersection Observer to only load video when component is visible
+    let observer: IntersectionObserver | null = null
+    
+    const setupObserver = () => {
+      if (!containerRef.current) return
+      
+      observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting && !thumbnailUrl && !isGenerating) {
+              // Component is visible, start loading video metadata
+              const video = videoRef.current
+              if (video) {
+                setIsGenerating(true)
+                setupVideoListeners()
+              }
+              if (observer) {
+                observer.disconnect()
+                observer = null
+              }
+            }
+          })
+        },
+        {
+          rootMargin: '50px', // Start loading 50px before component enters viewport
+          threshold: 0.01
+        }
+      )
+
+      observer.observe(containerRef.current)
+    }
+    
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(setupObserver, 100)
 
     // Generate thumbnail from video
     const generateThumbnail = () => {
@@ -91,27 +127,38 @@ const VideoThumbnail = ({
       setIsGenerating(false)
     }
 
-    const video = videoRef.current
-    if (video) {
-      setIsGenerating(true)
-      video.addEventListener('loadedmetadata', handleLoadedMetadata)
-      video.addEventListener('seeked', handleSeeked)
-      video.addEventListener('error', handleError)
-      
-      // Load video metadata
-      video.preload = 'metadata'
-      video.muted = true
-      video.playsInline = true
+    const setupVideoListeners = () => {
+      const video = videoRef.current
+      if (video) {
+        video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true })
+        video.addEventListener('seeked', handleSeeked, { once: true })
+        video.addEventListener('error', handleError, { once: true })
+        
+        // Use HEAD request approach: only load minimal metadata
+        // Set preload to 'none' initially, then load metadata on demand
+        video.preload = 'none'
+        video.muted = true
+        video.playsInline = true
+        video.crossOrigin = 'anonymous'
+        
+        // Load only metadata (not the full video)
+        video.load()
+      }
     }
 
     return () => {
+      clearTimeout(timer)
+      if (observer) {
+        observer.disconnect()
+      }
+      const video = videoRef.current
       if (video) {
         video.removeEventListener('loadedmetadata', handleLoadedMetadata)
         video.removeEventListener('seeked', handleSeeked)
         video.removeEventListener('error', handleError)
       }
     }
-  }, [videoSrc, onThumbnailGenerated])
+  }, [videoSrc, onThumbnailGenerated, thumbnailUrl, isGenerating])
 
   if (hasError) {
     return (
@@ -124,13 +171,13 @@ const VideoThumbnail = ({
   }
 
   return (
-    <div className={`${className} relative`}>
+    <div ref={containerRef} className={`${className} relative`}>
       {/* Hidden video element for thumbnail generation */}
       <video
         ref={videoRef}
         src={videoSrc}
         className="hidden"
-        preload="metadata"
+        preload="none"
         muted
         playsInline
         crossOrigin="anonymous"

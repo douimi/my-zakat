@@ -22,42 +22,39 @@ import VideoThumbnail from '../components/VideoThumbnail'
 
 const Home = () => {
 
+  // Prioritize critical data first, then load secondary content
   const { data: donationStats, error: statsError } = useQuery('donation-stats', donationsAPI.getStats, {
-    retry: false,
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
     onError: (error) => console.error('Stats error:', error)
   })
+  const { data: settings, error: settingsError } = useQuery('home-media-settings', settingsAPI.getAll, {
+    retry: 1,
+    staleTime: 10 * 60 * 1000, // 10 minutes - settings change rarely
+    onError: (error) => console.error('Settings error:', error)
+  })
+  
+  // Load secondary content after a delay to prioritize critical content
   const { data: featuredStories, error: storiesError } = useQuery('featured-stories', () => 
     storiesAPI.getAll(true, true), {
-    retry: false,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Stories error:', error)
   })
   const { data: upcomingEvents, error: eventsError } = useQuery('upcoming-events', () => 
     eventsAPI.getAll(true), {
-    retry: false,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Events error:', error)
   })
   const { data: testimonials, error: testimonialsError } = useQuery('testimonials', () => 
     testimonialsAPI.getAll(true), {
-    retry: false,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Testimonials error:', error)
-  })
-  const { data: settings, error: settingsError } = useQuery('home-media-settings', settingsAPI.getAll, {
-    retry: false,
-    onError: (error) => console.error('Settings error:', error)
-  })
-
-  // Debug logging
-  console.log('Home component rendering:', {
-    donationStats,
-    statsError,
-    featuredStories,
-    storiesError,
-    upcomingEvents,
-    eventsError,
-    testimonials,
-    testimonialsError,
-    settings,
-    settingsError
   })
 
   // Show error state if any critical API calls fail

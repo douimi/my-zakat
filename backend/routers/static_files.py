@@ -93,6 +93,19 @@ async def serve_video(filename: str, request: Request):
     # Handle range requests for video seeking
     range_header = request.headers.get('range')
     
+    # For HEAD requests or metadata-only requests, return file info without body
+    if request.method == 'HEAD':
+        return Response(
+            status_code=200,
+            headers={
+                'Content-Type': content_type,
+                'Content-Length': str(file_size),
+                'Accept-Ranges': 'bytes',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',
+            }
+        )
+    
     if range_header:
         # Parse range header
         range_match = range_header.replace('bytes=', '').split('-')
