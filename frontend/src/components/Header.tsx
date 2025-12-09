@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail } from 'lucide-react'
+import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
@@ -10,9 +10,11 @@ const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isQuickLinksDropdownOpen, setIsQuickLinksDropdownOpen] = useState(false)
   const [isUrgentNeedsDropdownOpen, setIsUrgentNeedsDropdownOpen] = useState(false)
+  const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
   const quickLinksRef = useRef<HTMLDivElement>(null)
   const urgentNeedsRef = useRef<HTMLDivElement>(null)
+  const toolsRef = useRef<HTMLDivElement>(null)
   const profileDropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const navigate = useNavigate()
@@ -44,6 +46,9 @@ const Header = () => {
       }
       if (urgentNeedsRef.current && !urgentNeedsRef.current.contains(event.target as Node)) {
         setIsUrgentNeedsDropdownOpen(false)
+      }
+      if (toolsRef.current && !toolsRef.current.contains(event.target as Node)) {
+        setIsToolsDropdownOpen(false)
       }
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
         setIsProfileDropdownOpen(false)
@@ -113,14 +118,14 @@ const Header = () => {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-1 xl:gap-2">
+            <nav className="hidden lg:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-0.5">
               {/* Urgent Needs Dropdown */}
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
                   <button
                     onClick={() => setIsUrgentNeedsDropdownOpen(!isUrgentNeedsDropdownOpen)}
                     className={clsx(
-                      'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                      'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                       isUrgentNeedsActive()
                         ? 'text-primary-600 bg-primary-50 shadow-sm'
                         : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -165,7 +170,7 @@ const Header = () => {
               <Link
                 to="/stories"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/stories')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -179,7 +184,7 @@ const Header = () => {
               <Link
                 to="/events"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/events')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -193,7 +198,7 @@ const Header = () => {
               <Link
                 to="/volunteer"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/volunteer')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -204,17 +209,83 @@ const Header = () => {
                 <span className="xl:hidden">Involved</span>
               </Link>
 
+              {/* Tools & Donate Dropdown */}
+              <div className="relative" ref={toolsRef}>
+                <button
+                  onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
+                  className={clsx(
+                    'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                    isActive('/zakat-calculator') || isActive('/kaffarah-calculator') || isActive('/donate')
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
+                  )}
+                >
+                  <Calculator className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                  <span className="hidden xl:inline">Tools & Donate</span>
+                  <span className="xl:hidden">Tools</span>
+                  <ChevronDown className={clsx(
+                    'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
+                    isToolsDropdownOpen && 'transform rotate-180'
+                  )} />
+                </button>
+                
+                {isToolsDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 animate-fade-in">
+                    <Link
+                      to="/zakat-calculator"
+                      onClick={() => setIsToolsDropdownOpen(false)}
+                      className={clsx(
+                        'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
+                        location.pathname === '/zakat-calculator'
+                          ? 'text-primary-600 bg-primary-50 font-semibold'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                      )}
+                    >
+                      <Calculator className="w-4 h-4 flex-shrink-0" />
+                      <span>Zakat Calculator</span>
+                    </Link>
+                    <Link
+                      to="/kaffarah-calculator"
+                      onClick={() => setIsToolsDropdownOpen(false)}
+                      className={clsx(
+                        'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
+                        location.pathname === '/kaffarah-calculator'
+                          ? 'text-primary-600 bg-primary-50 font-semibold'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                      )}
+                    >
+                      <Coins className="w-4 h-4 flex-shrink-0" />
+                      <span>Kaffarah Calculator</span>
+                    </Link>
+                    <Link
+                      to="/donate"
+                      onClick={() => setIsToolsDropdownOpen(false)}
+                      className={clsx(
+                        'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
+                        location.pathname === '/donate'
+                          ? 'text-primary-600 bg-primary-50 font-semibold'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                      )}
+                    >
+                      <CreditCard className="w-4 h-4 flex-shrink-0" />
+                      <span>Ways to Donate</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+
               {/* Quick Links Dropdown */}
               <div className="relative" ref={quickLinksRef}>
                 <button
                   onClick={() => setIsQuickLinksDropdownOpen(!isQuickLinksDropdownOpen)}
                   className={clsx(
-                    'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                    'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isZakatActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
+                  <Link2 className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                   <span className="hidden xl:inline">Quick Links</span>
                   <span className="xl:hidden">Links</span>
                   <ChevronDown className={clsx(
@@ -252,7 +323,7 @@ const Header = () => {
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          <BookOpen className="w-4 h-4 flex-shrink-0" />
+                          <BookMarked className="w-4 h-4 flex-shrink-0" />
                           <span>Book of Duas</span>
                         </Link>
                         <Link
@@ -265,61 +336,15 @@ const Header = () => {
                               : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           )}
                         >
-                          <Heart className="w-4 h-4 flex-shrink-0" />
+                          <Sparkles className="w-4 h-4 flex-shrink-0" />
                           <span>Charity in Islam</span>
                         </Link>
                       </div>
                     </div>
 
-                    {/* Tools Section */}
-                    <div className="px-3 py-2 border-b border-gray-100">
-                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Tools</p>
-                      <div className="space-y-1">
-                        <Link
-                          to="/zakat-calculator"
-                          onClick={() => setIsQuickLinksDropdownOpen(false)}
-                          className={clsx(
-                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
-                            location.pathname === '/zakat-calculator'
-                              ? 'text-primary-600 bg-primary-50 font-semibold'
-                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                          )}
-                        >
-                          <Gift className="w-4 h-4 flex-shrink-0" />
-                          <span>Zakat Calculator</span>
-                        </Link>
-                        <Link
-                          to="/kaffarah-calculator"
-                          onClick={() => setIsQuickLinksDropdownOpen(false)}
-                          className={clsx(
-                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
-                            location.pathname === '/kaffarah-calculator'
-                              ? 'text-primary-600 bg-primary-50 font-semibold'
-                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                          )}
-                        >
-                          <Gift className="w-4 h-4 flex-shrink-0" />
-                          <span>Kaffarah Calculator</span>
-                        </Link>
-                        <Link
-                          to="/donate"
-                          onClick={() => setIsQuickLinksDropdownOpen(false)}
-                          className={clsx(
-                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
-                            location.pathname === '/donate'
-                              ? 'text-primary-600 bg-primary-50 font-semibold'
-                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                          )}
-                        >
-                          <Heart className="w-4 h-4 flex-shrink-0" />
-                          <span>Ways to Donate</span>
-                        </Link>
-                      </div>
-                    </div>
-
-                    {/* Quick Links Section */}
+                    {/* Resources Section */}
                     <div className="px-3 py-2">
-                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Quick Links</p>
+                      <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Resources</p>
                       <div className="space-y-1">
                         <Link
                           to="/zakat-on-gold"
@@ -357,7 +382,7 @@ const Header = () => {
               <Link
                 to="/about"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/about')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -371,7 +396,7 @@ const Header = () => {
               <Link
                 to="/contact"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/contact')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
@@ -529,6 +554,53 @@ const Header = () => {
                   <span>Get Involved</span>
                 </Link>
 
+                {/* Tools & Donate Section */}
+                <div className="space-y-2 bg-primary-50/30 rounded-xl p-4">
+                  <p className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-3 flex items-center">
+                    <Calculator className="w-5 h-5 mr-2" />
+                    Tools & Donate
+                  </p>
+                  <Link
+                    to="/zakat-calculator"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={clsx(
+                      'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
+                      isActive('/zakat-calculator')
+                        ? 'text-primary-600 bg-white shadow-sm'
+                        : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
+                    )}
+                  >
+                    <Calculator className="w-5 h-5" />
+                    <span>Zakat Calculator</span>
+                  </Link>
+                  <Link
+                    to="/kaffarah-calculator"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={clsx(
+                      'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
+                      isActive('/kaffarah-calculator')
+                        ? 'text-primary-600 bg-white shadow-sm'
+                        : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
+                    )}
+                  >
+                    <Coins className="w-5 h-5" />
+                    <span>Kaffarah Calculator</span>
+                  </Link>
+                  <Link
+                    to="/donate"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={clsx(
+                      'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
+                      isActive('/donate')
+                        ? 'text-primary-600 bg-white shadow-sm'
+                        : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
+                    )}
+                  >
+                    <CreditCard className="w-5 h-5" />
+                    <span>Ways to Donate</span>
+                  </Link>
+                </div>
+
                 {/* Quick Links in mobile menu */}
                 <div className="space-y-3 bg-gray-50 rounded-xl p-4">
                   <p className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-3">Quick Links</p>
@@ -559,7 +631,7 @@ const Header = () => {
                           : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      <BookOpen className="w-4 h-4 flex-shrink-0" />
+                      <BookMarked className="w-4 h-4 flex-shrink-0" />
                       <span>Book of Duas</span>
                     </Link>
                     <Link
@@ -572,58 +644,14 @@ const Header = () => {
                           : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                       )}
                     >
-                      <Heart className="w-4 h-4 flex-shrink-0" />
+                      <Sparkles className="w-4 h-4 flex-shrink-0" />
                       <span>Charity in Islam</span>
                     </Link>
                   </div>
 
-                  {/* Tools */}
+                  {/* Resources */}
                   <div className="space-y-1">
-                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Tools</p>
-                    <Link
-                      to="/zakat-calculator"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={clsx(
-                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                        location.pathname === '/zakat-calculator'
-                          ? 'text-primary-600 bg-white shadow-sm'
-                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
-                      )}
-                    >
-                      <Gift className="w-4 h-4 flex-shrink-0" />
-                      <span>Zakat Calculator</span>
-                    </Link>
-                    <Link
-                      to="/kaffarah-calculator"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={clsx(
-                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                        location.pathname === '/kaffarah-calculator'
-                          ? 'text-primary-600 bg-white shadow-sm'
-                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
-                      )}
-                    >
-                      <Gift className="w-4 h-4 flex-shrink-0" />
-                      <span>Kaffarah Calculator</span>
-                    </Link>
-                    <Link
-                      to="/donate"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={clsx(
-                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                        location.pathname === '/donate'
-                          ? 'text-primary-600 bg-white shadow-sm'
-                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
-                      )}
-                    >
-                      <Heart className="w-4 h-4 flex-shrink-0" />
-                      <span>Ways to Donate</span>
-                    </Link>
-                  </div>
-
-                  {/* Quick Links */}
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Quick Links</p>
+                    <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-2 px-2">Resources</p>
                     <Link
                       to="/zakat-on-gold"
                       onClick={() => setIsMobileMenuOpen(false)}
