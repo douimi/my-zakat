@@ -18,6 +18,7 @@ import {
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI } from '../utils/api'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
+import VideoThumbnail from '../components/VideoThumbnail'
 
 const Home = () => {
 
@@ -564,7 +565,7 @@ const GallerySection = () => {
       id: item.id,
       url: mediaInfo.url,
       type: mediaInfo.isVideo ? 'video' : 'image' as 'image' | 'video',
-      thumbnail: mediaInfo.url,
+      thumbnail: mediaInfo.isVideo ? null : mediaInfo.url, // Videos will generate thumbnails
     }
   })
 
@@ -619,23 +620,17 @@ const GallerySection = () => {
             onClick={() => setSelectedMediaIndex(index)}
           >
             {item.type === 'video' ? (
-              <video
-                src={item.url}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                preload="none"
-                muted
-                playsInline
-                loading="lazy"
-                onError={(e) => {
-                  // Hide video if it fails to load
-                  e.currentTarget.style.display = 'none'
-                }}
+              <VideoThumbnail
+                videoSrc={item.url}
+                className="w-full h-full"
+                alt={`Gallery video ${item.id}`}
               />
             ) : (
               <img 
-                src={item.thumbnail}
+                src={item.thumbnail || item.url}
                 alt={`Gallery ${item.type} ${item.id}`}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                loading="lazy"
                 onError={(e) => {
                   // Hide image if it fails to load instead of trying placeholder
                   e.currentTarget.style.display = 'none'

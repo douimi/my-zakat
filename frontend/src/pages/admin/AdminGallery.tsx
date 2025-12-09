@@ -4,6 +4,7 @@ import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, L
 import { galleryAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
+import VideoThumbnail from '../../components/VideoThumbnail'
 import type { GalleryItem } from '../../types'
 
 interface GalleryItemType extends GalleryItem {
@@ -320,22 +321,17 @@ const AdminGallery = () => {
                 {/* Media Preview */}
                 <div className="aspect-square bg-gray-200 rounded-t-lg overflow-hidden relative group mb-4">
                   {isVideo ? (
-                    <video
-                      src={mediaUrl}
-                      className="w-full h-full object-cover"
-                      controls={false}
-                      preload="none"
-                      playsInline
-                      muted
-                      loading="lazy"
-                    >
-                      <source src={mediaUrl} type="video/mp4" />
-                    </video>
+                    <VideoThumbnail
+                      videoSrc={mediaUrl}
+                      className="w-full h-full"
+                      alt={`Gallery video ${item.id}`}
+                    />
                   ) : (
                     <img
                       src={mediaUrl}
                       alt={`Gallery item ${item.id}`}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
                       }}

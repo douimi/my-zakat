@@ -4,6 +4,7 @@ import { Upload, Video, Trash2, Play, Download, FileVideo, Loader2 } from 'lucid
 import { mediaAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
+import VideoThumbnail from '../../components/VideoThumbnail'
 
 interface VideoFile {
   filename: string
@@ -195,30 +196,24 @@ const AdminVideos = () => {
           {videos.map((video: VideoFile) => (
             <div key={video.filename} className="card hover:shadow-lg transition-shadow">
               {/* Video Preview */}
-              <div className="aspect-video bg-gray-900 rounded-t-lg overflow-hidden relative group">
-                <video
-                  src={getVideoUrl(video)}
-                  className="w-full h-full object-contain"
-                  controls={true}
-                  preload="none"
-                  playsInline
-                  muted
-                  loading="lazy"
+              <div className="aspect-video bg-gray-900 rounded-t-lg overflow-hidden relative group cursor-pointer">
+                <VideoThumbnail
+                  videoSrc={getVideoUrl(video)}
+                  className="w-full h-full"
+                  alt={`Video ${video.filename}`}
+                />
+                <a
+                  href={getVideoUrl(video)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200"
+                  title="Play video"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <source src={getVideoUrl(video)} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
-                  <a
-                    href={getVideoUrl(video)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-3 hover:bg-opacity-100"
-                    title="Play video"
-                  >
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-3 hover:bg-opacity-100">
                     <Play className="w-6 h-6 text-primary-600 ml-0.5" fill="currentColor" />
-                  </a>
-                </div>
+                  </div>
+                </a>
               </div>
 
               {/* Video Info */}

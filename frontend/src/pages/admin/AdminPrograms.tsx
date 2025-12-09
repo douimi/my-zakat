@@ -5,6 +5,8 @@ import { settingsAPI, adminAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import { isValidImageUrl, isValidVideoUrl, getImageUrl, getVideoUrl } from '../../utils/mediaHelpers'
+import LazyVideo from '../../components/LazyVideo'
+import VideoThumbnail from '../../components/VideoThumbnail'
 import type { Setting } from '../../types'
 
 interface Program {
@@ -353,14 +355,13 @@ const AdminPrograms = () => {
                 {/* Program Media - Video takes priority */}
                 {videoUrl && !showVideoInput && !showImageInput && (
                   <div className="mb-4">
-                    <video
-                      src={videoUrl}
-                      controls
-                      className="w-full h-48 object-cover rounded-lg"
-                      preload="none"
-                      playsInline
-                      loading="lazy"
-                    />
+                    <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-200">
+                      <VideoThumbnail
+                        videoSrc={videoUrl}
+                        className="w-full h-full"
+                        alt={`Program ${program.id} video`}
+                      />
+                    </div>
                     <p className="text-xs text-gray-500 mt-1">Video (takes priority over image)</p>
                   </div>
                 )}

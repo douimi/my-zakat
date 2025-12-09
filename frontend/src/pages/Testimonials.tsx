@@ -1,6 +1,7 @@
 import { useQuery } from 'react-query'
 import { Star, MapPin, Heart, Video, Play } from 'lucide-react'
 import { testimonialsAPI, getStaticFileUrl } from '../utils/api'
+import LazyVideo from '../components/LazyVideo'
 import type { Testimonial } from '../types'
 
 const Testimonials = () => {
@@ -81,17 +82,13 @@ const Testimonials = () => {
                     {/* Video Display */}
                     {videoUrl && (
                       <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
-                        <video
+                        <LazyVideo
                           src={videoUrl}
                           className="w-full aspect-video object-cover"
-                          controls
-                          preload="none"
-                          playsInline
-                          loading="lazy"
-                          crossOrigin="anonymous"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
+                          controls={true}
+                          playsInline={true}
+                          poster={imageUrl || undefined}
+                        />
                       </div>
                     )}
                     
