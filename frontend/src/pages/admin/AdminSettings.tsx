@@ -89,8 +89,8 @@ const AdminSettings = () => {
     <div className="section-container">
       <div className="mb-8">
         <div className="flex items-center mb-4">
-          <SettingsIcon className="w-8 h-8 text-primary-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-900">Impact Statistics Settings</h1>
+          <SettingsIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mr-2 sm:mr-3" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Impact Statistics Settings</h1>
         </div>
         <p className="text-gray-600">
           Manage the impact statistics displayed on your homepage

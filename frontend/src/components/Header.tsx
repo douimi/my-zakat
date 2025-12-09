@@ -104,35 +104,36 @@ const Header = () => {
         <div className="w-full px-2 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-24 md:h-28 lg:h-32 py-2 md:py-3 min-w-0">
             {/* Logo */}
-            <Link to="/" className="flex items-center flex-shrink-0 mr-2 md:mr-4 lg:mr-6 transition-transform duration-200 hover:scale-105">
+            <Link to="/" className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-transform duration-200 hover:scale-105">
               <img 
                 src="/logo.png" 
                 alt="MyZakat Logo" 
-                className="h-24 md:h-32 lg:h-44 w-auto object-contain"
+                className="h-20 md:h-24 lg:h-28 xl:h-36 2xl:h-44 w-auto object-contain"
               />
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center flex-1 justify-evenly min-w-0 px-4 xl:px-6">
+            <nav className="hidden lg:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-1 xl:gap-2">
               {/* Urgent Needs Dropdown */}
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
                   <button
                     onClick={() => setIsUrgentNeedsDropdownOpen(!isUrgentNeedsDropdownOpen)}
                     className={clsx(
-                      'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                      'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                       isUrgentNeedsActive()
                         ? 'text-primary-600 bg-primary-50 shadow-sm'
                         : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                     )}
                   >
                     <AlertCircle className={clsx(
-                      'w-4 h-4 transition-transform duration-300',
+                      'w-3.5 xl:w-4 h-3.5 xl:h-4 transition-transform duration-300 flex-shrink-0',
                       isUrgentNeedsActive() && 'text-primary-600'
                     )} />
-                    <span>Urgent Needs</span>
+                    <span className="hidden xl:inline">Urgent Needs</span>
+                    <span className="xl:hidden">Urgent</span>
                     <ChevronDown className={clsx(
-                      'w-3.5 h-3.5 transition-transform duration-300',
+                      'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                       isUrgentNeedsDropdownOpen && 'transform rotate-180'
                     )} />
                   </button>
@@ -164,13 +165,13 @@ const Header = () => {
               <Link
                 to="/stories"
                 className={clsx(
-                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/stories')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <BookOpen className="w-4 h-4" />
+                <BookOpen className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                 <span>Our Impact</span>
               </Link>
 
@@ -178,13 +179,13 @@ const Header = () => {
               <Link
                 to="/events"
                 className={clsx(
-                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/events')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                 <span>Our Work</span>
               </Link>
 
@@ -192,14 +193,15 @@ const Header = () => {
               <Link
                 to="/volunteer"
                 className={clsx(
-                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/volunteer')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Users className="w-4 h-4" />
-                <span>Get Involved</span>
+                <Users className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <span className="hidden xl:inline">Get Involved</span>
+                <span className="xl:hidden">Involved</span>
               </Link>
 
               {/* Quick Links Dropdown */}
@@ -207,15 +209,16 @@ const Header = () => {
                 <button
                   onClick={() => setIsQuickLinksDropdownOpen(!isQuickLinksDropdownOpen)}
                   className={clsx(
-                    'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                    'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isZakatActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
-                  <span>Quick Links</span>
+                  <span className="hidden xl:inline">Quick Links</span>
+                  <span className="xl:hidden">Links</span>
                   <ChevronDown className={clsx(
-                    'w-3.5 h-3.5 transition-transform duration-300',
+                    'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                     isQuickLinksDropdownOpen && 'transform rotate-180'
                   )} />
                 </button>
@@ -354,13 +357,13 @@ const Header = () => {
               <Link
                 to="/about"
                 className={clsx(
-                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/about')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Info className="w-4 h-4" />
+                <Info className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                 <span>About</span>
               </Link>
 
@@ -368,19 +371,19 @@ const Header = () => {
               <Link
                 to="/contact"
                 className={clsx(
-                  'flex items-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 whitespace-nowrap',
+                  'flex items-center space-x-1.5 xl:space-x-2 px-2 xl:px-3 2xl:px-4 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/contact')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Mail className="w-4 h-4" />
+                <Mail className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                 <span>Contact</span>
               </Link>
             </nav>
 
             {/* Profile Icon with Dropdown */}
-            <div className="hidden lg:flex items-center flex-shrink-0 ml-4 xl:ml-6">
+            <div className="hidden lg:flex items-center flex-shrink-0 ml-2 xl:ml-4 2xl:ml-6">
               <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
@@ -456,7 +459,7 @@ const Header = () => {
 
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg">
+          <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg max-h-[calc(100vh-6rem)] overflow-y-auto">
             <div className="w-full px-2 sm:px-4 lg:px-6 py-6">
               <nav className="flex flex-col space-y-3">
                 {/* Urgent Needs in mobile menu */}

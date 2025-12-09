@@ -83,17 +83,17 @@ const AdminDonations = () => {
   return (
     <div className="section-container">
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div className="flex items-center">
-            <Heart className="w-8 h-8 text-primary-600 mr-3" />
-            <h1 className="text-3xl font-bold text-gray-900">Donations</h1>
+            <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mr-2 sm:mr-3" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Donations</h1>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
             {window.location.hostname === 'localhost' && (
               <button
                 onClick={handleSyncStripeData}
                 disabled={syncing}
-                className="btn-secondary flex items-center"
+                className="btn-secondary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
                 {syncing ? 'Syncing...' : 'Sync Stripe'}
@@ -101,14 +101,14 @@ const AdminDonations = () => {
             )}
             <button
               onClick={exportToCsv}
-              className="btn-primary flex items-center"
+              className="btn-primary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
             >
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </button>
           </div>
         </div>
-        <p className="text-gray-600">Manage and track all donations</p>
+        <p className="text-gray-600 text-sm sm:text-base">Manage and track all donations</p>
       </div>
 
       {/* Stats Cards */}
@@ -189,16 +189,16 @@ const AdminDonations = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Donor
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Amount
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Frequency
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
               </tr>
@@ -206,23 +206,23 @@ const AdminDonations = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredDonations.map((donation: Donation) => (
                 <tr key={donation.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 sm:px-6 py-4">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
                         {donation.name}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs sm:text-sm text-gray-500 break-words">
                         {donation.email}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-green-600">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                    <div className="text-xs sm:text-sm font-medium text-green-600">
                       ${donation.amount.toLocaleString()}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  <td className="px-3 sm:px-6 py-4">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
                       donation.frequency === 'One-Time' 
                         ? 'bg-blue-100 text-blue-800'
                         : donation.frequency === 'Monthly'
@@ -232,7 +232,7 @@ const AdminDonations = () => {
                       {donation.frequency}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
                     {new Date(donation.donated_at).toLocaleDateString()}
                   </td>
                 </tr>

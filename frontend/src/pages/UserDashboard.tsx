@@ -283,23 +283,23 @@ const UserDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center">
-              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center mr-4">
-                <UserIcon className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-full flex items-center justify-center mr-3 sm:mr-4 flex-shrink-0">
+                <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                   Welcome back, {user?.name || 'User'}!
                 </h1>
-                <p className="text-sm text-gray-600">{user?.email}</p>
+                <p className="text-xs sm:text-sm text-gray-600 truncate">{user?.email}</p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition duration-200"
+                className="flex items-center justify-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200"
               >
                 <Home className="w-4 h-4" />
                 <span>Back to Home</span>
@@ -307,7 +307,7 @@ const UserDashboard = () => {
               {isAdmin && (
                 <button
                   onClick={() => navigate('/admin')}
-                  className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition duration-200"
+                  className="flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200"
                 >
                   <Shield className="w-4 h-4" />
                   <span>Admin Console</span>
@@ -315,7 +315,7 @@ const UserDashboard = () => {
               )}
               <button
                 onClick={handleLogout}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition duration-200 flex items-center"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200 flex items-center justify-center"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
@@ -326,41 +326,41 @@ const UserDashboard = () => {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Total Donated</p>
-                  <p className="text-3xl font-bold text-blue-600">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Donated</p>
+                  <p className="text-2xl sm:text-3xl font-bold text-blue-600 truncate">
                     ${stats.total_donated.toFixed(2)}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Donations Made</p>
-                  <p className="text-3xl font-bold text-blue-600">{stats.donation_count}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Donations Made</p>
+                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.donation_count}</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Heart className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sm:col-span-2 lg:col-span-1">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Active Subscriptions</p>
-                  <p className="text-3xl font-bold text-blue-600">{stats.active_subscriptions}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Active Subscriptions</p>
+                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.active_subscriptions}</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <CreditCard className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </div>
@@ -369,20 +369,20 @@ const UserDashboard = () => {
 
         {/* Active Subscriptions */}
         {subscriptions.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
+          <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-8">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center">
+              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" />
               Active Subscriptions
             </h2>
             <div className="space-y-4">
               {subscriptions.map((subscription) => (
                 <div
                   key={subscription.id}
-                  className="border border-gray-200 rounded-lg p-4 flex items-center justify-between"
+                  className="border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
                 >
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{subscription.purpose}</h3>
-                    <div className="mt-2 text-sm text-gray-600 space-y-1">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 break-words">{subscription.purpose}</h3>
+                    <div className="mt-2 text-xs sm:text-sm text-gray-600 space-y-1">
                       <p>Amount: <span className="font-medium">${subscription.amount}</span> / {subscription.interval}</p>
                       <p>Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>
                         {subscription.status}
@@ -395,7 +395,7 @@ const UserDashboard = () => {
                   <button
                     onClick={() => handleCancelSubscription(subscription.id)}
                     disabled={cancellingId === subscription.id}
-                    className="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition duration-200 flex items-center"
+                    className="bg-red-100 hover:bg-red-200 text-red-700 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200 flex items-center justify-center w-full sm:w-auto"
                   >
                     {cancellingId === subscription.id ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
@@ -413,28 +413,28 @@ const UserDashboard = () => {
         )}
 
         {/* Donation History */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <Calendar className="w-5 h-5 mr-2 text-blue-600" />
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" />
             Donation History
           </h2>
           {donations.length === 0 ? (
-            <p className="text-gray-600 text-center py-8">No donations yet</p>
+            <p className="text-gray-600 text-center py-8 text-sm sm:text-base">No donations yet</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                       Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Certificate
                     </th>
                   </tr>
@@ -442,18 +442,18 @@ const UserDashboard = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {donations.map((donation) => (
                     <tr key={donation.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                         {formatDate(donation.donated_at)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
                         ${donation.amount.toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 hidden sm:table-cell">
                         {donation.frequency}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
                         {/* Certificates are now generated on-the-fly, so they're always available */}
-                        <div className="flex items-center space-x-3">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:space-x-3">
                           <button
                             onClick={() => handleDownloadCertificate(donation.id)}
                             className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium"
@@ -478,6 +478,7 @@ const UserDashboard = () => {
                               </>
                             )}
                           </button>
+                          <span className="text-xs text-gray-500 sm:hidden">({donation.frequency})</span>
                         </div>
                       </td>
                     </tr>

@@ -162,20 +162,20 @@ const AdminContacts = () => {
   return (
     <div className="section-container">
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div className="flex items-center">
-            <MessageSquare className="w-8 h-8 text-primary-600 mr-3" />
-            <h1 className="text-3xl font-bold text-gray-900">Contact Submissions</h1>
+            <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mr-2 sm:mr-3" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Contact Submissions</h1>
           </div>
           <button
             onClick={exportToCsv}
-            className="btn-primary flex items-center"
+            className="btn-primary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
           >
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </button>
         </div>
-        <p className="text-gray-600">Manage and respond to contact form submissions</p>
+        <p className="text-gray-600 text-sm sm:text-base">Manage and respond to contact form submissions</p>
       </div>
 
       {/* Stats Cards */}
@@ -267,7 +267,7 @@ const AdminContacts = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left">
+                <th className="px-3 sm:px-6 py-3 text-left">
                   <input
                     type="checkbox"
                     checked={selectedContacts.length === filteredContacts.length && filteredContacts.length > 0}
@@ -275,19 +275,19 @@ const AdminContacts = () => {
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contact
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                   Message
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -295,7 +295,7 @@ const AdminContacts = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredContacts.map((contact: ContactSubmission) => (
                 <tr key={contact.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={selectedContacts.includes(contact.id)}
@@ -309,18 +309,24 @@ const AdminContacts = () => {
                       className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 sm:px-6 py-4">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
                         {contact.name}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs sm:text-sm text-gray-500 break-words">
                         {contact.email}
+                      </div>
+                      <div className="text-xs sm:text-sm text-gray-500 mt-1 md:hidden break-words">
+                        {contact.message.length > 50 ? `${contact.message.substring(0, 50)}...` : contact.message}
+                      </div>
+                      <div className="text-xs text-gray-400 sm:hidden mt-1">
+                        {new Date(contact.submitted_at).toLocaleDateString()}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs truncate">
+                  <td className="px-3 sm:px-6 py-4 hidden md:table-cell">
+                    <div className="text-xs sm:text-sm text-gray-900 max-w-xs break-words">
                       {contact.message}
                     </div>
                   </td>
@@ -388,7 +394,7 @@ const AdminContacts = () => {
       {/* View Contact Modal */}
       {selectedContact && !showReplyModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Contact Details</h2>
               <button
@@ -464,7 +470,7 @@ const AdminContacts = () => {
       {/* Reply Modal */}
       {showReplyModal && selectedContact && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Reply to {selectedContact.name}</h2>
               <button
