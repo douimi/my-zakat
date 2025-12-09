@@ -42,6 +42,7 @@ import IslamicKnowledge from './pages/IslamicKnowledge'
 import BookOfDuas from './pages/BookOfDuas'
 import CharityInIslam from './pages/CharityInIslam'
 import KaffarahCalculator from './pages/KaffarahCalculator'
+import ZakatAlFitrCalculator from './pages/ZakatAlFitrCalculator'
 import ZakatOnGold from './pages/ZakatOnGold'
 import UmrahGuidelines from './pages/UmrahGuidelines'
 import PrivacyPolicy from './pages/PrivacyPolicy'
@@ -49,6 +50,7 @@ import DonationPolicy from './pages/DonationPolicy'
 import AdminRoute from './components/AdminRoute'
 import AdminLayout from './components/AdminLayout'
 import UserRoute from './components/UserRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useAuthStore } from './store/authStore'
 
 // Initialize Stripe
@@ -75,9 +77,10 @@ function App() {
   }, [initFromStorage, logout])
 
   return (
-    <ToastProvider>
-      <Elements stripe={stripePromise}>
-        <Routes>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Elements stripe={stripePromise}>
+          <Routes>
         {/* Public routes */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
@@ -99,6 +102,7 @@ function App() {
           <Route path="book-of-duas" element={<BookOfDuas />} />
           <Route path="charity-in-islam" element={<CharityInIslam />} />
           <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
+          <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
           <Route path="zakat-on-gold" element={<ZakatOnGold />} />
           <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
           <Route path="privacy-policy" element={<PrivacyPolicy />} />
@@ -131,9 +135,10 @@ function App() {
           <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
-        </Routes>
-      </Elements>
-    </ToastProvider>
+          </Routes>
+        </Elements>
+      </ToastProvider>
+    </ErrorBoundary>
   )
 }
 

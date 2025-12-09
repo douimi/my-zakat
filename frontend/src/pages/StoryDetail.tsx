@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { ArrowLeft, Calendar, Play } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
+import LazyVideo from '../components/LazyVideo'
 
 const StoryDetail = () => {
   const { id } = useParams<{ id: string }>()
@@ -140,17 +141,13 @@ const StoryDetail = () => {
               <div className="mt-8">
                 <h2 className="text-2xl font-heading font-bold text-gray-900 mb-4">Video</h2>
                 <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden">
-                  <video
+                  <LazyVideo
                     src={videoUrl}
-                    controls
                     className="w-full h-full"
-                    preload="metadata"
-                    playsInline
-                    crossOrigin="anonymous"
-                  >
-                    <source src={videoUrl} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                    controls={true}
+                    playsInline={true}
+                    poster={imageUrl || undefined}
+                  />
                 </div>
               </div>
             ) : null

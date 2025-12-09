@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI } from '../utils/api'
 import Slideshow from '../components/Slideshow'
+import LazyVideo from '../components/LazyVideo'
 
 const Home = () => {
 
@@ -322,17 +323,11 @@ const Home = () => {
                 {/* Media Section */}
                 <div className="relative overflow-hidden h-64">
                   {program.media.type === 'video' && program.media.url ? (
-                    <video
+                    <LazyVideo
                       src={program.media.url}
                       className="w-full h-full object-cover"
-                      controls
-                      preload="none"
-                      playsInline
-                      loading="lazy"
-                      crossOrigin="anonymous"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
+                      controls={true}
+                      playsInline={true}
                     />
                   ) : program.media.url ? (
                     <>
@@ -686,18 +681,13 @@ const GallerySection = () => {
             <div className="flex-1 flex items-center justify-center">
               {selectedMedia.type === 'video' ? (
                 <div className="aspect-video bg-black rounded-lg overflow-hidden w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-                  <video
+                  <LazyVideo
                     src={selectedMedia.url}
-                    controls
                     className="w-full h-full"
-                    autoPlay
-                    preload="metadata"
-                    playsInline
-                    crossOrigin="anonymous"
-                  >
-                    <source src={selectedMedia.url} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                    controls={true}
+                    autoPlay={true}
+                    playsInline={true}
+                  />
                 </div>
               ) : (
                 <img 

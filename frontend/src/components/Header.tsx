@@ -84,12 +84,13 @@ const Header = () => {
 
   const isZakatActive = () => {
     return location.pathname.startsWith('/zakat-calculator') || 
+           location.pathname.startsWith('/kaffarah-calculator') ||
+           location.pathname.startsWith('/zakat-al-fitr-calculator') ||
            location.pathname.startsWith('/zakat-education') ||
+           location.pathname.startsWith('/zakat-on-gold') ||
            location.pathname.startsWith('/islamic-knowledge') ||
            location.pathname.startsWith('/book-of-duas') ||
            location.pathname.startsWith('/charity-in-islam') ||
-           location.pathname.startsWith('/kaffarah-calculator') ||
-           location.pathname.startsWith('/zakat-on-gold') ||
            location.pathname.startsWith('/umrah-guidelines')
   }
 
@@ -213,7 +214,7 @@ const Header = () => {
                 <span className="xl:hidden">Involved</span>
               </Link>
 
-              {/* Tools & Donate Dropdown */}
+              {/* Calculators Dropdown */}
               <div className="relative" ref={toolsRef}>
                 <button
                   onClick={() => {
@@ -223,14 +224,14 @@ const Header = () => {
                   }}
                   className={clsx(
                     'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
-                    isActive('/zakat-calculator') || isActive('/kaffarah-calculator') || isActive('/donate')
+                    isActive('/zakat-calculator') || isActive('/kaffarah-calculator') || isActive('/zakat-al-fitr-calculator')
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
                   <Calculator className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
-                  <span className="hidden xl:inline">Tools & Donate</span>
-                  <span className="xl:hidden">Tools</span>
+                  <span className="hidden xl:inline">Calculators</span>
+                  <span className="xl:hidden">Calc</span>
                   <ChevronDown className={clsx(
                     'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                     isToolsDropdownOpen && 'transform rotate-180'
@@ -266,17 +267,17 @@ const Header = () => {
                       <span>Kaffarah Calculator</span>
                     </Link>
                     <Link
-                      to="/donate"
+                      to="/zakat-al-fitr-calculator"
                       onClick={() => setIsToolsDropdownOpen(false)}
                       className={clsx(
                         'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
-                        location.pathname === '/donate'
+                        location.pathname === '/zakat-al-fitr-calculator'
                           ? 'text-primary-600 bg-primary-50 font-semibold'
                           : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                       )}
                     >
-                      <CreditCard className="w-4 h-4 flex-shrink-0" />
-                      <span>Ways to Donate</span>
+                      <Gift className="w-4 h-4 flex-shrink-0" />
+                      <span>Zakat al-Fitr Calculator</span>
                     </Link>
                   </div>
                 )}
@@ -358,6 +359,19 @@ const Header = () => {
                     <div className="px-3 py-2">
                       <p className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-3 px-2">Resources</p>
                       <div className="space-y-1">
+                        <Link
+                          to="/donate"
+                          onClick={() => setIsQuickLinksDropdownOpen(false)}
+                          className={clsx(
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
+                            location.pathname === '/donate'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
+                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                          )}
+                        >
+                          <CreditCard className="w-4 h-4 flex-shrink-0" />
+                          <span>Ways to Donate</span>
+                        </Link>
                         <Link
                           to="/zakat-on-gold"
                           onClick={() => setIsQuickLinksDropdownOpen(false)}
@@ -566,11 +580,11 @@ const Header = () => {
                   <span>Get Involved</span>
                 </Link>
 
-                {/* Tools & Donate Section */}
+                {/* Calculators Section */}
                 <div className="space-y-2 bg-primary-50/30 rounded-xl p-4">
                   <p className="text-sm font-bold text-primary-600 uppercase tracking-wider mb-3 flex items-center">
                     <Calculator className="w-5 h-5 mr-2" />
-                    Tools & Donate
+                    Calculators
                   </p>
                   <Link
                     to="/zakat-calculator"
@@ -599,17 +613,17 @@ const Header = () => {
                     <span>Kaffarah Calculator</span>
                   </Link>
                   <Link
-                    to="/donate"
+                    to="/zakat-al-fitr-calculator"
                     onClick={() => setIsMobileMenuOpen(false)}
                     className={clsx(
                       'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
-                      isActive('/donate')
+                      isActive('/zakat-al-fitr-calculator')
                         ? 'text-primary-600 bg-white shadow-sm'
                         : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
                     )}
                   >
-                    <CreditCard className="w-5 h-5" />
-                    <span>Ways to Donate</span>
+                    <Gift className="w-5 h-5" />
+                    <span>Zakat al-Fitr Calculator</span>
                   </Link>
                 </div>
 
