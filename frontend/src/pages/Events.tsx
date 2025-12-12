@@ -1,7 +1,7 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { Calendar, MapPin, Clock, ArrowRight } from 'lucide-react'
-import { eventsAPI } from '../utils/api'
+import { eventsAPI, getStaticFileUrl } from '../utils/api'
 import type { Event } from '../types'
 
 const Events = () => {

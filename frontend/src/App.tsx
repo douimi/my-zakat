@@ -23,6 +23,7 @@ const Stories = lazy(() => import('./pages/Stories'))
 const StoryDetail = lazy(() => import('./pages/StoryDetail'))
 const Events = lazy(() => import('./pages/Events'))
 const EventDetail = lazy(() => import('./pages/EventDetail'))
+const Programs = lazy(() => import('./pages/Programs'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Volunteer = lazy(() => import('./pages/Volunteer'))
 const Testimonials = lazy(() => import('./pages/Testimonials'))
@@ -99,6 +100,7 @@ function App() {
                 <Route path="stories/:id" element={<StoryDetail />} />
                 <Route path="events" element={<Events />} />
                 <Route path="events/:id" element={<EventDetail />} />
+                <Route path="programs" element={<Programs />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="volunteer" element={<Volunteer />} />
                 <Route path="testimonials" element={<Testimonials />} />

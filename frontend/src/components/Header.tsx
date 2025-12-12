@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2 } from 'lucide-react'
+import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2, TrendingUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
@@ -187,6 +187,20 @@ const Header = () => {
 
               {/* Our Work */}
               <Link
+                to="/programs"
+                className={clsx(
+                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  isActive('/programs')
+                    ? 'text-primary-600 bg-primary-50 shadow-sm'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
+                )}
+              >
+                <TrendingUp className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <span>Our Work</span>
+              </Link>
+
+              {/* Events */}
+              <Link
                 to="/events"
                 className={clsx(
                   'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
@@ -196,7 +210,7 @@ const Header = () => {
                 )}
               >
                 <Calendar className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
-                <span>Our Work</span>
+                <span>Events</span>
               </Link>
 
               {/* Get Involved */}
@@ -554,6 +568,19 @@ const Header = () => {
                   <span>Our Impact</span>
                 </Link>
                 <Link
+                  to="/programs"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={clsx(
+                    'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200',
+                    isActive('/programs')
+                      ? 'text-primary-600 bg-primary-50 shadow-sm'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                  )}
+                >
+                  <TrendingUp className="w-5 h-5" />
+                  <span>Our Work</span>
+                </Link>
+                <Link
                   to="/events"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
@@ -564,7 +591,7 @@ const Header = () => {
                   )}
                 >
                   <Calendar className="w-5 h-5" />
-                  <span>Our Work</span>
+                  <span>Events</span>
                 </Link>
                 <Link
                   to="/volunteer"

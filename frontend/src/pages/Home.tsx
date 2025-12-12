@@ -13,9 +13,12 @@ import {
   Image as ImageIcon,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar,
+  MapPin
 } from 'lucide-react'
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI } from '../utils/api'
+import type { Event } from '../types'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
@@ -373,6 +376,130 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* Events Section */}
+      {upcomingEvents && upcomingEvents.length > 0 && (
+        <section className="py-20 bg-white relative overflow-hidden">
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+          </div>
+          <div className="section-container relative z-10">
+            <div className="text-center mb-16">
+              <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+                Upcoming Events
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+                Join Us at Our
+                <span className="block text-primary-600 mt-2">Upcoming Events</span>
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                Be part of our community events, fundraisers, and gatherings where we come together to make a difference
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {upcomingEvents.slice(0, 3).map((event: Event, index: number) => {
+                const eventDate = new Date(event.date)
+                const isToday = eventDate.toDateString() === new Date().toDateString()
+                
+                // Helper function to get image URL - check if it's a full URL or a filename
+                const getImageUrl = (imageValue?: string) => {
+                  if (!imageValue) return null
+                  // Check if it's a full URL (starts with http:// or https://)
+                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+                    return imageValue
+                  }
+                  // Otherwise, treat it as a filename and load from uploads
+                  return getStaticFileUrl(`/api/uploads/events/${imageValue}`)
+                }
+
+                const imageUrl = getImageUrl(event.image)
+
+                return (
+                  <div 
+                    key={event.id}
+                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    {/* Event Image */}
+                    {imageUrl && (
+                      <div className="relative overflow-hidden h-48">
+                        <img 
+                          src={imageUrl} 
+                          alt={event.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                        <div className="absolute top-4 right-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            isToday 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {isToday ? 'Today' : 'Upcoming'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-6">
+                      {/* Event Title */}
+                      <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors">
+                        {event.title}
+                      </h3>
+
+                      {/* Event Description */}
+                      <p className="text-gray-600 mb-4 line-clamp-2">{event.description}</p>
+
+                      {/* Event Details */}
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center text-sm text-gray-600">
+                          <Calendar className="w-4 h-4 mr-2 text-primary-500 flex-shrink-0" />
+                          <span>
+                            {eventDate.toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center text-sm text-gray-600">
+                          <MapPin className="w-4 h-4 mr-2 text-primary-500 flex-shrink-0" />
+                          <span className="truncate">{event.location}</span>
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <Link 
+                        to={`/events/${event.id}`}
+                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
+                      >
+                        Learn More
+                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* View All Events Link */}
+            <div className="text-center mt-12">
+              <Link 
+                to="/events"
+                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
+              >
+                View All Events
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Testimonials */}
       {testimonials && testimonials.length > 0 && (
