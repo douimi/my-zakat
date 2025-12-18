@@ -158,3 +158,42 @@ export interface GalleryItem {
   created_at: string
   updated_at: string
 }
+
+export interface ProgramCategory {
+  id: number
+  name: string
+  slug: string
+  title: string
+  description?: string
+  short_description?: string
+  image_url?: string
+  video_filename?: string
+  impact_text?: string
+  html_content?: string
+  css_content?: string
+  js_content?: string
+  category_slideshow_id?: number
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Program {
+  id: number
+  category_id: number
+  title: string
+  slug: string
+  description?: string
+  short_description?: string
+  image_url?: string
+  video_filename?: string
+  html_content?: string
+  css_content?: string
+  js_content?: string
+  impact_text?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}

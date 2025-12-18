@@ -40,6 +40,7 @@ const AdminLayout = () => {
     { name: 'Testimonials', href: '/admin/testimonials', icon: Star },
     { name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
     { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
+    { name: 'Program Categories', href: '/admin/program-categories', icon: TrendingUp },
     { name: 'Programs', href: '/admin/programs', icon: TrendingUp },
     { name: 'Gallery', href: '/admin/gallery', icon: Film },
     { name: 'Videos', href: '/admin/videos', icon: Video },

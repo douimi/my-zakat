@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs
 
 load_dotenv()
 
@@ -49,9 +49,6 @@ def ensure_admin_user():
             ('orphans_cared_for', '800', 'Total number of orphans receiving care and support'),
             ('total_raised', '500000', 'Total amount raised in USD for all programs'),
             ('hero_video', '', 'Main video displayed on the homepage hero section'),
-            ('program_image_1', '', 'First program image on homepage'),
-            ('program_image_2', '', 'Second program image on homepage'),
-            ('program_image_3', '', 'Third program image on homepage'),
             ('gallery_item_1', '', 'Gallery image/video 1'),
             ('gallery_item_2', '', 'Gallery image/video 2'),
             ('gallery_item_3', '', 'Gallery image/video 3'),
@@ -89,7 +86,9 @@ def ensure_media_directories():
         "uploads/media/images",
         "uploads/events",
         "uploads/stories",
-        "uploads/testimonials"
+        "uploads/testimonials",
+        "uploads/program_categories",
+        "uploads/programs"
     ]
     
     for directory in directories:
@@ -167,6 +166,8 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(slideshow.router, prefix="/api/slideshow", tags=["slideshow"])
 app.include_router(urgent_needs.router, prefix="/api/urgent-needs", tags=["urgent-needs"])
 app.include_router(gallery.router, prefix="/api/gallery", tags=["gallery"])
+app.include_router(program_categories.router, prefix="/api/program-categories", tags=["program-categories"])
+app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
 
 @app.get("/")
 async def root():

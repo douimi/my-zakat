@@ -147,14 +147,25 @@ async def update_story(
         
         story.video_filename = video_filename
     
+    # Handle image removal/update
+    old_image = story.image_filename
+    if image_filename is not None:
+        # If clearing image or changing to a new one, delete old file
+        if old_image and (not image_filename or image_filename != old_image):
+            old_path = os.path.join("uploads/stories", old_image)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        story.image_filename = image_filename
+    
     # Update basic fields
     story.title = title
     story.summary = summary
     story.content = content
     story.is_active = is_active
     story.is_featured = is_featured
-    if image_filename is not None:
-        story.image_filename = image_filename
     
     db.commit()
     db.refresh(story)
@@ -170,6 +181,24 @@ async def delete_story(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
+    
+    # Delete associated video file if exists
+    if story.video_filename:
+        video_path = os.path.join("uploads/stories", story.video_filename)
+        if os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+            except Exception as e:
+                print(f"Warning: Could not delete video file {video_path}: {e}")
+    
+    # Delete associated image file if exists
+    if story.image_filename:
+        image_path = os.path.join("uploads/stories", story.image_filename)
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception as e:
+                print(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(story)
     db.commit()

@@ -727,4 +727,153 @@ export const urgentNeedsAPI = {
   },
 }
 
+// Program Categories API
+export const programCategoriesAPI = {
+  getAll: async (activeOnly: boolean = false) => {
+    const response = await api.get(`/api/program-categories/?active_only=${activeOnly}`)
+    return response.data
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/api/program-categories/${id}`)
+    return response.data
+  },
+  
+  getBySlug: async (slug: string) => {
+    const response = await api.get(`/api/program-categories/slug/${slug}`)
+    return response.data
+  },
+  
+  create: async (category: {
+    name: string
+    slug: string
+    title: string
+    description?: string
+    short_description?: string
+    image_url?: string
+    video_filename?: string
+    impact_text?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    category_slideshow_id?: number
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.post('/api/program-categories/', category)
+    return response.data
+  },
+  
+  update: async (id: number, category: {
+    name?: string
+    slug?: string
+    title?: string
+    description?: string
+    short_description?: string
+    image_url?: string
+    video_filename?: string
+    impact_text?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    category_slideshow_id?: number
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.put(`/api/program-categories/${id}`, category)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/api/program-categories/${id}`)
+    return response.data
+  },
+  
+  uploadVideo: async (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post(`/api/program-categories/${id}/upload-video`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+}
+
+// Programs API
+export const programsAPI = {
+  getAll: async (categoryId?: number, activeOnly: boolean = false) => {
+    const params = new URLSearchParams()
+    if (categoryId) params.append('category_id', categoryId.toString())
+    if (activeOnly) params.append('active_only', 'true')
+    const response = await api.get(`/api/programs/?${params.toString()}`)
+    return response.data
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/api/programs/${id}`)
+    return response.data
+  },
+  
+  getBySlug: async (slug: string) => {
+    const response = await api.get(`/api/programs/slug/${slug}`)
+    return response.data
+  },
+  
+  create: async (program: {
+    category_id: number
+    title: string
+    slug: string
+    description?: string
+    short_description?: string
+    image_url?: string
+    video_filename?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    impact_text?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.post('/api/programs/', program)
+    return response.data
+  },
+  
+  update: async (id: number, program: {
+    category_id?: number
+    title?: string
+    slug?: string
+    description?: string
+    short_description?: string
+    image_url?: string
+    video_filename?: string
+    html_content?: string
+    css_content?: string
+    js_content?: string
+    impact_text?: string
+    display_order?: number
+    is_active?: boolean
+  }) => {
+    const response = await api.put(`/api/programs/${id}`, program)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/api/programs/${id}`)
+    return response.data
+  },
+  
+  uploadVideo: async (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post(`/api/programs/${id}/upload-video`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+}
+
 export default api

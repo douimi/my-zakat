@@ -13,6 +13,8 @@ STORIES_IMAGE_DIR = "uploads/stories"
 TESTIMONIALS_VIDEO_DIR = "uploads/testimonials"
 TESTIMONIALS_IMAGE_DIR = "uploads/testimonials"
 EVENTS_IMAGE_DIR = "uploads/events"
+PROGRAM_CATEGORIES_DIR = "uploads/program_categories"
+PROGRAMS_DIR = "uploads/programs"
 
 
 def get_content_type(filename: str) -> str:
@@ -315,4 +317,208 @@ async def serve_event_image(filename: str):
             'Access-Control-Allow-Origin': '*',
         }
     )
+
+
+@router.options("/program_categories/{filename}")
+async def options_program_category_video(filename: str):
+    """Handle CORS preflight requests for program category videos"""
+    return Response(
+        status_code=200,
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Max-Age': '3600',
+        }
+    )
+
+
+@router.head("/program_categories/{filename}")
+async def head_program_category_video(filename: str):
+    """Handle HEAD requests for program category video metadata"""
+    # Security: prevent directory traversal
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = os.path.join(PROGRAM_CATEGORIES_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    file_size = os.path.getsize(file_path)
+    content_type = get_content_type(filename)
+    
+    return Response(
+        status_code=200,
+        headers={
+            'Content-Type': content_type,
+            'Content-Length': str(file_size),
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',
+        }
+    )
+
+
+@router.get("/program_categories/{filename}")
+async def serve_program_category_video(filename: str, request: Request):
+    """
+    Serve program category video files with proper range request support for video playback
+    """
+    # Security: prevent directory traversal
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = os.path.join(PROGRAM_CATEGORIES_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    file_size = os.path.getsize(file_path)
+    content_type = get_content_type(filename)
+    
+    # Handle range requests for video seeking
+    range_header = request.headers.get('range')
+    
+    if range_header:
+        # Parse range header
+        range_match = range_header.replace('bytes=', '').split('-')
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] and range_match[1] else file_size - 1
+        
+        # Ensure valid range
+        if start >= file_size or end >= file_size:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+        
+        # Open file and read chunk
+        with open(file_path, 'rb') as f:
+            f.seek(start)
+            chunk_size = end - start + 1
+            data = f.read(chunk_size)
+        
+        # Return partial content response
+        return Response(
+            content=data,
+            status_code=206,
+            media_type=content_type,
+            headers={
+                'Content-Range': f'bytes {start}-{end}/{file_size}',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': str(chunk_size),
+                'Content-Type': content_type,
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers': 'Range',
+                'Cache-Control': 'public, max-age=86400',
+            }
+        )
+    else:
+        # Return full file
+        return FileResponse(
+            file_path,
+            media_type=content_type,
+            headers={
+                'Accept-Ranges': 'bytes',
+                'Content-Length': str(file_size),
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',
+            }
+        )
+
+
+@router.options("/programs/{filename}")
+async def options_program_video(filename: str):
+    """Handle CORS preflight requests for program videos"""
+    return Response(
+        status_code=200,
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Max-Age': '3600',
+        }
+    )
+
+
+@router.head("/programs/{filename}")
+async def head_program_video(filename: str):
+    """Handle HEAD requests for program video metadata"""
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = os.path.join(PROGRAMS_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    file_size = os.path.getsize(file_path)
+    content_type = get_content_type(filename)
+    
+    return Response(
+        status_code=200,
+        headers={
+            'Content-Type': content_type,
+            'Content-Length': str(file_size),
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',
+        }
+    )
+
+
+@router.get("/programs/{filename}")
+async def serve_program_video(filename: str, request: Request):
+    """Serve program video files with proper range request support"""
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = os.path.join(PROGRAMS_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    file_size = os.path.getsize(file_path)
+    content_type = get_content_type(filename)
+    
+    range_header = request.headers.get('range')
+    
+    if range_header:
+        range_match = range_header.replace('bytes=', '').split('-')
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] and range_match[1] else file_size - 1
+        
+        if start >= file_size or end >= file_size:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+        
+        with open(file_path, 'rb') as f:
+            f.seek(start)
+            chunk_size = end - start + 1
+            data = f.read(chunk_size)
+        
+        return Response(
+            content=data,
+            status_code=206,
+            media_type=content_type,
+            headers={
+                'Content-Range': f'bytes {start}-{end}/{file_size}',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': str(chunk_size),
+                'Content-Type': content_type,
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers': 'Range',
+                'Cache-Control': 'public, max-age=86400',
+            }
+        )
+    else:
+        return FileResponse(
+            file_path,
+            media_type=content_type,
+            headers={
+                'Accept-Ranges': 'bytes',
+                'Content-Length': str(file_size),
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',
+            }
+        )
 

@@ -40,6 +40,7 @@ const AdminStories = lazy(() => import('./pages/admin/AdminStories'))
 const AdminTestimonials = lazy(() => import('./pages/admin/AdminTestimonials'))
 const AdminVolunteers = lazy(() => import('./pages/admin/AdminVolunteers'))
 const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions'))
+const AdminProgramCategories = lazy(() => import('./pages/admin/AdminProgramCategories'))
 const AdminPrograms = lazy(() => import('./pages/admin/AdminPrograms'))
 const AdminGallery = lazy(() => import('./pages/admin/AdminGallery'))
 const AdminVideos = lazy(() => import('./pages/admin/AdminVideos'))
@@ -47,6 +48,8 @@ const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminSlideshow = lazy(() => import('./pages/admin/AdminSlideshow'))
 const AdminUrgentNeeds = lazy(() => import('./pages/admin/AdminUrgentNeeds'))
 const UrgentNeedDetail = lazy(() => import('./pages/UrgentNeedDetail'))
+const CategoryDetail = lazy(() => import('./pages/CategoryDetail'))
+const ProgramDetail = lazy(() => import('./pages/ProgramDetail'))
 const QuickLinks = lazy(() => import('./pages/QuickLinks'))
 const IslamicKnowledge = lazy(() => import('./pages/IslamicKnowledge'))
 const BookOfDuas = lazy(() => import('./pages/BookOfDuas'))
@@ -101,6 +104,8 @@ function App() {
                 <Route path="events" element={<Events />} />
                 <Route path="events/:id" element={<EventDetail />} />
                 <Route path="programs" element={<Programs />} />
+                <Route path="programs/:slug" element={<ProgramDetail />} />
+                <Route path="categories/:slug" element={<CategoryDetail />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="volunteer" element={<Volunteer />} />
                 <Route path="testimonials" element={<Testimonials />} />
@@ -136,6 +141,7 @@ function App() {
                 <Route path="testimonials" element={<AdminTestimonials />} />
                 <Route path="volunteers" element={<AdminVolunteers />} />
                 <Route path="subscriptions" element={<AdminSubscriptions />} />
+                <Route path="program-categories" element={<AdminProgramCategories />} />
                 <Route path="programs" element={<AdminPrograms />} />
                 <Route path="gallery" element={<AdminGallery />} />
                 <Route path="videos" element={<AdminVideos />} />

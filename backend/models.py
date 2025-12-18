@@ -189,3 +189,49 @@ class UrgentNeed(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ProgramCategory(Base):
+    __tablename__ = "program_categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    short_description = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    video_filename = Column(String(255), nullable=True)
+    impact_text = Column(String(255), nullable=True)
+    # Page content fields for category detail page
+    html_content = Column(Text, nullable=True)
+    css_content = Column(Text, nullable=True)
+    js_content = Column(Text, nullable=True)
+    # Category page slideshow (separate from home page slideshow)
+    category_slideshow_id = Column(Integer, nullable=True)  # Reference to slideshow_slides if needed
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Program(Base):
+    __tablename__ = "programs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    category_id = Column(Integer, nullable=False, index=True)  # Foreign key to program_categories
+    title = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    short_description = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    video_filename = Column(String(255), nullable=True)
+    # Program page content fields
+    html_content = Column(Text, nullable=True)
+    css_content = Column(Text, nullable=True)
+    js_content = Column(Text, nullable=True)
+    impact_text = Column(String(255), nullable=True)
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2, TrendingUp } from 'lucide-react'
+import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
@@ -82,16 +82,20 @@ const Header = () => {
     return location.pathname.startsWith(href)
   }
 
-  const isZakatActive = () => {
+  const isCalculatorActive = () => {
     return location.pathname.startsWith('/zakat-calculator') || 
            location.pathname.startsWith('/kaffarah-calculator') ||
-           location.pathname.startsWith('/zakat-al-fitr-calculator') ||
-           location.pathname.startsWith('/zakat-education') ||
+           location.pathname.startsWith('/zakat-al-fitr-calculator')
+  }
+
+  const isQuickLinksActive = () => {
+    return location.pathname.startsWith('/zakat-education') ||
            location.pathname.startsWith('/zakat-on-gold') ||
            location.pathname.startsWith('/islamic-knowledge') ||
            location.pathname.startsWith('/book-of-duas') ||
            location.pathname.startsWith('/charity-in-islam') ||
-           location.pathname.startsWith('/umrah-guidelines')
+           location.pathname.startsWith('/umrah-guidelines') ||
+           location.pathname.startsWith('/quick-links')
   }
 
   return (
@@ -195,7 +199,7 @@ const Header = () => {
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <TrendingUp className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Heart className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
                 <span>Our Work</span>
               </Link>
 
@@ -210,7 +214,8 @@ const Header = () => {
                 )}
               >
                 <Calendar className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
-                <span>Events</span>
+                <span className="hidden xl:inline">Events</span>
+                <span className="xl:hidden">Events</span>
               </Link>
 
               {/* Get Involved */}
@@ -238,7 +243,7 @@ const Header = () => {
                   }}
                   className={clsx(
                     'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
-                    isActive('/zakat-calculator') || isActive('/kaffarah-calculator') || isActive('/zakat-al-fitr-calculator')
+                    isCalculatorActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
@@ -307,7 +312,7 @@ const Header = () => {
                   }}
                   className={clsx(
                     'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
-                    isZakatActive()
+                    isQuickLinksActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
@@ -577,7 +582,7 @@ const Header = () => {
                       : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                   )}
                 >
-                  <TrendingUp className="w-5 h-5" />
+                  <Heart className="w-5 h-5" />
                   <span>Our Work</span>
                 </Link>
                 <Link

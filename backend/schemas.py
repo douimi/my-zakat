@@ -331,3 +331,110 @@ class GalleryItemResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+# Program Category schemas
+class ProgramCategoryCreate(BaseModel):
+    name: str
+    slug: str
+    title: str
+    description: Optional[str] = None
+    short_description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_filename: Optional[str] = None
+    impact_text: Optional[str] = None
+    html_content: Optional[str] = None
+    css_content: Optional[str] = None
+    js_content: Optional[str] = None
+    category_slideshow_id: Optional[int] = None
+    display_order: Optional[int] = 0
+    is_active: Optional[bool] = True
+
+class ProgramCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    short_description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_filename: Optional[str] = None
+    impact_text: Optional[str] = None
+    html_content: Optional[str] = None
+    css_content: Optional[str] = None
+    js_content: Optional[str] = None
+    category_slideshow_id: Optional[int] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class ProgramCategoryResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    title: str
+    description: Optional[str]
+    short_description: Optional[str]
+    image_url: Optional[str]
+    video_filename: Optional[str]
+    impact_text: Optional[str]
+    html_content: Optional[str]
+    css_content: Optional[str]
+    js_content: Optional[str]
+    category_slideshow_id: Optional[int]
+    display_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+# Program schemas
+class ProgramCreate(BaseModel):
+    category_id: int
+    title: str
+    slug: str
+    description: Optional[str] = None
+    short_description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_filename: Optional[str] = None
+    html_content: Optional[str] = None
+    css_content: Optional[str] = None
+    js_content: Optional[str] = None
+    impact_text: Optional[str] = None
+    display_order: Optional[int] = 0
+    is_active: Optional[bool] = True
+
+class ProgramUpdate(BaseModel):
+    category_id: Optional[int] = None
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    short_description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_filename: Optional[str] = None
+    html_content: Optional[str] = None
+    css_content: Optional[str] = None
+    js_content: Optional[str] = None
+    impact_text: Optional[str] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class ProgramResponse(BaseModel):
+    id: int
+    category_id: int
+    title: str
+    slug: Optional[str]  # Made optional to handle existing NULL values
+    description: Optional[str]
+    short_description: Optional[str]
+    image_url: Optional[str]
+    video_filename: Optional[str]
+    html_content: Optional[str]
+    css_content: Optional[str]
+    js_content: Optional[str]
+    impact_text: Optional[str]
+    display_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True

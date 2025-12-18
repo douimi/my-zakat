@@ -17,8 +17,8 @@ import {
   Calendar,
   MapPin
 } from 'lucide-react'
-import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI } from '../utils/api'
-import type { Event } from '../types'
+import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI, programCategoriesAPI } from '../utils/api'
+import type { Event, ProgramCategory } from '../types'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
@@ -39,7 +39,7 @@ const Home = () => {
   
   // Load secondary content after a delay to prioritize critical content
   const { data: featuredStories, error: storiesError } = useQuery('featured-stories', () => 
-    storiesAPI.getAll(true, true), {
+    storiesAPI.getAll(true, false), { // Get all active stories, not just featured
     retry: 1,
     staleTime: 5 * 60 * 1000,
     enabled: !!donationStats, // Only load after critical data
@@ -58,6 +58,13 @@ const Home = () => {
     staleTime: 5 * 60 * 1000,
     enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Testimonials error:', error)
+  })
+  const { data: categories, error: categoriesError } = useQuery('program-categories', () => 
+    programCategoriesAPI.getAll(true), {
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    enabled: !!donationStats, // Only load after critical data
+    onError: (error) => console.error('Categories error:', error)
   })
 
   // Show error state if any critical API calls fail
@@ -132,47 +139,22 @@ const Home = () => {
     return setting?.value || ''
   }
 
-  // Helper to get program media - checks video first, then image
-  const getProgramMedia = (programNum: number) => {
-    const videoValue = getSettingValue(`program_video_${programNum}`)
-    const imageValue = getSettingValue(`program_image_${programNum}`)
-    
-    if (videoValue) {
+  // Helper to get category media - checks video first, then image
+  const getCategoryMedia = (category: ProgramCategory) => {
+    if (category.video_filename) {
       // Video takes priority
-      const videoUrl = getVideoUrl(videoValue)
+      const videoUrl = getStaticFileUrl(`/api/uploads/program_categories/${category.video_filename}`)
       return { url: videoUrl, type: 'video' as const }
-    } else if (imageValue) {
+    } else if (category.image_url) {
       // Fallback to image - check if it's a URL or needs to be constructed
-      if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-        return { url: imageValue, type: 'image' as const }
+      if (category.image_url.startsWith('http://') || category.image_url.startsWith('https://')) {
+        return { url: category.image_url, type: 'image' as const }
       }
-      const imageUrl = getMediaUrl(`program_image_${programNum}`, '')
-      return { url: imageUrl, type: 'image' as const }
+      return { url: category.image_url, type: 'image' as const }
     }
     
     return { url: null, type: 'image' as const }
   }
-
-  const programs = [
-    {
-      title: getSettingValue('program_title_1'),
-      description: getSettingValue('program_description_1'),
-      media: getProgramMedia(1),
-      impact: getSettingValue('program_impact_1')
-    },
-    {
-      title: getSettingValue('program_title_2'),
-      description: getSettingValue('program_description_2'),
-      media: getProgramMedia(2),
-      impact: getSettingValue('program_impact_2')
-    },
-    {
-      title: getSettingValue('program_title_3'),
-      description: getSettingValue('program_description_3'),
-      media: getProgramMedia(3),
-      impact: getSettingValue('program_impact_3')
-    }
-  ].filter(program => program.title || program.description || program.impact) // Only show programs with at least some data
 
   return (
     <div className="min-h-screen">
@@ -295,87 +277,204 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Programs */}
-      <section className="py-20 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-        </div>
-        <div className="section-container relative z-10">
-          <div className="text-center mb-16">
-            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-              Our Initiatives
-            </div>
-            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-              Programs That Make
-              <span className="block text-primary-600 mt-2">A Real Difference</span>
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Focused initiatives that address the most critical needs in underserved communities around the world
-            </p>
+      {/* Our Work - Program Categories */}
+      {categories && categories.length > 0 && (
+        <section className="py-20 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {programs.map((program, index) => (
-              <div 
-                key={index}
-                className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                {/* Media Section */}
-                <div className="relative overflow-hidden h-64">
-                  {program.media.type === 'video' && program.media.url ? (
-                    <LazyVideo
-                      src={program.media.url}
-                      className="w-full h-full object-cover"
-                      controls={true}
-                      playsInline={true}
-                    />
-                  ) : program.media.url ? (
-                    <>
-                      <img 
-                        src={program.media.url} 
-                        alt={program.title || 'Program'}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                        }}
-                      />
-                      {/* Overlay only for images, not videos */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                    </>
-                  ) : (
-                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-400">No media</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Content Section */}
-                <div className="p-6">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                    {program.title}
-                  </h3>
-                  {program.impact && (
-                    <div className="mb-3">
-                      <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
-                        {program.impact}
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-gray-600 mb-6 leading-relaxed">{program.description}</p>
-                  <Link 
-                    to="/donate" 
-                    className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
-                  >
-                    Support This Program
-                    <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
+          <div className="section-container relative z-10">
+            <div className="text-center mb-16">
+              <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
+                Our Work
               </div>
-            ))}
+              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+                Programs That Make
+                <span className="block text-primary-600 mt-2">A Real Difference</span>
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                Focused initiatives that address the most critical needs in underserved communities around the world
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {categories.map((category, index) => {
+                const media = getCategoryMedia(category)
+                return (
+                  <div 
+                    key={category.id}
+                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    {/* Media Section */}
+                    <div className="relative overflow-hidden h-64">
+                      {media.type === 'video' && media.url ? (
+                        <LazyVideo
+                          src={media.url}
+                          className="w-full h-full object-cover"
+                          controls={true}
+                          playsInline={true}
+                        />
+                      ) : media.url ? (
+                        <>
+                          <img 
+                            src={media.url} 
+                            alt={category.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                          {/* Overlay only for images, not videos */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-gray-400">No media</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Content Section */}
+                    <div className="p-6">
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+                        {category.title}
+                      </h3>
+                      {category.impact_text && (
+                        <div className="mb-3">
+                          <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
+                            {category.impact_text}
+                          </span>
+                        </div>
+                      )}
+                      <p className="text-gray-600 mb-6 leading-relaxed">
+                        {category.short_description || category.description || ''}
+                      </p>
+                      <Link 
+                        to="/donate" 
+                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
+                      >
+                        Support This Program
+                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Stories Section */}
+      {featuredStories && featuredStories.length > 0 && (
+        <section className="py-20 bg-gradient-to-br from-purple-50 via-white to-blue-50 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-1/4 right-0 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 left-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
+          </div>
+          <div className="section-container relative z-10">
+            <div className="text-center mb-16">
+              <div className="inline-block px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-4">
+                Stories of Impact
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+                Real Stories,
+                <span className="block text-primary-600 mt-2">Real Impact</span>
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                Discover how your generosity transforms lives and creates lasting change in communities around the world
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredStories.slice(0, 3).map((story: any, index: number) => {
+                // Helper function to get image URL
+                const getImageUrl = (imageValue?: string) => {
+                  if (!imageValue) return null
+                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+                    return imageValue
+                  }
+                  return getStaticFileUrl(`/api/uploads/stories/${imageValue}`)
+                }
+
+                // Helper function to get video URL
+                const getVideoUrl = (videoFilename?: string) => {
+                  if (!videoFilename) return null
+                  return getStaticFileUrl(`/api/uploads/stories/${videoFilename}`)
+                }
+
+                const imageUrl = getImageUrl(story.image_filename)
+                const videoUrl = getVideoUrl(story.video_filename)
+
+                return (
+                  <div 
+                    key={story.id}
+                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    {/* Story Media */}
+                    {(imageUrl || videoUrl) && (
+                      <div className="relative overflow-hidden h-48">
+                        {videoUrl ? (
+                          <LazyVideo
+                            src={videoUrl}
+                            className="w-full h-full object-cover"
+                            controls={false}
+                            playsInline={true}
+                          />
+                        ) : (
+                          <img 
+                            src={imageUrl || ''} 
+                            alt={story.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                      </div>
+                    )}
+
+                    <div className="p-6">
+                      {/* Story Title */}
+                      <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                        {story.title}
+                      </h3>
+
+                      {/* Story Summary */}
+                      <p className="text-gray-600 mb-6 line-clamp-3 leading-relaxed">
+                        {story.summary || story.content?.substring(0, 150) + '...'}
+                      </p>
+
+                      {/* Action Button */}
+                      <Link 
+                        to={`/stories/${story.id}`}
+                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
+                      >
+                        Read Story
+                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* View All Stories Link */}
+            <div className="text-center mt-12">
+              <Link 
+                to="/stories"
+                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
+              >
+                View All Stories
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Events Section */}
       {upcomingEvents && upcomingEvents.length > 0 && (

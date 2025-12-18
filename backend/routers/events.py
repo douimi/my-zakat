@@ -122,6 +122,8 @@ async def update_event(
     event.location = location
     
     # Handle image - prioritize file upload over URL
+    old_image = event.image  # Store old image for deletion
+    
     if image and image.filename:
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
@@ -129,6 +131,15 @@ async def update_event(
         # Create uploads directory if it doesn't exist
         upload_dir = "uploads/events"
         os.makedirs(upload_dir, exist_ok=True)
+        
+        # Delete old image file if it exists and is a filename (not a URL)
+        if old_image and not old_image.startswith(('http://', 'https://')):
+            old_path = os.path.join(upload_dir, old_image)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -144,6 +155,15 @@ async def update_event(
         # Update image filename
         event.image = image_filename
     elif image_url is not None:
+        # Delete old image file if clearing/changing image and old one was a filename
+        if old_image and not old_image.startswith(('http://', 'https://')):
+            old_path = os.path.join("uploads/events", old_image)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        
         # Update image URL if provided (empty string clears the image)
         event.image = image_url.strip() if image_url.strip() else None
     
@@ -161,6 +181,15 @@ async def delete_event(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Delete associated image file if it exists and is a filename (not a URL)
+    if event.image and not event.image.startswith(('http://', 'https://')):
+        image_path = os.path.join("uploads/events", event.image)
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception as e:
+                print(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(event)
     db.commit()

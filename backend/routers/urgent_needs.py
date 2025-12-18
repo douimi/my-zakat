@@ -99,6 +99,23 @@ async def update_urgent_need(
         # Auto-generate slug from title if title changed but slug didn't
         update_data['slug'] = slugify(update_data['title'])
     
+    # Handle image file deletion when image_url is updated
+    if 'image_url' in update_data:
+        old_image = need.image_url
+        new_image = update_data['image_url']
+        # If old image was a filename (not URL) and we're changing it
+        if old_image and not old_image.startswith(('http://', 'https://')):
+            if not new_image or new_image.startswith(('http://', 'https://')) or new_image != old_image:
+                # Old image was a filename, delete it
+                import os
+                from pathlib import Path
+                old_path = Path("uploads/urgent_needs") / old_image
+                if old_path.exists():
+                    try:
+                        old_path.unlink()
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+    
     for field, value in update_data.items():
         setattr(need, field, value)
     
@@ -114,9 +131,21 @@ async def delete_urgent_need(
     current_admin = Depends(get_current_admin)
 ):
     """Delete an urgent need"""
+    import os
+    from pathlib import Path
+    
     need = db.query(UrgentNeed).filter(UrgentNeed.id == need_id).first()
     if not need:
         raise HTTPException(status_code=404, detail="Urgent need not found")
+    
+    # Delete associated image file if exists and is a filename (not URL)
+    if need.image_url and not need.image_url.startswith(('http://', 'https://')):
+        image_path = Path("uploads/urgent_needs") / need.image_url
+        if image_path.exists():
+            try:
+                image_path.unlink()
+            except Exception as e:
+                print(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(need)
     db.commit()

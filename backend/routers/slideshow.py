@@ -120,6 +120,34 @@ async def update_slideshow_slide(
     
     # Use model_dump() for Pydantic v2 compatibility
     update_data = slide_update.model_dump(exclude_unset=True) if hasattr(slide_update, 'model_dump') else slide_update.dict(exclude_unset=True)
+    
+    # Handle image file deletion when image fields are updated
+    # Delete old image_filename if being cleared or changed
+    if 'image_filename' in update_data:
+        old_image_filename = slide.image_filename
+        new_image_filename = update_data['image_filename']
+        if old_image_filename and (not new_image_filename or new_image_filename != old_image_filename):
+            old_path = os.path.join(UPLOAD_DIR, old_image_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image_filename file {old_path}: {e}")
+    
+    # Delete old image_url if being cleared or changed from filename to URL
+    if 'image_url' in update_data:
+        old_image_url = slide.image_url
+        new_image_url = update_data['image_url']
+        # If old image_url was a filename (not URL) and we're changing it
+        if old_image_url and not old_image_url.startswith(('http://', 'https://')):
+            if not new_image_url or new_image_url.startswith(('http://', 'https://')) or new_image_url != old_image_url:
+                old_path = os.path.join(UPLOAD_DIR, old_image_url)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image_url file {old_path}: {e}")
+    
     for field, value in update_data.items():
         setattr(slide, field, value)
     
@@ -139,7 +167,7 @@ async def delete_slideshow_slide(
     if not slide:
         raise HTTPException(status_code=404, detail="Slide not found")
     
-    # Optionally delete the image file if it exists
+    # Delete the image file if it exists (check both image_filename and image_url)
     if slide.image_filename:
         image_path = os.path.join(UPLOAD_DIR, slide.image_filename)
         if os.path.exists(image_path):
@@ -147,6 +175,15 @@ async def delete_slideshow_slide(
                 os.remove(image_path)
             except Exception as e:
                 print(f"Error deleting image file: {e}")
+    
+    # Also check image_url if it's a filename (not a URL)
+    if slide.image_url and not slide.image_url.startswith(('http://', 'https://')):
+        image_path = os.path.join(UPLOAD_DIR, slide.image_url)
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception as e:
+                print(f"Error deleting image file from image_url: {e}")
     
     db.delete(slide)
     db.commit()
@@ -177,7 +214,7 @@ async def upload_slideshow_image(
     filename = f"slideshow_{slide_id}_{int(os.urandom(4).hex(), 16)}{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     
-    # Delete old image if it exists
+    # Delete old image if it exists (check both image_filename and image_url)
     if slide.image_filename:
         old_path = os.path.join(UPLOAD_DIR, slide.image_filename)
         if os.path.exists(old_path):
@@ -185,6 +222,15 @@ async def upload_slideshow_image(
                 os.remove(old_path)
             except Exception as e:
                 print(f"Error deleting old image: {e}")
+    
+    # Also check image_url if it's a filename (not a URL)
+    if slide.image_url and not slide.image_url.startswith(('http://', 'https://')):
+        old_path = os.path.join(UPLOAD_DIR, slide.image_url)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except Exception as e:
+                print(f"Error deleting old image from image_url: {e}")
     
     # Save new image
     async with aiofiles.open(file_path, 'wb') as f:

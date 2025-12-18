@@ -154,9 +154,29 @@ async def update_testimonial(
             content_bytes = await image.read()
             await f.write(content_bytes)
         
+        # Delete old image file if it exists and is a filename (not URL)
+        old_image = testimonial.image
+        if old_image and not old_image.startswith(('http://', 'https://')):
+            old_path = os.path.join("uploads/testimonials", old_image)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        
         # Update image filename
         testimonial.image = image_filename
     elif image_url is not None:
+        # Delete old image file if clearing/changing image and old one was a filename
+        old_image = testimonial.image
+        if old_image and not old_image.startswith(('http://', 'https://')):
+            old_path = os.path.join("uploads/testimonials", old_image)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        
         # Update image URL if provided (empty string clears the image)
         testimonial.image = image_url.strip() if image_url.strip() else None
     
@@ -227,6 +247,28 @@ async def delete_testimonial(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
+    testimonial = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not testimonial:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    
+    # Delete associated video file if exists
+    if testimonial.video_filename:
+        video_path = os.path.join("uploads/testimonials", testimonial.video_filename)
+        if os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+            except Exception as e:
+                print(f"Warning: Could not delete video file {video_path}: {e}")
+    
+    # Delete associated image file if exists and is a filename (not URL)
+    if testimonial.image and not testimonial.image.startswith(('http://', 'https://')):
+        image_path = os.path.join("uploads/testimonials", testimonial.image)
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception as e:
+                print(f"Warning: Could not delete image file {image_path}: {e}")
+    
     testimonial = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
     if not testimonial:
         raise HTTPException(status_code=404, detail="Testimonial not found")
