@@ -431,14 +431,49 @@ const Home = () => {
                           e.preventDefault()
                           e.stopPropagation()
                           const container = e.currentTarget
+                          if (container.querySelector('video')) return // Already playing
+                          
                           const video = document.createElement('video')
                           video.src = videoUrl
                           video.className = "w-full h-full object-cover"
                           video.controls = true
                           video.playsInline = true
-                          video.preload = "metadata"
+                          video.preload = "auto"
+                          video.muted = false
+                          
+                          const loadingDiv = document.createElement('div')
+                          loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
+                          loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
                           container.innerHTML = ''
+                          container.appendChild(loadingDiv)
                           container.appendChild(video)
+                          
+                          video.addEventListener('canplay', () => {
+                            loadingDiv.remove()
+                            video.play().catch(() => {})
+                          }, { once: true })
+                          
+                          video.addEventListener('error', () => {
+                            loadingDiv.remove()
+                            container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white text-sm">Video failed to load</div>'
+                          }, { once: true })
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                        if (videoUrl) {
+                          const container = e.currentTarget
+                          if (!container.querySelector('video')) {
+                            const preloadVideo = document.createElement('video')
+                            preloadVideo.src = videoUrl
+                            preloadVideo.preload = "auto"
+                            preloadVideo.style.display = "none"
+                            document.body.appendChild(preloadVideo)
+                            setTimeout(() => {
+                              if (preloadVideo.parentNode) {
+                                preloadVideo.parentNode.removeChild(preloadVideo)
+                              }
+                            }, 30000)
+                          }
                         }
                       }}>
                         {videoUrl ? (
@@ -679,14 +714,47 @@ const Home = () => {
                     {videoUrl && (
                       <div className="mb-6 rounded-lg overflow-hidden bg-gray-900 group cursor-pointer" onClick={(e) => {
                         const container = e.currentTarget
+                        if (container.querySelector('video')) return
+                        
                         const video = document.createElement('video')
                         video.src = videoUrl
                         video.className = "w-full aspect-video object-cover"
                         video.controls = true
                         video.playsInline = true
-                        video.preload = "metadata"
+                        video.preload = "auto"
+                        video.muted = false
+                        
+                        const loadingDiv = document.createElement('div')
+                        loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
+                        loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
                         container.innerHTML = ''
+                        container.appendChild(loadingDiv)
                         container.appendChild(video)
+                        
+                        video.addEventListener('canplay', () => {
+                          loadingDiv.remove()
+                          video.play().catch(() => {})
+                        }, { once: true })
+                        
+                        video.addEventListener('error', () => {
+                          loadingDiv.remove()
+                          container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white">Video failed to load</div>'
+                        }, { once: true })
+                      }}
+                      onMouseEnter={(e) => {
+                        const container = e.currentTarget
+                        if (!container.querySelector('video') && videoUrl) {
+                          const preloadVideo = document.createElement('video')
+                          preloadVideo.src = videoUrl
+                          preloadVideo.preload = "auto"
+                          preloadVideo.style.display = "none"
+                          document.body.appendChild(preloadVideo)
+                          setTimeout(() => {
+                            if (preloadVideo.parentNode) {
+                              preloadVideo.parentNode.removeChild(preloadVideo)
+                            }
+                          }, 30000)
+                        }
                       }}>
                         <VideoThumbnail
                           videoSrc={videoUrl}
