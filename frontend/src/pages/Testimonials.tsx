@@ -2,6 +2,7 @@ import { useQuery } from 'react-query'
 import { Star, MapPin, Heart, Video, Play } from 'lucide-react'
 import { testimonialsAPI, getStaticFileUrl } from '../utils/api'
 import LazyVideo from '../components/LazyVideo'
+import VideoThumbnail from '../components/VideoThumbnail'
 import type { Testimonial } from '../types'
 
 const Testimonials = () => {
@@ -81,13 +82,21 @@ const Testimonials = () => {
                   <div className="relative">
                     {/* Video Display */}
                     {videoUrl && (
-                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
-                        <LazyVideo
-                          src={videoUrl}
+                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900 group cursor-pointer" onClick={(e) => {
+                        const container = e.currentTarget
+                        const video = document.createElement('video')
+                        video.src = videoUrl
+                        video.className = "w-full aspect-video object-cover"
+                        video.controls = true
+                        video.playsInline = true
+                        video.preload = "metadata"
+                        container.innerHTML = ''
+                        container.appendChild(video)
+                      }}>
+                        <VideoThumbnail
+                          videoSrc={videoUrl}
                           className="w-full aspect-video object-cover"
-                          controls={true}
-                          playsInline={true}
-                          poster={imageUrl || undefined}
+                          alt={`${testimonial.name} testimonial video`}
                         />
                       </div>
                     )}

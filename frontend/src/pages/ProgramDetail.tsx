@@ -4,6 +4,7 @@ import { useQuery } from 'react-query'
 import { programsAPI, getStaticFileUrl } from '../utils/api'
 import { Heart, Calendar } from 'lucide-react'
 import LazyVideo from '../components/LazyVideo'
+import VideoThumbnail from '../components/VideoThumbnail'
 
 const ProgramDetail = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -102,12 +103,24 @@ const ProgramDetail = () => {
       {(imageUrl || videoUrl) && (
         <div className="relative h-96 overflow-hidden">
           {videoUrl ? (
-            <LazyVideo
-              src={videoUrl}
-              className="w-full h-full object-cover"
-              controls={true}
-              playsInline={true}
-            />
+            <div className="relative w-full h-full group cursor-pointer" onClick={(e) => {
+              // Replace thumbnail with actual video on click
+              const container = e.currentTarget
+              const video = document.createElement('video')
+              video.src = videoUrl
+              video.className = "w-full h-full object-cover"
+              video.controls = true
+              video.playsInline = true
+              video.preload = "metadata"
+              container.innerHTML = ''
+              container.appendChild(video)
+            }}>
+              <VideoThumbnail
+                videoSrc={videoUrl}
+                className="w-full h-full"
+                alt={`${program.title} video`}
+              />
+            </div>
           ) : (
             <img
               src={imageUrl}
@@ -115,8 +128,8 @@ const ProgramDetail = () => {
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 right-0 p-8 text-white pointer-events-none">
             <h1 className="text-4xl lg:text-5xl font-bold mb-2">{program.title}</h1>
             {program.short_description && (
               <p className="text-xl text-white/90">{program.short_description}</p>

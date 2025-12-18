@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Calendar, User, ArrowRight, Play, BookOpen, Heart } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import type { Story } from '../types'
+import VideoThumbnail from '../components/VideoThumbnail'
 
 const Stories = () => {
   const { data: stories, isLoading, error } = useQuery('public-stories', () => 

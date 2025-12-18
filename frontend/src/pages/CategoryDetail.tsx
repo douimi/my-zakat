@@ -4,6 +4,7 @@ import { useQuery } from 'react-query'
 import { programCategoriesAPI, programsAPI, getStaticFileUrl } from '../utils/api'
 import { ArrowLeft, Heart, Share2, Calendar, ChevronLeft, ChevronRight, ArrowRight, Users, Target } from 'lucide-react'
 import LazyVideo from '../components/LazyVideo'
+import VideoThumbnail from '../components/VideoThumbnail'
 
 const CategoryDetail = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -40,7 +41,7 @@ const CategoryDetail = () => {
   }, [categoryPrograms])
 
   useEffect(() => {
-    // Clean up any existing category CSS/JS from previous visits
+    // Clean up ALL existing category CSS/JS (not just from this category)
     const existingStyles = document.querySelectorAll('style[id^="category-css-"]')
     existingStyles.forEach((style) => {
       style.remove()
@@ -51,7 +52,11 @@ const CategoryDetail = () => {
       script.remove()
     })
 
-    // Inject CSS
+    // Reset refs
+    cssRef.current = null
+    jsRef.current = null
+
+    // Inject CSS if it exists
     if (category?.css_content) {
       const styleId = `category-css-${category.id}`
       const styleElement = document.createElement('style')
@@ -61,28 +66,34 @@ const CategoryDetail = () => {
       cssRef.current = styleElement
     }
 
-    // Inject JS
+    // Inject JS if it exists
     if (category?.js_content) {
       const script = document.createElement('script')
       script.setAttribute('data-category', 'true')
+      script.setAttribute('data-category-id', category.id.toString())
       script.textContent = category.js_content
       document.body.appendChild(script)
       jsRef.current = script
     }
 
-    // Cleanup function
+    // Cleanup function - always clean up on unmount or category change
     return () => {
-      if (cssRef.current && cssRef.current.parentNode) {
-        cssRef.current.parentNode.removeChild(cssRef.current)
-        cssRef.current = null
-      }
+      // Remove CSS
+      const stylesToRemove = document.querySelectorAll('style[id^="category-css-"]')
+      stylesToRemove.forEach((style) => {
+        style.remove()
+      })
       
-      if (jsRef.current && jsRef.current.parentNode) {
-        jsRef.current.parentNode.removeChild(jsRef.current)
-        jsRef.current = null
-      }
+      // Remove scripts
+      const scriptsToRemove = document.querySelectorAll('script[data-category]')
+      scriptsToRemove.forEach((script) => {
+        script.remove()
+      })
+      
+      cssRef.current = null
+      jsRef.current = null
     }
-  }, [category])
+  }, [category?.id, category?.css_content, category?.js_content])
 
   const getVideoUrl = (filename?: string) => {
     if (!filename) return null
@@ -147,29 +158,28 @@ const CategoryDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="section-container py-4">
-          <Link
-            to="/programs"
-            className="inline-flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Programs
-          </Link>
-        </div>
-      </div>
-
       {/* Hero Section */}
       {(imageUrl || videoUrl) && (
         <div className="relative h-96 overflow-hidden">
           {videoUrl ? (
-            <LazyVideo
-              src={videoUrl}
-              className="w-full h-full object-cover"
-              controls={true}
-              playsInline={true}
-            />
+            <div className="relative w-full h-full group cursor-pointer" onClick={(e) => {
+              // Replace thumbnail with actual video on click
+              const container = e.currentTarget
+              const video = document.createElement('video')
+              video.src = videoUrl
+              video.className = "w-full h-full object-cover"
+              video.controls = true
+              video.playsInline = true
+              video.preload = "metadata"
+              container.innerHTML = ''
+              container.appendChild(video)
+            }}>
+              <VideoThumbnail
+                videoSrc={videoUrl}
+                className="w-full h-full"
+                alt={`${category.title} video`}
+              />
+            </div>
           ) : (
             <img
               src={imageUrl}
@@ -177,8 +187,8 @@ const CategoryDetail = () => {
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 right-0 p-8 text-white pointer-events-none">
             <h1 className="text-4xl lg:text-5xl font-bold mb-2">{category.title}</h1>
             {category.short_description && (
               <p className="text-xl text-white/90">{category.short_description}</p>
@@ -309,13 +319,26 @@ const CategoryDetail = () => {
                     className="group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden transform hover:-translate-y-2"
                   >
                     {(programImageUrl || programVideoUrl) && (
-                      <div className="relative h-56 overflow-hidden">
+                      <div className="relative h-56 overflow-hidden group cursor-pointer" onClick={(e) => {
+                        if (programVideoUrl) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const container = e.currentTarget
+                          const video = document.createElement('video')
+                          video.src = programVideoUrl
+                          video.className = "w-full h-full object-cover"
+                          video.controls = true
+                          video.playsInline = true
+                          video.preload = "metadata"
+                          container.innerHTML = ''
+                          container.appendChild(video)
+                        }
+                      }}>
                         {programVideoUrl ? (
-                          <LazyVideo
-                            src={programVideoUrl}
-                            className="w-full h-full object-cover"
-                            controls={false}
-                            playsInline={true}
+                          <VideoThumbnail
+                            videoSrc={programVideoUrl}
+                            className="w-full h-full"
+                            alt={`${program.title} video`}
                           />
                         ) : (
                           <img
@@ -324,7 +347,7 @@ const CategoryDetail = () => {
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                       </div>
                     )}
                     <div className="p-6">

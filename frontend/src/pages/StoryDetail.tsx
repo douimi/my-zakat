@@ -3,6 +3,7 @@ import { useQuery } from 'react-query'
 import { ArrowLeft, Calendar, Play } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import LazyVideo from '../components/LazyVideo'
+import VideoThumbnail from '../components/VideoThumbnail'
 
 const StoryDetail = () => {
   const { id } = useParams<{ id: string }>()
@@ -140,13 +141,21 @@ const StoryDetail = () => {
             return videoUrl ? (
               <div className="mt-8">
                 <h2 className="text-2xl font-heading font-bold text-gray-900 mb-4">Video</h2>
-                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden">
-                  <LazyVideo
-                    src={videoUrl}
+                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden group cursor-pointer" onClick={(e) => {
+                  const container = e.currentTarget
+                  const video = document.createElement('video')
+                  video.src = videoUrl
+                  video.className = "w-full h-full"
+                  video.controls = true
+                  video.playsInline = true
+                  video.preload = "metadata"
+                  container.innerHTML = ''
+                  container.appendChild(video)
+                }}>
+                  <VideoThumbnail
+                    videoSrc={videoUrl}
                     className="w-full h-full"
-                    controls={true}
-                    playsInline={true}
-                    poster={imageUrl || undefined}
+                    alt={`${story.title} video`}
                   />
                 </div>
               </div>

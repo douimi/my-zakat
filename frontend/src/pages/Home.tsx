@@ -307,13 +307,24 @@ const Home = () => {
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
                     {/* Media Section */}
-                    <div className="relative overflow-hidden h-64">
+                    <div className="relative overflow-hidden h-64 group cursor-pointer" onClick={(e) => {
+                      if (media.type === 'video' && media.url) {
+                        const container = e.currentTarget
+                        const video = document.createElement('video')
+                        video.src = media.url
+                        video.className = "w-full h-full object-cover"
+                        video.controls = true
+                        video.playsInline = true
+                        video.preload = "metadata"
+                        container.innerHTML = ''
+                        container.appendChild(video)
+                      }
+                    }}>
                       {media.type === 'video' && media.url ? (
-                        <LazyVideo
-                          src={media.url}
-                          className="w-full h-full object-cover"
-                          controls={true}
-                          playsInline={true}
+                        <VideoThumbnail
+                          videoSrc={media.url}
+                          className="w-full h-full"
+                          alt={`${category.title} video`}
                         />
                       ) : media.url ? (
                         <>
@@ -415,13 +426,26 @@ const Home = () => {
                   >
                     {/* Story Media */}
                     {(imageUrl || videoUrl) && (
-                      <div className="relative overflow-hidden h-48">
+                      <div className="relative overflow-hidden h-48 group cursor-pointer" onClick={(e) => {
+                        if (videoUrl) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const container = e.currentTarget
+                          const video = document.createElement('video')
+                          video.src = videoUrl
+                          video.className = "w-full h-full object-cover"
+                          video.controls = true
+                          video.playsInline = true
+                          video.preload = "metadata"
+                          container.innerHTML = ''
+                          container.appendChild(video)
+                        }
+                      }}>
                         {videoUrl ? (
-                          <LazyVideo
-                            src={videoUrl}
-                            className="w-full h-full object-cover"
-                            controls={false}
-                            playsInline={true}
+                          <VideoThumbnail
+                            videoSrc={videoUrl}
+                            className="w-full h-full"
+                            alt={`${story.title} video`}
                           />
                         ) : (
                           <img 
@@ -433,7 +457,7 @@ const Home = () => {
                             }}
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                       </div>
                     )}
 
@@ -653,18 +677,32 @@ const Home = () => {
                   <div className="relative">
                     {/* Video Display */}
                     {videoUrl && (
-                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
-                        <video
-                          src={videoUrl}
+                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900 group cursor-pointer" onClick={(e) => {
+                        const container = e.currentTarget
+                        const video = document.createElement('video')
+                        video.src = videoUrl
+                        video.className = "w-full aspect-video object-cover"
+                        video.controls = true
+                        video.playsInline = true
+                        video.preload = "metadata"
+                        container.innerHTML = ''
+                        container.appendChild(video)
+                      }}>
+                        <VideoThumbnail
+                          videoSrc={videoUrl}
                           className="w-full aspect-video object-cover"
-                          controls
-                          preload="none"
-                          playsInline
+                          alt={`${testimonial.name} testimonial video`}
+                        />
+                      </div>
+                    )}
+                    {!videoUrl && imageUrl && (
+                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
+                        <img
+                          src={imageUrl}
+                          alt={testimonial.name}
+                          className="w-full aspect-video object-cover"
                           loading="lazy"
-                          crossOrigin="anonymous"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
+                        />
                       </div>
                     )}
                     
