@@ -156,12 +156,12 @@ const AdminProgramCategories = () => {
     const data = categoryData[categoryId]
     if (!data) return
 
-    // Ensure all content fields are included
+    // Ensure all content fields are included - send empty string explicitly to clear content
     const updateData = {
       ...data,
-      html_content: data.html_content || undefined,
-      css_content: data.css_content || undefined,
-      js_content: data.js_content || undefined,
+      html_content: data.html_content !== undefined ? data.html_content : undefined,
+      css_content: data.css_content !== undefined ? data.css_content : undefined,
+      js_content: data.js_content !== undefined ? data.js_content : undefined,
     }
 
     updateMutation.mutate({ id: categoryId, data: updateData })
