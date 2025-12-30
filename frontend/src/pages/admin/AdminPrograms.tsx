@@ -9,6 +9,7 @@ import LazyVideo from '../../components/LazyVideo'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import { Link } from 'react-router-dom'
 import type { Program, ProgramCategory } from '../../types'
+import MediaInput from '../../components/MediaInput'
 
 const AdminPrograms = () => {
   const [editingProgram, setEditingProgram] = useState<number | null>(null)
@@ -364,16 +365,14 @@ const AdminPrograms = () => {
                   <>
                     {showVideoInput ? (
                       <div className="mb-4 space-y-3">
-                        <input
-                          type="url"
+                        <MediaInput
                           value={urlValue}
-                          onChange={(e) => setUrlValue(e.target.value)}
-                          placeholder="Enter video URL"
-                          className={`input-field ${!isValidVideoUrl(urlValue) && urlValue ? 'border-red-300' : ''}`}
+                          onChange={(url) => setUrlValue(url)}
+                          type="videos"
+                          label="Video URL"
+                          placeholder="Enter video URL or select from library"
+                          showPreview={false}
                         />
-                        {!isValidVideoUrl(urlValue) && urlValue && (
-                          <p className="text-red-600 text-sm">Please enter a valid video URL</p>
-                        )}
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleUrlSubmit(program.id, 'video')}
@@ -393,16 +392,14 @@ const AdminPrograms = () => {
                       </div>
                     ) : showImageInput ? (
                       <div className="mb-4 space-y-3">
-                        <input
-                          type="url"
+                        <MediaInput
                           value={urlValue}
-                          onChange={(e) => setUrlValue(e.target.value)}
-                          placeholder="Enter image URL"
-                          className={`input-field ${!isValidImageUrl(urlValue) && urlValue ? 'border-red-300' : ''}`}
+                          onChange={(url) => setUrlValue(url)}
+                          type="images"
+                          label="Image URL"
+                          placeholder="Enter image URL or select from library"
+                          showPreview={false}
                         />
-                        {!isValidImageUrl(urlValue) && urlValue && (
-                          <p className="text-red-600 text-sm">Please enter a valid image URL</p>
-                        )}
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleUrlSubmit(program.id, 'image')}

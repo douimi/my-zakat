@@ -5,6 +5,7 @@ import { eventsAPI, getStaticFileUrl } from '../../utils/api'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import { isValidImageUrl, getImageUrl } from '../../utils/mediaHelpers'
 import type { Event } from '../../types'
+import MediaInput from '../../components/MediaInput'
 
 interface EventFormData {
   title: string
@@ -227,39 +228,13 @@ const AdminEvents = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Event Photo URL
-                </label>
-                <input
-                  type="url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
-                  placeholder="https://example.com/photo.jpg"
-                  className={`input-field ${!isValidImageUrl(formData.image_url) ? 'border-red-300' : ''}`}
-                />
-                {!isValidImageUrl(formData.image_url) && formData.image_url && (
-                  <p className="text-red-600 text-sm mt-1">
-                    Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)
-                  </p>
-                )}
-                {formData.image_url && isValidImageUrl(formData.image_url) && (
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-600">Preview:</p>
-                    <img 
-                      src={formData.image_url} 
-                      alt="Event preview" 
-                      className="w-20 h-20 object-cover rounded mt-1"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                  </div>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter a direct URL to a photo (supports jpg, jpeg, png, gif, webp, svg)
-                </p>
-              </div>
+              <MediaInput
+                value={formData.image_url}
+                onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+                type="images"
+                label="Event Photo URL"
+                placeholder="Enter image URL or select from library"
+              />
 
               <div className="flex justify-end space-x-4 pt-4">
                 <button

@@ -4,6 +4,7 @@ from sqlalchemy import func
 import aiofiles
 import os
 from datetime import datetime
+from s3_service import upload_file, generate_object_key, get_file_url
 
 from database import get_db
 from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting, User
@@ -82,27 +83,27 @@ async def upload_media(
     if type == 'hero_video':
         if not file.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
-        upload_dir = "uploads/media/videos"
+        category = "videos"
         max_size = 50 * 1024 * 1024  # 50MB
     elif type.startswith('program_video'):
         if not file.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
-        upload_dir = "uploads/media/videos"
+        category = "videos"
         max_size = 100 * 1024 * 1024  # 100MB
     elif type.startswith('program_image'):
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
-        upload_dir = "uploads/media/images"
+        category = "images"
         max_size = 5 * 1024 * 1024  # 5MB
     elif type.startswith('gallery_item'):
         # Gallery items can be either images or videos
         if not (file.content_type.startswith('image/') or file.content_type.startswith('video/')):
             raise HTTPException(status_code=400, detail="File must be an image or video")
         if file.content_type.startswith('video/'):
-            upload_dir = "uploads/media/videos"
+            category = "videos"
             max_size = 100 * 1024 * 1024  # 100MB
         else:
-            upload_dir = "uploads/media/images"
+            category = "images"
             max_size = 5 * 1024 * 1024  # 5MB
     else:
         raise HTTPException(status_code=400, detail="Invalid media type")
@@ -112,31 +113,44 @@ async def upload_media(
     if len(file_content) > max_size:
         raise HTTPException(status_code=400, detail="File size too large")
     
-    # Create uploads directory if it doesn't exist
-    os.makedirs(upload_dir, exist_ok=True)
-    
     # Generate unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_extension = os.path.splitext(file.filename)[1] if file.filename else ''
     filename = f"{type}_{timestamp}{file_extension}"
-    file_path = os.path.join(upload_dir, filename)
     
-    # Save file
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(file_content)
-    
-    # Determine upload type for path
-    if type == 'hero_video' or type.startswith('program_video') or (type.startswith('gallery_item') and file.content_type.startswith('video/')):
-        media_type = 'videos'
-    else:
-        media_type = 'images'
-    
-    return {
-        "filename": filename,
-        "path": f"/api/uploads/media/{media_type}/{filename}",
-        "type": type,
-        "content_type": file.content_type
-    }
+    # Upload to S3
+    try:
+        object_key = generate_object_key(category, filename)
+        s3_url = upload_file(
+            file_content=file_content,
+            object_key=object_key,
+            content_type=file.content_type,
+            metadata={"type": type, "original_filename": file.filename or ""}
+        )
+        
+        return {
+            "filename": filename,
+            "url": s3_url,
+            "path": s3_url,  # Keep for backward compatibility
+            "type": type,
+            "content_type": file.content_type
+        }
+    except Exception as e:
+        # Fallback to local storage if S3 fails
+        upload_dir = f"uploads/media/{category}"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+        
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(file_content)
+        
+        return {
+            "filename": filename,
+            "url": f"/api/uploads/media/{category}/{filename}",
+            "path": f"/api/uploads/media/{category}/{filename}",
+            "type": type,
+            "content_type": file.content_type
+        }
 
 
 # User Management Endpoints

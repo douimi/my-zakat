@@ -15,7 +15,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  MapPin
+  MapPin,
+  Sparkles,
+  HeartHandshake
 } from 'lucide-react'
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI, programCategoriesAPI } from '../utils/api'
 import type { Event, ProgramCategory } from '../types'
@@ -160,6 +162,82 @@ const Home = () => {
     <div className="min-h-screen">
       {/* Slideshow Section */}
       <Slideshow />
+
+      {/* Our Foundation */}
+      <section className="py-20 bg-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl"></div>
+        </div>
+        <div className="section-container relative z-10">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-6">
+                <Sparkles className="w-4 h-4" />
+                <span>Our Foundation</span>
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+                Built on Personal Commitment
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                From individual campaigns to a platform for change
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+              <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
+                <div className="flex items-center mb-6">
+                  <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                    <HeartHandshake className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900">Personal Beginnings</h3>
+                </div>
+                <p className="text-gray-700 leading-relaxed text-lg">
+                  MyZakat Zakat Distribution Foundation emerged from a series of personal donation campaigns carried out throughout our founder's career. 
+                  What began as individual efforts to address immediate needs has grown into a dedicated platform for amplifying charitable impact.
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
+                <div className="flex items-center mb-6">
+                  <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                    <TrendingUp className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900">Authentic Stories</h3>
+                </div>
+                <p className="text-gray-700 leading-relaxed text-lg">
+                  The images and stories throughout our platform were captured during these early campaigns. These authentic moments of hope, transformation, 
+                  and community support occurred before this website existed, representing what can be achieved with personal resources and unwavering commitment.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl shadow-2xl p-8 md:p-10 border-2 border-primary-300">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0">
+                  <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg">
+                    <Heart className="w-10 h-10 text-primary-600" />
+                  </div>
+                </div>
+                <div className="flex-1 text-center md:text-left">
+                  <p className="text-2xl font-bold text-white mb-2">
+                    Look at what was accomplished using only personal resources.
+                  </p>
+                  <p className="text-xl text-primary-100">
+                    Now imagine what we can achieve together with your support.
+                  </p>
+                </div>
+                <div className="flex-shrink-0">
+                  <Link to="/donate" className="bg-white text-primary-600 hover:bg-primary-50 text-lg px-8 py-4 rounded-lg font-semibold flex items-center gap-2 group transition-all duration-300 shadow-lg">
+                    Join Us
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Impact Stats */}
       <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">

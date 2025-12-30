@@ -9,6 +9,7 @@ from database import get_db
 from models import GalleryItem
 from schemas import GalleryItemCreate, GalleryItemUpdate, GalleryItemResponse
 from auth_utils import get_current_admin
+from s3_service import upload_file, delete_file, generate_object_key
 
 router = APIRouter()
 
@@ -102,12 +103,12 @@ async def upload_and_create_gallery_item(
     if not is_image and not is_video:
         raise HTTPException(status_code=400, detail="File must be an image or video")
     
-    # Determine upload directory and max size
+    # Determine category and max size
     if is_video:
-        upload_dir = VIDEO_UPLOAD_DIR
+        category = "videos"
         max_size = 100 * 1024 * 1024  # 100MB
     else:
-        upload_dir = IMAGE_UPLOAD_DIR
+        category = "images"
         max_size = 5 * 1024 * 1024  # 5MB
     
     # Check file size
@@ -115,18 +116,32 @@ async def upload_and_create_gallery_item(
     if len(file_content) > max_size:
         raise HTTPException(status_code=400, detail=f"File size too large. Maximum size is {max_size / (1024*1024)}MB")
     
-    # Create uploads directory if it doesn't exist
-    os.makedirs(upload_dir, exist_ok=True)
-    
     # Generate unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_extension = os.path.splitext(file.filename)[1] if file.filename else ''
     filename = f"gallery_{timestamp}{file_extension}"
-    file_path = os.path.join(upload_dir, filename)
     
-    # Save file
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(file_content)
+    # Upload to S3
+    try:
+        object_key = generate_object_key(category, filename)
+        s3_url = upload_file(
+            file_content=file_content,
+            object_key=object_key,
+            content_type=file.content_type,
+            metadata={"original_filename": file.filename or "", "type": "gallery"}
+        )
+        # Store the S3 URL as the filename (for backward compatibility, we'll store URL)
+        stored_filename = s3_url
+    except Exception as e:
+        # Fallback to local storage if S3 fails
+        upload_dir = VIDEO_UPLOAD_DIR if is_video else IMAGE_UPLOAD_DIR
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+        
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(file_content)
+        
+        stored_filename = filename
     
     # If no display_order provided, set it to the max + 1
     if display_order is None:
@@ -139,7 +154,7 @@ async def upload_and_create_gallery_item(
     
     # Create gallery item
     db_item = GalleryItem(
-        media_filename=filename,
+        media_filename=stored_filename,
         display_order=display_order,
         is_active=is_active,
         created_at=datetime.utcnow(),

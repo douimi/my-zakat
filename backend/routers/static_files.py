@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, RedirectResponse
 import os
 from pathlib import Path
+from s3_service import file_exists, get_file_url, download_file, extract_object_key_from_url
 
 router = APIRouter()
 
@@ -79,11 +80,29 @@ async def head_video(filename: str):
 async def serve_video(filename: str, request: Request):
     """
     Serve video files with proper range request support for video playback
+    If filename is an S3 URL, redirect to it. Otherwise check S3 first, then local filesystem.
     """
     # Security: prevent directory traversal
     if '..' in filename or '/' in filename or '\\' in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
+    # If filename is already an S3 URL, redirect to it
+    if filename.startswith('http://') or filename.startswith('https://'):
+        return RedirectResponse(url=filename)
+    
+    # Check S3 first - simple structure: videos/filename
+    object_key = f"videos/{filename}"
+    
+    s3_file_found = False
+    s3_url = None
+    if file_exists(object_key):
+        s3_url = get_file_url(object_key)
+        s3_file_found = True
+    
+    if s3_file_found:
+        return RedirectResponse(url=s3_url)
+    
+    # Fallback to local filesystem
     file_path = os.path.join(VIDEO_DIR, filename)
     
     if not os.path.exists(file_path):
@@ -158,11 +177,29 @@ async def serve_video(filename: str, request: Request):
 async def serve_image(filename: str):
     """
     Serve image files
+    If filename is an S3 URL, redirect to it. Otherwise check S3 first, then local filesystem.
     """
     # Security: prevent directory traversal
     if '..' in filename or '/' in filename or '\\' in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
+    # If filename is already an S3 URL, redirect to it
+    if filename.startswith('http://') or filename.startswith('https://'):
+        return RedirectResponse(url=filename)
+    
+    # Check S3 first - simple structure: images/filename
+    object_key = f"images/{filename}"
+    
+    s3_file_found = False
+    s3_url = None
+    if file_exists(object_key):
+        s3_url = get_file_url(object_key)
+        s3_file_found = True
+    
+    if s3_file_found:
+        return RedirectResponse(url=s3_url)
+    
+    # Fallback to local filesystem
     file_path = os.path.join(IMAGE_DIR, filename)
     
     if not os.path.exists(file_path):

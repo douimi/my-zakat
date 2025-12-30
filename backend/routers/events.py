@@ -9,6 +9,7 @@ from database import get_db
 from models import Event
 from schemas import EventCreate, EventResponse
 from auth_utils import get_current_admin
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 
 router = APIRouter()
 
@@ -36,22 +37,30 @@ async def create_event(
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/events"
-        os.makedirs(upload_dir, exist_ok=True)
-        
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
+        filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
+        content_bytes = await image.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content = await image.read()
-            await f.write(content)
-        
-        image_value = image_filename
+        # Upload to S3
+        try:
+            object_key = generate_object_key("images", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=image.content_type,
+                metadata={"original_filename": image.filename, "type": "event_image"}
+            )
+            image_value = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/events"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            image_value = filename
     elif image_url and image_url.strip():
         # Use image URL if provided and no file upload
         image_value = image_url.strip()
@@ -128,41 +137,58 @@ async def update_event(
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/events"
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Delete old image file if it exists and is a filename (not a URL)
-        if old_image and not old_image.startswith(('http://', 'https://')):
-            old_path = os.path.join(upload_dir, old_image)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        # Delete old image if it exists
+        if old_image:
+            if old_image.startswith('http://') or old_image.startswith('https://'):
+                object_key = extract_object_key_from_url(old_image)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                old_path = os.path.join("uploads/events", old_image)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
+        filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
+        content_bytes = await image.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content = await image.read()
-            await f.write(content)
-        
-        # Update image filename
-        event.image = image_filename
+        # Upload to S3
+        try:
+            object_key = generate_object_key("images", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=image.content_type,
+                metadata={"original_filename": image.filename, "type": "event_image"}
+            )
+            event.image = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/events"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            event.image = filename
     elif image_url is not None:
-        # Delete old image file if clearing/changing image and old one was a filename
-        if old_image and not old_image.startswith(('http://', 'https://')):
-            old_path = os.path.join("uploads/events", old_image)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        # Delete old image file if clearing/changing image
+        if old_image:
+            if old_image.startswith('http://') or old_image.startswith('https://'):
+                object_key = extract_object_key_from_url(old_image)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                old_path = os.path.join("uploads/events", old_image)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Update image URL if provided (empty string clears the image)
         event.image = image_url.strip() if image_url.strip() else None
@@ -182,14 +208,19 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    # Delete associated image file if it exists and is a filename (not a URL)
-    if event.image and not event.image.startswith(('http://', 'https://')):
-        image_path = os.path.join("uploads/events", event.image)
-        if os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-            except Exception as e:
-                print(f"Warning: Could not delete image file {image_path}: {e}")
+    # Delete associated image file if it exists
+    if event.image:
+        if event.image.startswith('http://') or event.image.startswith('https://'):
+            object_key = extract_object_key_from_url(event.image)
+            if object_key:
+                delete_file(object_key)
+        else:
+            image_path = os.path.join("uploads/events", event.image)
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(event)
     db.commit()

@@ -6,6 +6,7 @@ import { urgentNeedsAPI } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import { Link } from 'react-router-dom'
+import MediaInput from '../../components/MediaInput'
 
 interface UrgentNeed {
   id: number
@@ -331,17 +332,13 @@ const AdminUrgentNeeds = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Image URL
-              </label>
-              <input
-                {...register('image_url')}
-                type="url"
-                className="input-field"
-                placeholder="https://example.com/image.jpg"
-              />
-            </div>
+            <MediaInput
+              value={watch('image_url') || ''}
+              onChange={(url) => setValue('image_url', url)}
+              type="images"
+              label="Image URL"
+              placeholder="Enter image URL or select from library"
+            />
 
             {/* Code Editors */}
             <div>

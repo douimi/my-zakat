@@ -1,4 +1,4 @@
-import { Heart, Users, Target, Award, Globe, Shield } from 'lucide-react'
+import { Target, Award, Globe, Shield, TrendingUp, Heart, ArrowRight } from 'lucide-react'
 
 const About = () => {
   return (
@@ -16,6 +16,76 @@ const About = () => {
         </div>
       </div>
 
+      {/* Our Foundation */}
+      <div className="section-container py-16">
+        <div className="max-w-5xl mx-auto mb-16">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-6">
+              <TrendingUp className="w-4 h-4" />
+              <span>Our Foundation</span>
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
+              Built on Personal Commitment
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              From individual campaigns to a platform for change
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+            <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                  <Heart className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900">Personal Beginnings</h3>
+              </div>
+              <p className="text-gray-700 leading-relaxed text-lg">
+                MyZakat Zakat Distribution Foundation emerged from a series of personal donation campaigns carried out throughout our founder's career. 
+                What began as individual efforts to address immediate needs has grown into a dedicated platform for amplifying charitable impact.
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
+                  <TrendingUp className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900">Authentic Stories</h3>
+              </div>
+              <p className="text-gray-700 leading-relaxed text-lg">
+                The images and stories throughout our platform were captured during these early campaigns. These authentic moments of hope, transformation, 
+                and community support occurred before this website existed, representing what can be achieved with personal resources and unwavering commitment.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl shadow-2xl p-8 md:p-10 border-2 border-primary-300">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex-shrink-0">
+                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg">
+                  <Heart className="w-10 h-10 text-primary-600" />
+                </div>
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <p className="text-2xl font-bold text-white mb-2">
+                  Look at what was accomplished using only personal resources.
+                </p>
+                <p className="text-xl text-primary-100">
+                  Now imagine what we can achieve together with your support.
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <a href="/donate" className="bg-white text-primary-600 hover:bg-primary-50 text-lg px-8 py-4 rounded-lg font-semibold flex items-center gap-2 group transition-all duration-300 shadow-lg">
+                  Join Us
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Mission & Vision */}
       <div className="section-container py-16">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
@@ -25,9 +95,8 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Mission</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              MyZakat – Zakat Distribution Foundation is committed to creating a world where no one suffers from poverty or hunger by facilitating the efficient 
-              and transparent distribution of Islamic charitable donations. We strive to connect generous 
-              hearts with those in need, following the principles of Zakat and Sadaqa as outlined in Islam.
+              MyZakat – Zakat Distribution Foundation facilitates the efficient and transparent distribution of Islamic charitable donations, 
+              connecting generous hearts with those in need while following the principles of Zakat and Sadaqa.
             </p>
           </div>
 
@@ -37,9 +106,8 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Vision</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              MyZakat – Zakat Distribution Foundation envisions being the leading platform for Islamic charitable giving, known for our transparency, 
-              efficiency, and impact. We envision a global community where charitable giving is 
-              accessible, trusted, and creates lasting positive change in communities worldwide.
+              We envision being the leading platform for Islamic charitable giving—transparent, efficient, and impactful—creating a global community 
+              where charitable giving is accessible, trusted, and creates lasting positive change.
             </p>
           </div>
         </div>
@@ -87,6 +155,7 @@ const About = () => {
           </div>
         </div>
 
+
         {/* Impact Statistics */}
         <div className="bg-primary-600 rounded-2xl text-white p-8 mb-16">
           <div className="text-center mb-8">
@@ -120,7 +189,7 @@ const About = () => {
         <div className="text-center mb-12">
           <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">What We Do</h2>
           <p className="text-gray-600 max-w-3xl mx-auto">
-            Our comprehensive approach to charitable giving ensures maximum impact and sustainable change
+            Our comprehensive approach ensures maximum impact and sustainable change
           </p>
         </div>
 
@@ -128,7 +197,7 @@ const About = () => {
           <div className="card">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Zakat Distribution</h3>
             <p className="text-gray-600 mb-4">
-              We facilitate the proper calculation and distribution of Zakat according to Islamic guidelines, 
+              Facilitating proper calculation and distribution of Zakat according to Islamic guidelines, 
               ensuring your religious obligation is fulfilled while maximizing impact.
             </p>
             <ul className="text-gray-600 space-y-2">
@@ -142,7 +211,7 @@ const About = () => {
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Emergency Relief</h3>
             <p className="text-gray-600 mb-4">
               Rapid response to natural disasters and humanitarian crises, providing immediate assistance 
-              to affected communities when they need it most.
+              to affected communities.
             </p>
             <ul className="text-gray-600 space-y-2">
               <li>• Emergency food and water supplies</li>
@@ -154,8 +223,8 @@ const About = () => {
           <div className="card">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Education Support</h3>
             <p className="text-gray-600 mb-4">
-              Investing in education to break the cycle of poverty, providing scholarships, school supplies, 
-              and educational infrastructure to underserved communities.
+              Investing in education to break the cycle of poverty through scholarships, school supplies, 
+              and educational infrastructure.
             </p>
             <ul className="text-gray-600 space-y-2">
               <li>• Scholarship programs</li>
@@ -168,7 +237,7 @@ const About = () => {
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Orphan Care</h3>
             <p className="text-gray-600 mb-4">
               Comprehensive support for orphaned children including housing, education, healthcare, 
-              and emotional support to ensure they have the best possible future.
+              and emotional support.
             </p>
             <ul className="text-gray-600 space-y-2">
               <li>• Monthly sponsorship programs</li>

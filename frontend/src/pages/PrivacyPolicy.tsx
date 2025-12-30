@@ -136,8 +136,8 @@ const PrivacyPolicy = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-gray-700"><strong>MyZakat – Zakat Distribution Foundation</strong></p>
                 <p className="text-gray-600">Email: info@myzakat.org</p>
-                <p className="text-gray-600">Phone: +1 (555) 123-4567</p>
-                <p className="text-gray-600">Address: 123 Charity Ave, City, Country</p>
+                <p className="text-gray-600">Phone: +540-676-0330</p>
+                <p className="text-gray-600">Address: 544 Monticello Street, Winchester, VA 22601</p>
               </div>
             </section>
           </div>

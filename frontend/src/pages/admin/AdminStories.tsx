@@ -7,6 +7,7 @@ import { useConfirmation } from '../../hooks/useConfirmation'
 import { getImageUrl } from '../../utils/mediaHelpers'
 import type { Story } from '../../types'
 import axios from 'axios'
+import MediaInput from '../../components/MediaInput'
 
 interface StoryFormData {
   title: string
@@ -15,6 +16,7 @@ interface StoryFormData {
   is_active: boolean
   is_featured: boolean
   video_file: File | null
+  video_url: string
   image_url: string
   remove_video: boolean
 }
@@ -30,6 +32,7 @@ const AdminStories = () => {
     is_active: true,
     is_featured: false,
     video_file: null,
+    video_url: '',
     image_url: '',
     remove_video: false
   })
@@ -156,6 +159,7 @@ const AdminStories = () => {
         is_active: story.is_active,
         is_featured: story.is_featured,
         video_file: null,
+        video_url: story.video_filename || '',
         image_url: story.image_filename || '',
         remove_video: false
       })
@@ -179,6 +183,8 @@ const AdminStories = () => {
     
     if (formData.video_file) {
       submitData.append('video', formData.video_file)
+    } else if (formData.video_url.trim()) {
+      submitData.append('video_filename', formData.video_url.trim())
     }
     
     if (formData.remove_video && editingStory) {
@@ -297,59 +303,45 @@ const AdminStories = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Story Photo URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.image_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
-                    placeholder="https://example.com/photo.jpg"
-                    className={`input-field ${!isValidImageUrl(formData.image_url) ? 'border-red-300' : ''}`}
-                  />
-                  {!isValidImageUrl(formData.image_url) && formData.image_url && (
-                    <p className="text-red-600 text-sm mt-1">
-                      Please enter a valid photo URL (jpg, jpeg, png, gif, webp, svg)
-                    </p>
-                  )}
-                  {formData.image_url && isValidImageUrl(formData.image_url) && (
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-600">Preview:</p>
-                      <img 
-                        src={formData.image_url} 
-                        alt="Story preview" 
-                        className="w-20 h-20 object-cover rounded mt-1"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                        }}
-                      />
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter a direct URL to a photo (supports jpg, jpeg, png, gif, webp, svg)
-                  </p>
-                </div>
+                <MediaInput
+                  value={formData.image_url}
+                  onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+                  type="images"
+                  label="Story Photo URL"
+                  placeholder="Enter image URL or select from library"
+                />
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Video File (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null
-                      setFormData(prev => ({ ...prev, video_file: file }))
-                    }}
-                    className="input-field"
+                  <MediaInput
+                    value={formData.video_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, video_url: url, video_file: null, remove_video: false }))}
+                    type="videos"
+                    label="Video URL (optional)"
+                    placeholder="Enter video URL or select from library"
                   />
-                  {formData.video_file && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      Selected: {formData.video_file.name}
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Or Upload Video File
+                    </label>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null
+                        setFormData(prev => ({ ...prev, video_file: file, video_url: '', remove_video: false }))
+                      }}
+                      className="input-field"
+                    />
+                    {formData.video_file && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Selected: {formData.video_file.name}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload a video file (MP4, WebM, etc.). Maximum size: 100MB
                     </p>
-                  )}
-                  {editingStory?.video_filename && !formData.video_file && !formData.remove_video && (
+                  </div>
+                  {editingStory?.video_filename && !formData.video_file && !formData.video_url && !formData.remove_video && (
                     <div className="mt-2 flex items-center justify-between p-2 bg-gray-50 rounded border">
                       <div className="flex items-center">
                         <Video className="w-4 h-4 text-gray-600 mr-2" />
@@ -366,7 +358,7 @@ const AdminStories = () => {
                             variant: 'danger'
                           })
                           if (confirmed) {
-                            setFormData(prev => ({ ...prev, remove_video: true, video_file: null }))
+                            setFormData(prev => ({ ...prev, remove_video: true, video_file: null, video_url: '' }))
                           }
                         }}
                         className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
@@ -381,9 +373,6 @@ const AdminStories = () => {
                       <p className="text-sm text-red-700">Video will be deleted when you save the story.</p>
                     </div>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Upload a video file (MP4, WebM, etc.). Maximum size: 100MB
-                  </p>
                 </div>
               </div>
 

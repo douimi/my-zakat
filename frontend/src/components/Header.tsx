@@ -12,6 +12,7 @@ const Header = () => {
   const [isUrgentNeedsDropdownOpen, setIsUrgentNeedsDropdownOpen] = useState(false)
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+  const [isScrolled, setIsScrolled] = useState(false)
   const quickLinksRef = useRef<HTMLDivElement>(null)
   const urgentNeedsRef = useRef<HTMLDivElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
@@ -37,6 +38,22 @@ const Header = () => {
   const emergencyBannerCtaUrl = settings?.find((s: any) => s.key === 'emergency_banner_cta_url')?.value || 
     '/donate'
   const emergencyBannerEnabled = settings?.find((s: any) => s.key === 'emergency_banner_enabled')?.value === 'true'
+
+  // Handle scroll detection
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY || document.documentElement.scrollTop
+      setIsScrolled(scrollPosition > 50)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    // Check initial scroll position
+    handleScroll()
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -110,16 +127,39 @@ const Header = () => {
         </div>
       )}
 
-      <header className="bg-white shadow-md border-b border-gray-100 sticky top-0 z-50 backdrop-blur-sm bg-white/95">
+      <header className="bg-white shadow-md border-b border-gray-100 sticky top-0 z-50">
         <div className="w-full px-2 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-24 md:h-28 lg:h-32 py-2 md:py-3 min-w-0">
             {/* Logo */}
-            <Link to="/" className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-transform duration-200 hover:scale-105">
-              <img 
-                src="/logo.png" 
-                alt="MyZakat Logo" 
-                className="h-20 md:h-24 lg:h-28 xl:h-36 2xl:h-44 w-auto object-contain"
-              />
+            <Link 
+              to="/" 
+              className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:scale-105 max-h-full"
+            >
+              {isScrolled ? (
+                <div className="flex items-center gap-2 md:gap-3 transition-all duration-300">
+                  <div className="flex-shrink-0 bg-transparent">
+                    <img 
+                      src="/icon.png" 
+                      alt="MyZakat Icon" 
+                      className="h-10 md:h-12 lg:h-14 xl:h-16 w-auto object-contain bg-transparent"
+                    />
+                  </div>
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-primary-600 font-semibold text-xs md:text-sm lg:text-base xl:text-lg">
+                      Myzakat
+                    </span>
+                    <span className="text-gray-600 font-medium text-[10px] md:text-xs lg:text-sm xl:text-base">
+                      Zakat Distribution Foundation
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <img 
+                  src="/logo.png" 
+                  alt="MyZakat Logo" 
+                  className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain transition-all duration-300"
+                />
+              )}
             </Link>
 
             {/* Desktop Navigation */}

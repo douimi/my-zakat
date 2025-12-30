@@ -5,6 +5,7 @@ import { Image as ImageIcon, Edit, Trash2, Save, X, ArrowUp, ArrowDown } from 'l
 import { slideshowAPI } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
+import MediaInput from '../../components/MediaInput'
 
 interface SlideshowSlide {
   id: number
@@ -35,7 +36,7 @@ const AdminSlideshow = () => {
   
   const { data: slides, isLoading } = useQuery('admin-slideshow', () => slideshowAPI.getAll(false))
   
-  const { register, handleSubmit, reset, setValue } = useForm<SlideForm>()
+  const { register, handleSubmit, reset, setValue, watch } = useForm<SlideForm>()
   
   const createMutation = useMutation(
     (data: SlideForm) => slideshowAPI.create({
@@ -299,20 +300,14 @@ const AdminSlideshow = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Image URL *
-              </label>
-              <input
-                {...register('image_url', { required: true })}
-                type="url"
-                className="input-field"
-                placeholder="https://example.com/image.jpg"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Enter the full URL of the image you want to display
-              </p>
-            </div>
+            <MediaInput
+              value={watch('image_url') || ''}
+              onChange={(url) => setValue('image_url', url)}
+              type="images"
+              label="Image URL"
+              placeholder="Enter image URL or select from library"
+              required={true}
+            />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

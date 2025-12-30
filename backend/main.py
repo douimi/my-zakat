@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
+from s3_service import ensure_bucket_exists
 from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs
 
 load_dotenv()
@@ -103,6 +104,13 @@ def ensure_media_directories():
 # Ensure media directories (skip in test mode)
 if not TESTING_MODE:
     ensure_media_directories()
+    # Initialize S3 bucket
+    try:
+        ensure_bucket_exists()
+        print("✅ S3 bucket initialized successfully")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize S3 bucket: {e}")
+        print("   File uploads will fall back to local storage")
 
 app = FastAPI(
     title="MyZakat API",

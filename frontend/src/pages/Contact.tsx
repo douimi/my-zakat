@@ -79,11 +79,11 @@ const Contact = () => {
                 </div>
                 <div className="flex items-center">
                   <Phone className="w-5 h-5 text-primary-600 mr-3" />
-                  <span>+1 (555) 123-4567</span>
+                  <a href="tel:+15406760330" className="hover:text-primary-700">+540-676-0330</a>
                 </div>
                 <div className="flex items-center">
                   <MapPin className="w-5 h-5 text-primary-600 mr-3" />
-                  <span>123 Charity Ave, City, Country</span>
+                  <span>544 Monticello Street, Winchester, VA 22601</span>
                 </div>
               </div>
             </div>

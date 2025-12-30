@@ -14,6 +14,11 @@ services:
       - "5432:5432"
     networks:
       - zakat_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zakat_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: 
@@ -26,10 +31,18 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       ENVIRONMENT: production
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET_NAME: myzakat-media
+      S3_PUBLIC_URL: http://38.242.253.204:9000
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
     networks:
@@ -48,9 +61,32 @@ services:
     networks:
       - zakat_network
 
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Console port
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} 2>/dev/null; mc ready local || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 40s
+    networks:
+      - zakat_network
+
 volumes:
   postgres_data:
   backend_uploads:
+  minio_data:
 
 networks:
   zakat_network:

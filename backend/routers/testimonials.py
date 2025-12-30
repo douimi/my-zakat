@@ -9,6 +9,7 @@ from database import get_db
 from models import Testimonial
 from schemas import TestimonialCreate, TestimonialResponse
 from auth_utils import get_current_admin
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 
 router = APIRouter()
 
@@ -33,22 +34,30 @@ async def create_testimonial(
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/testimonials"
-        os.makedirs(upload_dir, exist_ok=True)
-        
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
+        filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        content_bytes = await image.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await image.read()
-            await f.write(content_bytes)
-        
-        image_value = image_filename
+        # Upload to S3
+        try:
+            object_key = generate_object_key("images", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=image.content_type,
+                metadata={"original_filename": image.filename, "type": "testimonial_image"}
+            )
+            image_value = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/testimonials"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            image_value = filename
     elif image_url and image_url.strip():
         # Use image URL if provided and no file upload
         image_value = image_url.strip()
@@ -59,20 +68,30 @@ async def create_testimonial(
         if not video.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/testimonials"
-        os.makedirs(upload_dir, exist_ok=True)
-        
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(video.filename)[1]
-        video_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, video_filename)
+        filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        content_bytes = await video.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await video.read()
-            await f.write(content_bytes)
+        # Upload to S3
+        try:
+            object_key = generate_object_key("videos", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=video.content_type,
+                metadata={"original_filename": video.filename, "type": "testimonial_video"}
+            )
+            video_filename = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/testimonials"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            video_filename = filename
     
     # Create testimonial in database
     db_testimonial = Testimonial(
@@ -139,43 +158,62 @@ async def update_testimonial(
         if not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/testimonials"
-        os.makedirs(upload_dir, exist_ok=True)
+        # Delete old image if it exists
+        old_image = testimonial.image
+        if old_image:
+            if old_image.startswith('http://') or old_image.startswith('https://'):
+                # S3 URL
+                object_key = extract_object_key_from_url(old_image)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                # Local file
+                old_path = os.path.join("uploads/testimonials", old_image)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(image.filename)[1]
-        image_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, image_filename)
+        filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        content_bytes = await image.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await image.read()
-            await f.write(content_bytes)
-        
-        # Delete old image file if it exists and is a filename (not URL)
-        old_image = testimonial.image
-        if old_image and not old_image.startswith(('http://', 'https://')):
-            old_path = os.path.join("uploads/testimonials", old_image)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Warning: Could not delete old image file {old_path}: {e}")
-        
-        # Update image filename
-        testimonial.image = image_filename
+        # Upload to S3
+        try:
+            object_key = generate_object_key("images", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=image.content_type,
+                metadata={"original_filename": image.filename, "type": "testimonial_image"}
+            )
+            testimonial.image = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/testimonials"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            testimonial.image = filename
     elif image_url is not None:
-        # Delete old image file if clearing/changing image and old one was a filename
+        # Delete old image file if clearing/changing image
         old_image = testimonial.image
-        if old_image and not old_image.startswith(('http://', 'https://')):
-            old_path = os.path.join("uploads/testimonials", old_image)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Warning: Could not delete old image file {old_path}: {e}")
+        if old_image:
+            if old_image.startswith('http://') or old_image.startswith('https://'):
+                object_key = extract_object_key_from_url(old_image)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                old_path = os.path.join("uploads/testimonials", old_image)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Update image URL if provided (empty string clears the image)
         testimonial.image = image_url.strip() if image_url.strip() else None
@@ -183,43 +221,61 @@ async def update_testimonial(
     # Handle video removal if requested
     if remove_video:
         if testimonial.video_filename:
-            old_path = os.path.join("uploads/testimonials", testimonial.video_filename)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Error deleting video: {e}")
+            if testimonial.video_filename.startswith('http://') or testimonial.video_filename.startswith('https://'):
+                object_key = extract_object_key_from_url(testimonial.video_filename)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                old_path = os.path.join("uploads/testimonials", testimonial.video_filename)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Error deleting video: {e}")
         testimonial.video_filename = None
     # Handle video upload if provided
     elif video and video.filename:
         if not video.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
         
-        # Create uploads directory if it doesn't exist
-        upload_dir = "uploads/testimonials"
-        os.makedirs(upload_dir, exist_ok=True)
-        
         # Delete old video if it exists
         if testimonial.video_filename:
-            old_path = os.path.join(upload_dir, testimonial.video_filename)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    print(f"Error deleting old video: {e}")
+            if testimonial.video_filename.startswith('http://') or testimonial.video_filename.startswith('https://'):
+                object_key = extract_object_key_from_url(testimonial.video_filename)
+                if object_key:
+                    delete_file(object_key)
+            else:
+                old_path = os.path.join("uploads/testimonials", testimonial.video_filename)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception as e:
+                        print(f"Error deleting old video: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(video.filename)[1]
-        video_filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
-        file_path = os.path.join(upload_dir, video_filename)
+        filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
+        content_bytes = await video.read()
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            content_bytes = await video.read()
-            await f.write(content_bytes)
-        
-        testimonial.video_filename = video_filename
+        # Upload to S3
+        try:
+            object_key = generate_object_key("videos", filename)
+            s3_url = upload_file(
+                file_content=content_bytes,
+                object_key=object_key,
+                content_type=video.content_type,
+                metadata={"original_filename": video.filename, "type": "testimonial_video"}
+            )
+            testimonial.video_filename = s3_url
+        except Exception as e:
+            # Fallback to local storage
+            upload_dir = "uploads/testimonials"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content_bytes)
+            testimonial.video_filename = filename
     
     db.commit()
     db.refresh(testimonial)
@@ -253,21 +309,31 @@ async def delete_testimonial(
     
     # Delete associated video file if exists
     if testimonial.video_filename:
-        video_path = os.path.join("uploads/testimonials", testimonial.video_filename)
-        if os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-            except Exception as e:
-                print(f"Warning: Could not delete video file {video_path}: {e}")
+        if testimonial.video_filename.startswith('http://') or testimonial.video_filename.startswith('https://'):
+            object_key = extract_object_key_from_url(testimonial.video_filename)
+            if object_key:
+                delete_file(object_key)
+        else:
+            video_path = os.path.join("uploads/testimonials", testimonial.video_filename)
+            if os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete video file {video_path}: {e}")
     
-    # Delete associated image file if exists and is a filename (not URL)
-    if testimonial.image and not testimonial.image.startswith(('http://', 'https://')):
-        image_path = os.path.join("uploads/testimonials", testimonial.image)
-        if os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-            except Exception as e:
-                print(f"Warning: Could not delete image file {image_path}: {e}")
+    # Delete associated image file if exists
+    if testimonial.image:
+        if testimonial.image.startswith('http://') or testimonial.image.startswith('https://'):
+            object_key = extract_object_key_from_url(testimonial.image)
+            if object_key:
+                delete_file(object_key)
+        else:
+            image_path = os.path.join("uploads/testimonials", testimonial.image)
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"Warning: Could not delete image file {image_path}: {e}")
     
     testimonial = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
     if not testimonial:

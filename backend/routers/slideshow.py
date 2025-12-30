@@ -11,6 +11,7 @@ from database import get_db
 from models import SlideshowSlide
 from schemas import SlideshowSlideCreate, SlideshowSlideUpdate, SlideshowSlideResponse
 from auth_utils import get_current_admin
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 
 router = APIRouter()
 
@@ -216,12 +217,17 @@ async def upload_slideshow_image(
     
     # Delete old image if it exists (check both image_filename and image_url)
     if slide.image_filename:
-        old_path = os.path.join(UPLOAD_DIR, slide.image_filename)
-        if os.path.exists(old_path):
-            try:
-                os.remove(old_path)
-            except Exception as e:
-                print(f"Error deleting old image: {e}")
+        if slide.image_filename.startswith('http://') or slide.image_filename.startswith('https://'):
+            object_key = extract_object_key_from_url(slide.image_filename)
+            if object_key:
+                delete_file(object_key)
+        else:
+            old_path = os.path.join(UPLOAD_DIR, slide.image_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    print(f"Error deleting old image: {e}")
     
     # Also check image_url if it's a filename (not a URL)
     if slide.image_url and not slide.image_url.startswith(('http://', 'https://')):
@@ -232,12 +238,25 @@ async def upload_slideshow_image(
             except Exception as e:
                 print(f"Error deleting old image from image_url: {e}")
     
-    # Save new image
-    async with aiofiles.open(file_path, 'wb') as f:
-        content = await file.read()
-        await f.write(content)
+    # Read file content
+    content_bytes = await file.read()
     
-    slide.image_filename = filename
+    # Upload to S3
+    try:
+        object_key = generate_object_key("images", filename)
+        s3_url = upload_file(
+            file_content=content_bytes,
+            object_key=object_key,
+            content_type=file.content_type,
+            metadata={"original_filename": file.filename or "", "type": "slideshow_image", "slide_id": str(slide_id)}
+        )
+        slide.image_filename = s3_url
+    except Exception as e:
+        # Fallback to local storage
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content_bytes)
+        slide.image_filename = filename
     db.commit()
     db.refresh(slide)
     

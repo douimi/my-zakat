@@ -9,6 +9,7 @@ from database import get_db
 from models import ProgramCategory
 from schemas import ProgramCategoryCreate, ProgramCategoryUpdate, ProgramCategoryResponse
 from auth_utils import get_current_admin
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 
 router = APIRouter()
 
@@ -193,26 +194,42 @@ async def upload_category_video(
     # Generate filename
     file_ext = Path(file.filename).suffix
     filename = f"category_{category_id}_{category.slug}{file_ext}"
-    file_path = UPLOAD_DIR / filename
     
     # Delete old video if exists
     if category.video_filename:
-        old_path = UPLOAD_DIR / category.video_filename
-        if old_path.exists():
-            try:
-                old_path.unlink()
-            except Exception as e:
-                print(f"Warning: Could not delete old video {old_path}: {e}")
+        if category.video_filename.startswith('http://') or category.video_filename.startswith('https://'):
+            object_key = extract_object_key_from_url(category.video_filename)
+            if object_key:
+                delete_file(object_key)
+        else:
+            old_path = UPLOAD_DIR / category.video_filename
+            if old_path.exists():
+                try:
+                    old_path.unlink()
+                except Exception as e:
+                    print(f"Warning: Could not delete old video {old_path}: {e}")
     
-    # Save new video
+    # Read file content
+    file_content = await file.read()
+    
+    # Upload to S3
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        category.video_filename = filename
-        db.commit()
-        db.refresh(category)
-        return category
+        object_key = generate_object_key("videos", filename)
+        s3_url = upload_file(
+            file_content=file_content,
+            object_key=object_key,
+            content_type=file.content_type,
+            metadata={"original_filename": file.filename or "", "type": "category_video", "category_id": str(category_id)}
+        )
+        category.video_filename = s3_url
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload video: {str(e)}")
+        # Fallback to local storage
+        file_path = UPLOAD_DIR / filename
+        with open(file_path, "wb") as buffer:
+            buffer.write(file_content)
+        category.video_filename = filename
+    
+    db.commit()
+    db.refresh(category)
+    return category
 

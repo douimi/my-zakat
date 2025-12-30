@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import type { GalleryItem } from '../../types'
+import MediaInput from '../../components/MediaInput'
 
 interface GalleryItemType extends GalleryItem {
   // Extended type
@@ -260,37 +261,41 @@ const AdminGallery = () => {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
+            <div className="space-y-3">
+              <MediaInput
                 value={urlValue}
-                onChange={(e) => setUrlValue(e.target.value)}
-                placeholder="https://example.com/image.jpg or https://example.com/video.mp4"
-                className="input-field flex-1"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleUrlSubmit()
-                  }
-                }}
+                onChange={(url) => setUrlValue(url)}
+                type="all"
+                label="Media URL"
+                placeholder="Enter image or video URL or select from library"
+                showPreview={false}
               />
-              <button
-                onClick={handleUrlSubmit}
-                disabled={!urlValue.trim() || createFromUrlMutation.isLoading}
-                className="btn-primary"
-              >
-                {createFromUrlMutation.isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  'Add'
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUrlSubmit}
+                  disabled={!urlValue.trim() || createFromUrlMutation.isLoading}
+                  className="btn-primary flex-1"
+                >
+                  {createFromUrlMutation.isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Gallery Item'
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUrlInput(false)
+                    setUrlValue('')
+                  }}
+                  className="btn-outline"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-            <p className="text-sm text-blue-700 mt-2">
-              Enter a direct URL to an image or video file (must start with http:// or https://)
-            </p>
           </div>
         )}
       </div>
