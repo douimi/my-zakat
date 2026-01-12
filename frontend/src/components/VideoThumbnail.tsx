@@ -89,11 +89,57 @@ const VideoThumbnail = ({
       const handleLoadedMetadata = () => {
         if (!video || !mounted) return
         try {
+          // Try to seek to a specific time for thumbnail
           const duration = video.duration || 10
           const seekTime = Math.min(1, duration * 0.1)
-          video.currentTime = seekTime
+          
+          // If video is already loaded enough, try to capture immediately
+          if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+            try {
+              video.currentTime = seekTime
+            } catch (e) {
+              // If seeking fails, try to capture current frame
+              captureCurrentFrame()
+            }
+          } else {
+            video.currentTime = seekTime
+          }
         } catch (e) {
-          setIsGenerating(false)
+          // If seeking fails, try to capture current frame
+          captureCurrentFrame()
+        }
+      }
+
+      const captureCurrentFrame = () => {
+        if (!video || !canvas || !ctx || !mounted) return
+        
+        try {
+          const width = video.videoWidth || 640
+          const height = video.videoHeight || 360
+          
+          if (width > 0 && height > 0) {
+            canvas.width = width
+            canvas.height = height
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+            
+            if (mounted) {
+              try {
+                localStorage.setItem(cacheKey, dataUrl)
+              } catch (e) {
+                // localStorage full, ignore
+              }
+              setThumbnailUrl(dataUrl)
+              setIsGenerating(false)
+              if (onThumbnailGenerated) {
+                onThumbnailGenerated(dataUrl)
+              }
+            }
+          }
+        } catch (error) {
+          if (mounted) {
+            setIsGenerating(false)
+          }
         }
       }
 
@@ -145,17 +191,49 @@ const VideoThumbnail = ({
       video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true })
       video.addEventListener('seeked', handleSeeked, { once: true })
       video.addEventListener('error', handleError, { once: true })
+      video.addEventListener('loadeddata', () => {
+        // If metadata loads but seek doesn't work, try to capture first frame
+        if (!thumbnailUrl && mounted) {
+          try {
+            const width = video.videoWidth || 640
+            const height = video.videoHeight || 360
+            
+            if (width > 0 && height > 0 && canvas && ctx) {
+              canvas.width = width
+              canvas.height = height
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+              
+              if (mounted) {
+                try {
+                  localStorage.setItem(cacheKey, dataUrl)
+                } catch (e) {
+                  // localStorage full, ignore
+                }
+                setThumbnailUrl(dataUrl)
+                setIsGenerating(false)
+                if (onThumbnailGenerated) {
+                  onThumbnailGenerated(dataUrl)
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }, { once: true })
       
       video.preload = 'metadata'
       video.muted = true
       video.playsInline = true
+      video.crossOrigin = videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined
       
       // Set timeout
       const timeout = setTimeout(() => {
         if (mounted) {
           setIsGenerating(false)
         }
-      }, 5000) // Reduced to 5 seconds
+      }, 10000) // Increased to 10 seconds for slower connections
 
       video.load()
 
@@ -183,9 +261,10 @@ const VideoThumbnail = ({
         ref={videoRef}
         src={videoSrc}
         className="hidden"
-        preload="none"
+        preload="metadata"
         muted
         playsInline
+        crossOrigin={videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined}
       />
       <canvas ref={canvasRef} className="hidden" />
 
