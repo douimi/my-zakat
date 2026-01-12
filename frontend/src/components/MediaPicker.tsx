@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from 'react-query'
-import { X, Search, Upload, Image as ImageIcon, Video, Loader2, Check } from 'lucide-react'
+import { X, Search, Upload, Image as ImageIcon, Video, Loader2, Check, Maximize2 } from 'lucide-react'
 import { mediaAPI, getStaticFileUrl } from '../utils/api'
 
 interface MediaItem {
@@ -24,6 +24,7 @@ interface MediaPickerProps {
 const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: MediaPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTab, setSelectedTab] = useState<'images' | 'videos'>(mediaType === 'images' ? 'images' : mediaType === 'videos' ? 'videos' : 'images')
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null)
 
   const { data: mediaData, isLoading } = useQuery(
     ['media-picker', mediaType],
@@ -170,12 +171,12 @@ const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: Med
                             }`}
                             onClick={() => handleSelect(image)}
                           >
-                            <div className="aspect-square bg-gray-100 relative">
+                            <div className="aspect-square bg-gray-100 relative group/item">
                               <img
                                 src={imageUrl}
                                 alt={image.filename}
-                                className="w-full h-full object-cover"
-                                crossOrigin="anonymous"
+                                className="w-full h-full object-cover cursor-pointer"
+                                crossOrigin={imageUrl.startsWith('http://') || imageUrl.startsWith('https://') ? 'anonymous' : undefined}
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement
@@ -191,12 +192,20 @@ const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: Med
                                 onLoad={() => {
                                   console.log('Image loaded successfully:', imageUrl)
                                 }}
+                                onMouseEnter={() => setPreviewItem(image)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPreviewItem(image)
+                                }}
                               />
                               {isSelected && (
-                                <div className="absolute top-2 right-2 bg-blue-600 rounded-full p-1">
+                                <div className="absolute top-2 right-2 bg-blue-600 rounded-full p-1 z-10">
                                   <Check className="w-4 h-4 text-white" />
                                 </div>
                               )}
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover/item:bg-opacity-20 transition-opacity flex items-center justify-center">
+                                <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover/item:opacity-100 transition-opacity" />
+                              </div>
                             </div>
                             <div className="p-2 bg-white">
                               <p className="text-xs text-gray-600 truncate" title={image.filename}>
@@ -239,12 +248,18 @@ const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: Med
                             }`}
                             onClick={() => handleSelect(video)}
                           >
-                            <div className="aspect-video bg-gray-900 relative">
+                            <div className="aspect-video bg-gray-900 relative group/item">
                               <video
                                 src={videoUrl}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-cover cursor-pointer"
                                 muted
                                 preload="metadata"
+                                crossOrigin={videoUrl.startsWith('http://') || videoUrl.startsWith('https://') ? 'anonymous' : undefined}
+                                onMouseEnter={() => setPreviewItem(video)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPreviewItem(video)
+                                }}
                               />
                               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
                                 <Video className="w-12 h-12 text-white opacity-75" />
@@ -289,6 +304,44 @@ const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: Med
           </button>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewItem && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-75"
+          onClick={() => setPreviewItem(null)}
+        >
+          <div className="relative max-w-7xl max-h-[90vh] p-4">
+            <button
+              onClick={() => setPreviewItem(null)}
+              className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full p-2"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            {selectedTab === 'images' ? (
+              <img
+                src={getMediaUrl(previewItem)}
+                alt={previewItem.filename}
+                className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                crossOrigin={getMediaUrl(previewItem).startsWith('http://') || getMediaUrl(previewItem).startsWith('https://') ? 'anonymous' : undefined}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <video
+                src={getMediaUrl(previewItem)}
+                className="max-w-full max-h-[90vh] rounded-lg"
+                controls
+                autoPlay
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
+            <div className="mt-4 text-center text-white">
+              <p className="text-lg font-medium">{previewItem.filename}</p>
+              <p className="text-sm text-gray-300 mt-1">{formatFileSize(previewItem.size)}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

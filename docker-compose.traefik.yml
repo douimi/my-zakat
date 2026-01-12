@@ -74,7 +74,7 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-myzakat-media}
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_SSL=false
-      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-http://31.97.131.31:9000}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-https://media.myzakat.org}
     depends_on:
       db:
         condition: service_healthy
@@ -164,12 +164,24 @@ services:
       - "traefik.http.routers.minio-console-ip.rule=Host(`31.97.131.31`)"
       - "traefik.http.routers.minio-console-ip.entrypoints=web"
       - "traefik.http.services.minio-console-ip.loadbalancer.server.port=9001"
-      # MinIO API (port 9000) - HTTPS via domain
+      # MinIO API (port 9000) - HTTPS via domain (admin access with auth)
       - "traefik.http.routers.minio-api.rule=Host(`minio-api.myzakat.org`)"
       - "traefik.http.routers.minio-api.entrypoints=websecure"
       - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
       - "traefik.http.routers.minio-api.middlewares=auth"
+      # MinIO API (port 9000) - HTTPS public access for media (no auth)
+      - "traefik.http.routers.minio-media.rule=Host(`media.myzakat.org`)"
+      - "traefik.http.routers.minio-media.entrypoints=websecure"
+      - "traefik.http.routers.minio-media.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio-media.loadbalancer.server.port=9000"
+      # CORS headers for media access
+      - "traefik.http.middlewares.minio-cors.headers.accesscontrolallowmethods=GET,HEAD,OPTIONS"
+      - "traefik.http.middlewares.minio-cors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.minio-cors.headers.accesscontrolalloworiginlist=https://myzakat.org,https://www.myzakat.org"
+      - "traefik.http.middlewares.minio-cors.headers.accesscontrolmaxage=3600"
+      - "traefik.http.middlewares.minio-cors.headers.addvaryheader=true"
+      - "traefik.http.routers.minio-media.middlewares=minio-cors"
 
 volumes:
   postgres_data:
