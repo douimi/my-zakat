@@ -410,6 +410,7 @@ const Home = () => {
                             src={media.url} 
                             alt={category.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            crossOrigin={media.url.startsWith('http://') || media.url.startsWith('https://') ? 'anonymous' : undefined}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none'
                             }}
@@ -1038,6 +1039,7 @@ const GallerySection = () => {
                 alt={`Gallery ${item.type} ${item.id}`}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 loading="lazy"
+                crossOrigin={(item.thumbnail || item.url)?.startsWith('http://') || (item.thumbnail || item.url)?.startsWith('https://') ? 'anonymous' : undefined}
                 onError={(e) => {
                   // Hide image if it fails to load instead of trying placeholder
                   e.currentTarget.style.display = 'none'

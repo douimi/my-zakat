@@ -161,6 +161,7 @@ const FeaturedStoryCard = ({ story }: FeaturedStoryCardProps) => {
             src={imageUrl} 
             alt={story.title}
             className="w-full h-full object-cover"
+            crossOrigin={imageUrl?.startsWith('http://') || imageUrl?.startsWith('https://') ? 'anonymous' : undefined}
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}
@@ -229,6 +230,7 @@ const StoryCard = ({ story }: StoryCardProps) => {
             src={imageUrl} 
             alt={story.title}
             className="w-full h-full object-cover"
+            crossOrigin={imageUrl?.startsWith('http://') || imageUrl?.startsWith('https://') ? 'anonymous' : undefined}
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}

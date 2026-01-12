@@ -101,6 +101,7 @@ const LazyImage: React.FC<LazyImageProps> = ({
             onLoad={handleLoad}
             onError={handleError}
             decoding="async"
+            crossOrigin={src.startsWith('http://') || src.startsWith('https://') ? 'anonymous' : undefined}
           />
         </>
       )}

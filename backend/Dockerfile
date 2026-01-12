@@ -24,6 +24,7 @@ RUN mkdir -p certificates
 EXPOSE 8000
 
 # Run the application with optimized settings for production
-# --log-level warning: Reduces log verbosity (only shows warnings and errors)
-# --no-access-log: Disables access logs (206 responses are normal for video streaming)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--timeout-keep-alive", "65", "--limit-concurrency", "1000", "--backlog", "2048", "--log-level", "warning", "--no-access-log"]
+# --log-level info: Shows info, warnings, and errors (change to "warning" for production)
+# Python unbuffered output ensures print statements appear immediately
+ENV PYTHONUNBUFFERED=1
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--timeout-keep-alive", "65", "--limit-concurrency", "1000", "--backlog", "2048", "--log-level", "info"]

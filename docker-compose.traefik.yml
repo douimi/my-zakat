@@ -56,6 +56,7 @@ services:
     container_name: myzakat-backend
     restart: unless-stopped
     environment:
+      - PYTHONUNBUFFERED=1  # Ensure Python output is unbuffered and logs are visible
       - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD}@db:5432/myzakat
       - SECRET_KEY=${SECRET_KEY}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}

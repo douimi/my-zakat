@@ -106,6 +106,7 @@ const Programs = () => {
                             src={media.url} 
                             alt={category.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            crossOrigin={media.url?.startsWith('http://') || media.url?.startsWith('https://') ? 'anonymous' : undefined}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none'
                             }}

@@ -175,9 +175,16 @@ const MediaPicker = ({ isOpen, onClose, onSelect, mediaType, currentValue }: Med
                                 src={imageUrl}
                                 alt={image.filename}
                                 className="w-full h-full object-cover"
+                                crossOrigin="anonymous"
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement
-                                  target.src = '/placeholder-image.png'
+                                  // Hide broken image instead of trying to load non-existent placeholder
+                                  target.style.display = 'none'
+                                  // Show error indicator
+                                  const parent = target.parentElement
+                                  if (parent) {
+                                    parent.innerHTML = '<div class="w-full h-full bg-gray-200 flex items-center justify-center"><span class="text-gray-400 text-xs">Image unavailable</span></div>'
+                                  }
                                 }}
                               />
                               {isSelected && (
