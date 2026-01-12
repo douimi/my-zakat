@@ -119,10 +119,54 @@ async def list_videos(
                     "created_at": file_info['last_modified'].isoformat() if file_info.get('last_modified') else datetime.utcnow().isoformat(),
                     "modified_at": file_info['last_modified'].isoformat() if file_info.get('last_modified') else datetime.utcnow().isoformat(),
                     "location": "videos",
-                    "used_in": used_in
+                    "used_in": used_in,
+                    "exists_in_s3": True  # Mark that file exists in S3
                 })
     except Exception as e:
         print(f"Error listing videos from S3: {e}")
+    
+    # Also check database for videos that might be referenced but deleted from S3
+    # This helps identify orphaned database entries
+    try:
+        from s3_service import file_exists, extract_object_key_from_url
+        
+        # Check gallery items for videos
+        gallery_videos = db.query(GalleryItem).filter(
+            GalleryItem.media_filename.like('%.mp4')
+            | GalleryItem.media_filename.like('%.webm')
+            | GalleryItem.media_filename.like('%.ogg')
+            | GalleryItem.media_filename.like('%.avi')
+            | GalleryItem.media_filename.like('%.mov')
+            | GalleryItem.media_filename.like('%videos/%')
+        ).all()
+        
+        for gallery_item in gallery_videos:
+            filename_or_url = gallery_item.media_filename
+            # Extract filename if it's a URL
+            if filename_or_url.startswith('http://') or filename_or_url.startswith('https://'):
+                object_key = extract_object_key_from_url(filename_or_url)
+                if object_key and object_key.startswith('videos/'):
+                    filename = object_key.split('/')[-1]
+                    # Check if already in videos list
+                    if not any(v.get('filename') == filename for v in videos):
+                        # Check if file exists in S3
+                        exists = file_exists(object_key)
+                        if not exists:
+                            # File doesn't exist in S3, mark as orphaned
+                            videos.append({
+                                "filename": filename,
+                                "url": filename_or_url,
+                                "path": filename_or_url,
+                                "size": 0,
+                                "created_at": gallery_item.created_at.isoformat() if gallery_item.created_at else datetime.utcnow().isoformat(),
+                                "modified_at": gallery_item.updated_at.isoformat() if gallery_item.updated_at else datetime.utcnow().isoformat(),
+                                "location": "database",
+                                "used_in": get_used_in(filename_or_url),
+                                "exists_in_s3": False,  # Mark as not existing in S3
+                                "orphaned": True  # Mark as orphaned database entry
+                            })
+    except Exception as e:
+        print(f"Error checking database for orphaned videos: {e}")
     
     # Check local filesystem as fallback
     # Check media/videos directory (general videos)
@@ -306,12 +350,27 @@ async def delete_video(
 ):
     """
     Delete a video file and remove references from all sections where it's used
+    Handles both S3 and local filesystem storage
     """
+    from s3_service import file_exists, delete_file, extract_object_key_from_url
+    
     # Security: prevent directory traversal
-    if '..' in filename or '/' in filename or '\\' in filename:
+    if '..' in filename or ('/' in filename and not filename.startswith('http')):
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    # Check if video exists in any directory
+    # Check if video exists in S3 or local filesystem
+    # First, try to extract object key if filename is a URL
+    object_key = None
+    if filename.startswith('http://') or filename.startswith('https://'):
+        object_key = extract_object_key_from_url(filename)
+        if object_key and object_key.startswith('videos/'):
+            filename = object_key.split('/')[-1]  # Extract just the filename
+    
+    # Check S3 first
+    s3_object_key = f"videos/{filename}"
+    video_exists_in_s3 = file_exists(s3_object_key)
+    
+    # Check local filesystem as fallback
     media_video_path = os.path.join(VIDEO_UPLOAD_DIR, filename)
     stories_video_path = os.path.join("uploads/stories", filename)
     testimonials_video_path = os.path.join("uploads/testimonials", filename)
@@ -320,8 +379,11 @@ async def delete_video(
     video_exists_in_stories = os.path.exists(stories_video_path)
     video_exists_in_testimonials = os.path.exists(testimonials_video_path)
     
-    if not video_exists_in_media and not video_exists_in_stories and not video_exists_in_testimonials:
-        raise HTTPException(status_code=404, detail="Video not found")
+    # Check if video exists anywhere (S3 or local)
+    video_exists = video_exists_in_s3 or video_exists_in_media or video_exists_in_stories or video_exists_in_testimonials
+    
+    # Even if file doesn't exist, we should still clean up database references
+    # This handles the case where files were deleted from S3 but DB entries remain
     
     try:
         # Remove references from Stories
@@ -374,17 +436,38 @@ async def delete_video(
         if settings_cleared:
             db.commit()
         
-        # Delete the actual file(s)
+        # Delete the actual file(s) from S3 and local filesystem
         deleted_files = []
+        
+        # Delete from S3 if it exists
+        if video_exists_in_s3:
+            try:
+                delete_file(s3_object_key)
+                deleted_files.append(f"S3: videos/{filename}")
+                print(f"✅ Deleted video from S3: {s3_object_key}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete video from S3: {e}")
+                # Continue even if S3 deletion fails
+        
+        # Delete from local filesystem if it exists
         if video_exists_in_media:
-            os.remove(media_video_path)
-            deleted_files.append(f"media/videos/{filename}")
+            try:
+                os.remove(media_video_path)
+                deleted_files.append(f"media/videos/{filename}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete local file: {e}")
         if video_exists_in_stories:
-            os.remove(stories_video_path)
-            deleted_files.append(f"stories/{filename}")
+            try:
+                os.remove(stories_video_path)
+                deleted_files.append(f"stories/{filename}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete local file: {e}")
         if video_exists_in_testimonials:
-            os.remove(testimonials_video_path)
-            deleted_files.append(f"testimonials/{filename}")
+            try:
+                os.remove(testimonials_video_path)
+                deleted_files.append(f"testimonials/{filename}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete local file: {e}")
         
         # Count affected records
         affected_count = len(stories_with_video) + len(testimonials_with_video) + len(gallery_items_with_video)

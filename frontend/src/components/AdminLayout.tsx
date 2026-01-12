@@ -18,7 +18,9 @@ import {
   Film,
   AlertCircle,
   Video,
-  TrendingUp
+  TrendingUp,
+  Trash2,
+  FolderOpen
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
@@ -46,6 +48,8 @@ const AdminLayout = () => {
     { name: 'Videos', href: '/admin/videos', icon: Video },
     { name: 'Slideshow', href: '/admin/slideshow', icon: Film },
     { name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
+    { name: 'Media Cleanup', href: '/admin/cleanup', icon: Trash2 },
+    { name: 'S3 Media Browser', href: '/admin/s3-media', icon: FolderOpen },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
   ]
 

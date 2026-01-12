@@ -233,21 +233,66 @@ async def delete_gallery_item(
     if not db_item:
         raise HTTPException(status_code=404, detail="Gallery item not found")
     
-    # Delete the associated file if it exists
+    # Delete the associated file from S3 and local filesystem
     filename = db_item.media_filename
     is_video = filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov'))
     
-    if is_video:
-        file_path = os.path.join(VIDEO_UPLOAD_DIR, filename)
+    # Extract object key if filename is a URL
+    object_key = None
+    if filename.startswith('http://') or filename.startswith('https://'):
+        object_key = extract_object_key_from_url(filename)
+        if object_key:
+            # Delete from S3
+            try:
+                delete_file(object_key)
+                print(f"✅ Deleted gallery item from S3: {object_key}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete from S3: {e}")
+            
+            # Also delete thumbnail if it exists
+            if is_video and db_item.thumbnail_url:
+                thumbnail_key = extract_object_key_from_url(db_item.thumbnail_url)
+                if thumbnail_key:
+                    try:
+                        delete_file(thumbnail_key)
+                        print(f"✅ Deleted thumbnail from S3: {thumbnail_key}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete thumbnail from S3: {e}")
     else:
-        file_path = os.path.join(IMAGE_UPLOAD_DIR, filename)
-    
-    if os.path.exists(file_path):
+        # Handle local filesystem deletion (legacy)
+        if is_video:
+            file_path = os.path.join(VIDEO_UPLOAD_DIR, filename)
+            object_key = f"videos/{filename}"
+        else:
+            file_path = os.path.join(IMAGE_UPLOAD_DIR, filename)
+            object_key = f"images/{filename}"
+        
+        # Try to delete from S3
         try:
-            os.remove(file_path)
+            from s3_service import file_exists
+            if file_exists(object_key):
+                delete_file(object_key)
+                print(f"✅ Deleted gallery item from S3: {object_key}")
         except Exception as e:
-            # Log error but don't fail the deletion
-            print(f"Error deleting file {file_path}: {str(e)}")
+            print(f"⚠️  Warning: Could not delete from S3: {e}")
+        
+        # Try to delete from local filesystem
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete local file: {e}")
+        
+        # Delete thumbnail if it exists
+        if is_video and db_item.thumbnail_url:
+            thumbnail_key = extract_object_key_from_url(db_item.thumbnail_url) if db_item.thumbnail_url.startswith('http') else f"images/{db_item.thumbnail_url.split('/')[-1]}"
+            try:
+                from s3_service import file_exists
+                if file_exists(thumbnail_key):
+                    delete_file(thumbnail_key)
+                    print(f"✅ Deleted thumbnail from S3: {thumbnail_key}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete thumbnail from S3: {e}")
     
     db.delete(db_item)
     db.commit()

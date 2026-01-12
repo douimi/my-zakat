@@ -208,12 +208,13 @@ def upload_file(
         raise
 
 
-def delete_file(object_key: str) -> bool:
+def delete_file(object_key: str, cleanup_db: bool = True) -> bool:
     """
-    Delete a file from S3
+    Delete a file from S3 and optionally clean up database references
     
     Args:
         object_key: S3 object key (path/filename)
+        cleanup_db: If True, automatically remove database references to this file
     
     Returns:
         True if deleted successfully, False otherwise
@@ -221,6 +222,36 @@ def delete_file(object_key: str) -> bool:
     try:
         client = get_s3_client()
         client.delete_object(Bucket=S3_BUCKET_NAME, Key=object_key)
+        print(f"✅ Deleted file from S3: {object_key}")
+        
+        # Automatically clean up database references if requested
+        # Note: This runs in background and may cause a brief delay
+        if cleanup_db:
+            try:
+                # Import here to avoid circular dependencies
+                import threading
+                def cleanup_db_refs():
+                    try:
+                        from database import SessionLocal
+                        from routers.cleanup import cleanup_orphaned_media
+                        db = SessionLocal()
+                        try:
+                            # Clean up any references to orphaned files
+                            cleanup_orphaned_media(db=db, current_admin=None, auto_delete=True)
+                        except Exception as e:
+                            print(f"⚠️  Warning: Could not cleanup DB references for {object_key}: {e}")
+                        finally:
+                            db.close()
+                    except ImportError as e:
+                        print(f"⚠️  Warning: Could not import cleanup module: {e}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not trigger DB cleanup: {e}")
+                
+                cleanup_thread = threading.Thread(target=cleanup_db_refs, daemon=True)
+                cleanup_thread.start()
+            except Exception as e:
+                print(f"⚠️  Warning: Could not trigger DB cleanup: {e}")
+        
         return True
     except Exception as e:
         print(f"Error deleting file from S3: {e}")

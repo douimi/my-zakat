@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X } from 'lucide-react'
+import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X, Play } from 'lucide-react'
 import { galleryAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import type { GalleryItem } from '../../types'
 import MediaInput from '../../components/MediaInput'
+import LazyVideo from '../../components/LazyVideo'
 
 interface GalleryItemType extends GalleryItem {
   // Extended type
@@ -17,6 +18,7 @@ const AdminGallery = () => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlValue, setUrlValue] = useState('')
+  const [playingVideoId, setPlayingVideoId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
@@ -326,11 +328,53 @@ const AdminGallery = () => {
                 {/* Media Preview */}
                 <div className="aspect-square bg-gray-200 rounded-t-lg overflow-hidden relative group mb-4">
                   {isVideo ? (
-                    <VideoThumbnail
-                      videoSrc={mediaUrl}
-                      className="w-full h-full"
-                      alt={`Gallery video ${item.id}`}
-                    />
+                    playingVideoId === item.id ? (
+                      // Show video player when playing
+                      <div className="w-full h-full relative">
+                        <LazyVideo
+                          src={mediaUrl}
+                          className="w-full h-full object-cover"
+                          controls={true}
+                          playsInline={true}
+                          autoPlay={true}
+                        />
+                        <button
+                          onClick={() => setPlayingVideoId(null)}
+                          className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded hover:bg-opacity-70"
+                          title="Close video"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      // Show thumbnail with play button
+                      <div className="w-full h-full relative cursor-pointer" onClick={() => setPlayingVideoId(item.id)}>
+                        {item.thumbnail_url ? (
+                          <img
+                            src={item.thumbnail_url}
+                            alt={`Gallery video ${item.id}`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            crossOrigin={item.thumbnail_url?.startsWith('http://') || item.thumbnail_url?.startsWith('https://') ? 'anonymous' : undefined}
+                            onError={(e) => {
+                              // Fallback to VideoThumbnail if thumbnail fails
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <VideoThumbnail
+                            videoSrc={mediaUrl}
+                            className="w-full h-full"
+                            alt={`Gallery video ${item.id}`}
+                          />
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-4 hover:bg-opacity-100">
+                            <Play className="w-8 h-8 text-primary-600 ml-1" fill="currentColor" />
+                          </div>
+                        </div>
+                      </div>
+                    )
                   ) : (
                     <img
                       src={mediaUrl}

@@ -9,7 +9,7 @@ from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media
 
 load_dotenv()
 
@@ -111,6 +111,34 @@ if not TESTING_MODE:
     except Exception as e:
         print(f"⚠️  Warning: Could not initialize S3 bucket: {e}")
         print("   File uploads will fall back to local storage")
+    
+    # Run automatic cleanup of orphaned media on startup (in background)
+    import threading
+    def run_startup_cleanup():
+        try:
+            from routers.cleanup import cleanup_orphaned_media
+            from database import SessionLocal
+            import time
+            # Wait a bit for database to be ready
+            time.sleep(5)
+            print("🔍 Running automatic cleanup of orphaned media...")
+            db = SessionLocal()
+            try:
+                result = cleanup_orphaned_media(db=db, current_admin=None, auto_delete=True)
+                if result["orphaned_count"] > 0:
+                    print(f"✅ Cleaned up {result['deleted_count']} orphaned media entries")
+                else:
+                    print("✅ No orphaned media found")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not run automatic cleanup: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"⚠️  Warning: Could not initialize cleanup system: {e}")
+    
+    # Run cleanup in background thread
+    cleanup_thread = threading.Thread(target=run_startup_cleanup, daemon=True)
+    cleanup_thread.start()
 
 app = FastAPI(
     title="MyZakat API",
@@ -176,6 +204,8 @@ app.include_router(urgent_needs.router, prefix="/api/urgent-needs", tags=["urgen
 app.include_router(gallery.router, prefix="/api/gallery", tags=["gallery"])
 app.include_router(program_categories.router, prefix="/api/program-categories", tags=["program-categories"])
 app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
+app.include_router(cleanup.router, prefix="/api/cleanup", tags=["cleanup"])
+app.include_router(s3_media.router, prefix="/api/s3-media", tags=["s3-media"])
 
 @app.get("/")
 async def root():

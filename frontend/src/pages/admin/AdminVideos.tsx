@@ -8,12 +8,15 @@ import VideoThumbnail from '../../components/VideoThumbnail'
 
 interface VideoFile {
   filename: string
+  url?: string
   path: string
   size: number
   created_at: string
   modified_at: string
   location?: string
   used_in?: string[]
+  exists_in_s3?: boolean
+  orphaned?: boolean  // Video exists in DB but not in S3
 }
 
 const AdminVideos = () => {
@@ -194,26 +197,36 @@ const AdminVideos = () => {
       {videos && videos.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {videos.map((video: VideoFile) => (
-            <div key={video.filename} className="card hover:shadow-lg transition-shadow">
+            <div key={video.filename} className={`card hover:shadow-lg transition-shadow ${video.orphaned ? 'border-2 border-yellow-400 bg-yellow-50' : ''}`}>
               {/* Video Preview */}
               <div className="aspect-video bg-gray-900 rounded-t-lg overflow-hidden relative group cursor-pointer">
-                <VideoThumbnail
-                  videoSrc={getVideoUrl(video)}
-                  className="w-full h-full"
-                  alt={`Video ${video.filename}`}
-                />
-                <a
-                  href={getVideoUrl(video)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200"
-                  title="Play video"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-3 hover:bg-opacity-100">
-                    <Play className="w-6 h-6 text-primary-600 ml-0.5" fill="currentColor" />
+                {video.orphaned ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-gray-500">
+                    <Video className="w-12 h-12 mb-2" />
+                    <p className="text-sm font-medium">File Not Found</p>
+                    <p className="text-xs mt-1">Deleted from storage</p>
                   </div>
-                </a>
+                ) : (
+                  <>
+                    <VideoThumbnail
+                      videoSrc={getVideoUrl(video)}
+                      className="w-full h-full"
+                      alt={`Video ${video.filename}`}
+                    />
+                    <a
+                      href={getVideoUrl(video)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200"
+                      title="Play video"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-3 hover:bg-opacity-100">
+                        <Play className="w-6 h-6 text-primary-600 ml-0.5" fill="currentColor" />
+                      </div>
+                    </a>
+                  </>
+                )}
               </div>
 
               {/* Video Info */}
@@ -227,9 +240,14 @@ const AdminVideos = () => {
                 </div>
 
                 <div className="space-y-2 text-sm text-gray-600">
+                  {video.orphaned && (
+                    <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium mb-2">
+                      ⚠️ File deleted from storage
+                    </div>
+                  )}
                   <div className="flex items-center">
                     <FileVideo className="w-4 h-4 mr-2" />
-                    <span>{formatFileSize(video.size)}</span>
+                    <span>{video.size > 0 ? formatFileSize(video.size) : 'Unknown size'}</span>
                   </div>
                   {video.location && (
                     <div className="text-xs text-gray-500">
