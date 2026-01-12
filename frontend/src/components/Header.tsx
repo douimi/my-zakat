@@ -116,21 +116,19 @@ const Header = () => {
             {/* Logo */}
             <Link 
               to="/" 
-              className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:opacity-80 max-h-full"
+              className="flex flex-col items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:opacity-80 max-h-full"
             >
-              <div className="flex items-center gap-2 md:gap-3">
-                <div className="flex-shrink-0">
-                  <img 
-                    src="/logo.png" 
-                    alt="MyZakat Logo" 
-                    className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain"
-                  />
-                </div>
-                <div className="hidden sm:flex flex-col leading-tight">
-                  <span className="text-gray-600 font-medium text-xs md:text-sm lg:text-base">
-                    Zakat Distribution Foundation
-                  </span>
-                </div>
+              <div className="flex-shrink-0">
+                <img 
+                  src="/logo.png" 
+                  alt="MyZakat Logo" 
+                  className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain"
+                />
+              </div>
+              <div className="hidden sm:flex flex-col items-center leading-tight mt-1">
+                <span className="text-green-600 font-medium text-xs md:text-sm lg:text-base text-center">
+                  Zakat Distribution Foundation
+                </span>
               </div>
             </Link>
 
