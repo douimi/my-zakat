@@ -9,6 +9,7 @@ class GalleryItem(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     media_filename = Column(String(255), nullable=False)
+    thumbnail_url = Column(String(500), nullable=True)  # Thumbnail URL for videos
     display_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

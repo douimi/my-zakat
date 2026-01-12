@@ -186,6 +186,7 @@ async def upload_and_create_gallery_item(
     # Create gallery item
     db_item = GalleryItem(
         media_filename=stored_filename,
+        thumbnail_url=thumbnail_url,  # Store thumbnail URL for videos
         display_order=display_order,
         is_active=is_active,
         created_at=datetime.utcnow(),

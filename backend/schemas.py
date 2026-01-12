@@ -324,6 +324,7 @@ class GalleryItemUpdate(BaseModel):
 class GalleryItemResponse(BaseModel):
     id: int
     media_filename: str
+    thumbnail_url: Optional[str] = None  # Thumbnail URL for videos
     display_order: int
     is_active: bool
     created_at: Optional[datetime] = None

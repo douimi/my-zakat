@@ -153,6 +153,7 @@ export interface Setting {
 export interface GalleryItem {
   id: number
   media_filename: string
+  thumbnail_url?: string  // Backend-generated thumbnail URL for videos
   display_order: number
   is_active: boolean
   created_at: string

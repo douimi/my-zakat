@@ -985,7 +985,7 @@ const GallerySection = () => {
       id: item.id,
       url: mediaInfo.url,
       type: mediaInfo.isVideo ? 'video' : 'image' as 'image' | 'video',
-      thumbnail: mediaInfo.isVideo ? null : mediaInfo.url, // Videos will generate thumbnails
+      thumbnail: mediaInfo.isVideo ? (item.thumbnail_url || null) : mediaInfo.url, // Use backend-generated thumbnail for videos
     }
   })
 
@@ -1040,11 +1040,27 @@ const GallerySection = () => {
             onClick={() => setSelectedMediaIndex(index)}
           >
             {item.type === 'video' ? (
-              <VideoThumbnail
-                videoSrc={item.url}
-                className="w-full h-full"
-                alt={`Gallery video ${item.id}`}
-              />
+              item.thumbnail ? (
+                // Use backend-generated thumbnail if available
+                <img 
+                  src={item.thumbnail}
+                  alt={`Gallery video ${item.id}`}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                  loading="lazy"
+                  crossOrigin={item.thumbnail?.startsWith('http://') || item.thumbnail?.startsWith('https://') ? 'anonymous' : undefined}
+                  onError={(e) => {
+                    // Fallback to VideoThumbnail if thumbnail fails to load
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : (
+                // Fallback to client-side generation if no thumbnail
+                <VideoThumbnail
+                  videoSrc={item.url}
+                  className="w-full h-full"
+                  alt={`Gallery video ${item.id}`}
+                />
+              )
             ) : (
               <img 
                 src={item.thumbnail || item.url}
