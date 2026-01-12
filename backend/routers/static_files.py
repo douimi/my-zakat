@@ -52,29 +52,39 @@ async def options_video(filename: str):
 
 @router.head("/media/videos/{filename}")
 async def head_video(filename: str):
-    """Handle HEAD requests for video metadata"""
+    """Handle HEAD requests for video metadata - check S3 first"""
+    from urllib.parse import unquote
+    
+    # Decode URL-encoded filename
+    filename = unquote(filename)
+    
     # Security: prevent directory traversal
-    if '..' in filename or '/' in filename or '\\' in filename:
+    if '..' in filename or filename.startswith('/'):
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    file_path = os.path.join(VIDEO_DIR, filename)
+    # Check S3 first - simple structure: videos/filename
+    object_key = f"videos/{filename}"
     
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Video not found")
+    # Check if file exists in S3
+    if file_exists(object_key):
+        try:
+            file_info = get_file_info(object_key)
+            if file_info:
+                return Response(
+                    status_code=200,
+                    headers={
+                        'Content-Type': file_info.get('content_type', 'video/mp4'),
+                        'Content-Length': str(file_info['size']),
+                        'Accept-Ranges': 'bytes',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'public, max-age=86400',
+                    }
+                )
+        except Exception as e:
+            print(f"Error getting video info from S3: {e}")
     
-    file_size = os.path.getsize(file_path)
-    content_type = get_content_type(filename)
-    
-    return Response(
-        status_code=200,
-        headers={
-            'Content-Type': content_type,
-            'Content-Length': str(file_size),
-            'Accept-Ranges': 'bytes',
-            'Access-Control-Allow-Origin': '*',
-            'Cache-Control': 'public, max-age=86400',  # Cache for 1 day
-        }
-    )
+    # Don't fall back to filesystem - fail if not in S3
+    raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
 
 @router.get("/media/videos/{filename}")
 async def serve_video(filename: str, request: Request):

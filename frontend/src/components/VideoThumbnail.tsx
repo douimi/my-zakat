@@ -93,11 +93,29 @@ const VideoThumbnail = ({
           const duration = video.duration || 10
           const seekTime = Math.min(1, duration * 0.1)
           
+          // Set up a timeout to capture frame if seek doesn't complete
+          const seekTimeout = setTimeout(() => {
+            if (mounted && !thumbnailUrl) {
+              captureCurrentFrame()
+            }
+          }, 2000)
+          
+          const handleSeekComplete = () => {
+            clearTimeout(seekTimeout)
+            if (mounted) {
+              captureCurrentFrame()
+            }
+          }
+          
+          video.addEventListener('seeked', handleSeekComplete, { once: true })
+          
           // If video is already loaded enough, try to capture immediately
           if (video.readyState >= 2) { // HAVE_CURRENT_DATA
             try {
               video.currentTime = seekTime
             } catch (e) {
+              clearTimeout(seekTimeout)
+              video.removeEventListener('seeked', handleSeekComplete)
               // If seeking fails, try to capture current frame
               captureCurrentFrame()
             }
@@ -111,32 +129,116 @@ const VideoThumbnail = ({
       }
 
       const captureCurrentFrame = () => {
-        if (!video || !canvas || !ctx || !mounted) return
+        if (!video || !canvas || !ctx || !mounted) {
+          setIsGenerating(false)
+          return
+        }
         
         try {
-          const width = video.videoWidth || 640
-          const height = video.videoHeight || 360
-          
-          if (width > 0 && height > 0) {
-            canvas.width = width
-            canvas.height = height
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+          // Wait a bit for video to be ready
+          if (video.readyState < 2) {
+            // Video not ready yet, wait for it
+            const checkReady = setInterval(() => {
+              if (video.readyState >= 2 && mounted) {
+                clearInterval(checkReady)
+                tryCapture()
+              } else if (!mounted) {
+                clearInterval(checkReady)
+                setIsGenerating(false)
+              }
+            }, 100)
             
-            if (mounted) {
-              try {
-                localStorage.setItem(cacheKey, dataUrl)
-              } catch (e) {
-                // localStorage full, ignore
+            setTimeout(() => {
+              clearInterval(checkReady)
+              if (mounted) {
+                tryCapture()
               }
-              setThumbnailUrl(dataUrl)
+            }, 3000)
+            return
+          }
+          
+          tryCapture()
+        } catch (error) {
+          console.error('Error capturing video frame:', error)
+          if (mounted) {
+            setIsGenerating(false)
+          }
+        }
+      }
+      
+      const tryCapture = () => {
+        if (!video || !canvas || !ctx || !mounted) {
+          setIsGenerating(false)
+          return
+        }
+        
+        try {
+          // Some browsers need the video to play at least one frame
+          // Try to play and pause immediately to ensure a frame is available
+          const attemptCapture = () => {
+            try {
+              const width = video.videoWidth || 640
+              const height = video.videoHeight || 360
+              
+              if (width > 0 && height > 0) {
+                canvas.width = width
+                canvas.height = height
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+                
+                if (mounted && dataUrl && dataUrl !== 'data:,') {
+                  try {
+                    localStorage.setItem(cacheKey, dataUrl)
+                  } catch (e) {
+                    // localStorage full, ignore
+                  }
+                  setThumbnailUrl(dataUrl)
+                  setIsGenerating(false)
+                  if (onThumbnailGenerated) {
+                    onThumbnailGenerated(dataUrl)
+                  }
+                  video.pause()
+                  return true
+                }
+              }
+            } catch (error) {
+              console.error('Error capturing frame:', error)
+            }
+            return false
+          }
+          
+          // Try immediate capture first
+          if (attemptCapture()) {
+            return
+          }
+          
+          // If that fails, try playing the video briefly
+          if (video.paused) {
+            video.play().then(() => {
+              // Wait for a frame to be available
+              setTimeout(() => {
+                if (mounted) {
+                  video.pause()
+                  if (!attemptCapture()) {
+                    setIsGenerating(false)
+                  }
+                }
+              }, 100)
+            }).catch((error) => {
+              console.error('Error playing video for thumbnail:', error)
+              // Try one more time without playing
+              if (!attemptCapture()) {
+                setIsGenerating(false)
+              }
+            })
+          } else {
+            // Video is already playing, just try to capture
+            if (!attemptCapture()) {
               setIsGenerating(false)
-              if (onThumbnailGenerated) {
-                onThumbnailGenerated(dataUrl)
-              }
             }
           }
         } catch (error) {
+          console.error('Error in tryCapture:', error)
           if (mounted) {
             setIsGenerating(false)
           }
@@ -144,45 +246,11 @@ const VideoThumbnail = ({
       }
 
       const handleSeeked = () => {
-        if (!video || !canvas || !ctx || !mounted) {
-          setIsGenerating(false)
-          return
-        }
-
-        try {
-          const width = video.videoWidth || 640
-          const height = video.videoHeight || 360
-          
-          if (width === 0 || height === 0) {
-            setIsGenerating(false)
-            return
-          }
-          
-          canvas.width = width
-          canvas.height = height
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
-          
-          if (mounted) {
-            try {
-              localStorage.setItem(cacheKey, dataUrl)
-            } catch (e) {
-              // localStorage full, ignore
-            }
-            setThumbnailUrl(dataUrl)
-            setIsGenerating(false)
-            if (onThumbnailGenerated) {
-              onThumbnailGenerated(dataUrl)
-            }
-          }
-        } catch (error) {
-          if (mounted) {
-            setIsGenerating(false)
-          }
-        }
+        captureCurrentFrame()
       }
 
-      const handleError = () => {
+      const handleError = (e: Event) => {
+        console.error('Video thumbnail generation error:', e, videoSrc)
         if (mounted) {
           setIsGenerating(false)
         }
