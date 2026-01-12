@@ -46,18 +46,23 @@ def get_s3_client():
 
 def ensure_bucket_cors():
     """
-    Ensure CORS is configured on the bucket
+    Ensure CORS is configured on the bucket for direct browser access
     Note: MinIO doesn't support PutBucketCors via boto3 API.
     CORS must be configured manually via MinIO Console or mc CLI.
-    However, since we're routing images through the backend API proxy,
-    CORS is not needed - the backend serves files, avoiding cross-origin issues.
+    
+    To configure CORS manually:
+    1. Go to MinIO Console (http://31.97.131.31:9001)
+    2. Select bucket 'myzakat-media' -> Access Policy -> CORS Configuration
+    3. Add rule:
+       - Allowed Origins: *
+       - Allowed Methods: GET, HEAD, OPTIONS
+       - Allowed Headers: *
+       - Exposed Headers: ETag
+       - Max Age: 3600
     """
-    # CORS is not needed when routing through backend API proxy
-    # Files are served from the same origin (backend API), so no CORS required
-    # If you need direct MinIO access in the future, configure CORS manually:
-    # 1. Go to MinIO Console (http://31.97.131.31:9001)
-    # 2. Select bucket -> Access Policy -> CORS Configuration
-    # 3. Add rule: Origin: *, Methods: GET, HEAD, Headers: *
+    print("ℹ️  CORS configuration must be set manually in MinIO Console for direct browser access")
+    print("   Go to: http://31.97.131.31:9001 -> Buckets -> myzakat-media -> Access Policy -> CORS")
+    print("   Add rule: Origin: *, Methods: GET, HEAD, OPTIONS, Headers: *")
     return True
 
 
@@ -75,6 +80,28 @@ def ensure_bucket_exists():
         try:
             client.head_bucket(Bucket=S3_BUCKET_NAME)
             bucket_exists = True
+            # Ensure bucket policy is set for public read access (even if bucket exists)
+            import json
+            bucket_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"AWS": "*"},
+                        "Action": ["s3:GetObject"],
+                        "Resource": [f"arn:aws:s3:::{S3_BUCKET_NAME}/*"]
+                    }
+                ]
+            }
+            try:
+                client.put_bucket_policy(
+                    Bucket=S3_BUCKET_NAME,
+                    Policy=json.dumps(bucket_policy)
+                )
+                print(f"✅ Bucket policy verified/set for public read access on {S3_BUCKET_NAME}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not set bucket policy: {e}")
+                print("   You may need to set it manually in MinIO console")
             # Ensure CORS is configured on existing bucket
             ensure_bucket_cors()
         except ClientError as e:
@@ -225,13 +252,13 @@ def file_exists(object_key: str) -> bool:
 def get_file_url(object_key: str) -> str:
     """
     Get public URL for a file in S3
-    Returns backend API URL that proxies to S3 to avoid mixed content and CORS issues
+    Returns direct S3 URL for serving media directly from S3
     
     Args:
         object_key: S3 object key (path/filename)
     
     Returns:
-        Public URL of the file (backend API URL that proxies to S3)
+        Direct S3 public URL of the file
     """
     # If object_key is already a full URL, return as-is
     if object_key.startswith('http://') or object_key.startswith('https://'):
@@ -241,51 +268,24 @@ def get_file_url(object_key: str) -> str:
     # Remove leading slash if present
     object_key = object_key.lstrip('/')
     
-    # Extract filename from object key (e.g., "images/filename.jpg" -> "filename.jpg")
-    filename = object_key.split('/')[-1]
-    
-    # Determine media type from object key prefix
-    if object_key.startswith('images/'):
-        media_type = 'images'
-    elif object_key.startswith('videos/'):
-        media_type = 'videos'
-    else:
-        # Try to infer from filename extension
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
-            media_type = 'images'
-        elif filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv')):
-            media_type = 'videos'
-        else:
-            media_type = 'images'  # Default
-    
-    # Route through backend API to avoid mixed content (HTTPS frontend -> HTTP MinIO)
-    # and CORS issues. The backend proxies the file from S3.
-    if FRONTEND_URL:
-        # Remove trailing slash
-        base_url = FRONTEND_URL.rstrip('/')
-        # If it's localhost, use localhost for API too (different port)
-        if 'localhost' in base_url or '127.0.0.1' in base_url:
-            # Replace frontend port with backend port
-            api_base = base_url.replace(':3000', ':8000').replace(':5173', ':8000').replace(':80', ':8000')
-        else:
-            # For production, frontend and backend are on the same domain via Traefik
-            # So use the same base URL
-            api_base = base_url
-        
-        return f"{api_base}/api/uploads/media/{media_type}/{filename}"
-    
-    # Fallback: use direct S3 URL if FRONTEND_URL not configured
+    # Use S3_PUBLIC_URL if configured (preferred for direct S3 access)
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
         return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
     
-    # Last resort: construct from endpoint
+    # Fallback: construct from endpoint
     endpoint = S3_ENDPOINT
-    if 'minio:' in endpoint or 'localhost' in endpoint:
-        endpoint = endpoint.replace('minio:', 'localhost:').replace('localhost:', 'http://localhost:')
-        if not endpoint.startswith('http'):
-            endpoint = f"http://{endpoint}"
-    elif not endpoint.startswith('http'):
+    # Replace internal Docker service name with localhost for external access
+    if 'minio:' in endpoint:
+        # For Docker internal access, use the endpoint as-is
+        # But for public URLs, we need the external IP/domain
+        if S3_PUBLIC_URL:
+            endpoint = S3_PUBLIC_URL
+        else:
+            # Default to localhost if no public URL configured
+            endpoint = endpoint.replace('minio:', 'localhost:')
+    
+    if not endpoint.startswith('http'):
         endpoint = f"http://{endpoint}"
     
     return f"{endpoint}/{S3_BUCKET_NAME}/{object_key}"
