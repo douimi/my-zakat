@@ -44,10 +44,38 @@ def get_s3_client():
     return s3_client
 
 
+def ensure_bucket_cors():
+    """Ensure CORS is configured on the bucket"""
+    try:
+        client = get_s3_client()
+        cors_configuration = {
+            'CORSRules': [
+                {
+                    'AllowedOrigins': ['*'],  # Allow all origins
+                    'AllowedMethods': ['GET', 'HEAD'],  # Allow GET and HEAD requests
+                    'AllowedHeaders': ['*'],  # Allow all headers
+                    'ExposeHeaders': ['ETag', 'Content-Length', 'Content-Type'],
+                    'MaxAgeSeconds': 3000
+                }
+            ]
+        }
+        client.put_bucket_cors(
+            Bucket=S3_BUCKET_NAME,
+            CORSConfiguration=cors_configuration
+        )
+        print(f"✅ CORS configuration updated for {S3_BUCKET_NAME}")
+        return True
+    except Exception as e:
+        print(f"⚠️  Warning: Could not set CORS configuration: {e}")
+        return False
+
+
 def ensure_bucket_exists():
     """Ensure the S3 bucket exists, create if it doesn't"""
     global bucket_exists
     if bucket_exists:
+        # Still ensure CORS is configured
+        ensure_bucket_cors()
         return
     
     try:
@@ -56,6 +84,8 @@ def ensure_bucket_exists():
         try:
             client.head_bucket(Bucket=S3_BUCKET_NAME)
             bucket_exists = True
+            # Ensure CORS is configured on existing bucket
+            ensure_bucket_cors()
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', '')
             if error_code == '404':
@@ -83,6 +113,10 @@ def ensure_bucket_exists():
                 except Exception as e:
                     print(f"⚠️  Warning: Could not set bucket policy: {e}")
                     print("   You may need to set it manually in MinIO console")
+                
+                # Set CORS configuration
+                ensure_bucket_cors()
+                
                 bucket_exists = True
             else:
                 raise
