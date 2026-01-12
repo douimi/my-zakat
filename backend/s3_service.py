@@ -45,29 +45,20 @@ def get_s3_client():
 
 
 def ensure_bucket_cors():
-    """Ensure CORS is configured on the bucket"""
-    try:
-        client = get_s3_client()
-        cors_configuration = {
-            'CORSRules': [
-                {
-                    'AllowedOrigins': ['*'],  # Allow all origins
-                    'AllowedMethods': ['GET', 'HEAD'],  # Allow GET and HEAD requests
-                    'AllowedHeaders': ['*'],  # Allow all headers
-                    'ExposeHeaders': ['ETag', 'Content-Length', 'Content-Type'],
-                    'MaxAgeSeconds': 3000
-                }
-            ]
-        }
-        client.put_bucket_cors(
-            Bucket=S3_BUCKET_NAME,
-            CORSConfiguration=cors_configuration
-        )
-        print(f"✅ CORS configuration updated for {S3_BUCKET_NAME}")
-        return True
-    except Exception as e:
-        print(f"⚠️  Warning: Could not set CORS configuration: {e}")
-        return False
+    """
+    Ensure CORS is configured on the bucket
+    Note: MinIO doesn't support PutBucketCors via boto3 API.
+    CORS must be configured manually via MinIO Console or mc CLI.
+    However, since we're routing images through the backend API proxy,
+    CORS is not needed - the backend serves files, avoiding cross-origin issues.
+    """
+    # CORS is not needed when routing through backend API proxy
+    # Files are served from the same origin (backend API), so no CORS required
+    # If you need direct MinIO access in the future, configure CORS manually:
+    # 1. Go to MinIO Console (http://31.97.131.31:9001)
+    # 2. Select bucket -> Access Policy -> CORS Configuration
+    # 3. Add rule: Origin: *, Methods: GET, HEAD, Headers: *
+    return True
 
 
 def ensure_bucket_exists():
@@ -212,13 +203,13 @@ def file_exists(object_key: str) -> bool:
 def get_file_url(object_key: str) -> str:
     """
     Get public URL for a file in S3
-    Returns direct S3 URL for public access (MinIO format: http://IP:9000/bucket/object-key)
+    Returns backend API URL that proxies to S3 to avoid mixed content and CORS issues
     
     Args:
         object_key: S3 object key (path/filename)
     
     Returns:
-        Public URL of the file (direct S3 URL)
+        Public URL of the file (backend API URL that proxies to S3)
     """
     # If object_key is already a full URL, return as-is
     if object_key.startswith('http://') or object_key.startswith('https://'):
@@ -228,19 +219,47 @@ def get_file_url(object_key: str) -> str:
     # Remove leading slash if present
     object_key = object_key.lstrip('/')
     
-    # Use S3_PUBLIC_URL if configured (should be VPS IP:9000 for now)
+    # Extract filename from object key (e.g., "images/filename.jpg" -> "filename.jpg")
+    filename = object_key.split('/')[-1]
+    
+    # Determine media type from object key prefix
+    if object_key.startswith('images/'):
+        media_type = 'images'
+    elif object_key.startswith('videos/'):
+        media_type = 'videos'
+    else:
+        # Try to infer from filename extension
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
+            media_type = 'images'
+        elif filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv')):
+            media_type = 'videos'
+        else:
+            media_type = 'images'  # Default
+    
+    # Route through backend API to avoid mixed content (HTTPS frontend -> HTTP MinIO)
+    # and CORS issues. The backend proxies the file from S3.
+    if FRONTEND_URL:
+        # Remove trailing slash
+        base_url = FRONTEND_URL.rstrip('/')
+        # If it's localhost, use localhost for API too (different port)
+        if 'localhost' in base_url or '127.0.0.1' in base_url:
+            # Replace frontend port with backend port
+            api_base = base_url.replace(':3000', ':8000').replace(':5173', ':8000').replace(':80', ':8000')
+        else:
+            # For production, frontend and backend are on the same domain via Traefik
+            # So use the same base URL
+            api_base = base_url
+        
+        return f"{api_base}/api/uploads/media/{media_type}/{filename}"
+    
+    # Fallback: use direct S3 URL if FRONTEND_URL not configured
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
-        # MinIO direct access format: http://IP:9000/bucket-name/object-key
         return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
     
-    # Fallback: construct from endpoint (internal Docker network)
-    # Replace internal hostname with public IP if possible
+    # Last resort: construct from endpoint
     endpoint = S3_ENDPOINT
-    # If endpoint is internal (minio:9000), try to use public URL
     if 'minio:' in endpoint or 'localhost' in endpoint:
-        # Use port 9000 for direct MinIO access
-        # Default to localhost for development, but should be set via S3_PUBLIC_URL in production
         endpoint = endpoint.replace('minio:', 'localhost:').replace('localhost:', 'http://localhost:')
         if not endpoint.startswith('http'):
             endpoint = f"http://{endpoint}"
