@@ -139,6 +139,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BROWSER_REDIRECT_URL: https://minio.myzakat.org
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -181,6 +182,9 @@ services:
       - "traefik.http.middlewares.minio-cors.headers.accesscontrolalloworiginlist=https://myzakat.org,https://www.myzakat.org"
       - "traefik.http.middlewares.minio-cors.headers.accesscontrolmaxage=3600"
       - "traefik.http.middlewares.minio-cors.headers.addvaryheader=true"
+      # Strip prefix middleware - MinIO expects paths like /bucket-name/object-key
+      # But we're accessing via media.myzakat.org/bucket-name/object-key
+      # No prefix stripping needed, just pass through
       - "traefik.http.routers.minio-media.middlewares=minio-cors"
 
 volumes:

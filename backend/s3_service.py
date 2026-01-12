@@ -252,23 +252,51 @@ def file_exists(object_key: str) -> bool:
 def get_file_url(object_key: str) -> str:
     """
     Get public URL for a file in S3
-    Returns direct S3 URL for serving media directly from S3
+    Returns backend API URL that proxies from S3 (avoids authentication issues)
     
     Args:
         object_key: S3 object key (path/filename)
     
     Returns:
-        Direct S3 public URL of the file
+        Backend API URL that proxies the file from S3
     """
-    # If object_key is already a full URL, return as-is
+    # If object_key is already a full URL, extract the object key
     if object_key.startswith('http://') or object_key.startswith('https://'):
-        return object_key
+        # Extract object key from URL
+        extracted_key = extract_object_key_from_url(object_key)
+        if extracted_key:
+            object_key = extracted_key
+        else:
+            # If we can't extract, return as-is (might be external URL)
+            return object_key
     
     # Construct public URL
     # Remove leading slash if present
     object_key = object_key.lstrip('/')
     
-    # Use S3_PUBLIC_URL if configured (preferred for direct S3 access)
+    # Extract filename and determine media type
+    filename = object_key.split('/')[-1]
+    if object_key.startswith('images/'):
+        media_type = 'images'
+    elif object_key.startswith('videos/'):
+        media_type = 'videos'
+    else:
+        # Try to infer from filename extension
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
+            media_type = 'images'
+        elif filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv')):
+            media_type = 'videos'
+        else:
+            media_type = 'images'  # Default
+    
+    # Route through backend API to avoid MinIO authentication issues
+    # The backend proxies files from S3 efficiently
+    if FRONTEND_URL:
+        base_url = FRONTEND_URL.rstrip('/')
+        # For production, frontend and backend are on the same domain via Traefik
+        return f"{base_url}/api/uploads/media/{media_type}/{filename}"
+    
+    # Fallback: use direct S3 URL if FRONTEND_URL not configured
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
         return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
