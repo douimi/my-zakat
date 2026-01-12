@@ -112,21 +112,21 @@ const Header = () => {
 
       <header className="bg-white shadow-md border-b border-gray-100 sticky top-0 z-50">
         <div className="w-full px-2 sm:px-4 lg:px-6">
-          <div className="flex items-center justify-between h-24 md:h-28 lg:h-32 py-2 md:py-3 min-w-0">
+          <div className="flex items-center justify-between h-auto py-2 md:py-3 min-w-0">
             {/* Logo */}
             <Link 
               to="/" 
-              className="flex flex-col items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:opacity-80 max-h-full"
+              className="flex flex-col items-center justify-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:opacity-80"
             >
               <div className="flex-shrink-0">
                 <img 
                   src="/logo.png" 
                   alt="MyZakat Logo" 
-                  className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain"
+                  className="h-14 md:h-16 lg:h-18 xl:h-20 w-auto object-contain"
                 />
               </div>
-              <div className="hidden sm:flex flex-col items-center leading-tight mt-1">
-                <span className="text-green-600 font-medium text-xs md:text-sm lg:text-base text-center">
+              <div className="hidden sm:flex flex-col items-center leading-tight mt-0.5">
+                <span className="text-green-600 font-medium text-[10px] md:text-xs lg:text-sm text-center whitespace-nowrap">
                   Zakat Distribution Foundation
                 </span>
               </div>
