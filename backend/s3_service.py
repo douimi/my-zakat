@@ -289,17 +289,18 @@ def get_file_url(object_key: str) -> str:
         else:
             media_type = 'images'  # Default
     
-    # Route through backend API to avoid MinIO authentication issues
-    # The backend proxies files from S3 efficiently
-    if FRONTEND_URL:
-        base_url = FRONTEND_URL.rstrip('/')
-        # For production, frontend and backend are on the same domain via Traefik
-        return f"{base_url}/api/uploads/media/{media_type}/{filename}"
-    
-    # Fallback: use direct S3 URL if FRONTEND_URL not configured
+    # Return direct S3 URL for public access
+    # MinIO supports anonymous access when bucket has public read policy
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
-        return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
+        direct_url = f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
+        print(f"🔗 Generated direct S3 URL: {direct_url}")
+        return direct_url
+    
+    # Fallback: route through backend API if S3_PUBLIC_URL not configured
+    if FRONTEND_URL:
+        base_url = FRONTEND_URL.rstrip('/')
+        return f"{base_url}/api/uploads/media/{media_type}/{filename}"
     
     # Fallback: construct from endpoint
     endpoint = S3_ENDPOINT

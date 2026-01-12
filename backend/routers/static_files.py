@@ -93,20 +93,15 @@ async def serve_video(filename: str, request: Request):
     # Check S3 first - simple structure: videos/filename
     object_key = f"videos/{filename}"
     
-    s3_file_found = False
-    s3_url = None
+    # Check if file exists in S3
     if file_exists(object_key):
         s3_url = get_file_url(object_key)
-        s3_file_found = True
-    
-    if s3_file_found:
+        print(f"🔗 Redirecting to direct S3 URL: {s3_url}")
         return RedirectResponse(url=s3_url)
     
-    # Fallback to local filesystem
-    file_path = os.path.join(VIDEO_DIR, filename)
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Video not found")
+    # Don't fall back to filesystem - fail if not in S3
+    print(f"⚠️  Video not found in S3: {object_key}")
+    raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
     
     file_size = os.path.getsize(file_path)
     content_type = get_content_type(filename)
@@ -206,24 +201,40 @@ async def serve_image(filename: str):
             # Check S3 first - simple structure: images/filename
             object_key = f"images/{filename}"
     
-    # Try to serve from S3
-    if object_key and file_exists(object_key):
-        try:
-            file_content = download_file(object_key)
-            if file_content:
-                file_info = get_file_info(object_key)
-                content_type = file_info.get('content_type', 'image/jpeg') if file_info else get_content_type(filename.split('/')[-1])
-                return Response(
-                    content=file_content,
-                    media_type=content_type,
-                    headers={
-                        'Access-Control-Allow-Origin': '*',
-                        'Cache-Control': 'public, max-age=86400',
-                    }
-                )
-        except Exception as e:
-            print(f"Error serving image from S3: {e}")
-            # Fall through to local filesystem
+    # Try to serve from S3 FIRST - never fall back to filesystem
+    if object_key:
+        # Check if file exists in S3
+        if file_exists(object_key):
+            try:
+                print(f"📥 Serving image from S3: {object_key}")
+                file_content = download_file(object_key)
+                if file_content:
+                    file_info = get_file_info(object_key)
+                    content_type = file_info.get('content_type', 'image/jpeg') if file_info else get_content_type(filename.split('/')[-1])
+                    print(f"✅ Successfully served image from S3: {object_key} ({len(file_content)} bytes)")
+                    return Response(
+                        content=file_content,
+                        media_type=content_type,
+                        headers={
+                            'Access-Control-Allow-Origin': '*',
+                            'Cache-Control': 'public, max-age=86400',
+                        }
+                    )
+                else:
+                    print(f"⚠️  S3 file exists but content is empty: {object_key}")
+            except Exception as e:
+                import traceback
+                print(f"❌ Error serving image from S3: {object_key}")
+                print(f"   Error: {str(e)}")
+                print(traceback.format_exc())
+                # Don't fall back to filesystem - fail instead
+                raise HTTPException(status_code=500, detail=f"Failed to retrieve image from S3: {str(e)}")
+        else:
+            print(f"⚠️  Image not found in S3: {object_key}")
+    
+    # If we reach here, file doesn't exist in S3
+    # Don't fall back to filesystem - fail instead
+    raise HTTPException(status_code=404, detail=f"Image not found in S3: {object_key or filename}")
     
     # Fallback to local filesystem - extract just the filename
     local_filename = filename.split('/')[-1]
