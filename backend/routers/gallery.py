@@ -9,7 +9,8 @@ from database import get_db
 from models import GalleryItem
 from schemas import GalleryItemCreate, GalleryItemUpdate, GalleryItemResponse
 from auth_utils import get_current_admin
-from s3_service import upload_file, delete_file, generate_object_key
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
+from media_processing import compress_image, compress_video, generate_video_thumbnail, should_compress_image, should_compress_video
 
 router = APIRouter()
 
@@ -111,10 +112,20 @@ async def upload_and_create_gallery_item(
         category = "images"
         max_size = 5 * 1024 * 1024  # 5MB
     
-    # Check file size
+    # Read file content
     file_content = await file.read()
-    if len(file_content) > max_size:
+    original_size = len(file_content)
+    
+    if original_size > max_size:
         raise HTTPException(status_code=400, detail=f"File size too large. Maximum size is {max_size / (1024*1024)}MB")
+    
+    # Compress media before uploading
+    if is_image and should_compress_image(file.content_type):
+        print(f"🗜️  Compressing image before upload...")
+        file_content = compress_image(file_content)
+    elif is_video and should_compress_video(file.content_type):
+        print(f"🗜️  Compressing video before upload...")
+        file_content = compress_video(file_content)
     
     # Generate unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -132,6 +143,23 @@ async def upload_and_create_gallery_item(
             metadata={"original_filename": file.filename or "", "type": "gallery"}
         )
         print(f"✅ Successfully uploaded gallery item to S3: {s3_url}")
+        
+        # Generate and upload thumbnail for videos
+        thumbnail_url = None
+        if is_video:
+            print(f"🖼️  Generating video thumbnail...")
+            thumbnail_data = generate_video_thumbnail(file_content)
+            if thumbnail_data:
+                thumbnail_filename = f"gallery_{timestamp}_thumb.jpg"
+                thumbnail_key = generate_object_key("images", thumbnail_filename)
+                thumbnail_url = upload_file(
+                    file_content=thumbnail_data,
+                    object_key=thumbnail_key,
+                    content_type="image/jpeg",
+                    metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
+                )
+                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+        
         # Store the S3 URL as the filename
         stored_filename = s3_url
     except Exception as e:

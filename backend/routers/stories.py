@@ -9,6 +9,7 @@ from models import Story
 from schemas import StoryCreate, StoryResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key
+from media_processing import compress_image, compress_video, generate_video_thumbnail, should_compress_image, should_compress_video
 
 router = APIRouter()
 
@@ -37,6 +38,11 @@ async def create_story(
         filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
         content_bytes = await video.read()
         
+        # Compress video before uploading
+        if should_compress_video(video.content_type):
+            print(f"🗜️  Compressing story video before upload...")
+            content_bytes = compress_video(content_bytes)
+        
         # Upload to S3 - ALWAYS use S3, never fall back to local storage
         try:
             object_key = generate_object_key("videos", filename)
@@ -47,6 +53,20 @@ async def create_story(
                 metadata={"original_filename": video.filename, "type": "story_video"}
             )
             video_filename = s3_url
+            
+            # Generate and upload thumbnail
+            print(f"🖼️  Generating video thumbnail...")
+            thumbnail_data = generate_video_thumbnail(content_bytes)
+            if thumbnail_data:
+                thumbnail_filename = f"{timestamp}_{title.replace(' ', '_')}_thumb.jpg"
+                thumbnail_key = generate_object_key("images", thumbnail_filename)
+                thumbnail_url = upload_file(
+                    file_content=thumbnail_data,
+                    object_key=thumbnail_key,
+                    content_type="image/jpeg",
+                    metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
+                )
+                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
         except Exception as e:
             import traceback
             print(f"❌ Failed to upload story video to S3: {str(e)}")

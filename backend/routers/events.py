@@ -9,6 +9,7 @@ from models import Event
 from schemas import EventCreate, EventResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
+from media_processing import compress_image, should_compress_image
 
 router = APIRouter()
 
@@ -41,6 +42,11 @@ async def create_event(
         file_extension = os.path.splitext(image.filename)[1]
         filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
         content_bytes = await image.read()
+        
+        # Compress image before uploading
+        if should_compress_image(image.content_type):
+            print(f"🗜️  Compressing event image before upload...")
+            content_bytes = compress_image(content_bytes)
         
         # Upload to S3
         try:
@@ -175,12 +181,18 @@ async def update_event(
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
             )
     elif image_url is not None:
-        # Delete old image file if clearing/changing image
-        if old_image:
+        new_image_value = image_url.strip() if image_url.strip() else None
+        
+        # Only delete old image if it's being changed or cleared
+        if old_image and old_image != new_image_value:
             if old_image.startswith('http://') or old_image.startswith('https://'):
                 object_key = extract_object_key_from_url(old_image)
                 if object_key:
-                    delete_file(object_key)
+                    try:
+                        delete_file(object_key)
+                        print(f"🗑️  Deleted old event image from S3: {object_key}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete old image from S3: {e}")
             else:
                 old_path = os.path.join("uploads/events", old_image)
                 if os.path.exists(old_path):
@@ -189,8 +201,8 @@ async def update_event(
                     except Exception as e:
                         print(f"Warning: Could not delete old image file {old_path}: {e}")
         
-        # Update image URL if provided (empty string clears the image)
-        event.image = image_url.strip() if image_url.strip() else None
+        # Update image URL
+        event.image = new_image_value
     
     db.commit()
     db.refresh(event)

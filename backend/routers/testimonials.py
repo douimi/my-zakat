@@ -199,13 +199,19 @@ async def update_testimonial(
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
             )
     elif image_url is not None:
-        # Delete old image file if clearing/changing image
+        new_image_value = image_url.strip() if image_url.strip() else None
         old_image = testimonial.image
-        if old_image:
+        
+        # Only delete old image if it's being changed or cleared
+        if old_image and old_image != new_image_value:
             if old_image.startswith('http://') or old_image.startswith('https://'):
                 object_key = extract_object_key_from_url(old_image)
                 if object_key:
-                    delete_file(object_key)
+                    try:
+                        delete_file(object_key)
+                        print(f"🗑️  Deleted old testimonial image from S3: {object_key}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete old image from S3: {e}")
             else:
                 old_path = os.path.join("uploads/testimonials", old_image)
                 if os.path.exists(old_path):
@@ -214,8 +220,8 @@ async def update_testimonial(
                     except Exception as e:
                         print(f"Warning: Could not delete old image file {old_path}: {e}")
         
-        # Update image URL if provided (empty string clears the image)
-        testimonial.image = image_url.strip() if image_url.strip() else None
+        # Update image URL
+        testimonial.image = new_image_value
     
     # Handle video removal if requested
     if remove_video:

@@ -39,9 +39,6 @@ const EventDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Event Not Found</h1>
-          <Link to="/events" className="text-primary-600 hover:text-primary-700">
-            Return to Events
-          </Link>
         </div>
       </div>
     )
@@ -54,19 +51,6 @@ const EventDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="section-container py-4">
-          <Link
-            to="/events"
-            className="inline-flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Events
-          </Link>
-        </div>
-      </div>
-
       {/* Content */}
       <div className="section-container py-8">
         {/* Event Image */}

@@ -5,6 +5,7 @@ import aiofiles
 import os
 from datetime import datetime
 from s3_service import upload_file, generate_object_key, get_file_url
+from media_processing import compress_image, compress_video, generate_video_thumbnail, should_compress_image, should_compress_video
 
 from database import get_db
 from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting, User
@@ -108,10 +109,23 @@ async def upload_media(
     else:
         raise HTTPException(status_code=400, detail="Invalid media type")
     
-    # Check file size
+    # Read file content
     file_content = await file.read()
-    if len(file_content) > max_size:
+    original_size = len(file_content)
+    
+    if original_size > max_size:
         raise HTTPException(status_code=400, detail="File size too large")
+    
+    # Compress media before uploading
+    is_image = file.content_type.startswith('image/')
+    is_video = file.content_type.startswith('video/')
+    
+    if is_image and should_compress_image(file.content_type):
+        print(f"🗜️  Compressing image before upload...")
+        file_content = compress_image(file_content)
+    elif is_video and should_compress_video(file.content_type):
+        print(f"🗜️  Compressing video before upload...")
+        file_content = compress_video(file_content)
     
     # Generate unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -130,12 +144,29 @@ async def upload_media(
         )
         print(f"✅ Successfully uploaded to S3: {s3_url}")
         
+        # Generate and upload thumbnail for videos
+        thumbnail_url = None
+        if is_video:
+            print(f"🖼️  Generating video thumbnail...")
+            thumbnail_data = generate_video_thumbnail(file_content)
+            if thumbnail_data:
+                thumbnail_filename = f"{type}_{timestamp}_thumb.jpg"
+                thumbnail_key = generate_object_key("images", thumbnail_filename)
+                thumbnail_url = upload_file(
+                    file_content=thumbnail_data,
+                    object_key=thumbnail_key,
+                    content_type="image/jpeg",
+                    metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
+                )
+                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+        
         return {
             "filename": filename,
             "url": s3_url,
             "path": s3_url,  # Keep for backward compatibility
             "type": type,
-            "content_type": file.content_type
+            "content_type": file.content_type,
+            "thumbnail_url": thumbnail_url  # Include thumbnail URL if generated
         }
     except Exception as e:
         # Log the error with full details
