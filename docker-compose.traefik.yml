@@ -65,8 +65,17 @@ services:
       - ENVIRONMENT=production
       - API_HOST=0.0.0.0
       - API_PORT=8000
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-myzakat-media}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_USE_SSL=false
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-https://minio.myzakat.org}
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
@@ -116,7 +125,44 @@ services:
     networks:
       - internal
 
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: myzakat-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - traefik-network
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} 2>/dev/null; mc ready local || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      # MinIO Console UI (port 9001)
+      - "traefik.http.routers.minio-console.rule=Host(`minio.myzakat.org`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      - "traefik.http.routers.minio-console.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$K8V2VzMrCOWQ8gF8qGWoVeF8WGqJ8Wq8WGqJ8Wq8WGqJ8Wq8WGqJ8W"
+      # MinIO API (port 9000) - optional, if you want to expose it
+      - "traefik.http.routers.minio-api.rule=Host(`minio-api.myzakat.org`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+      - "traefik.http.routers.minio-api.middlewares=auth"
+
 volumes:
   postgres_data:
   redis_data:
   backend_uploads:
+  minio_data:

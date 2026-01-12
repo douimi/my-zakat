@@ -141,7 +141,7 @@ const Header = () => {
                     <img 
                       src="/icon.png" 
                       alt="MyZakat Icon" 
-                      className="h-10 md:h-12 lg:h-14 xl:h-16 w-auto object-contain bg-transparent"
+                      className="h-12 md:h-14 lg:h-16 xl:h-20 w-auto object-contain bg-transparent"
                     />
                   </div>
                   <div className="flex flex-col leading-tight">
@@ -157,7 +157,7 @@ const Header = () => {
                 <img 
                   src="/logo.png" 
                   alt="MyZakat Logo" 
-                  className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain transition-all duration-300"
+                  className="h-20 md:h-24 lg:h-28 xl:h-32 max-h-full w-auto object-contain transition-all duration-300"
                 />
               )}
             </Link>
