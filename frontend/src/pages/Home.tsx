@@ -954,7 +954,19 @@ const GallerySection = () => {
   const getMediaUrl = (filename: string): { url: string; isVideo: boolean } => {
     // Check if it's a full URL (starts with http:// or https://)
     if (filename.startsWith('http://') || filename.startsWith('https://')) {
-      const isVideo = filename.includes('youtube.com') || filename.includes('youtu.be') || filename.includes('vimeo.com') || filename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
+      // Extract filename from URL if it's a backend proxy URL
+      const urlParts = filename.split('/')
+      const actualFilename = urlParts[urlParts.length - 1]
+      
+      // Determine if it's a video based on extension or URL path
+      const isVideo = filename.includes('/videos/') || 
+                     filename.includes('youtube.com') || 
+                     filename.includes('youtu.be') || 
+                     filename.includes('vimeo.com') || 
+                     actualFilename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
+      
+      // If it's a backend proxy URL, use it directly
+      // Otherwise, it might be an external URL (YouTube, etc.)
       return { url: filename, isVideo: !!isVideo }
     }
     

@@ -75,16 +75,22 @@ const VideoThumbnail = ({
     const timer = setTimeout(setupObserver, 50)
 
     const generateThumbnail = () => {
-      if (!videoRef.current || !canvasRef.current || !mounted) return
+      if (!videoRef.current || !canvasRef.current || !mounted) {
+        console.log('VideoThumbnail: Missing refs or unmounted', { videoRef: !!videoRef.current, canvasRef: !!canvasRef.current, mounted })
+        return
+      }
 
       const video = videoRef.current
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
 
       if (!ctx) {
+        console.error('VideoThumbnail: Could not get canvas context')
         setIsGenerating(false)
         return
       }
+      
+      console.log('VideoThumbnail: Starting thumbnail generation for', videoSrc)
 
       const handleLoadedMetadata = () => {
         if (!video || !mounted) return

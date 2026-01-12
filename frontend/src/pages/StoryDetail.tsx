@@ -1,9 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
-import { ArrowLeft, Calendar, Play } from 'lucide-react'
+import { ArrowLeft, Calendar } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import LazyVideo from '../components/LazyVideo'
-import VideoThumbnail from '../components/VideoThumbnail'
 
 const StoryDetail = () => {
   const { id } = useParams<{ id: string }>()
@@ -79,35 +78,58 @@ const StoryDetail = () => {
 
       {/* Content */}
       <div className="section-container py-8">
-        {/* Story Image/Video */}
-        {imageUrl && (
-          <div className="mb-8">
-            <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
-              <img 
-                src={imageUrl} 
-                alt={story.title}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none'
-                }}
-              />
-              {story.video_filename && (
-                <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
-                  <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
-                    <Play className="w-8 h-8 text-primary-600 ml-1" />
-                  </div>
+        {/* Story Video or Image */}
+        {(() => {
+          const videoUrl = story.video_filename ? getVideoUrl(story.video_filename) : null
+          
+          if (videoUrl) {
+            // Show playable video at the top
+            return (
+              <div className="mb-8">
+                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
+                  <LazyVideo
+                    src={videoUrl}
+                    className="w-full h-full"
+                    controls={true}
+                    autoPlay={false}
+                    playsInline={true}
+                  />
+                  {story.is_featured && (
+                    <div className="absolute top-4 left-4 z-10">
+                      <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                        Featured
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {story.is_featured && (
-                <div className="absolute top-4 left-4">
-                  <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                    Featured
-                  </span>
+              </div>
+            )
+          } else if (imageUrl) {
+            // Show image if no video
+            return (
+              <div className="mb-8">
+                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
+                  <img 
+                    src={imageUrl} 
+                    alt={story.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                  {story.is_featured && (
+                    <div className="absolute top-4 left-4">
+                      <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                        Featured
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
+              </div>
+            )
+          }
+          return null
+        })()}
 
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="mb-6">
@@ -135,65 +157,6 @@ const StoryDetail = () => {
               </div>
             </div>
           )}
-
-          {story.video_filename && (() => {
-            const videoUrl = getVideoUrl(story.video_filename)
-            return videoUrl ? (
-              <div className="mt-8">
-                <h2 className="text-2xl font-heading font-bold text-gray-900 mb-4">Video</h2>
-                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden group cursor-pointer" onClick={(e) => {
-                  const container = e.currentTarget
-                  if (container.querySelector('video')) return
-                  
-                  const video = document.createElement('video')
-                  video.src = videoUrl
-                  video.className = "w-full h-full"
-                  video.controls = true
-                  video.playsInline = true
-                  video.preload = "auto"
-                  video.muted = false
-                  
-                  const loadingDiv = document.createElement('div')
-                  loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-                  loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-                  container.innerHTML = ''
-                  container.appendChild(loadingDiv)
-                  container.appendChild(video)
-                  
-                  video.addEventListener('canplay', () => {
-                    loadingDiv.remove()
-                    video.play().catch(() => {})
-                  }, { once: true })
-                  
-                  video.addEventListener('error', () => {
-                    loadingDiv.remove()
-                    container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white">Video failed to load</div>'
-                  }, { once: true })
-                }}
-                onMouseEnter={(e) => {
-                  const container = e.currentTarget
-                  if (!container.querySelector('video') && videoUrl) {
-                    const preloadVideo = document.createElement('video')
-                    preloadVideo.src = videoUrl
-                    preloadVideo.preload = "auto"
-                    preloadVideo.style.display = "none"
-                    document.body.appendChild(preloadVideo)
-                    setTimeout(() => {
-                      if (preloadVideo.parentNode) {
-                        preloadVideo.parentNode.removeChild(preloadVideo)
-                      }
-                    }, 30000)
-                  }
-                }}>
-                  <VideoThumbnail
-                    videoSrc={videoUrl}
-                    className="w-full h-full"
-                    alt={`${story.title} video`}
-                  />
-                </div>
-              </div>
-            ) : null
-          })()}
         </div>
       </div>
     </div>
