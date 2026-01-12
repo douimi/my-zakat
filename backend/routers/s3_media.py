@@ -122,6 +122,10 @@ async def browse_s3_media(
                 object_key = file_info['key']
                 filename = object_key.split('/')[-1]
                 
+                # Skip generated thumbnails (files with "_thumb" in name or ending with "_thumb.jpg")
+                if '_thumb' in filename.lower() or filename.lower().endswith('_thumb.jpg') or filename.lower().endswith('_thumb.png'):
+                    continue
+                
                 # Determine file type
                 is_image = filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'))
                 is_video = filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv'))

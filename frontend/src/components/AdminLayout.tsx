@@ -17,7 +17,6 @@ import {
   UserPlus,
   Film,
   AlertCircle,
-  Video,
   TrendingUp,
   Trash2,
   FolderOpen
@@ -45,7 +44,6 @@ const AdminLayout = () => {
     { name: 'Program Categories', href: '/admin/program-categories', icon: TrendingUp },
     { name: 'Programs', href: '/admin/programs', icon: TrendingUp },
     { name: 'Gallery', href: '/admin/gallery', icon: Film },
-    { name: 'Videos', href: '/admin/videos', icon: Video },
     { name: 'Slideshow', href: '/admin/slideshow', icon: Film },
     { name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
     { name: 'Media Cleanup', href: '/admin/cleanup', icon: Trash2 },

@@ -157,13 +157,19 @@ const AdminGallery = () => {
   }
 
   const getMediaUrl = (filename: string): string => {
+    // If it's already a full URL, return as-is
     if (filename.startsWith('http://') || filename.startsWith('https://')) {
       return filename
     }
-    const isVideo = filename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
+    // Extract filename from URL if it contains path separators
+    let actualFilename = filename
+    if (filename.includes('/')) {
+      actualFilename = filename.split('/').pop() || filename
+    }
+    const isVideo = actualFilename.match(/\.(mp4|webm|ogg|avi|mov|mkv)$/i)
     return isVideo
-      ? getStaticFileUrl(`/api/uploads/media/videos/${filename}`)
-      : getStaticFileUrl(`/api/uploads/media/images/${filename}`)
+      ? getStaticFileUrl(`/api/uploads/media/videos/${actualFilename}`)
+      : getStaticFileUrl(`/api/uploads/media/images/${actualFilename}`)
   }
 
   const handleDragStart = (index: number) => {

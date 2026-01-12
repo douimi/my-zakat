@@ -43,7 +43,6 @@ const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions')
 const AdminProgramCategories = lazy(() => import('./pages/admin/AdminProgramCategories'))
 const AdminPrograms = lazy(() => import('./pages/admin/AdminPrograms'))
 const AdminGallery = lazy(() => import('./pages/admin/AdminGallery'))
-const AdminVideos = lazy(() => import('./pages/admin/AdminVideos'))
 const AdminCleanup = lazy(() => import('./pages/admin/AdminCleanup'))
 const AdminS3Media = lazy(() => import('./pages/admin/AdminS3Media'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
@@ -146,7 +145,6 @@ function App() {
                 <Route path="program-categories" element={<AdminProgramCategories />} />
                 <Route path="programs" element={<AdminPrograms />} />
                 <Route path="gallery" element={<AdminGallery />} />
-                <Route path="videos" element={<AdminVideos />} />
                 <Route path="slideshow" element={<AdminSlideshow />} />
                 <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
                 <Route path="cleanup" element={<AdminCleanup />} />

@@ -244,11 +244,6 @@ export const mediaAPI = {
     return response.data
   },
   
-  listVideos: async () => {
-    const response = await api.get('/api/media/videos')
-    return response.data
-  },
-  
   listImages: async () => {
     const response = await api.get('/api/media/images')
     return response.data
@@ -258,16 +253,6 @@ export const mediaAPI = {
     const response = await api.get('/api/media/media-picker', {
       params: { media_type: mediaType }
     })
-    return response.data
-  },
-  
-  deleteVideo: async (filename: string) => {
-    const response = await api.delete(`/api/media/videos/${filename}`)
-    return response.data
-  },
-  
-  getVideoInfo: async (filename: string) => {
-    const response = await api.get(`/api/media/videos/${filename}/info`)
     return response.data
   },
 }
