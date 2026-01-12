@@ -71,7 +71,7 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-myzakat-media}
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_SSL=false
-      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-https://minio.myzakat.org}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-http://31.97.131.31:9000}
     depends_on:
       db:
         condition: service_healthy

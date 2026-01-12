@@ -62,6 +62,7 @@ def ensure_bucket_exists():
                 # Bucket doesn't exist, create it
                 client.create_bucket(Bucket=S3_BUCKET_NAME)
                 # Set bucket policy for public read access
+                import json
                 bucket_policy = {
                     "Version": "2012-10-17",
                     "Statement": [
@@ -76,11 +77,12 @@ def ensure_bucket_exists():
                 try:
                     client.put_bucket_policy(
                         Bucket=S3_BUCKET_NAME,
-                        Policy=str(bucket_policy).replace("'", '"')
+                        Policy=json.dumps(bucket_policy)
                     )
-                except Exception:
-                    # Policy setting might fail, but bucket creation succeeded
-                    pass
+                    print(f"✅ Bucket policy set for public read access on {S3_BUCKET_NAME}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not set bucket policy: {e}")
+                    print("   You may need to set it manually in MinIO console")
                 bucket_exists = True
             else:
                 raise
@@ -176,13 +178,13 @@ def file_exists(object_key: str) -> bool:
 def get_file_url(object_key: str) -> str:
     """
     Get public URL for a file in S3
-    Returns backend API URL that proxies to S3, so it works without DNS configuration
+    Returns direct S3 URL for public access (MinIO format: http://IP:9000/bucket/object-key)
     
     Args:
         object_key: S3 object key (path/filename)
     
     Returns:
-        Public URL of the file (backend API URL)
+        Public URL of the file (direct S3 URL)
     """
     # If object_key is already a full URL, return as-is
     if object_key.startswith('http://') or object_key.startswith('https://'):
@@ -192,46 +194,26 @@ def get_file_url(object_key: str) -> str:
     # Remove leading slash if present
     object_key = object_key.lstrip('/')
     
-    # Extract filename from object key (e.g., "images/filename.jpg" -> "filename.jpg")
-    filename = object_key.split('/')[-1]
-    
-    # Determine media type from object key prefix
-    if object_key.startswith('images/'):
-        media_type = 'images'
-    elif object_key.startswith('videos/'):
-        media_type = 'videos'
-    else:
-        # Try to infer from filename extension
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
-            media_type = 'images'
-        elif filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv')):
-            media_type = 'videos'
-        else:
-            media_type = 'images'  # Default
-    
-    # Use backend API URL instead of direct S3 URL
-    # This ensures it works without DNS configuration for MinIO
-    # Extract base URL from FRONTEND_URL (e.g., "https://myzakat.org" -> "https://myzakat.org/api/uploads")
-    if FRONTEND_URL:
-        # Remove trailing slash
-        base_url = FRONTEND_URL.rstrip('/')
-        # If it's localhost, use localhost for API too (different port)
-        if 'localhost' in base_url or '127.0.0.1' in base_url:
-            # Replace frontend port with backend port
-            api_base = base_url.replace(':3000', ':8000').replace(':5173', ':8000').replace(':80', ':8000')
-        else:
-            # For production, frontend and backend are on the same domain via Traefik
-            # So use the same base URL
-            api_base = base_url
-        
-        return f"{api_base}/api/uploads/media/{media_type}/{filename}"
-    
-    # Fallback: use S3_PUBLIC_URL if configured, otherwise construct from endpoint
+    # Use S3_PUBLIC_URL if configured (should be VPS IP:9000 for now)
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
+        # MinIO direct access format: http://IP:9000/bucket-name/object-key
         return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
     
-    return f"{S3_ENDPOINT}/{S3_BUCKET_NAME}/{object_key}"
+    # Fallback: construct from endpoint (internal Docker network)
+    # Replace internal hostname with public IP if possible
+    endpoint = S3_ENDPOINT
+    # If endpoint is internal (minio:9000), try to use public URL
+    if 'minio:' in endpoint or 'localhost' in endpoint:
+        # Use port 9000 for direct MinIO access
+        # Default to localhost for development, but should be set via S3_PUBLIC_URL in production
+        endpoint = endpoint.replace('minio:', 'localhost:').replace('localhost:', 'http://localhost:')
+        if not endpoint.startswith('http'):
+            endpoint = f"http://{endpoint}"
+    elif not endpoint.startswith('http'):
+        endpoint = f"http://{endpoint}"
+    
+    return f"{endpoint}/{S3_BUCKET_NAME}/{object_key}"
 
 
 def download_file(object_key: str) -> Optional[bytes]:

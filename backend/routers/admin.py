@@ -136,7 +136,22 @@ async def upload_media(
             "content_type": file.content_type
         }
     except Exception as e:
-        # Fallback to local storage if S3 fails
+        # Log the error
+        import traceback
+        error_msg = f"Failed to upload to S3: {str(e)}"
+        print(f"❌ {error_msg}")
+        print(traceback.format_exc())
+        
+        # In production, fail instead of falling back to local storage
+        # This ensures files are stored in S3, not in container filesystem
+        env = os.getenv("ENVIRONMENT", "development")
+        if env == "production":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload file to S3. Please check S3 configuration. Error: {str(e)}"
+            )
+        
+        # Fallback to local storage only in development
         upload_dir = f"uploads/media/{category}"
         os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(upload_dir, filename)
