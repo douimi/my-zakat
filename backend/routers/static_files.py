@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import FileResponse, Response, RedirectResponse
 import os
 from pathlib import Path
-from s3_service import file_exists, get_file_url, download_file, extract_object_key_from_url
+from s3_service import file_exists, get_file_url, download_file, extract_object_key_from_url, get_file_info
 
 router = APIRouter()
 
@@ -173,39 +173,66 @@ async def serve_video(filename: str, request: Request):
         )
 
 
-@router.get("/media/images/{filename}")
+@router.get("/media/images/{filename:path}")
 async def serve_image(filename: str):
     """
     Serve image files
-    If filename is an S3 URL, redirect to it. Otherwise check S3 first, then local filesystem.
+    If filename is an S3 URL, extract object key and serve from S3. Otherwise check S3 first, then local filesystem.
     """
-    # Security: prevent directory traversal
-    if '..' in filename or '/' in filename or '\\' in filename:
+    from urllib.parse import unquote
+    
+    # Decode URL-encoded filename
+    filename = unquote(filename)
+    
+    # Security: prevent directory traversal (but allow forward slashes for S3 paths)
+    if '..' in filename or filename.startswith('/'):
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    # If filename is already an S3 URL, redirect to it
+    # If filename is already an S3 URL, extract the object key
+    object_key = None
     if filename.startswith('http://') or filename.startswith('https://'):
-        return RedirectResponse(url=filename)
+        # Extract object key from S3 URL
+        object_key = extract_object_key_from_url(filename)
+        if not object_key:
+            # If we can't extract, try to redirect (for external URLs)
+            return RedirectResponse(url=filename)
+    else:
+        # Extract just the filename if it contains path separators
+        # Handle cases where filename might be "images/filename.jpg" or just "filename.jpg"
+        if '/' in filename:
+            # If it already has the path, use it as-is
+            object_key = filename if filename.startswith('images/') or filename.startswith('videos/') else f"images/{filename.split('/')[-1]}"
+        else:
+            # Check S3 first - simple structure: images/filename
+            object_key = f"images/{filename}"
     
-    # Check S3 first - simple structure: images/filename
-    object_key = f"images/{filename}"
+    # Try to serve from S3
+    if object_key and file_exists(object_key):
+        try:
+            file_content = download_file(object_key)
+            if file_content:
+                file_info = get_file_info(object_key)
+                content_type = file_info.get('content_type', 'image/jpeg') if file_info else get_content_type(filename.split('/')[-1])
+                return Response(
+                    content=file_content,
+                    media_type=content_type,
+                    headers={
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'public, max-age=86400',
+                    }
+                )
+        except Exception as e:
+            print(f"Error serving image from S3: {e}")
+            # Fall through to local filesystem
     
-    s3_file_found = False
-    s3_url = None
-    if file_exists(object_key):
-        s3_url = get_file_url(object_key)
-        s3_file_found = True
-    
-    if s3_file_found:
-        return RedirectResponse(url=s3_url)
-    
-    # Fallback to local filesystem
-    file_path = os.path.join(IMAGE_DIR, filename)
+    # Fallback to local filesystem - extract just the filename
+    local_filename = filename.split('/')[-1]
+    file_path = os.path.join(IMAGE_DIR, local_filename)
     
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Image not found")
     
-    content_type = get_content_type(filename)
+    content_type = get_content_type(local_filename)
     return FileResponse(
         file_path, 
         media_type=content_type,

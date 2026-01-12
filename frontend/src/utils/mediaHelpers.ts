@@ -9,8 +9,19 @@ import { getStaticFileUrl } from './api'
 export const getImageUrl = (filename?: string, basePath: string = 'media/images'): string | null => {
   if (!filename) return null
   
-  // If it's already a full URL, return as-is
+  // If it's already a full URL, check if it's an S3 URL (needs to go through backend)
   if (filename.startsWith('http://') || filename.startsWith('https://')) {
+    // If it's an S3/MinIO URL, extract the filename and route through backend
+    // S3 URLs typically look like: http://host:port/bucket/images/filename.jpg
+    // or https://host/bucket/images/filename.jpg
+    if (filename.includes('/myzakat-media/') || filename.includes(':9000/') || filename.includes(':9001/')) {
+      // Extract the filename from the S3 URL
+      const urlParts = filename.split('/')
+      const filenamePart = urlParts[urlParts.length - 1]
+      // Route through backend API
+      return getStaticFileUrl(`/api/uploads/${basePath}/${encodeURIComponent(filenamePart)}`)
+    }
+    // For external URLs (YouTube, external images, etc.), return as-is
     return filename
   }
   
@@ -27,8 +38,17 @@ export const getImageUrl = (filename?: string, basePath: string = 'media/images'
 export const getVideoUrl = (filename?: string, basePath: string = 'media/videos'): string | null => {
   if (!filename) return null
   
-  // If it's already a full URL, return as-is
+  // If it's already a full URL, check if it's an S3 URL (needs to go through backend)
   if (filename.startsWith('http://') || filename.startsWith('https://')) {
+    // If it's an S3/MinIO URL, extract the filename and route through backend
+    if (filename.includes('/myzakat-media/') || filename.includes(':9000/') || filename.includes(':9001/')) {
+      // Extract the filename from the S3 URL
+      const urlParts = filename.split('/')
+      const filenamePart = urlParts[urlParts.length - 1]
+      // Route through backend API
+      return getStaticFileUrl(`/api/uploads/${basePath}/${encodeURIComponent(filenamePart)}`)
+    }
+    // For external URLs (YouTube, Vimeo, etc.), return as-is
     return filename
   }
   
