@@ -235,22 +235,6 @@ async def serve_image(filename: str):
     # If we reach here, file doesn't exist in S3
     # Don't fall back to filesystem - fail instead
     raise HTTPException(status_code=404, detail=f"Image not found in S3: {object_key or filename}")
-    
-    # Fallback to local filesystem - extract just the filename
-    local_filename = filename.split('/')[-1]
-    file_path = os.path.join(IMAGE_DIR, local_filename)
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    
-    content_type = get_content_type(local_filename)
-    return FileResponse(
-        file_path, 
-        media_type=content_type,
-        headers={
-            'Access-Control-Allow-Origin': '*',
-        }
-    )
 
 
 @router.get("/stories/{filename}")

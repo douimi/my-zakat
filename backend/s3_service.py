@@ -289,18 +289,18 @@ def get_file_url(object_key: str) -> str:
         else:
             media_type = 'images'  # Default
     
-    # Return direct S3 URL for public access
-    # MinIO supports anonymous access when bucket has public read policy
-    if S3_PUBLIC_URL:
-        base_url = S3_PUBLIC_URL.rstrip('/')
-        direct_url = f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
-        print(f"🔗 Generated direct S3 URL: {direct_url}")
-        return direct_url
-    
-    # Fallback: route through backend API if S3_PUBLIC_URL not configured
+    # Route through backend API proxy (HTTPS, handles authentication, avoids mixed content)
+    # The backend efficiently proxies files from S3, serving them over HTTPS
     if FRONTEND_URL:
         base_url = FRONTEND_URL.rstrip('/')
-        return f"{base_url}/api/uploads/media/{media_type}/{filename}"
+        proxy_url = f"{base_url}/api/uploads/media/{media_type}/{filename}"
+        print(f"🔗 Generated backend proxy URL (serves from S3): {proxy_url}")
+        return proxy_url
+    
+    # Fallback: use direct S3 URL if FRONTEND_URL not configured
+    if S3_PUBLIC_URL:
+        base_url = S3_PUBLIC_URL.rstrip('/')
+        return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
     
     # Fallback: construct from endpoint
     endpoint = S3_ENDPOINT
