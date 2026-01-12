@@ -12,7 +12,6 @@ const Header = () => {
   const [isUrgentNeedsDropdownOpen, setIsUrgentNeedsDropdownOpen] = useState(false)
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
-  const [isScrolled, setIsScrolled] = useState(false)
   const quickLinksRef = useRef<HTMLDivElement>(null)
   const urgentNeedsRef = useRef<HTMLDivElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
@@ -38,22 +37,6 @@ const Header = () => {
   const emergencyBannerCtaUrl = settings?.find((s: any) => s.key === 'emergency_banner_cta_url')?.value || 
     '/donate'
   const emergencyBannerEnabled = settings?.find((s: any) => s.key === 'emergency_banner_enabled')?.value === 'true'
-
-  // Handle scroll detection
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY || document.documentElement.scrollTop
-      setIsScrolled(scrollPosition > 50)
-    }
-
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    // Check initial scroll position
-    handleScroll()
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-    }
-  }, [])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -133,37 +116,26 @@ const Header = () => {
             {/* Logo */}
             <Link 
               to="/" 
-              className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:scale-105 max-h-full"
+              className="flex items-center flex-shrink-0 mr-2 md:mr-3 lg:mr-4 xl:mr-6 transition-all duration-300 hover:opacity-80 max-h-full"
             >
-              {isScrolled ? (
-                <div className="flex items-center gap-2 md:gap-3 transition-all duration-300">
-                  <div className="flex-shrink-0 bg-transparent">
-                    <img 
-                      src="/icon.png" 
-                      alt="MyZakat Icon" 
-                      className="h-12 md:h-14 lg:h-16 xl:h-20 w-auto object-contain bg-transparent"
-                    />
-                  </div>
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-primary-600 font-semibold text-xs md:text-sm lg:text-base xl:text-lg">
-                      Myzakat
-                    </span>
-                    <span className="text-gray-600 font-medium text-[10px] md:text-xs lg:text-sm xl:text-base">
-                      Zakat Distribution Foundation
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="flex-shrink-0">
+                  <img 
+                    src="/logo.png" 
+                    alt="MyZakat Logo" 
+                    className="h-16 md:h-20 lg:h-24 xl:h-28 max-h-full w-auto object-contain"
+                  />
                 </div>
-              ) : (
-                <img 
-                  src="/logo.png" 
-                  alt="MyZakat Logo" 
-                  className="h-20 md:h-24 lg:h-28 xl:h-32 max-h-full w-auto object-contain transition-all duration-300"
-                />
-              )}
+                <div className="hidden sm:flex flex-col leading-tight">
+                  <span className="text-gray-600 font-medium text-xs md:text-sm lg:text-base">
+                    Zakat Distribution Foundation
+                  </span>
+                </div>
+              </div>
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-0.5">
+            <nav className="hidden md:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-0.5">
               {/* Urgent Needs Dropdown */}
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
@@ -493,7 +465,7 @@ const Header = () => {
             </nav>
 
             {/* Profile Icon with Dropdown */}
-            <div className="hidden lg:flex items-center flex-shrink-0 ml-2 xl:ml-4 2xl:ml-6">
+            <div className="hidden md:flex items-center flex-shrink-0 ml-2 xl:ml-4 2xl:ml-6">
               <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
@@ -555,7 +527,7 @@ const Header = () => {
             {/* Mobile menu button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-xl text-gray-700 hover:text-primary-600 hover:bg-primary-50 flex-shrink-0 transition-all duration-200"
+              className="md:hidden p-2.5 rounded-xl text-gray-700 hover:text-primary-600 hover:bg-primary-50 flex-shrink-0 transition-all duration-200"
               aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
@@ -569,7 +541,7 @@ const Header = () => {
 
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-100 bg-white shadow-lg max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="md:hidden border-t border-gray-100 bg-white shadow-lg max-h-[calc(100vh-6rem)] overflow-y-auto">
             <div className="w-full px-2 sm:px-4 lg:px-6 py-6">
               <nav className="flex flex-col space-y-3">
                 {/* Urgent Needs in mobile menu */}
