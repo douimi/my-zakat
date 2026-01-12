@@ -94,160 +94,238 @@ const VideoThumbnail = ({
 
       const handleLoadedMetadata = () => {
         if (!video || !mounted) return
+        console.log('VideoThumbnail: loadedmetadata', { 
+          videoSrc, 
+          duration: video.duration, 
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight
+        })
+        
         try {
-          // Try to seek to a specific time for thumbnail
-          const duration = video.duration || 10
-          const seekTime = Math.min(1, duration * 0.1)
+          // Try multiple strategies to get a frame
+          const tryMultipleStrategies = () => {
+            // Strategy 1: Try to capture current frame immediately
+            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+              console.log('VideoThumbnail: Strategy 1 - Immediate capture')
+              if (captureCurrentFrame()) {
+                return true
+              }
+            }
+            
+            // Strategy 2: Seek to a specific time
+            try {
+              const duration = video.duration || 10
+              const seekTime = Math.min(1, duration * 0.1)
+              console.log('VideoThumbnail: Strategy 2 - Seeking to', seekTime)
+              video.currentTime = seekTime
+              return false // Will be handled by seeked event
+            } catch (e) {
+              console.warn('VideoThumbnail: Seek failed', e)
+            }
+            
+            // Strategy 3: Try playing briefly
+            console.log('VideoThumbnail: Strategy 3 - Playing briefly')
+            video.play().then(() => {
+              setTimeout(() => {
+                if (mounted) {
+                  video.pause()
+                  captureCurrentFrame()
+                }
+              }, 300)
+            }).catch((err) => {
+              console.error('VideoThumbnail: Play failed', err)
+              setIsGenerating(false)
+            })
+            
+            return false
+          }
           
-          // Set up a timeout to capture frame if seek doesn't complete
-          const seekTimeout = setTimeout(() => {
+          // Set timeout as fallback
+          const fallbackTimeout = setTimeout(() => {
             if (mounted && !thumbnailUrl) {
+              console.log('VideoThumbnail: Fallback timeout - trying capture')
               captureCurrentFrame()
             }
-          }, 2000)
+          }, 3000)
           
           const handleSeekComplete = () => {
-            clearTimeout(seekTimeout)
+            clearTimeout(fallbackTimeout)
             if (mounted) {
+              console.log('VideoThumbnail: Seek completed')
               captureCurrentFrame()
             }
           }
           
           video.addEventListener('seeked', handleSeekComplete, { once: true })
           
-          // If video is already loaded enough, try to capture immediately
-          if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-            try {
-              video.currentTime = seekTime
-            } catch (e) {
-              clearTimeout(seekTimeout)
-              video.removeEventListener('seeked', handleSeekComplete)
-              // If seeking fails, try to capture current frame
-              captureCurrentFrame()
-            }
+          // Try strategies
+          if (!tryMultipleStrategies()) {
+            // Strategies are async, wait for them
+            setTimeout(() => {
+              clearTimeout(fallbackTimeout)
+            }, 5000)
           } else {
-            video.currentTime = seekTime
+            clearTimeout(fallbackTimeout)
           }
         } catch (e) {
-          // If seeking fails, try to capture current frame
+          console.error('VideoThumbnail: Error in handleLoadedMetadata', e)
           captureCurrentFrame()
         }
       }
 
       const captureCurrentFrame = () => {
         if (!video || !canvas || !ctx || !mounted) {
+          console.log('VideoThumbnail: captureCurrentFrame - missing refs', { video: !!video, canvas: !!canvas, ctx: !!ctx, mounted })
           setIsGenerating(false)
-          return
+          return false
         }
         
         try {
           // Wait a bit for video to be ready
           if (video.readyState < 2) {
+            console.log('VideoThumbnail: Video not ready, waiting...', { readyState: video.readyState })
             // Video not ready yet, wait for it
             const checkReady = setInterval(() => {
               if (video.readyState >= 2 && mounted) {
                 clearInterval(checkReady)
-                tryCapture()
+                return tryCapture()
               } else if (!mounted) {
                 clearInterval(checkReady)
                 setIsGenerating(false)
+                return false
               }
             }, 100)
             
             setTimeout(() => {
               clearInterval(checkReady)
               if (mounted) {
-                tryCapture()
+                return tryCapture()
               }
+              return false
             }, 3000)
-            return
+            return false
           }
           
-          tryCapture()
+          return tryCapture()
         } catch (error) {
-          console.error('Error capturing video frame:', error)
+          console.error('VideoThumbnail: Error in captureCurrentFrame', error)
           if (mounted) {
             setIsGenerating(false)
           }
+          return false
         }
       }
       
       const tryCapture = () => {
         if (!video || !canvas || !ctx || !mounted) {
+          console.log('VideoThumbnail: tryCapture - missing refs')
           setIsGenerating(false)
-          return
+          return false
         }
         
         try {
-          // Some browsers need the video to play at least one frame
-          // Try to play and pause immediately to ensure a frame is available
-          const attemptCapture = () => {
+          const width = video.videoWidth || 640
+          const height = video.videoHeight || 360
+          
+          console.log('VideoThumbnail: tryCapture attempt', { 
+            width, 
+            height, 
+            readyState: video.readyState,
+            paused: video.paused 
+          })
+          
+          if (width > 0 && height > 0) {
+            canvas.width = width
+            canvas.height = height
+            
             try {
-              const width = video.videoWidth || 640
-              const height = video.videoHeight || 360
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
               
-              if (width > 0 && height > 0) {
-                canvas.width = width
-                canvas.height = height
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
-                
-                if (mounted && dataUrl && dataUrl !== 'data:,') {
-                  try {
-                    localStorage.setItem(cacheKey, dataUrl)
-                  } catch (e) {
-                    // localStorage full, ignore
-                  }
-                  setThumbnailUrl(dataUrl)
-                  setIsGenerating(false)
-                  if (onThumbnailGenerated) {
-                    onThumbnailGenerated(dataUrl)
-                  }
-                  video.pause()
-                  return true
+              console.log('VideoThumbnail: Captured frame', { 
+                dataUrlLength: dataUrl.length,
+                isValid: dataUrl && dataUrl !== 'data:,'
+              })
+              
+              if (mounted && dataUrl && dataUrl !== 'data:,') {
+                try {
+                  localStorage.setItem(cacheKey, dataUrl)
+                } catch (e) {
+                  // localStorage full, ignore
                 }
+                setThumbnailUrl(dataUrl)
+                setIsGenerating(false)
+                if (onThumbnailGenerated) {
+                  onThumbnailGenerated(dataUrl)
+                }
+                if (!video.paused) {
+                  video.pause()
+                }
+                return true
+              } else {
+                console.warn('VideoThumbnail: Invalid dataUrl', { dataUrl: dataUrl?.substring(0, 50) })
               }
-            } catch (error) {
-              console.error('Error capturing frame:', error)
+            } catch (drawError) {
+              console.error('VideoThumbnail: Error drawing to canvas', drawError)
             }
-            return false
+          } else {
+            console.warn('VideoThumbnail: Invalid dimensions', { width, height })
           }
           
-          // Try immediate capture first
-          if (attemptCapture()) {
-            return
-          }
-          
-          // If that fails, try playing the video briefly
-          if (video.paused) {
+          // If immediate capture failed, try playing briefly
+          if (video.paused && video.readyState >= 2) {
+            console.log('VideoThumbnail: Trying to play video for frame capture')
             video.play().then(() => {
-              // Wait for a frame to be available
               setTimeout(() => {
                 if (mounted) {
-                  video.pause()
-                  if (!attemptCapture()) {
-                    setIsGenerating(false)
+                  try {
+                    const width = video.videoWidth || 640
+                    const height = video.videoHeight || 360
+                    
+                    if (width > 0 && height > 0) {
+                      canvas.width = width
+                      canvas.height = height
+                      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+                      
+                      if (mounted && dataUrl && dataUrl !== 'data:,') {
+                        try {
+                          localStorage.setItem(cacheKey, dataUrl)
+                        } catch (e) {
+                          // localStorage full, ignore
+                        }
+                        setThumbnailUrl(dataUrl)
+                        setIsGenerating(false)
+                        if (onThumbnailGenerated) {
+                          onThumbnailGenerated(dataUrl)
+                        }
+                        video.pause()
+                        return
+                      }
+                    }
+                  } catch (e) {
+                    console.error('VideoThumbnail: Error in play-then-capture', e)
                   }
+                  video.pause()
+                  setIsGenerating(false)
                 }
-              }, 100)
+              }, 200)
             }).catch((error) => {
-              console.error('Error playing video for thumbnail:', error)
-              // Try one more time without playing
-              if (!attemptCapture()) {
-                setIsGenerating(false)
-              }
+              console.error('VideoThumbnail: Error playing video', error)
+              setIsGenerating(false)
             })
           } else {
-            // Video is already playing, just try to capture
-            if (!attemptCapture()) {
-              setIsGenerating(false)
-            }
+            setIsGenerating(false)
           }
+          
+          return false
         } catch (error) {
-          console.error('Error in tryCapture:', error)
+          console.error('VideoThumbnail: Error in tryCapture', error)
           if (mounted) {
             setIsGenerating(false)
           }
+          return false
         }
       }
 
@@ -266,34 +344,45 @@ const VideoThumbnail = ({
       video.addEventListener('seeked', handleSeeked, { once: true })
       video.addEventListener('error', handleError, { once: true })
       video.addEventListener('loadeddata', () => {
+        console.log('VideoThumbnail: loadeddata event', { videoSrc, videoWidth: video.videoWidth, videoHeight: video.videoHeight, readyState: video.readyState })
         // If metadata loads but seek doesn't work, try to capture first frame
         if (!thumbnailUrl && mounted) {
-          try {
-            const width = video.videoWidth || 640
-            const height = video.videoHeight || 360
-            
-            if (width > 0 && height > 0 && canvas && ctx) {
-              canvas.width = width
-              canvas.height = height
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+          // Wait a bit for video to be ready
+          setTimeout(() => {
+            try {
+              const width = video.videoWidth || 640
+              const height = video.videoHeight || 360
               
-              if (mounted) {
-                try {
-                  localStorage.setItem(cacheKey, dataUrl)
-                } catch (e) {
-                  // localStorage full, ignore
+              console.log('VideoThumbnail: Attempting to capture from loadeddata', { width, height, readyState: video.readyState })
+              
+              if (width > 0 && height > 0 && canvas && ctx) {
+                canvas.width = width
+                canvas.height = height
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+                
+                if (mounted && dataUrl && dataUrl !== 'data:,') {
+                  console.log('VideoThumbnail: Successfully captured thumbnail from loadeddata')
+                  try {
+                    localStorage.setItem(cacheKey, dataUrl)
+                  } catch (e) {
+                    // localStorage full, ignore
+                  }
+                  setThumbnailUrl(dataUrl)
+                  setIsGenerating(false)
+                  if (onThumbnailGenerated) {
+                    onThumbnailGenerated(dataUrl)
+                  }
+                } else {
+                  console.warn('VideoThumbnail: Invalid dataUrl from loadeddata', { dataUrl })
                 }
-                setThumbnailUrl(dataUrl)
-                setIsGenerating(false)
-                if (onThumbnailGenerated) {
-                  onThumbnailGenerated(dataUrl)
-                }
+              } else {
+                console.warn('VideoThumbnail: Invalid video dimensions from loadeddata', { width, height })
               }
+            } catch (e) {
+              console.error('VideoThumbnail: Error in loadeddata handler', e)
             }
-          } catch (e) {
-            // Ignore errors
-          }
+          }, 200)
         }
       }, { once: true })
       
@@ -339,6 +428,15 @@ const VideoThumbnail = ({
         muted
         playsInline
         crossOrigin={videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined}
+        onLoadedMetadata={() => {
+          console.log('VideoThumbnail: Video metadata loaded', { videoSrc, readyState: videoRef.current?.readyState })
+        }}
+        onLoadedData={() => {
+          console.log('VideoThumbnail: Video data loaded', { videoSrc, videoWidth: videoRef.current?.videoWidth, videoHeight: videoRef.current?.videoHeight })
+        }}
+        onError={(e) => {
+          console.error('VideoThumbnail: Video load error', { videoSrc, error: e, target: e.target })
+        }}
       />
       <canvas ref={canvasRef} className="hidden" />
 
