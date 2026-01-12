@@ -253,6 +253,9 @@ async def calculate_zakat(calculation: ZakatCalculation):
 
 @router.post("/create-payment-session", response_model=PaymentSession)
 async def create_payment_session(payment: PaymentCreate, db: Session = Depends(get_db)):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Validate amount
     if not payment.amount or payment.amount < 1:
         raise HTTPException(
@@ -260,15 +263,22 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             detail="Invalid amount"
         )
     
-    # Check if Stripe is configured
+    # Check if Stripe is configured - with detailed logging
+    stripe_key_from_env = os.getenv("STRIPE_SECRET_KEY")
+    logger.info(f"Stripe configuration check:")
+    logger.info(f"  stripe.api_key exists: {bool(stripe.api_key)}")
+    logger.info(f"  stripe.api_key value: {stripe.api_key[:10] + '...' if stripe.api_key else 'None'}")
+    logger.info(f"  stripe_secret_key variable exists: {bool(stripe_secret_key)}")
+    logger.info(f"  stripe_secret_key value: {stripe_secret_key[:10] + '...' if stripe_secret_key else 'None'}")
+    logger.info(f"  STRIPE_SECRET_KEY env var exists: {bool(stripe_key_from_env)}")
+    logger.info(f"  STRIPE_SECRET_KEY env var value: {stripe_key_from_env[:10] + '...' if stripe_key_from_env else 'None'}")
+    
     if not stripe.api_key or not stripe_secret_key:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Stripe not configured: api_key={bool(stripe.api_key)}, secret_key={bool(stripe_secret_key)}")
-        logger.error(f"STRIPE_SECRET_KEY env var exists: {bool(os.getenv('STRIPE_SECRET_KEY'))}")
+        error_detail = f"Payment processing is not configured. Stripe API key: {bool(stripe.api_key)}, Secret key: {bool(stripe_secret_key)}"
+        logger.error(error_detail)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Payment processing is not configured. Please contact support."
+            detail=error_detail
         )
     
     try:
@@ -320,11 +330,22 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         return PaymentSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Stripe error in create_payment_session: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stripe error: {str(e)}"
         )
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Payment processing error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment processing error: {str(e)}"

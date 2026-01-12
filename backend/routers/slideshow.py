@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import List, Optional
 from datetime import datetime
-import aiofiles
 import os
 import traceback
 
@@ -252,11 +251,14 @@ async def upload_slideshow_image(
         )
         slide.image_filename = s3_url
     except Exception as e:
-        # Fallback to local storage
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content_bytes)
-        slide.image_filename = filename
+        # ALWAYS fail - never fall back to local storage
+        import traceback
+        print(f"❌ Failed to upload slideshow image to S3: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload image to S3. Error: {str(e)}"
+        )
     db.commit()
     db.refresh(slide)
     

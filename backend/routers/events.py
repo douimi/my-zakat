@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import aiofiles
 import os
 from datetime import datetime
 
@@ -54,13 +53,13 @@ async def create_event(
             )
             image_value = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/events"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            image_value = filename
+            import traceback
+            print(f"❌ Failed to upload event image to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload image to S3. Error: {str(e)}"
+            )
     elif image_url and image_url.strip():
         # Use image URL if provided and no file upload
         image_value = image_url.strip()
@@ -168,13 +167,13 @@ async def update_event(
             )
             event.image = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/events"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            event.image = filename
+            import traceback
+            print(f"❌ Failed to upload event image to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload image to S3. Error: {str(e)}"
+            )
     elif image_url is not None:
         # Delete old image file if clearing/changing image
         if old_image:
@@ -235,18 +234,26 @@ async def upload_event_image(
     if not file.content_type.startswith('image/'):
         raise HTTPException(status_code=400, detail="File must be an image")
     
-    # Create uploads directory if it doesn't exist
-    upload_dir = "uploads/images/events"
-    os.makedirs(upload_dir, exist_ok=True)
-    
     # Generate unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{timestamp}_{file.filename}"
-    file_path = os.path.join(upload_dir, filename)
+    file_content = await file.read()
     
-    # Save file
-    async with aiofiles.open(file_path, 'wb') as f:
-        content = await file.read()
-        await f.write(content)
-    
-    return {"filename": filename, "path": f"/uploads/images/events/{filename}"}
+    # Upload to S3 - ALWAYS use S3, never fall back to local storage
+    try:
+        object_key = generate_object_key("images", filename)
+        s3_url = upload_file(
+            file_content=file_content,
+            object_key=object_key,
+            content_type=file.content_type,
+            metadata={"original_filename": file.filename or "", "type": "event_image"}
+        )
+        return {"filename": filename, "path": s3_url, "url": s3_url}
+    except Exception as e:
+        import traceback
+        print(f"❌ Failed to upload event image to S3: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload image to S3. Error: {str(e)}"
+        )

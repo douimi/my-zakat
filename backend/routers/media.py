@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import aiofiles
 import os
 from datetime import datetime
 from pathlib import Path
@@ -58,20 +57,14 @@ async def upload_video(
             "content_type": file.content_type
         }
     except Exception as e:
-        # Fallback to local storage if S3 fails
-        os.makedirs(VIDEO_UPLOAD_DIR, exist_ok=True)
-        file_path = os.path.join(VIDEO_UPLOAD_DIR, filename)
-        
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(file_content)
-        
-        return {
-            "filename": filename,
-            "url": f"/api/uploads/media/videos/{filename}",
-            "path": f"/api/uploads/media/videos/{filename}",
-            "size": len(file_content),
-            "content_type": file.content_type
-        }
+        # ALWAYS fail - never fall back to local storage
+        import traceback
+        print(f"❌ Failed to upload video to S3: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload video to S3. Please check S3 configuration. Error: {str(e)}"
+        )
 
 
 @router.get("/videos")

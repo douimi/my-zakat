@@ -121,27 +121,30 @@ async def upload_and_create_gallery_item(
     file_extension = os.path.splitext(file.filename)[1] if file.filename else ''
     filename = f"gallery_{timestamp}{file_extension}"
     
-    # Upload to S3
+    # Upload to S3 - ALWAYS use S3, never fall back to local storage
     try:
         object_key = generate_object_key(category, filename)
+        print(f"📤 Uploading gallery item to S3: {object_key} (size: {len(file_content)} bytes)")
         s3_url = upload_file(
             file_content=file_content,
             object_key=object_key,
             content_type=file.content_type,
             metadata={"original_filename": file.filename or "", "type": "gallery"}
         )
-        # Store the S3 URL as the filename (for backward compatibility, we'll store URL)
+        print(f"✅ Successfully uploaded gallery item to S3: {s3_url}")
+        # Store the S3 URL as the filename
         stored_filename = s3_url
     except Exception as e:
-        # Fallback to local storage if S3 fails
-        upload_dir = VIDEO_UPLOAD_DIR if is_video else IMAGE_UPLOAD_DIR
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, filename)
-        
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(file_content)
-        
-        stored_filename = filename
+        # Log the error and fail - never fall back to local storage
+        import traceback
+        error_msg = f"Failed to upload gallery item to S3: {str(e)}"
+        print(f"❌ {error_msg}")
+        print(f"   Error type: {type(e).__name__}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file to S3. Please check S3 configuration. Error: {str(e)}"
+        )
     
     # If no display_order provided, set it to the max + 1
     if display_order is None:

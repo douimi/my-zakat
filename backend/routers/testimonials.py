@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import aiofiles
 import os
 from datetime import datetime
 
@@ -40,7 +39,7 @@ async def create_testimonial(
         filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
         content_bytes = await image.read()
         
-        # Upload to S3
+        # Upload to S3 - ALWAYS use S3, never fall back to local storage
         try:
             object_key = generate_object_key("images", filename)
             s3_url = upload_file(
@@ -51,13 +50,13 @@ async def create_testimonial(
             )
             image_value = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/testimonials"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            image_value = filename
+            import traceback
+            print(f"❌ Failed to upload testimonial image to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload image to S3. Error: {str(e)}"
+            )
     elif image_url and image_url.strip():
         # Use image URL if provided and no file upload
         image_value = image_url.strip()
@@ -74,7 +73,7 @@ async def create_testimonial(
         filename = f"{timestamp}_{name.replace(' ', '_')}{file_extension}"
         content_bytes = await video.read()
         
-        # Upload to S3
+        # Upload to S3 - ALWAYS use S3, never fall back to local storage
         try:
             object_key = generate_object_key("videos", filename)
             s3_url = upload_file(
@@ -85,13 +84,13 @@ async def create_testimonial(
             )
             video_filename = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/testimonials"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            video_filename = filename
+            import traceback
+            print(f"❌ Failed to upload testimonial video to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload video to S3. Error: {str(e)}"
+            )
     
     # Create testimonial in database
     db_testimonial = Testimonial(
@@ -192,13 +191,13 @@ async def update_testimonial(
             )
             testimonial.image = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/testimonials"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            testimonial.image = filename
+            import traceback
+            print(f"❌ Failed to upload testimonial image to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload image to S3. Error: {str(e)}"
+            )
     elif image_url is not None:
         # Delete old image file if clearing/changing image
         old_image = testimonial.image
@@ -269,13 +268,13 @@ async def update_testimonial(
             )
             testimonial.video_filename = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/testimonials"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            testimonial.video_filename = filename
+            import traceback
+            print(f"❌ Failed to upload testimonial video to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload video to S3. Error: {str(e)}"
+            )
     
     db.commit()
     db.refresh(testimonial)

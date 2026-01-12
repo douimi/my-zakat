@@ -266,11 +266,14 @@ async def upload_program_video(
         )
         program.video_filename = s3_url
     except Exception as e:
-        # Fallback to local storage
-        file_path = UPLOAD_DIR / filename
-        with open(file_path, "wb") as buffer:
-            buffer.write(file_content)
-        program.video_filename = filename
+        # ALWAYS fail - never fall back to local storage
+        import traceback
+        print(f"❌ Failed to upload program video to S3: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload video to S3. Error: {str(e)}"
+        )
     
     db.commit()
     db.refresh(program)

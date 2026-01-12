@@ -55,6 +55,8 @@ services:
       dockerfile: Dockerfile
     container_name: myzakat-backend
     restart: unless-stopped
+    env_file:
+      - env.production  # Load environment variables from env.production file
     environment:
       - PYTHONUNBUFFERED=1  # Ensure Python output is unbuffered and logs are visible
       - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD}@db:5432/myzakat

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import aiofiles
 import os
 from datetime import datetime
 
@@ -38,7 +37,7 @@ async def create_story(
         filename = f"{timestamp}_{title.replace(' ', '_')}{file_extension}"
         content_bytes = await video.read()
         
-        # Upload to S3
+        # Upload to S3 - ALWAYS use S3, never fall back to local storage
         try:
             object_key = generate_object_key("videos", filename)
             s3_url = upload_file(
@@ -49,13 +48,13 @@ async def create_story(
             )
             video_filename = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/stories"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            video_filename = filename
+            import traceback
+            print(f"❌ Failed to upload story video to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload video to S3. Error: {str(e)}"
+            )
     
     # Create story in database
     db_story = Story(
@@ -193,13 +192,13 @@ async def update_story(
             )
             story.video_filename = s3_url
         except Exception as e:
-            # Fallback to local storage
-            upload_dir = "uploads/stories"
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content_bytes)
-            story.video_filename = filename
+            import traceback
+            print(f"❌ Failed to upload story video to S3: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload video to S3. Error: {str(e)}"
+            )
     
     # Handle image removal/update
     old_image = story.image_filename
