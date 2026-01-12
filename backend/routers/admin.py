@@ -118,15 +118,17 @@ async def upload_media(
     file_extension = os.path.splitext(file.filename)[1] if file.filename else ''
     filename = f"{type}_{timestamp}{file_extension}"
     
-    # Upload to S3
+    # Upload to S3 - ALWAYS use S3, never fall back to local storage
     try:
         object_key = generate_object_key(category, filename)
+        print(f"📤 Uploading to S3: {object_key} (size: {len(file_content)} bytes)")
         s3_url = upload_file(
             file_content=file_content,
             object_key=object_key,
             content_type=file.content_type,
             metadata={"type": type, "original_filename": file.filename or ""}
         )
+        print(f"✅ Successfully uploaded to S3: {s3_url}")
         
         return {
             "filename": filename,
@@ -136,36 +138,19 @@ async def upload_media(
             "content_type": file.content_type
         }
     except Exception as e:
-        # Log the error
+        # Log the error with full details
         import traceback
         error_msg = f"Failed to upload to S3: {str(e)}"
         print(f"❌ {error_msg}")
+        print(f"   Error type: {type(e).__name__}")
         print(traceback.format_exc())
         
-        # In production, fail instead of falling back to local storage
+        # ALWAYS fail - never fall back to local storage
         # This ensures files are stored in S3, not in container filesystem
-        env = os.getenv("ENVIRONMENT", "development")
-        if env == "production":
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to upload file to S3. Please check S3 configuration. Error: {str(e)}"
-            )
-        
-        # Fallback to local storage only in development
-        upload_dir = f"uploads/media/{category}"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, filename)
-        
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(file_content)
-        
-        return {
-            "filename": filename,
-            "url": f"/api/uploads/media/{category}/{filename}",
-            "path": f"/api/uploads/media/{category}/{filename}",
-            "type": type,
-            "content_type": file.content_type
-        }
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file to S3. Please check S3 configuration. Error: {str(e)}"
+        )
 
 
 # User Management Endpoints

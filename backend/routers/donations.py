@@ -262,6 +262,10 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
     
     # Check if Stripe is configured
     if not stripe.api_key or not stripe_secret_key:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Stripe not configured: api_key={bool(stripe.api_key)}, secret_key={bool(stripe_secret_key)}")
+        logger.error(f"STRIPE_SECRET_KEY env var exists: {bool(os.getenv('STRIPE_SECRET_KEY'))}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Payment processing is not configured. Please contact support."

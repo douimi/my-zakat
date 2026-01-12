@@ -145,6 +145,11 @@ def upload_file(
         if metadata:
             extra_args['Metadata'] = {str(k): str(v) for k, v in metadata.items()}
         
+        print(f"📤 Uploading to S3 bucket '{S3_BUCKET_NAME}' with key '{object_key}'")
+        print(f"   Content-Type: {content_type}")
+        print(f"   File size: {len(file_content)} bytes")
+        print(f"   S3 Endpoint: {S3_ENDPOINT}")
+        
         client.put_object(
             Bucket=S3_BUCKET_NAME,
             Key=object_key,
@@ -152,10 +157,27 @@ def upload_file(
             **extra_args
         )
         
+        # Verify upload by checking if file exists
+        try:
+            client.head_object(Bucket=S3_BUCKET_NAME, Key=object_key)
+            print(f"✅ Verified file exists in S3: {object_key}")
+        except Exception as verify_error:
+            print(f"⚠️  Warning: Could not verify upload: {verify_error}")
+        
         # Return public URL
-        return get_file_url(object_key)
+        url = get_file_url(object_key)
+        print(f"✅ Upload successful. URL: {url}")
+        return url
     except Exception as e:
-        print(f"Error uploading file to S3: {e}")
+        import traceback
+        print(f"❌ Error uploading file to S3:")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error message: {str(e)}")
+        print(f"   Bucket: {S3_BUCKET_NAME}")
+        print(f"   Object key: {object_key}")
+        print(f"   Endpoint: {S3_ENDPOINT}")
+        print(f"   Traceback:")
+        print(traceback.format_exc())
         raise
 
 
