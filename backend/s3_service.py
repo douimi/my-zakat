@@ -20,7 +20,8 @@ S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "minioadmin")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "myzakat-media")
 S3_REGION = os.getenv("S3_REGION", "us-east-1")
 S3_USE_SSL = os.getenv("S3_USE_SSL", "false").lower() == "true"
-S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", S3_ENDPOINT.replace("minio", "localhost"))
+S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Initialize S3 client
 s3_client = None
@@ -175,12 +176,13 @@ def file_exists(object_key: str) -> bool:
 def get_file_url(object_key: str) -> str:
     """
     Get public URL for a file in S3
+    Returns backend API URL that proxies to S3, so it works without DNS configuration
     
     Args:
         object_key: S3 object key (path/filename)
     
     Returns:
-        Public URL of the file
+        Public URL of the file (backend API URL)
     """
     # If object_key is already a full URL, return as-is
     if object_key.startswith('http://') or object_key.startswith('https://'):
@@ -190,7 +192,41 @@ def get_file_url(object_key: str) -> str:
     # Remove leading slash if present
     object_key = object_key.lstrip('/')
     
-    # Use public URL if configured, otherwise construct from endpoint
+    # Extract filename from object key (e.g., "images/filename.jpg" -> "filename.jpg")
+    filename = object_key.split('/')[-1]
+    
+    # Determine media type from object key prefix
+    if object_key.startswith('images/'):
+        media_type = 'images'
+    elif object_key.startswith('videos/'):
+        media_type = 'videos'
+    else:
+        # Try to infer from filename extension
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')):
+            media_type = 'images'
+        elif filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv')):
+            media_type = 'videos'
+        else:
+            media_type = 'images'  # Default
+    
+    # Use backend API URL instead of direct S3 URL
+    # This ensures it works without DNS configuration for MinIO
+    # Extract base URL from FRONTEND_URL (e.g., "https://myzakat.org" -> "https://myzakat.org/api/uploads")
+    if FRONTEND_URL:
+        # Remove trailing slash
+        base_url = FRONTEND_URL.rstrip('/')
+        # If it's localhost, use localhost for API too (different port)
+        if 'localhost' in base_url or '127.0.0.1' in base_url:
+            # Replace frontend port with backend port
+            api_base = base_url.replace(':3000', ':8000').replace(':5173', ':8000').replace(':80', ':8000')
+        else:
+            # For production, frontend and backend are on the same domain via Traefik
+            # So use the same base URL
+            api_base = base_url
+        
+        return f"{api_base}/api/uploads/media/{media_type}/{filename}"
+    
+    # Fallback: use S3_PUBLIC_URL if configured, otherwise construct from endpoint
     if S3_PUBLIC_URL:
         base_url = S3_PUBLIC_URL.rstrip('/')
         return f"{base_url}/{S3_BUCKET_NAME}/{object_key}"
