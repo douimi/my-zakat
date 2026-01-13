@@ -8,7 +8,7 @@ from database import get_db
 from models import Story
 from schemas import StoryCreate, StoryResponse
 from auth_utils import get_current_admin
-from s3_service import upload_file, delete_file, generate_object_key
+from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 from media_processing import compress_image, compress_video, generate_video_thumbnail, should_compress_image, should_compress_video
 
 router = APIRouter()
@@ -20,14 +20,19 @@ async def create_story(
     summary: str = Form(...),
     content: str = Form(...),
     image_filename: Optional[str] = Form(None),
+    video_filename: Optional[str] = Form(None),
     video: Optional[UploadFile] = File(None),
     is_active: bool = Form(True),
     is_featured: bool = Form(False),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    # Handle video upload if provided
-    video_filename = None
+    # Handle video URL if provided (from media picker)
+    final_video_filename = None
+    if video_filename and video_filename.strip():
+        final_video_filename = video_filename.strip()
+    
+    # Handle video upload if provided (takes precedence over video_filename)
     if video and video.filename:
         if not video.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
@@ -52,7 +57,7 @@ async def create_story(
                 content_type=video.content_type,
                 metadata={"original_filename": video.filename, "type": "story_video"}
             )
-            video_filename = s3_url
+            final_video_filename = s3_url
             
             # Generate and upload thumbnail
             print(f"🖼️  Generating video thumbnail...")
@@ -82,7 +87,7 @@ async def create_story(
         summary=summary,
         content=content,
         image_filename=image_filename if image_filename else None,
-        video_filename=video_filename,
+        video_filename=final_video_filename,
         is_active=is_active,
         is_featured=is_featured
     )
@@ -125,6 +130,7 @@ async def update_story(
     summary: str = Form(...),
     content: str = Form(...),
     image_filename: Optional[str] = Form(None),
+    video_filename: Optional[str] = Form(None),
     video: Optional[UploadFile] = File(None),
     remove_video: Optional[bool] = Form(False),
     is_active: bool = Form(True),
@@ -166,7 +172,19 @@ async def update_story(
                     except Exception as e:
                         print(f"Error deleting video: {e}")
         story.video_filename = None
-    # Handle video upload if provided
+    # Handle video URL if provided (from media picker) - only if no file upload
+    elif video_filename and video_filename.strip() and not (video and video.filename):
+        # Delete old video if it exists and is different
+        if story.video_filename and story.video_filename != video_filename.strip():
+            if story.video_filename.startswith('http://') or story.video_filename.startswith('https://'):
+                try:
+                    object_key = extract_object_key_from_url(story.video_filename)
+                    if object_key:
+                        delete_file(object_key)
+                except Exception as e:
+                    print(f"Error deleting old video from S3: {e}")
+        story.video_filename = video_filename.strip()
+    # Handle video upload if provided (takes precedence over video_filename)
     elif video and video.filename:
         if not video.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="File must be a video")
