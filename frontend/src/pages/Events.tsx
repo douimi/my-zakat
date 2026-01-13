@@ -160,7 +160,7 @@ const EventCard = ({ event, isUpcoming }: EventCardProps) => {
 
   return (
     <div className={`card hover:shadow-lg transition-shadow duration-300 ${
-      isUpcoming ? 'border-l-4 border-l-primary-500' : 'opacity-75'
+      !isUpcoming ? 'opacity-75' : ''
     }`}>
       {/* Event Image */}
       {imageUrl && (
