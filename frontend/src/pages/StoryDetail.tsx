@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
-import { ArrowLeft, Calendar } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import LazyVideo from '../components/LazyVideo'
 
@@ -63,19 +63,6 @@ const StoryDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="section-container py-4">
-          <Link
-            to="/stories"
-            className="inline-flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Stories
-          </Link>
-        </div>
-      </div>
-
       {/* Content */}
       <div className="section-container py-8">
         {/* Story Video or Image */}
