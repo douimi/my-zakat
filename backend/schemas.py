@@ -271,15 +271,29 @@ class PaymentSession(BaseModel):
     id: str
 
 class ZakatCalculation(BaseModel):
-    gold_value: Optional[float] = None
-    silver_value: Optional[float] = None
-    cash: Optional[float] = None
-    business_assets: Optional[float] = None
-    other_assets: Optional[float] = None
+    liabilities: float = 0
+    cash: float = 0
+    receivables: float = 0
+    stocks: float = 0
+    retirement: float = 0
+    gold_weight: float = 0
+    gold_price_per_gram: float = 0
+    silver_weight: float = 0
+    silver_price_per_gram: float = 0
+    business_goods: float = 0
+    agriculture_value: float = 0
+    investment_property: float = 0
+    other_valuables: float = 0
+    livestock: float = 0
+    other_assets: float = 0
 
 class ZakatResult(BaseModel):
-    total_zakat: float
-    breakdown: dict
+    wealth: float
+    gold: float
+    silver: float
+    business_goods: float
+    agriculture: float
+    total: float
 
 class SubscriptionCreate(BaseModel):
     name: str
