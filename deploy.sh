@@ -68,6 +68,10 @@ docker-compose -f docker-compose.traefik.yml down 2>/dev/null || true
 print_status "Pulling latest images..."
 docker-compose -f docker-compose.traefik.yml pull
 
+# Build frontend without cache to ensure latest changes are included
+print_status "Building frontend without cache..."
+docker-compose -f docker-compose.traefik.yml --env-file env.production build --no-cache frontend
+
 # Build and start services
 print_status "Building and starting services..."
 docker-compose -f docker-compose.traefik.yml --env-file env.production up -d --build
