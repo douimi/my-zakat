@@ -491,7 +491,12 @@ const Home = () => {
                 // Helper function to get video URL
                 const getVideoUrl = (videoFilename?: string) => {
                   if (!videoFilename) return null
-                  return getStaticFileUrl(`/api/uploads/stories/${videoFilename}`)
+                  // If it's already a full URL (from S3), return as-is
+                  if (videoFilename.startsWith('http://') || videoFilename.startsWith('https://')) {
+                    return videoFilename
+                  }
+                  // Otherwise, treat it as a filename and construct the path
+                  return getStaticFileUrl(`/api/uploads/media/videos/${videoFilename}`)
                 }
 
                 const imageUrl = getImageUrl(story.image_filename)

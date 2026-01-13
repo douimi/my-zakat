@@ -54,6 +54,9 @@ async def list_videos(
             used_in.append("programs")
         return used_in
     
+    # Track URLs we've already added to prevent duplicates
+    added_urls = set()
+    
     # Check S3 for videos
     try:
         # List videos from S3 - simple structure: videos/
@@ -61,11 +64,17 @@ async def list_videos(
         for file_info in s3_files:
             filename = file_info['key'].split('/')[-1]
             if filename.lower().endswith(video_extensions):
-                used_in = get_used_in(file_info['url'])
+                video_url = file_info['url']
+                # Skip if we've already added this URL (prevent duplicates)
+                if video_url in added_urls:
+                    continue
+                added_urls.add(video_url)
+                
+                used_in = get_used_in(video_url)
                 videos.append({
                     "filename": filename,
-                    "url": file_info['url'],
-                    "path": file_info['url'],  # Keep for backward compatibility
+                    "url": video_url,
+                    "path": video_url,  # Keep for backward compatibility
                     "size": file_info['size'],
                     "created_at": file_info['last_modified'].isoformat() if file_info.get('last_modified') else datetime.utcnow().isoformat(),
                     "modified_at": file_info['last_modified'].isoformat() if file_info.get('last_modified') else datetime.utcnow().isoformat(),
@@ -95,27 +104,30 @@ async def list_videos(
             filename_or_url = gallery_item.media_filename
             # Extract filename if it's a URL
             if filename_or_url.startswith('http://') or filename_or_url.startswith('https://'):
+                # Skip if we've already added this URL
+                if filename_or_url in added_urls:
+                    continue
+                    
                 object_key = extract_object_key_from_url(filename_or_url)
                 if object_key and object_key.startswith('videos/'):
                     filename = object_key.split('/')[-1]
-                    # Check if already in videos list
-                    if not any(v.get('filename') == filename for v in videos):
-                        # Check if file exists in S3
-                        exists = file_exists(object_key)
-                        if not exists:
-                            # File doesn't exist in S3, mark as orphaned
-                            videos.append({
-                                "filename": filename,
-                                "url": filename_or_url,
-                                "path": filename_or_url,
-                                "size": 0,
-                                "created_at": gallery_item.created_at.isoformat() if gallery_item.created_at else datetime.utcnow().isoformat(),
-                                "modified_at": gallery_item.updated_at.isoformat() if gallery_item.updated_at else datetime.utcnow().isoformat(),
-                                "location": "database",
-                                "used_in": get_used_in(filename_or_url),
-                                "exists_in_s3": False,  # Mark as not existing in S3
-                                "orphaned": True  # Mark as orphaned database entry
-                            })
+                    # Check if file exists in S3
+                    exists = file_exists(object_key)
+                    if not exists:
+                        # File doesn't exist in S3, mark as orphaned
+                        added_urls.add(filename_or_url)
+                        videos.append({
+                            "filename": filename,
+                            "url": filename_or_url,
+                            "path": filename_or_url,
+                            "size": 0,
+                            "created_at": gallery_item.created_at.isoformat() if gallery_item.created_at else datetime.utcnow().isoformat(),
+                            "modified_at": gallery_item.updated_at.isoformat() if gallery_item.updated_at else datetime.utcnow().isoformat(),
+                            "location": "database",
+                            "used_in": get_used_in(filename_or_url),
+                            "exists_in_s3": False,  # Mark as not existing in S3
+                            "orphaned": True  # Mark as orphaned database entry
+                        })
     except Exception as e:
         print(f"Error checking database for orphaned videos: {e}")
     
@@ -125,14 +137,16 @@ async def list_videos(
         for filename in os.listdir(VIDEO_UPLOAD_DIR):
             file_path = os.path.join(VIDEO_UPLOAD_DIR, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(video_extensions):
-                # Skip if already found in S3
-                if not any(v.get('filename') == filename and v.get('location') == 'media/videos' for v in videos):
+                local_url = f"/api/uploads/media/videos/{filename}"
+                # Skip if already found in S3 or already added
+                if local_url not in added_urls and not any(v.get('filename') == filename and v.get('location') == 'media/videos' for v in videos):
+                    added_urls.add(local_url)
                     stat = os.stat(file_path)
                     used_in = get_used_in(filename)
                     videos.append({
                         "filename": filename,
-                        "path": f"/api/uploads/media/videos/{filename}",
-                        "url": f"/api/uploads/media/videos/{filename}",
+                        "path": local_url,
+                        "url": local_url,
                         "size": stat.st_size,
                         "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
                         "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -146,13 +160,15 @@ async def list_videos(
         for filename in os.listdir(stories_dir):
             file_path = os.path.join(stories_dir, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(video_extensions):
-                if not any(v.get('filename') == filename and v.get('location') == 'stories' for v in videos):
+                local_url = f"/api/uploads/stories/{filename}"
+                if local_url not in added_urls and not any(v.get('filename') == filename and v.get('location') == 'stories' for v in videos):
+                    added_urls.add(local_url)
                     stat = os.stat(file_path)
                     used_in = get_used_in(filename)
                     videos.append({
                         "filename": filename,
-                        "path": f"/api/uploads/stories/{filename}",
-                        "url": f"/api/uploads/stories/{filename}",
+                        "path": local_url,
+                        "url": local_url,
                         "size": stat.st_size,
                         "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
                         "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -166,13 +182,15 @@ async def list_videos(
         for filename in os.listdir(testimonials_dir):
             file_path = os.path.join(testimonials_dir, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(video_extensions):
-                if not any(v.get('filename') == filename and v.get('location') == 'testimonials' for v in videos):
+                local_url = f"/api/uploads/testimonials/{filename}"
+                if local_url not in added_urls and not any(v.get('filename') == filename and v.get('location') == 'testimonials' for v in videos):
+                    added_urls.add(local_url)
                     stat = os.stat(file_path)
                     used_in = get_used_in(filename)
                     videos.append({
                         "filename": filename,
-                        "path": f"/api/uploads/testimonials/{filename}",
-                        "url": f"/api/uploads/testimonials/{filename}",
+                        "path": local_url,
+                        "url": local_url,
                         "size": stat.st_size,
                         "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
                         "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
