@@ -495,8 +495,8 @@ const Home = () => {
                   if (videoFilename.startsWith('http://') || videoFilename.startsWith('https://')) {
                     return videoFilename
                   }
-                  // Otherwise, treat it as a filename and construct the path
-                  return getStaticFileUrl(`/api/uploads/media/videos/${videoFilename}`)
+                  // Story videos are served from /api/uploads/stories/ endpoint
+                  return getStaticFileUrl(`/api/uploads/stories/${videoFilename}`)
                 }
 
                 const imageUrl = getImageUrl(story.image_filename)
