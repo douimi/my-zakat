@@ -138,9 +138,18 @@ async def update_slideshow_slide(
     if 'image_url' in update_data:
         old_image_url = slide.image_url
         new_image_url = update_data['image_url']
-        # If old image_url was a filename (not URL) and we're changing it
-        if old_image_url and not old_image_url.startswith(('http://', 'https://')):
-            if not new_image_url or new_image_url.startswith(('http://', 'https://')) or new_image_url != old_image_url:
+        # If old image_url exists and is being changed or cleared
+        if old_image_url and (not new_image_url or new_image_url != old_image_url):
+            if old_image_url.startswith(('http://', 'https://')):
+                # S3 URL - extract object key and delete from S3
+                object_key = extract_object_key_from_url(old_image_url)
+                if object_key:
+                    try:
+                        delete_file(object_key)
+                    except Exception as e:
+                        print(f"Warning: Could not delete old image_url from S3: {e}")
+            else:
+                # Local filename - delete from filesystem
                 old_path = os.path.join(UPLOAD_DIR, old_image_url)
                 if os.path.exists(old_path):
                     try:
@@ -176,14 +185,24 @@ async def delete_slideshow_slide(
             except Exception as e:
                 print(f"Error deleting image file: {e}")
     
-    # Also check image_url if it's a filename (not a URL)
-    if slide.image_url and not slide.image_url.startswith(('http://', 'https://')):
-        image_path = os.path.join(UPLOAD_DIR, slide.image_url)
-        if os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-            except Exception as e:
-                print(f"Error deleting image file from image_url: {e}")
+    # Also check image_url - handle both S3 URLs and local filenames
+    if slide.image_url:
+        if slide.image_url.startswith(('http://', 'https://')):
+            # S3 URL - extract object key and delete from S3
+            object_key = extract_object_key_from_url(slide.image_url)
+            if object_key:
+                try:
+                    delete_file(object_key)
+                except Exception as e:
+                    print(f"Error deleting image from S3: {e}")
+        else:
+            # Local filename - delete from filesystem
+            image_path = os.path.join(UPLOAD_DIR, slide.image_url)
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"Error deleting image file from image_url: {e}")
     
     db.delete(slide)
     db.commit()

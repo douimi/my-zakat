@@ -563,6 +563,7 @@ const Home = () => {
                         {videoUrl ? (
                           <VideoThumbnail
                             videoSrc={videoUrl}
+                            poster={imageUrl || undefined}
                             className="w-full h-full"
                             alt={`${story.title} video`}
                           />

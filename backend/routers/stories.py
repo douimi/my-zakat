@@ -62,6 +62,7 @@ async def create_story(
             # Generate and upload thumbnail
             print(f"🖼️  Generating video thumbnail...")
             thumbnail_data = generate_video_thumbnail(content_bytes)
+            thumbnail_url = None
             if thumbnail_data:
                 thumbnail_filename = f"{timestamp}_{title.replace(' ', '_')}_thumb.jpg"
                 thumbnail_key = generate_object_key("images", thumbnail_filename)
@@ -72,6 +73,10 @@ async def create_story(
                     metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
                 )
                 print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+            
+            # Store thumbnail URL in image_filename if no image was provided
+            if thumbnail_url and not image_filename:
+                image_filename = thumbnail_url
         except Exception as e:
             import traceback
             print(f"❌ Failed to upload story video to S3: {str(e)}")
@@ -229,6 +234,23 @@ async def update_story(
                 metadata={"original_filename": video.filename, "type": "story_video"}
             )
             story.video_filename = s3_url
+            
+            # Generate and upload thumbnail
+            print(f"🖼️  Generating video thumbnail...")
+            thumbnail_data = generate_video_thumbnail(content_bytes)
+            if thumbnail_data:
+                thumbnail_filename = f"{timestamp}_{title.replace(' ', '_')}_thumb.jpg"
+                thumbnail_key = generate_object_key("images", thumbnail_filename)
+                thumbnail_url = upload_file(
+                    file_content=thumbnail_data,
+                    object_key=thumbnail_key,
+                    content_type="image/jpeg",
+                    metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
+                )
+                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+                # Store thumbnail URL in image_filename if no image was provided
+                if not image_filename:
+                    story.image_filename = thumbnail_url
         except Exception as e:
             import traceback
             print(f"❌ Failed to upload story video to S3: {str(e)}")

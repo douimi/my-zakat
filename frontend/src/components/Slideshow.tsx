@@ -72,11 +72,22 @@ const Slideshow = () => {
 
   const currentSlide = slides[currentIndex]
   // Use image_url if available, otherwise fall back to image_filename, then default
-  const imageUrl = currentSlide.image_url 
-    ? currentSlide.image_url
-    : currentSlide.image_filename
-    ? `/api/uploads/media/images/${currentSlide.image_filename}`
-    : 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200&h=600&fit=crop'
+  // Handle both full URLs and filenames for image_filename
+  const getImageUrl = () => {
+    if (currentSlide.image_url) {
+      return currentSlide.image_url
+    }
+    if (currentSlide.image_filename) {
+      // If image_filename is already a full URL, use it directly
+      if (currentSlide.image_filename.startsWith('http://') || currentSlide.image_filename.startsWith('https://')) {
+        return currentSlide.image_filename
+      }
+      // Otherwise, construct the URL
+      return `/api/uploads/media/images/${currentSlide.image_filename}`
+    }
+    return 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200&h=600&fit=crop'
+  }
+  const imageUrl = getImageUrl()
   
   // Reset animation when slide changes by using a key
   const slideKey = `slide-${currentSlide.id}-${currentIndex}`

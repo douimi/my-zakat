@@ -464,7 +464,7 @@ def extract_object_key_from_url(url: str) -> Optional[str]:
     Extract S3 object key from a URL
     
     Args:
-        url: Full S3 URL
+        url: Full S3 URL or backend proxy URL
     
     Returns:
         Object key or None if not a valid S3 URL
@@ -474,7 +474,25 @@ def extract_object_key_from_url(url: str) -> Optional[str]:
     
     try:
         parts = url.split('/')
-        # Look for bucket name in URL
+        
+        # Handle backend proxy URLs: https://myzakat.org/api/uploads/media/images/filename.png
+        # or https://myzakat.org/api/uploads/media/videos/filename.mp4
+        if 'api/uploads/media' in url:
+            media_idx = -1
+            for i, part in enumerate(parts):
+                if part == 'media':
+                    media_idx = i
+                    break
+            
+            if media_idx >= 0 and media_idx < len(parts) - 2:
+                # Extract media type (images or videos) and filename
+                media_type = parts[media_idx + 1] if media_idx + 1 < len(parts) else 'images'
+                filename = parts[media_idx + 2] if media_idx + 2 < len(parts) else None
+                if filename:
+                    # Construct object key: images/filename or videos/filename
+                    return f"{media_type}/{filename}"
+        
+        # Handle direct S3 URLs: Look for bucket name in URL
         bucket_name = S3_BUCKET_NAME
         bucket_idx = -1
         
