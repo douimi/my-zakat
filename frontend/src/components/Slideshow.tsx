@@ -28,7 +28,7 @@ const Slideshow = () => {
     if (slides.length > 1) {
       const interval = setInterval(() => {
         setCurrentIndex((prev) => (prev + 1) % slides.length)
-      }, 5000) // Auto-advance every 5 seconds
+      }, 8000) // Auto-advance every 8 seconds
       return () => clearInterval(interval)
     }
   }, [slides.length])
@@ -96,7 +96,7 @@ const Slideshow = () => {
     <div className="relative w-full h-96 md:h-[500px] lg:h-[600px] overflow-hidden">
       {/* Slide Image */}
       <div
-        className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+        className="absolute inset-0 bg-cover bg-center transition-opacity duration-2000"
         style={{
           backgroundImage: `url(${imageUrl})`,
         }}
