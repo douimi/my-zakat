@@ -32,7 +32,7 @@ const AdminSettings = () => {
     }
   )
 
-  const impactSettings = settings?.filter((s: Setting) => 
+  const impactStats = settings?.filter((s: Setting) => 
     ['meals_provided', 'families_supported', 'orphans_cared_for', 'total_raised'].includes(s.key)
   ) || []
 
@@ -42,6 +42,10 @@ const AdminSettings = () => {
     message: settings?.find((s: Setting) => s.key === 'emergency_banner_message'),
     ctaText: settings?.find((s: Setting) => s.key === 'emergency_banner_cta_text'),
     ctaUrl: settings?.find((s: Setting) => s.key === 'emergency_banner_cta_url'),
+  }
+  const impactSectionSettings = {
+    homeEnabled: settings?.find((s: Setting) => s.key === 'home_impact_enabled'),
+    aboutEnabled: settings?.find((s: Setting) => s.key === 'about_impact_enabled'),
   }
 
   const handleEdit = (setting: Setting) => {
@@ -102,7 +106,7 @@ const AdminSettings = () => {
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Current Statistics</h2>
           <div className="space-y-4">
-            {impactSettings.map((setting: Setting) => (
+            {impactStats.map((setting: Setting) => (
               <div key={setting.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-gray-900">
@@ -374,6 +378,120 @@ const AdminSettings = () => {
           </div>
         </div>
       )}
+
+      {/* Our Impact Section Settings */}
+      <div className="mt-8 card">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Our Impact Section</h2>
+        <p className="text-gray-600 mb-6">
+          Control whether the "Our Impact" statistics section is displayed on the Home and About pages
+        </p>
+
+        {/* Home Page Impact Toggle */}
+        {impactSectionSettings.homeEnabled ? (
+          <div className="mb-6 flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Show Impact Section on Home Page</h3>
+              <p className="text-sm text-gray-600">
+                Display the "Our Impact" statistics section on the homepage
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const newValue = impactSectionSettings.homeEnabled.value === 'false' ? 'true' : 'false'
+                updateMutation.mutate({
+                  key: impactSectionSettings.homeEnabled.key,
+                  data: {
+                    value: newValue,
+                    description: impactSectionSettings.homeEnabled.description || 'Enable/disable Our Impact section on Home page'
+                  }
+                })
+              }}
+              disabled={updateMutation.isLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                impactSectionSettings.homeEnabled.value !== 'false' ? 'bg-primary-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  impactSectionSettings.homeEnabled.value !== 'false' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        ) : (
+          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-600 mb-2">Home page impact setting not found. It will be created when you toggle it.</p>
+            <button
+              onClick={() => {
+                updateMutation.mutate({
+                  key: 'home_impact_enabled',
+                  data: {
+                    value: 'true',
+                    description: 'Enable/disable Our Impact section on Home page'
+                  }
+                })
+              }}
+              disabled={updateMutation.isLoading}
+              className="btn-primary text-sm"
+            >
+              Enable Home Page Impact Section
+            </button>
+          </div>
+        )}
+
+        {/* About Page Impact Toggle */}
+        {impactSectionSettings.aboutEnabled ? (
+          <div className="mb-6 flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Show Impact Section on About Page</h3>
+              <p className="text-sm text-gray-600">
+                Display the "Our Impact" statistics section on the About page
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const newValue = impactSectionSettings.aboutEnabled.value === 'false' ? 'true' : 'false'
+                updateMutation.mutate({
+                  key: impactSectionSettings.aboutEnabled.key,
+                  data: {
+                    value: newValue,
+                    description: impactSectionSettings.aboutEnabled.description || 'Enable/disable Our Impact section on About page'
+                  }
+                })
+              }}
+              disabled={updateMutation.isLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                impactSectionSettings.aboutEnabled.value !== 'false' ? 'bg-primary-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  impactSectionSettings.aboutEnabled.value !== 'false' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        ) : (
+          <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-600 mb-2">About page impact setting not found. It will be created when you toggle it.</p>
+            <button
+              onClick={() => {
+                updateMutation.mutate({
+                  key: 'about_impact_enabled',
+                  data: {
+                    value: 'true',
+                    description: 'Enable/disable Our Impact section on About page'
+                  }
+                })
+              }}
+              disabled={updateMutation.isLoading}
+              className="btn-primary text-sm"
+            >
+              Enable About Page Impact Section
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Help Text */}
       <div className="mt-8 card bg-blue-50 border-blue-200">

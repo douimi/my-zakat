@@ -1,6 +1,15 @@
 import { Target, Award, Globe, Shield, TrendingUp, Heart, ArrowRight } from 'lucide-react'
+import { useQuery } from 'react-query'
+import { settingsAPI } from '../utils/api'
 
 const About = () => {
+  const { data: settings } = useQuery('about-settings', settingsAPI.getAll, {
+    retry: 1,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  })
+
+  const aboutImpactEnabled = settings?.find(s => s.key === 'about_impact_enabled')?.value !== 'false'
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
@@ -27,9 +36,6 @@ const About = () => {
             <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
               Built on Personal Commitment
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              From individual campaigns to a platform for change
-            </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
@@ -41,7 +47,7 @@ const About = () => {
                 <h3 className="text-2xl font-bold text-gray-900">Personal Beginnings</h3>
               </div>
               <p className="text-gray-700 leading-relaxed text-lg">
-                MyZakat Zakat Distribution Foundation emerged from a series of personal donation campaigns carried out throughout our founder's career. 
+                MyZakat Zakat Distribution Foundation emerged from a personal commitment to serving humanity. 
                 What began as individual efforts to address immediate needs has grown into a dedicated platform for amplifying charitable impact.
               </p>
             </div>
@@ -54,8 +60,8 @@ const About = () => {
                 <h3 className="text-2xl font-bold text-gray-900">Authentic Stories</h3>
               </div>
               <p className="text-gray-700 leading-relaxed text-lg">
-                The images and stories throughout our platform were captured during these early campaigns. These authentic moments of hope, transformation, 
-                and community support occurred before this website existed, representing what can be achieved with personal resources and unwavering commitment.
+                The images and stories throughout our platform represent authentic moments of hope, transformation, 
+                and community support, showcasing what can be achieved with personal resources and unwavering commitment.
               </p>
             </div>
           </div>
@@ -95,8 +101,7 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Mission</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              MyZakat – Zakat Distribution Foundation facilitates the efficient and transparent distribution of Islamic charitable donations, 
-              connecting generous hearts with those in need while following the principles of Zakat and Sadaqa.
+              The Zakat Distribution Foundation (ZDF) is dedicated to alleviating poverty, supporting those in distress, and empowering communities through Zakat and Sadaqa. Founded with a commitment to serving humanity, ZDF ensures that all contributions are used effectively to bring hope and relief to the most vulnerable individuals worldwide.
             </p>
           </div>
 
@@ -106,8 +111,7 @@ const About = () => {
               <h2 className="text-2xl font-heading font-bold text-gray-900">Our Vision</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              We envision being the leading platform for Islamic charitable giving—transparent, efficient, and impactful—creating a global community 
-              where charitable giving is accessible, trusted, and creates lasting positive change.
+              To create a world where no one lives in poverty. We believe everyone deserves access to food, water, shelter, and dignity. No one should suffer while others live comfortably.
             </p>
           </div>
         </div>
@@ -157,33 +161,35 @@ const About = () => {
 
 
         {/* Impact Statistics */}
-        <div className="bg-primary-600 rounded-2xl text-white p-8 mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-heading font-bold mb-4">Our Impact</h2>
-            <p className="text-primary-100">
-              Together, we've made a significant difference in communities around the world
-            </p>
-          </div>
+        {aboutImpactEnabled && (
+          <div className="bg-primary-600 rounded-2xl text-white p-8 mb-16">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-heading font-bold mb-4">Our Impact</h2>
+              <p className="text-primary-100">
+                Together, we've made a significant difference in communities around the world
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2">25,000+</div>
-              <div className="text-primary-100">Meals Provided</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2">1,200+</div>
-              <div className="text-primary-100">Families Supported</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2">800+</div>
-              <div className="text-primary-100">Orphans Cared For</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2">$500K+</div>
-              <div className="text-primary-100">Total Raised</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2">25,000+</div>
+                <div className="text-primary-100">Meals Provided</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2">1,200+</div>
+                <div className="text-primary-100">Families Supported</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2">800+</div>
+                <div className="text-primary-100">Orphans Cared For</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2">$500K+</div>
+                <div className="text-primary-100">Total Raised</div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* What We Do */}
         <div className="text-center mb-12">
