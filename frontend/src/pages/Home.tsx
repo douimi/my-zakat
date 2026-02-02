@@ -871,7 +871,7 @@ const Home = () => {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+            <div className="max-w-2xl mx-auto mb-12">
               <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
                 <div className="flex items-center mb-6">
                   <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
@@ -882,19 +882,6 @@ const Home = () => {
                 <p className="text-gray-700 leading-relaxed text-lg">
                   MyZakat Zakat Distribution Foundation emerged from a personal commitment to serving humanity. 
                   What began as individual efforts to address immediate needs has grown into a dedicated platform for amplifying charitable impact.
-                </p>
-              </div>
-
-              <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center mb-6">
-                  <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
-                    <TrendingUp className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900">Authentic Stories</h3>
-                </div>
-                <p className="text-gray-700 leading-relaxed text-lg">
-                  The images and stories throughout our platform represent authentic moments of hope, transformation, 
-                  and community support, showcasing what can be achieved with personal resources and unwavering commitment.
                 </p>
               </div>
             </div>
