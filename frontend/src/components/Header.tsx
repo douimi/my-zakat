@@ -4,7 +4,38 @@ import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen,
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
-import { urgentNeedsAPI, settingsAPI } from '../utils/api'
+import { urgentNeedsAPI, settingsAPI, getStaticFileUrl } from '../utils/api'
+
+// Component for urgent need menu item with image fallback
+const UrgentNeedMenuItem = ({ need, imageUrl, isActive, onClick, className = '' }: { need: any, imageUrl: string | null, isActive: boolean, onClick: () => void, className?: string }) => {
+  const [imageError, setImageError] = useState(false)
+  
+  return (
+    <Link
+      to={`/urgent-needs/${need.slug}`}
+      onClick={onClick}
+      className={clsx(
+        'flex items-center space-x-3 transition-all duration-200',
+        className || 'px-4 py-3 mx-2 rounded-lg text-sm',
+        isActive
+          ? 'text-primary-600 bg-primary-50 font-semibold'
+          : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+      )}
+    >
+      {imageUrl && !imageError ? (
+        <img 
+          src={imageUrl} 
+          alt={need.title}
+          className="w-8 h-8 object-cover rounded flex-shrink-0"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+      )}
+      <span>{need.title}</span>
+    </Link>
+  )
+}
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -164,22 +195,32 @@ const Header = () => {
                   
                   {isUrgentNeedsDropdownOpen && (
                     <div className="absolute top-full left-0 mt-3 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-96 overflow-y-auto animate-fade-in">
-                      {urgentNeeds.map((need: any) => (
-                        <Link
-                          key={need.id}
-                          to={`/urgent-needs/${need.slug}`}
-                          onClick={() => setIsUrgentNeedsDropdownOpen(false)}
-                          className={clsx(
-                            'flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm transition-all duration-200',
-                            location.pathname === `/urgent-needs/${need.slug}`
-                              ? 'text-primary-600 bg-primary-50 font-semibold'
-                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                          )}
-                        >
-                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                          <span>{need.title}</span>
-                        </Link>
-                      ))}
+                      {urgentNeeds.map((need: any) => {
+                        // Helper function to get image URL
+                        // Urgent needs images are typically stored as full URLs (S3 or external)
+                        const getImageUrl = (imageUrl?: string) => {
+                          if (!imageUrl) return null
+                          // If it's already a full URL, return as-is
+                          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+                            return imageUrl
+                          }
+                          // If it's a filename, try to construct URL (though this is less common)
+                          // Note: There's no specific route for urgent_needs, so we'll try media/images
+                          return getStaticFileUrl(`/api/uploads/media/images/${imageUrl}`)
+                        }
+                        
+                        const imageUrl = getImageUrl(need.image_url)
+                        
+                        return (
+                          <UrgentNeedMenuItem
+                            key={need.id}
+                            need={need}
+                            imageUrl={imageUrl}
+                            isActive={location.pathname === `/urgent-needs/${need.slug}`}
+                            onClick={() => setIsUrgentNeedsDropdownOpen(false)}
+                          />
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -549,22 +590,33 @@ const Header = () => {
                       <AlertCircle className="w-5 h-5 mr-2" />
                       Urgent Needs
                     </p>
-                    {urgentNeeds.map((need: any) => (
-                      <Link
-                        key={need.id}
-                        to={`/urgent-needs/${need.slug}`}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className={clsx(
-                          'flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200',
-                          location.pathname === `/urgent-needs/${need.slug}`
-                            ? 'text-primary-600 bg-white shadow-sm'
-                            : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
-                        )}
-                      >
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{need.title}</span>
-                      </Link>
-                    ))}
+                    {urgentNeeds.map((need: any) => {
+                      // Helper function to get image URL
+                      // Urgent needs images are typically stored as full URLs (S3 or external)
+                      const getImageUrl = (imageUrl?: string) => {
+                        if (!imageUrl) return null
+                        // If it's already a full URL, return as-is
+                        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+                          return imageUrl
+                        }
+                        // If it's a filename, try to construct URL (though this is less common)
+                        // Note: There's no specific route for urgent_needs, so we'll try media/images
+                        return getStaticFileUrl(`/api/uploads/media/images/${imageUrl}`)
+                      }
+                      
+                      const imageUrl = getImageUrl(need.image_url)
+                      
+                      return (
+                        <UrgentNeedMenuItem
+                          key={need.id}
+                          need={need}
+                          imageUrl={imageUrl}
+                          isActive={location.pathname === `/urgent-needs/${need.slug}`}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="px-4 py-3 rounded-lg text-base font-medium"
+                        />
+                      )
+                    })}
                   </div>
                 )}
 

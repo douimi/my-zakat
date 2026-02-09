@@ -177,13 +177,13 @@ const AdminStories = () => {
     submitData.append('is_active', formData.is_active.toString())
     submitData.append('is_featured', formData.is_featured.toString())
     
-    if (formData.image_url.trim()) {
+    if (formData.image_url && formData.image_url.trim()) {
       submitData.append('image_filename', formData.image_url.trim())
     }
     
     if (formData.video_file) {
       submitData.append('video', formData.video_file)
-    } else if (formData.video_url.trim()) {
+    } else if (formData.video_url && formData.video_url.trim()) {
       submitData.append('video_filename', formData.video_url.trim())
     }
     
