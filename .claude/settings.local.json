@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/Users/Otmane/Desktop/Draft/my-zakat/backend/routers/*.py)",
+      "Bash(grep -E \"^[^/]*\\\\.py$\" -v)",
+      "Bash(xargs grep:*)",
+      "Bash(wc -l /c/Users/Otmane/Desktop/Draft/my-zakat/frontend/src/pages/*.tsx)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/routers/donations.py'\\).read\\(\\)\\); print\\('donations.py: syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('main.py: syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/auth_utils.py'\\).read\\(\\)\\); print\\('auth_utils.py: syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py', encoding='utf-8'\\).read\\(\\)\\); print\\('main.py: syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/auth_utils.py', encoding='utf-8'\\).read\\(\\)\\); print\\('auth_utils.py: syntax OK'\\)\")"
+    ]
+  }
+}

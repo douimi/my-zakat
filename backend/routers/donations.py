@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -263,22 +264,12 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             detail="Invalid amount"
         )
     
-    # Check if Stripe is configured - with detailed logging
-    stripe_key_from_env = os.getenv("STRIPE_SECRET_KEY")
-    logger.info(f"Stripe configuration check:")
-    logger.info(f"  stripe.api_key exists: {bool(stripe.api_key)}")
-    logger.info(f"  stripe.api_key value: {stripe.api_key[:10] + '...' if stripe.api_key else 'None'}")
-    logger.info(f"  stripe_secret_key variable exists: {bool(stripe_secret_key)}")
-    logger.info(f"  stripe_secret_key value: {stripe_secret_key[:10] + '...' if stripe_secret_key else 'None'}")
-    logger.info(f"  STRIPE_SECRET_KEY env var exists: {bool(stripe_key_from_env)}")
-    logger.info(f"  STRIPE_SECRET_KEY env var value: {stripe_key_from_env[:10] + '...' if stripe_key_from_env else 'None'}")
-    
+    # Check if Stripe is configured
     if not stripe.api_key or not stripe_secret_key:
-        error_detail = f"Payment processing is not configured. Stripe API key: {bool(stripe.api_key)}, Secret key: {bool(stripe_secret_key)}"
-        logger.error(error_detail)
+        logger.error("Payment processing is not configured: Stripe API key missing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error_detail
+            detail="Payment processing is not configured. Please contact support."
         )
     
     try:
@@ -569,8 +560,8 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
 
 
 @router.post("/cancel-subscription")
-async def cancel_subscription(request: dict, db: Session = Depends(get_db)):
-    """Cancel a subscription"""
+async def cancel_subscription(request: dict, db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+    """Cancel a subscription (admin only)"""
     if not stripe.api_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -661,7 +652,9 @@ async def update_subscription_status(db: Session = Depends(get_db)):
                         sub.status = stripe_sub.status
                         sub.updated_at = datetime.utcnow()
                         updated_count += 1
-                except:
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to update pending subscription {sub.id}: {e}")
                     continue
             else:
                 # Update status from existing subscription ID
@@ -671,7 +664,9 @@ async def update_subscription_status(db: Session = Depends(get_db)):
                         sub.status = stripe_sub.status
                         sub.updated_at = datetime.utcnow()
                         updated_count += 1
-                except:
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to retrieve subscription {sub.stripe_subscription_id}: {e}")
                     continue
         
         db.commit()
@@ -815,8 +810,15 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
 
 
 @router.get("/debug-subscriptions")
-async def debug_subscriptions(db: Session = Depends(get_db)):
-    """Debug endpoint to check subscription records"""
+async def debug_subscriptions(db: Session = Depends(get_db), current_admin = Depends(get_current_admin)):
+    """Debug endpoint to check subscription records (admin only, development only)"""
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debug endpoint disabled in production"
+        )
+
     subscriptions = db.query(DonationSubscription).all()
     return {
         "total_subscriptions": len(subscriptions),
@@ -847,7 +849,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         
         if not webhook_secret:
             logger.error("Webhook secret not configured")
-            return {"status": "webhook secret not configured"}
+            return JSONResponse(status_code=500, content={"status": "webhook secret not configured"})
         
         # Verify webhook signature
         try:
@@ -856,10 +858,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             )
         except ValueError as e:
             logger.error(f"Invalid webhook payload: {str(e)}")
-            return {"status": "invalid payload"}, 400
+            return JSONResponse(status_code=400, content={"status": "invalid payload"})
         except stripe.error.SignatureVerificationError as e:
             logger.error(f"Invalid webhook signature: {str(e)}")
-            return {"status": "invalid signature"}, 400
+            return JSONResponse(status_code=400, content={"status": "invalid signature"})
         
         # Process webhook event
         event_type = event["type"]
@@ -1156,9 +1158,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"Webhook signature verification failed: {str(e)}")
-        return {"status": "signature verification failed"}, 400
+        return JSONResponse(status_code=400, content={"status": "signature verification failed"})
     except Exception as e:
         import traceback
         logger.error(f"Webhook processing error: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        return {"status": "webhook error", "error": str(e)}, 500
+        return JSONResponse(status_code=500, content={"status": "webhook error"})

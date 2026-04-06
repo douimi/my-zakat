@@ -13,7 +13,16 @@ from models import User
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    import warnings
+    if os.getenv("TESTING", "false").lower() == "true":
+        SECRET_KEY = "test-secret-key-not-for-production"
+    elif os.getenv("ENVIRONMENT", "development").lower() == "production":
+        raise RuntimeError("SECRET_KEY environment variable must be set in production")
+    else:
+        warnings.warn("SECRET_KEY not set — using insecure default for development only")
+        SECRET_KEY = "dev-only-insecure-secret-key"
 ALGORITHM = "HS256"
 # Increase token expiration to 7 days for better UX
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days default

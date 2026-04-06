@@ -164,11 +164,17 @@ if custom_origin:
 is_production = os.getenv("ENVIRONMENT", "development") == "production"
 
 if is_production:
-    # In production, allow all origins to support mobile devices and different network contexts
+    # In production, restrict to specific allowed origins
+    production_origins = [
+        "https://myzakat.org",
+        "https://www.myzakat.org",
+    ]
+    if custom_origin and custom_origin not in production_origins:
+        production_origins.append(custom_origin)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Allow all origins for production
-        allow_credentials=False,  # Must be False when allow_origins=["*"]
+        allow_origins=production_origins,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -1,0 +1,100 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual triggers from GitHub UI
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # Don't cancel in-progress deploys
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 12m
+          script: |
+            set -e
+
+            DEPLOY_DIR="/root/prod/my-zakat"
+            COMPOSE_FILE="docker-compose.traefik.yml"
+            ENV_FILE="env.production"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+            echo "=== Deployment started at $(date) ==="
+
+            # Navigate to project directory
+            cd "$DEPLOY_DIR"
+
+            # Pull latest code
+            echo "--- Pulling latest code from GitHub ---"
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Verify env.production exists
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "ERROR: $ENV_FILE not found in $DEPLOY_DIR"
+              exit 1
+            fi
+
+            # Ensure traefik network exists
+            docker network create traefik-network 2>/dev/null || true
+
+            # Ensure letsencrypt directory exists
+            mkdir -p letsencrypt
+
+            # Build new images
+            echo "--- Building Docker images ---"
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend
+
+            # Restart services (zero-downtime for DB/MinIO since they don't rebuild)
+            echo "--- Restarting services ---"
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+
+            # Wait for services to start
+            echo "--- Waiting for services to be healthy ---"
+            sleep 15
+
+            # Health check
+            echo "--- Running health check ---"
+            HEALTH=$(curl -sf http://localhost:8000/health || echo "FAILED")
+            if echo "$HEALTH" | grep -q "healthy"; then
+              echo "Backend health check: PASSED"
+            else
+              echo "WARNING: Backend health check returned: $HEALTH"
+              echo "--- Backend logs ---"
+              docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
+            fi
+
+            # Clean up old Docker images to free disk space
+            echo "--- Cleaning up old images ---"
+            docker image prune -f
+
+            # Show running containers
+            echo "--- Container status ---"
+            docker compose -f "$COMPOSE_FILE" ps
+
+            echo "=== Deployment completed at $(date) ==="
+
+      - name: Notify deployment result
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "::notice::Deployment to production succeeded"
+          else
+            echo "::error::Deployment to production failed"
+          fi
