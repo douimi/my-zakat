@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Calculator, Info, AlertCircle, Users, DollarSign, Calendar } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import SEOHead from '../components/SEOHead'
 
 const KaffarahCalculator = () => {
   const [daysMissed, setDaysMissed] = useState<number>(1)
@@ -41,6 +42,11 @@ const KaffarahCalculator = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Kaffarah Calculator"
+        description="Calculate your Kaffarah obligation for missed fasts or broken oaths. Our Kaffarah calculator helps you determine the correct expiation amount based on Islamic guidelines."
+        canonicalPath="/kaffarah-calculator"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12 max-w-4xl mx-auto">
           <div className="flex items-center mb-8">

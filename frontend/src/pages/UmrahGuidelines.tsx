@@ -1,4 +1,5 @@
 import { Globe, BookOpen } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const UmrahGuidelines = () => {
   const steps = [
@@ -10,6 +11,11 @@ const UmrahGuidelines = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Umrah Guidelines"
+        description="Complete Umrah guidelines and step-by-step instructions. Learn the rituals, preparations, and duas for performing Umrah pilgrimage."
+        canonicalPath="/umrah-guidelines"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
           <div className="flex items-center mb-8">

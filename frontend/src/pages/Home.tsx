@@ -20,6 +20,9 @@ import {
   HeartHandshake
 } from 'lucide-react'
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI, programCategoriesAPI } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
+import SEOHead from '../components/SEOHead'
+import { getFaqJsonLd } from '../utils/seo'
 import type { Event, ProgramCategory } from '../types'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
@@ -154,12 +157,29 @@ const Home = () => {
       }
       return { url: category.image_url, type: 'image' as const }
     }
-    
+
     return { url: null, type: 'image' as const }
+  }
+
+  // Helper to append width param to a URL for optimization
+  const withWidth = (url: string | null, width: number): string | null => {
+    if (!url || url.startsWith('http://') || url.startsWith('https://')) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}w=${width}`
   }
 
   return (
     <div className="min-h-screen">
+      <SEOHead
+        description="MyZakat is a nonprofit Zakat distribution foundation. Donate Zakat and Sadaqa online, calculate your Zakat, explore programs, and see the impact of your generosity on communities in need."
+        canonicalPath="/"
+        jsonLd={getFaqJsonLd([
+          { question: 'What is Zakat?', answer: 'Zakat is one of the Five Pillars of Islam. It is an obligatory annual charitable contribution of 2.5% of qualifying wealth, distributed to eligible recipients including the poor and needy.' },
+          { question: 'How do I calculate my Zakat?', answer: 'Use the MyZakat Zakat Calculator to enter your savings, gold, silver, investments, and business assets. The calculator applies the 2.5% rate if your total exceeds the Nisab threshold.' },
+          { question: 'Is my donation tax-deductible?', answer: 'As a 501(c)(3) nonprofit, donations to MyZakat may be tax-deductible. Donors receive receipts for their records.' },
+          { question: 'What is the difference between Zakat and Sadaqa?', answer: 'Zakat is obligatory with specific rules about amounts and recipients. Sadaqa is voluntary charity with no minimum amount or restrictions.' },
+        ])}
+      />
       {/* Slideshow Section */}
       <Slideshow />
 
@@ -336,8 +356,8 @@ const Home = () => {
                         />
                       ) : media.url ? (
                         <>
-                          <img 
-                            src={media.url} 
+                          <img
+                            src={withWidth(media.url, IMAGE_WIDTHS.CARD) || media.url}
                             alt={category.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                             crossOrigin={media.url.startsWith('http://') || media.url.startsWith('https://') ? 'anonymous' : undefined}
@@ -411,11 +431,7 @@ const Home = () => {
               {featuredStories.slice(0, 3).map((story: any, index: number) => {
                 // Helper function to get image URL
                 const getImageUrl = (imageValue?: string) => {
-                  if (!imageValue) return null
-                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-                    return imageValue
-                  }
-                  return getStaticFileUrl(`/api/uploads/stories/${imageValue}`)
+                  return getOptimizedImageUrl(imageValue, IMAGE_WIDTHS.THUMB, 'stories')
                 }
 
                 // Helper function to get video URL
@@ -575,18 +591,7 @@ const Home = () => {
                 const eventDate = new Date(event.date)
                 const isToday = eventDate.toDateString() === new Date().toDateString()
                 
-                // Helper function to get image URL - check if it's a full URL or a filename
-                const getImageUrl = (imageValue?: string) => {
-                  if (!imageValue) return null
-                  // Check if it's a full URL (starts with http:// or https://)
-                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-                    return imageValue
-                  }
-                  // Otherwise, treat it as a filename and load from uploads
-                  return getStaticFileUrl(`/api/uploads/events/${imageValue}`)
-                }
-
-                const imageUrl = getImageUrl(event.image)
+                const imageUrl = getOptimizedImageUrl(event.image, IMAGE_WIDTHS.THUMB, 'events')
 
                 return (
                   <div 
@@ -697,24 +702,13 @@ const Home = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {testimonials.slice(0, 3).map((testimonial, index) => {
-                // Helper function to get image URL - check if it's a full URL or a filename
-                const getImageUrl = (imageValue?: string) => {
-                  if (!imageValue) return null
-                  // Check if it's a full URL (starts with http:// or https://)
-                  if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-                    return imageValue
-                  }
-                  // Otherwise, treat it as a filename and load from uploads
-                  return getStaticFileUrl(`/api/uploads/testimonials/${imageValue}`)
-                }
-                
+                const imageUrl = getOptimizedImageUrl(testimonial.image, IMAGE_WIDTHS.THUMB, 'testimonials')
+
                 // Helper function to get video URL
                 const getVideoUrl = (videoFilename?: string) => {
                   if (!videoFilename) return null
                   return getStaticFileUrl(`/api/uploads/testimonials/${videoFilename}`)
                 }
-                
-                const imageUrl = getImageUrl(testimonial.image)
                 const videoUrl = getVideoUrl(testimonial.video_filename)
                 
                 return (
@@ -977,11 +971,15 @@ const GallerySection = () => {
 
   const processedItems = galleryItems.map((item) => {
     const mediaInfo = getMediaUrl(item.media_filename)
+    // For image gallery items, append ?w=400 for thumbnail optimization
+    const thumbUrl = !mediaInfo.isVideo && mediaInfo.url && !mediaInfo.url.startsWith('http://') && !mediaInfo.url.startsWith('https://')
+      ? `${mediaInfo.url}${mediaInfo.url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.THUMB}`
+      : mediaInfo.url
     return {
       id: item.id,
       url: mediaInfo.url,
       type: mediaInfo.isVideo ? 'video' : 'image' as 'image' | 'video',
-      thumbnail: mediaInfo.isVideo ? (item.thumbnail_url || null) : mediaInfo.url, // Use backend-generated thumbnail for videos
+      thumbnail: mediaInfo.isVideo ? (item.thumbnail_url || null) : thumbUrl, // Use backend-generated thumbnail for videos
     }
   })
 

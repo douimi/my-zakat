@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Calculator, DollarSign, TrendingUp, Info, ArrowRight } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import type { ZakatCalculation, ZakatResult } from '../types'
+import SEOHead from '../components/SEOHead'
 
 const ZakatCalculator = () => {
   const [result, setResult] = useState<ZakatResult | null>(null)
@@ -91,6 +92,11 @@ const ZakatCalculator = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Zakat Calculator"
+        description="Calculate your Zakat obligation accurately with our comprehensive Zakat calculator. Enter your savings, gold, silver, investments, and business assets to determine your annual Zakat."
+        canonicalPath="/zakat-calculator"
+      />
       <div className="section-container">
         {/* Header */}
         <div className="text-center mb-12">

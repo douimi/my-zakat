@@ -1,30 +1,27 @@
 import { useQuery } from 'react-query'
 import { Star, MapPin, Heart, Video, Play } from 'lucide-react'
-import { testimonialsAPI, getStaticFileUrl } from '../utils/api'
+import { testimonialsAPI } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
 import type { Testimonial } from '../types'
+import SEOHead from '../components/SEOHead'
 
 const Testimonials = () => {
   const { data: testimonials, isLoading, error } = useQuery('public-testimonials', () => 
     testimonialsAPI.getAll(true) // Get only approved testimonials
   )
 
-  // Helper function to get image URL - check if it's a full URL or a filename
+  // Helper function to get image URL with THUMB optimization
   const getImageUrl = (imageValue?: string) => {
-    if (!imageValue) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-      return imageValue
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/testimonials/${imageValue}`)
+    return getOptimizedImageUrl(imageValue, IMAGE_WIDTHS.THUMB, 'testimonials')
   }
 
   // Helper function to get video URL
   const getVideoUrl = (videoFilename?: string) => {
     if (!videoFilename) return null
-    return getStaticFileUrl(`/api/uploads/testimonials/${videoFilename}`)
+    // Videos can't go through image optimizer - use getOptimizedImageUrl with width 0 (no resize)
+    return getOptimizedImageUrl(videoFilename, 0, 'testimonials')
   }
 
   if (isLoading) {
@@ -54,6 +51,11 @@ const Testimonials = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Testimonials"
+        description="Read testimonials from donors and beneficiaries of MyZakat. Discover why supporters trust us with their Zakat and Sadaqa contributions."
+        canonicalPath="/testimonials"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">

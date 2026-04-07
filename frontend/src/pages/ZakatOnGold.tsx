@@ -1,8 +1,14 @@
 import { Info, Calculator } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const ZakatOnGold = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Zakat on Gold"
+        description="Calculate Zakat on your gold holdings. Learn about the Nisab threshold for gold and determine your Zakat obligation using current gold prices."
+        canonicalPath="/zakat-on-gold"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
           <div className="flex items-center mb-8">

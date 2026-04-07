@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { slideshowAPI } from '../utils/api'
+import { slideshowAPI, getStaticFileUrl } from '../utils/api'
 
 interface SlideshowSlide {
   id: number
@@ -72,22 +72,20 @@ const Slideshow = () => {
 
   const currentSlide = slides[currentIndex]
   // Use image_url if available, otherwise fall back to image_filename, then default
-  // Handle both full URLs and filenames for image_filename
-  const getImageUrl = () => {
+  // Append ?w=1200 for hero-sized images to avoid loading full 1920px originals
+  const getSlideImageUrl = () => {
     if (currentSlide.image_url) {
       return currentSlide.image_url
     }
     if (currentSlide.image_filename) {
-      // If image_filename is already a full URL, use it directly
       if (currentSlide.image_filename.startsWith('http://') || currentSlide.image_filename.startsWith('https://')) {
         return currentSlide.image_filename
       }
-      // Otherwise, construct the URL
-      return `/api/uploads/media/images/${currentSlide.image_filename}`
+      return `${getStaticFileUrl(`/api/uploads/media/images/${currentSlide.image_filename}`)}?w=1200`
     }
     return 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200&h=600&fit=crop'
   }
-  const imageUrl = getImageUrl()
+  const imageUrl = getSlideImageUrl()
   
   // Reset animation when slide changes by using a key
   const slideKey = `slide-${currentSlide.id}-${currentIndex}`

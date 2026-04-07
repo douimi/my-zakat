@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { Calendar } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import LazyVideo from '../components/LazyVideo'
 
 const StoryDetail = () => {
@@ -16,15 +17,9 @@ const StoryDetail = () => {
     }
   )
 
-  // Helper function to get image URL - check if it's a full URL or a filename
+  // Helper function to get image URL with LARGE optimization
   const getImageUrl = (imageFilename?: string) => {
-    if (!imageFilename) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageFilename.startsWith('http://') || imageFilename.startsWith('https://')) {
-      return imageFilename
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/stories/${imageFilename}`)
+    return getOptimizedImageUrl(imageFilename, IMAGE_WIDTHS.LARGE, 'stories')
   }
 
   // Helper function to get video URL - check if it's a filename

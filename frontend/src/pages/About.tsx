@@ -1,4 +1,5 @@
 import { Target, Award, Globe, Shield, TrendingUp, Heart, ArrowRight } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 import { useQuery } from 'react-query'
 import { settingsAPI } from '../utils/api'
 
@@ -12,6 +13,11 @@ const About = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="About Us"
+        description="Learn about MyZakat Zakat Distribution Foundation – our mission, values, and commitment to transparent Zakat and Sadaqa distribution. Empowering communities through charitable giving."
+        canonicalPath="/about"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">

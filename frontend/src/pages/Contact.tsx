@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import { Mail, Phone, MapPin } from 'lucide-react'
 import { contactAPI } from '../utils/api'
 import { useToast } from '../contexts/ToastContext'
+import SEOHead from '../components/SEOHead'
 
 interface ContactForm {
   name: string
@@ -25,6 +26,11 @@ const Contact = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Contact Us"
+        description="Get in touch with MyZakat Zakat Distribution Foundation. Reach out for questions about Zakat, donations, volunteering, or partnership opportunities."
+        canonicalPath="/contact"
+      />
       <div className="section-container">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-heading font-bold text-gray-900 mb-4">Contact Us</h1>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { BookOpen, Calculator, Heart, Info, FileText, Globe, ArrowLeft } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const QuickLinks = () => {
   const islamicLinks = [
@@ -43,6 +44,11 @@ const QuickLinks = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Quick Links"
+        description="Quick links to all MyZakat resources – Zakat calculators, donation page, programs, events, educational content, and more."
+        canonicalPath="/quick-links"
+      />
       <div className="section-container">
         <div className="mb-6">
           <Link

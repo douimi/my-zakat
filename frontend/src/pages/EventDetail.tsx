@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { ArrowLeft, Calendar, MapPin, Clock } from 'lucide-react'
 import { eventsAPI } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 
 const EventDetail = () => {
   const { id } = useParams<{ id: string }>()
@@ -15,15 +16,9 @@ const EventDetail = () => {
     }
   )
 
-  // Helper function to get image URL - check if it's a full URL or a filename
+  // Helper function to get image URL with LARGE optimization
   const getImageUrl = (imageValue?: string) => {
-    if (!imageValue) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-      return imageValue
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/events/${imageValue}`)
+    return getOptimizedImageUrl(imageValue, IMAGE_WIDTHS.LARGE, 'events')
   }
 
   if (isLoading) {

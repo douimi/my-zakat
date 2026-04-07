@@ -1,0 +1,83 @@
+# MyZakat – Zakat Distribution Foundation
+
+> MyZakat is a nonprofit 501(c)(3) Zakat distribution foundation based in Winchester, Virginia, USA. We empower communities through transparent and efficient distribution of Zakat, Sadaqa, and other Islamic charitable contributions.
+
+## About
+
+MyZakat Zakat Distribution Foundation emerged from a personal commitment to serving humanity. What began as individual efforts to address immediate needs has grown into a dedicated online platform for amplifying charitable impact. We provide secure donation processing, Zakat calculators, community programs, and educational resources rooted in Islamic principles.
+
+## Core Services
+
+### Online Donation Platform
+- Secure one-time and recurring donations via Stripe payment processing
+- Support for Zakat, Sadaqa, and general donations
+- Transparent fund allocation and impact tracking
+- Donation receipts and history for donors
+
+### Zakat Calculators
+- **Zakat Calculator**: Comprehensive tool to calculate annual Zakat obligations based on savings, investments, gold, silver, business assets, and agricultural holdings
+- **Kaffarah Calculator**: Calculate Kaffarah obligations for missed fasts or broken oaths
+- **Zakat Al-Fitr Calculator**: Determine Zakat Al-Fitr amount due at the end of Ramadan
+- **Zakat on Gold Calculator**: Specialized calculator for gold-based Zakat assessment
+
+### Community Programs
+- Active charitable programs categorized by area of impact
+- Urgent needs campaigns for emergency relief
+- Volunteer coordination and opportunities
+- Community events and gatherings
+
+### Islamic Education Resources
+- Zakat education: Rules, obligations, and eligible recipients
+- Islamic knowledge library
+- Book of Duas (supplications)
+- Charity in Islam educational content
+- Umrah guidelines
+
+## Key Features
+
+- **Transparent Impact Tracking**: Real-time statistics showing meals provided, families supported, and orphans assisted
+- **Secure Payments**: PCI-compliant payment processing through Stripe
+- **User Accounts**: Donors can create accounts to track donation history and manage recurring contributions
+- **Mobile-Friendly**: Fully responsive design optimized for all devices
+- **Stories of Impact**: Real stories showcasing how donations make a difference
+- **Event Management**: Community events with details, dates, and locations
+- **Testimonials**: Verified testimonials from donors and beneficiaries
+- **Newsletter**: Regular updates on programs and impact
+
+## Who We Serve
+
+- Muslims seeking to fulfill their Zakat obligations accurately and conveniently
+- Individuals looking to give Sadaqa (voluntary charity)
+- Community members in need of financial assistance, food aid, or emergency relief
+- Volunteers interested in contributing their time to charitable causes
+- Anyone interested in learning about Islamic charitable giving principles
+
+## Contact Information
+
+- **Website**: https://myzakat.org
+- **Email**: info@myzakat.org
+- **Phone**: +1-540-676-0330
+- **Address**: 544 Monticello Street, Winchester, VA 22601, United States
+
+## Technical Details
+
+- Built with React and FastAPI
+- Stripe-integrated payment processing
+- PostgreSQL database for reliable data management
+- AWS S3 for media storage
+- Docker-containerized deployment
+
+## Links
+
+- [Home](https://myzakat.org/)
+- [About](https://myzakat.org/about)
+- [Donate](https://myzakat.org/donate)
+- [Zakat Calculator](https://myzakat.org/zakat-calculator)
+- [Programs](https://myzakat.org/programs)
+- [Stories](https://myzakat.org/stories)
+- [Events](https://myzakat.org/events)
+- [Contact](https://myzakat.org/contact)
+- [Volunteer](https://myzakat.org/volunteer)
+- [Privacy Policy](https://myzakat.org/privacy-policy)
+- [Donation Policy](https://myzakat.org/donation-policy)
+- [Full Details](https://myzakat.org/llms-full.txt)

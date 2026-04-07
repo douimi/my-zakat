@@ -1,8 +1,14 @@
 import { BookOpen, Heart } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const IslamicKnowledge = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Islamic Knowledge"
+        description="Explore Islamic educational resources from MyZakat. Learn about Islamic principles, charitable giving, and spiritual growth through our curated content."
+        canonicalPath="/islamic-knowledge"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
           <div className="flex items-center mb-8">

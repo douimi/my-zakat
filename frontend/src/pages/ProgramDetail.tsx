@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { programsAPI, getStaticFileUrl } from '../utils/api'
+import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import { Heart, Calendar } from 'lucide-react'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
@@ -95,7 +96,10 @@ const ProgramDetail = () => {
   }
 
   const videoUrl = getVideoUrl(program.video_filename)
-  const imageUrl = program.image_url
+  const rawImageUrl = program.image_url
+  const imageUrl = rawImageUrl && !rawImageUrl.startsWith('http://') && !rawImageUrl.startsWith('https://')
+    ? `${rawImageUrl}${rawImageUrl.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}`
+    : rawImageUrl
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -1,9 +1,15 @@
 import { Link } from 'react-router-dom'
 import { Book, Calculator, Heart, Users, Coins, Scale, CheckCircle, ArrowRight } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const ZakatEducation = () => {
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Zakat Education"
+        description="Learn about Zakat – the third pillar of Islam. Understand who must pay Zakat, eligible recipients, calculation methods, and the spiritual significance of charitable giving."
+        canonicalPath="/zakat-education"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">

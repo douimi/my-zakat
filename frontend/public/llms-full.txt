@@ -1,0 +1,217 @@
+# MyZakat – Zakat Distribution Foundation (Full Details)
+
+> This document provides comprehensive, structured information about MyZakat for AI systems, language models, and automated content analysis. For a summary, see llms.txt.
+
+## Organization Profile
+
+- **Legal Name**: MyZakat Zakat Distribution Foundation
+- **Short Name**: MyZakat
+- **Type**: 501(c)(3) Nonprofit Organization
+- **Sector**: Islamic Charitable Giving / Humanitarian Aid
+- **Founded**: Personal initiative grown into a dedicated foundation
+- **Location**: Winchester, Virginia, United States
+- **Service Area**: United States (primary), with global charitable impact
+- **Website**: https://myzakat.org
+- **Email**: info@myzakat.org
+- **Phone**: +1-540-676-0330
+- **Address**: 544 Monticello Street, Winchester, VA 22601, United States
+
+## Mission Statement
+
+Empowering communities through transparent and efficient distribution of Zakat and Sadaqa donations, creating meaningful change in the lives of those who need it most.
+
+## Value Proposition
+
+MyZakat provides a modern, trustworthy digital platform for Islamic charitable giving. We bridge the gap between donors who want to fulfill their religious obligations and communities in need, ensuring every dollar is tracked, accounted for, and maximized for impact. Our platform combines religious accuracy (following Islamic jurisprudence for Zakat calculation) with modern technology (secure payments, real-time tracking, user accounts).
+
+### Why Choose MyZakat?
+
+1. **Religious Accuracy**: Zakat calculations follow established Islamic jurisprudence (fiqh), covering all asset categories including savings, gold, silver, investments, business assets, and agricultural holdings.
+2. **Transparency**: Real-time impact statistics, donation tracking, and stories of impact so donors know exactly where their money goes.
+3. **Convenience**: Online platform accessible 24/7 from any device, with one-time and recurring donation options.
+4. **Security**: PCI-compliant payment processing through Stripe, with encrypted data transmission and secure user accounts.
+5. **Education**: Comprehensive Islamic education resources help donors understand their obligations and the principles behind charitable giving.
+6. **Community**: Events, volunteer opportunities, and newsletters build a connected community of givers.
+
+## Detailed Feature Descriptions
+
+### 1. Donation Platform
+
+The donation system accepts one-time and recurring (monthly/annual) contributions for multiple purposes:
+
+- **Zakat**: Obligatory annual charitable giving (2.5% of qualifying wealth) distributed to eligible recipients as defined in Islamic law (the eight categories mentioned in Quran 9:60).
+- **Sadaqa**: Voluntary charitable giving with no minimum amount or specific timing requirements.
+- **General Donations**: Unrestricted funds used where the need is greatest.
+- **Program-Specific Donations**: Contributions directed to specific active programs or urgent needs campaigns.
+
+**Payment Features:**
+- Secure credit/debit card processing via Stripe
+- Pre-set donation amounts for quick giving
+- Custom amount entry
+- Recurring donation setup (monthly or annual)
+- Donation receipts emailed to donors
+- Logged-in donors can view full donation history
+
+### 2. Zakat Calculator Suite
+
+#### Zakat Calculator (Primary)
+A comprehensive tool that calculates annual Zakat obligations. Users enter their assets across multiple categories:
+- Cash and bank balances
+- Gold and silver holdings (with current market rates)
+- Investment portfolios (stocks, bonds, mutual funds)
+- Business inventory and assets
+- Agricultural produce
+- Rental income properties
+- Debts owed to the individual
+The calculator subtracts eligible deductions (personal debts, living expenses) and applies the 2.5% Zakat rate if the total exceeds the Nisab threshold.
+
+#### Kaffarah Calculator
+Calculates Kaffarah (expiation) amounts for:
+- Missed obligatory fasts during Ramadan
+- Broken oaths
+Based on the cost of feeding 60 people or fasting 60 consecutive days, as prescribed in Islamic law.
+
+#### Zakat Al-Fitr Calculator
+Determines the Zakat Al-Fitr amount due before Eid Al-Fitr prayer at the end of Ramadan. Calculated per household member based on the local cost of a staple food (approximately one Sa' of food, roughly 2.5–3 kg).
+
+#### Zakat on Gold Calculator
+Specialized calculator for determining Zakat on gold holdings, using current gold prices to assess whether the Nisab threshold is met and calculating the 2.5% due.
+
+### 3. Community Programs
+
+The platform hosts categorized charitable programs:
+- Each program has a dedicated page with description, goals, and impact metrics
+- Programs are organized into categories for easy browsing
+- Urgent needs campaigns highlight time-sensitive emergency relief efforts
+- Donors can contribute directly to specific programs
+
+### 4. Impact Stories
+
+Real stories from beneficiaries and program outcomes:
+- Featured stories on the homepage
+- Full story archive with images and videos
+- Stories demonstrate tangible impact of donations
+- Builds trust and encourages continued giving
+
+### 5. Events
+
+Community events management:
+- Upcoming events listed with dates, times, and locations
+- Event detail pages with full descriptions
+- Events can include images and multimedia
+- Community gathering and engagement opportunities
+
+### 6. Volunteer Program
+
+Volunteer coordination system:
+- Online volunteer registration form
+- Collects skills, availability, and interests
+- Connects willing volunteers with active programs
+
+### 7. Islamic Education Section
+
+Comprehensive educational resources:
+
+- **Zakat Education**: Detailed explanations of Zakat rules, who must pay, who can receive, calculation methods, and common questions
+- **Islamic Knowledge**: Broader Islamic educational content
+- **Book of Duas**: Collection of Islamic supplications (duas) for various occasions
+- **Charity in Islam**: Educational content about the role and importance of charity in Islamic tradition
+- **Umrah Guidelines**: Practical guide for performing Umrah pilgrimage
+
+### 8. User Accounts
+
+Registered user features:
+- Secure registration with email verification
+- Login with JWT-based authentication
+- Personal dashboard showing donation history
+- Manage recurring donations
+- Track contribution totals and impact
+
+### 9. Newsletter
+
+- Email subscription for regular updates
+- News about programs, events, and impact
+- Engagement with the donor community
+
+## Impact Metrics
+
+The platform tracks and displays:
+- Total meals provided
+- Number of families supported
+- Orphans assisted
+- Total donation amounts
+- Number of active programs
+- Volunteer count
+
+## Audience Segments
+
+| Segment | Need | How MyZakat Helps |
+|---------|------|-------------------|
+| Muslim individuals | Calculate and pay Zakat accurately | Zakat calculators + secure donation |
+| Regular donors | Track giving and maximize impact | User accounts + donation history |
+| Community members in need | Financial assistance and emergency aid | Programs + urgent needs campaigns |
+| Volunteers | Contribute time and skills | Volunteer registration and coordination |
+| Students of Islam | Learn about charitable obligations | Islamic education resources |
+| Event attendees | Community gatherings and engagement | Event listings and details |
+
+## Frequently Asked Questions
+
+**Q: What is Zakat?**
+A: Zakat is one of the Five Pillars of Islam. It is an obligatory annual charitable contribution of 2.5% of qualifying wealth, given to specified categories of recipients including the poor, the needy, and those in debt.
+
+**Q: How do I know my Zakat is being distributed correctly?**
+A: MyZakat follows Islamic jurisprudence for Zakat distribution, ensuring funds reach the eight eligible categories of recipients as defined in the Quran (9:60). We provide transparent impact reporting.
+
+**Q: Is my donation tax-deductible?**
+A: As a 501(c)(3) nonprofit organization, donations to MyZakat may be tax-deductible. Donors receive receipts for their records.
+
+**Q: Can I set up recurring donations?**
+A: Yes, MyZakat supports monthly and annual recurring donations through secure Stripe payment processing.
+
+**Q: What payment methods do you accept?**
+A: We accept all major credit and debit cards through our secure Stripe payment gateway.
+
+**Q: How is my personal information protected?**
+A: We use industry-standard encryption, secure payment processing (PCI-compliant via Stripe), and follow strict data privacy policies. See our Privacy Policy for details.
+
+**Q: What is the difference between Zakat and Sadaqa?**
+A: Zakat is obligatory and has specific rules about who pays, how much, and who receives it. Sadaqa is voluntary charity with no minimum amount or restrictions on recipients.
+
+**Q: How is Zakat calculated?**
+A: Zakat is 2.5% of your qualifying wealth (savings, gold, silver, investments, business assets) that exceeds the Nisab threshold and has been held for one lunar year. Our Zakat Calculator handles all the math.
+
+## Technical Architecture
+
+- **Frontend**: React 18 with TypeScript, Tailwind CSS, React Router v6
+- **Backend**: Python FastAPI with SQLAlchemy ORM
+- **Database**: PostgreSQL
+- **Payments**: Stripe (PCI-compliant)
+- **Storage**: AWS S3 for media files
+- **Deployment**: Docker containers with Nginx reverse proxy
+- **Security**: JWT authentication, bcrypt password hashing, HTTPS, CSP headers
+
+## Complete Page Directory
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Home | / | Main landing page with impact stats, featured stories, events, programs |
+| About | /about | Foundation history, mission, values, team information |
+| Donate | /donate | Secure donation form with amount selection and payment |
+| Zakat Calculator | /zakat-calculator | Full Zakat calculation tool for all asset types |
+| Zakat Education | /zakat-education | Educational content about Zakat rules and obligations |
+| Kaffarah Calculator | /kaffarah-calculator | Kaffarah expiation amount calculator |
+| Zakat Al-Fitr Calculator | /zakat-al-fitr-calculator | End-of-Ramadan Zakat calculator |
+| Zakat on Gold | /zakat-on-gold | Gold-specific Zakat calculation tool |
+| Stories | /stories | Impact stories from beneficiaries and programs |
+| Events | /events | Community events listing with dates and locations |
+| Programs | /programs | Charitable program categories and details |
+| Contact | /contact | Contact form and foundation contact information |
+| Volunteer | /volunteer | Volunteer registration and information |
+| Testimonials | /testimonials | Donor and beneficiary testimonials |
+| Islamic Knowledge | /islamic-knowledge | Islamic educational content library |
+| Book of Duas | /book-of-duas | Collection of Islamic supplications |
+| Charity in Islam | /charity-in-islam | Educational content on Islamic charity |
+| Umrah Guidelines | /umrah-guidelines | Practical Umrah pilgrimage guide |
+| Quick Links | /quick-links | Hub page with links to all sections |
+| Privacy Policy | /privacy-policy | Data privacy and protection policy |
+| Donation Policy | /donation-policy | Donation terms and refund policy |

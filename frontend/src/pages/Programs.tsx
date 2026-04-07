@@ -2,9 +2,11 @@ import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Heart } from 'lucide-react'
 import { programCategoriesAPI, getStaticFileUrl } from '../utils/api'
+import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { ProgramCategory } from '../types'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
+import SEOHead from '../components/SEOHead'
 
 const Programs = () => {
   const { data: categories, isLoading, error } = useQuery('program-categories', () => 
@@ -55,6 +57,11 @@ const Programs = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Charitable Programs"
+        description="Explore MyZakat charitable programs. From emergency relief to community development, find programs that make a lasting impact and support those in need."
+        canonicalPath="/programs"
+      />
       {/* Hero Section */}
       <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
         <div className="absolute inset-0 opacity-5">
@@ -102,8 +109,8 @@ const Programs = () => {
                         />
                       ) : media.url ? (
                         <>
-                          <img 
-                            src={media.url} 
+                          <img
+                            src={media.url && !media.url.startsWith('http://') && !media.url.startsWith('https://') ? `${media.url}${media.url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.THUMB}` : media.url}
                             alt={category.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                             crossOrigin={media.url?.startsWith('http://') || media.url?.startsWith('https://') ? 'anonymous' : undefined}

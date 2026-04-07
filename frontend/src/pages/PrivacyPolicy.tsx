@@ -1,6 +1,13 @@
+import SEOHead from '../components/SEOHead'
+
 const PrivacyPolicy = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Privacy Policy"
+        description="MyZakat Privacy Policy. Learn how we collect, use, and protect your personal information when you use our Zakat donation platform."
+        canonicalPath="/privacy-policy"
+      />
       <div className="section-container">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">

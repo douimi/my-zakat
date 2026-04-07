@@ -5,6 +5,7 @@ import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js'
 import { Heart, Shield, CheckCircle, CreditCard } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import { useAuthStore } from '../store/authStore'
+import SEOHead from '../components/SEOHead'
 
 interface DonationForm {
   name: string
@@ -138,6 +139,11 @@ const Donate = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Donate Zakat & Sadaqa Online"
+        description="Make a secure Zakat or Sadaqa donation online. Support families in need with one-time or recurring donations through our trusted, PCI-compliant payment platform."
+        canonicalPath="/donate"
+      />
       <div className="section-container">
         {/* Header */}
         <div className="text-center mb-12">

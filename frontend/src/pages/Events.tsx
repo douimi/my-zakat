@@ -1,8 +1,10 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { Calendar, MapPin, Clock, ArrowRight } from 'lucide-react'
-import { eventsAPI, getStaticFileUrl } from '../utils/api'
+import { eventsAPI } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { Event } from '../types'
+import SEOHead from '../components/SEOHead'
 
 const Events = () => {
   const { data: events, isLoading, error } = useQuery('public-events', () => 
@@ -44,6 +46,11 @@ const Events = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Community Events"
+        description="Join MyZakat community events. Find upcoming gatherings, fundraisers, and Islamic educational events near you."
+        canonicalPath="/events"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">
@@ -145,18 +152,7 @@ const EventCard = ({ event, isUpcoming }: EventCardProps) => {
   const eventDate = new Date(event.date)
   const isToday = eventDate.toDateString() === new Date().toDateString()
 
-  // Helper function to get image URL - check if it's a full URL or a filename
-  const getImageUrl = (imageValue?: string) => {
-    if (!imageValue) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
-      return imageValue
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/events/${imageValue}`)
-  }
-
-  const imageUrl = getImageUrl(event.image)
+  const imageUrl = getOptimizedImageUrl(event.image, IMAGE_WIDTHS.THUMB, 'events')
 
   return (
     <div className={`card hover:shadow-lg transition-shadow duration-300 ${

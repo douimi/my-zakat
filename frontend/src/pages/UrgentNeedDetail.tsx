@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { urgentNeedsAPI } from '../utils/api'
+import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -109,7 +110,7 @@ const UrgentNeedDetail = () => {
         {need.image_url && (
           <div className="mb-8">
             <img
-              src={need.image_url}
+              src={need.image_url && !need.image_url.startsWith('http://') && !need.image_url.startsWith('https://') ? `${need.image_url}${need.image_url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}` : need.image_url}
               alt={need.title}
               className="w-full h-64 md:h-96 object-cover rounded-lg shadow-lg"
             />

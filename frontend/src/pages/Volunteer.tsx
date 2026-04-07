@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from 'react-query'
 import { Heart, Users, Globe, Clock, CheckCircle, ArrowRight } from 'lucide-react'
 import { volunteersAPI } from '../utils/api'
+import SEOHead from '../components/SEOHead'
 
 const Volunteer = () => {
   const [formData, setFormData] = useState({
@@ -63,6 +64,11 @@ const Volunteer = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Volunteer With Us"
+        description="Join MyZakat as a volunteer. Contribute your time and skills to help distribute Zakat, support community programs, and make a difference."
+        canonicalPath="/volunteer"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">

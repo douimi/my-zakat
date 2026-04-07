@@ -222,72 +222,164 @@ async def serve_video(filename: str, request: Request):
 
 
 @router.get("/media/images/{filename:path}")
-async def serve_image(filename: str):
+async def serve_image(filename: str, request: Request, w: int = 0, fmt: str = ""):
     """
-    Serve image files
-    If filename is an S3 URL, extract object key and serve from S3. Otherwise check S3 first, then local filesystem.
+    Serve image files with optional on-the-fly resizing and format conversion.
+
+    Query params:
+        w   - Target width in pixels (e.g. ?w=400). 0 = original size.
+        fmt - Output format: "webp" or "". Empty = auto-detect from Accept header.
+
+    Features:
+        - In-memory LRU cache (avoids repeated S3 downloads)
+        - On-the-fly resize & WebP conversion
+        - ETag / 304 Not Modified support
+        - Long cache headers for CDN/browser caching
     """
     from urllib.parse import unquote
-    
+    from image_cache import cache_get, cache_put, make_cache_key, resize_image, compute_etag
+
     # Decode URL-encoded filename
     filename = unquote(filename)
-    
+
     # Security: prevent directory traversal (but allow forward slashes for S3 paths)
     if '..' in filename or filename.startswith('/'):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
-    # If filename is already an S3 URL, extract the object key
+
+    # Clamp width to sensible values
+    if w < 0:
+        w = 0
+    if w > 1920:
+        w = 1920
+
+    # Auto-detect WebP support from Accept header
+    wants_webp = False
+    if fmt == "webp":
+        wants_webp = True
+    elif not fmt:
+        accept = request.headers.get("accept", "")
+        if "image/webp" in accept:
+            wants_webp = True
+
+    output_format = "WEBP" if wants_webp else ""
+
+    # Resolve S3 object key
     object_key = None
     if filename.startswith('http://') or filename.startswith('https://'):
-        # Extract object key from S3 URL
         object_key = extract_object_key_from_url(filename)
         if not object_key:
-            # If we can't extract, try to redirect (for external URLs)
             return RedirectResponse(url=filename)
     else:
-        # Extract just the filename if it contains path separators
-        # Handle cases where filename might be "images/filename.jpg" or just "filename.jpg"
         if '/' in filename:
-            # If it already has the path, use it as-is
             object_key = filename if filename.startswith('images/') or filename.startswith('videos/') else f"images/{filename.split('/')[-1]}"
         else:
-            # Check S3 first - simple structure: images/filename
             object_key = f"images/{filename}"
-    
-    # Try to serve from S3 FIRST - never fall back to filesystem
-    if object_key:
-        # Check if file exists in S3
-        if file_exists(object_key):
+
+    # Build cache key
+    cache_key = make_cache_key(object_key, w or None, output_format or None)
+
+    # 1. Check in-memory cache first
+    cached = cache_get(cache_key)
+    if cached:
+        data, content_type = cached
+        etag = compute_etag(data)
+
+        # Check If-None-Match for 304
+        if_none_match = request.headers.get("if-none-match", "")
+        if if_none_match and if_none_match.strip('"') == etag:
+            return Response(status_code=304, headers={
+                'ETag': f'"{etag}"',
+                'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+                'Access-Control-Allow-Origin': '*',
+            })
+
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+                'ETag': f'"{etag}"',
+                'Vary': 'Accept',
+            }
+        )
+
+    # 2. Download original from S3
+    if not object_key or not file_exists(object_key):
+        raise HTTPException(status_code=404, detail=f"Image not found in S3: {object_key or filename}")
+
+    try:
+        file_content = download_file(object_key)
+        if not file_content:
+            raise HTTPException(status_code=404, detail=f"Image not found in S3: {object_key}")
+
+        file_info = get_file_info(object_key)
+        content_type = file_info.get('content_type', 'image/jpeg') if file_info else get_content_type(filename.split('/')[-1])
+
+        # 3. Apply resizing / format conversion if requested
+        final_data = file_content
+        final_content_type = content_type
+
+        needs_processing = (w > 0) or wants_webp
+        is_processable = content_type and content_type.startswith('image/') and content_type not in ('image/svg+xml', 'image/gif')
+
+        if needs_processing and is_processable:
             try:
-                print(f"📥 Serving image from S3: {object_key}")
-                file_content = download_file(object_key)
-                if file_content:
-                    file_info = get_file_info(object_key)
-                    content_type = file_info.get('content_type', 'image/jpeg') if file_info else get_content_type(filename.split('/')[-1])
-                    print(f"✅ Successfully served image from S3: {object_key} ({len(file_content)} bytes)")
-                    return Response(
-                        content=file_content,
-                        media_type=content_type,
-                        headers={
-                            'Access-Control-Allow-Origin': '*',
-                            'Cache-Control': 'public, max-age=86400',
-                        }
-                    )
-                else:
-                    print(f"⚠️  S3 file exists but content is empty: {object_key}")
+                target_format = output_format if output_format else (
+                    "JPEG" if content_type in ("image/jpeg", "image/jpg") else
+                    "PNG" if content_type == "image/png" else
+                    "JPEG"
+                )
+                final_data, final_content_type = resize_image(
+                    file_content,
+                    target_width=w if w > 0 else 9999,
+                    output_format=target_format,
+                )
             except Exception as e:
-                import traceback
-                print(f"❌ Error serving image from S3: {object_key}")
-                print(f"   Error: {str(e)}")
-                print(traceback.format_exc())
-                # Don't fall back to filesystem - fail instead
-                raise HTTPException(status_code=500, detail=f"Failed to retrieve image from S3: {str(e)}")
+                print(f"⚠️  Image processing failed, serving original: {e}")
+                final_data = file_content
+                final_content_type = content_type
+
+        # 4. Cache the result and serve
+        cache_put(cache_key, final_data, final_content_type)
+
+        # Also cache original if we didn't request processing
+        if not needs_processing:
+            pass  # already cached above
         else:
-            print(f"⚠️  Image not found in S3: {object_key}")
-    
-    # If we reach here, file doesn't exist in S3
-    # Don't fall back to filesystem - fail instead
-    raise HTTPException(status_code=404, detail=f"Image not found in S3: {object_key or filename}")
+            # Cache the original too for future non-resized requests
+            orig_cache_key = make_cache_key(object_key)
+            if not cache_get(orig_cache_key):
+                cache_put(orig_cache_key, file_content, content_type)
+
+        etag = compute_etag(final_data)
+
+        # Check If-None-Match
+        if_none_match = request.headers.get("if-none-match", "")
+        if if_none_match and if_none_match.strip('"') == etag:
+            return Response(status_code=304, headers={
+                'ETag': f'"{etag}"',
+                'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+                'Access-Control-Allow-Origin': '*',
+            })
+
+        return Response(
+            content=final_data,
+            media_type=final_content_type,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+                'ETag': f'"{etag}"',
+                'Vary': 'Accept',
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"❌ Error serving image from S3: {object_key}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve image from S3: {str(e)}")
 
 
 @router.get("/stories/{filename}")

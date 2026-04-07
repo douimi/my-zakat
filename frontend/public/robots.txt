@@ -1,0 +1,17 @@
+# robots.txt for myzakat.org
+User-agent: *
+Allow: /
+
+# Disallow admin and auth pages
+Disallow: /admin
+Disallow: /admin/
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /dashboard
+
+# Sitemap
+Sitemap: https://myzakat.org/sitemap.xml
+
+# LLMs.txt for AI systems
+# See https://myzakat.org/llms.txt

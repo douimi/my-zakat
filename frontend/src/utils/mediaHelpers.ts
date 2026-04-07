@@ -1,6 +1,25 @@
 import { getStaticFileUrl } from './api'
 
 /**
+ * Standard responsive widths used across the app.
+ * These match common layout breakpoints to avoid serving oversized images.
+ */
+export const IMAGE_WIDTHS = {
+  /** Tiny blur placeholder */
+  PLACEHOLDER: 32,
+  /** Small card thumbnail */
+  THUMB: 400,
+  /** Medium card / list item */
+  CARD: 640,
+  /** Large card or half-width section */
+  LARGE: 800,
+  /** Full-width hero / banner */
+  HERO: 1200,
+  /** Original size (no resize) */
+  FULL: 0,
+} as const
+
+/**
  * Get image URL from a filename or full URL
  * @param filename - Image filename or full URL
  * @param basePath - Base path for uploaded files (e.g., 'stories', 'events', 'testimonials', 'media/images')
@@ -8,14 +27,45 @@ import { getStaticFileUrl } from './api'
  */
 export const getImageUrl = (filename?: string, basePath: string = 'media/images'): string | null => {
   if (!filename) return null
-  
+
   // If it's already a full URL, return as-is (including direct S3 URLs)
   if (filename.startsWith('http://') || filename.startsWith('https://')) {
     return filename
   }
-  
+
   // Otherwise, treat it as a filename and construct the path
   return getStaticFileUrl(`/api/uploads/${basePath}/${filename}`)
+}
+
+/**
+ * Get an optimized image URL with on-the-fly resizing.
+ * The backend will resize to the target width and auto-convert to WebP if the browser supports it.
+ *
+ * @param filename - Image filename or full URL
+ * @param width - Target width in pixels (0 = original). Use IMAGE_WIDTHS constants.
+ * @param basePath - Base path for uploads
+ * @returns Optimized image URL or null
+ */
+export const getOptimizedImageUrl = (
+  filename?: string,
+  width: number = 0,
+  basePath: string = 'media/images',
+): string | null => {
+  if (!filename) return null
+
+  // External URLs can't be optimized through our backend
+  if (filename.startsWith('http://') || filename.startsWith('https://')) {
+    return filename
+  }
+
+  const base = getStaticFileUrl(`/api/uploads/${basePath}/${filename}`)
+  if (!base) return null
+
+  if (width > 0) {
+    const separator = base.includes('?') ? '&' : '?'
+    return `${base}${separator}w=${width}`
+  }
+  return base
 }
 
 /**

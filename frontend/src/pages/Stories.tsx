@@ -1,9 +1,11 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { Calendar, User, ArrowRight, Play, BookOpen, Heart } from 'lucide-react'
-import { storiesAPI, getStaticFileUrl } from '../utils/api'
+import { storiesAPI } from '../utils/api'
+import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { Story } from '../types'
 import VideoThumbnail from '../components/VideoThumbnail'
+import SEOHead from '../components/SEOHead'
 
 const Stories = () => {
   const { data: stories, isLoading, error } = useQuery('public-stories', () => 
@@ -40,6 +42,11 @@ const Stories = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title="Impact Stories"
+        description="Read real stories of how Zakat and Sadaqa donations have transformed lives. See the tangible impact of your charitable giving through MyZakat programs."
+        canonicalPath="/stories"
+      />
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="section-container">
@@ -139,18 +146,7 @@ interface FeaturedStoryCardProps {
 }
 
 const FeaturedStoryCard = ({ story }: FeaturedStoryCardProps) => {
-  // Helper function to get image URL - check if it's a full URL or a filename
-  const getImageUrl = (imageFilename?: string) => {
-    if (!imageFilename) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageFilename.startsWith('http://') || imageFilename.startsWith('https://')) {
-      return imageFilename
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/stories/${imageFilename}`)
-  }
-
-  const imageUrl = getImageUrl(story.image_filename)
+  const imageUrl = getOptimizedImageUrl(story.image_filename, IMAGE_WIDTHS.CARD, 'stories')
 
   return (
     <div className="card hover:shadow-xl transition-shadow duration-300 overflow-hidden">
@@ -208,18 +204,7 @@ interface StoryCardProps {
 }
 
 const StoryCard = ({ story }: StoryCardProps) => {
-  // Helper function to get image URL - check if it's a full URL or a filename
-  const getImageUrl = (imageFilename?: string) => {
-    if (!imageFilename) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (imageFilename.startsWith('http://') || imageFilename.startsWith('https://')) {
-      return imageFilename
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/stories/${imageFilename}`)
-  }
-
-  const imageUrl = getImageUrl(story.image_filename)
+  const imageUrl = getOptimizedImageUrl(story.image_filename, IMAGE_WIDTHS.THUMB, 'stories')
 
   return (
     <div className="card hover:shadow-lg transition-shadow duration-300">

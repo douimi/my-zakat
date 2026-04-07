@@ -156,7 +156,7 @@ const Footer = () => {
 
         {/* Bottom */}
         <div className="mt-12 pt-8 border-t border-gray-800 text-center text-gray-400">
-          <p>&copy; 2024 MyZakat Distribution Foundation. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} MyZakat Distribution Foundation. All rights reserved.</p>
         </div>
       </div>
     </footer>

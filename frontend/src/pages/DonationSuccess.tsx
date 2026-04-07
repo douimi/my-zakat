@@ -1,9 +1,15 @@
 import { Link } from 'react-router-dom'
 import { CheckCircle, Heart } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const DonationSuccess = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12">
+      <SEOHead
+        noindex={true}
+        title="Donation Successful"
+        description="Thank you for your generous donation to MyZakat."
+      />
       <div className="text-center max-w-md mx-auto">
         <div className="mb-8">
           <CheckCircle className="w-20 h-20 text-green-600 mx-auto mb-4" />

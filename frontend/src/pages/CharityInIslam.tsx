@@ -1,8 +1,14 @@
 import { Heart, Users, Globe } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const CharityInIslam = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Charity in Islam"
+        description="Discover the importance and types of charity in Islam. Learn about Zakat, Sadaqa, Waqf, and other forms of Islamic charitable giving and their spiritual rewards."
+        canonicalPath="/charity-in-islam"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
           <div className="flex items-center mb-8">

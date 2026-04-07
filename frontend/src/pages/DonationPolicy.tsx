@@ -1,6 +1,13 @@
+import SEOHead from '../components/SEOHead'
+
 const DonationPolicy = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Donation Policy"
+        description="MyZakat Donation Policy. Understand our donation processing, refund policy, and how we handle Zakat, Sadaqa, and general charitable contributions."
+        canonicalPath="/donation-policy"
+      />
       <div className="section-container">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">

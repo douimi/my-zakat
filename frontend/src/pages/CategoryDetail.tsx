@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { programCategoriesAPI, programsAPI, getStaticFileUrl } from '../utils/api'
+import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import { ArrowLeft, Heart, Share2, Calendar, ChevronLeft, ChevronRight, ArrowRight, Users, Target } from 'lucide-react'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
@@ -103,17 +104,21 @@ const CategoryDetail = () => {
     return getStaticFileUrl(`/api/uploads/program_categories/${filename}`)
   }
 
-  const getProgramImageUrl = (program: any) => {
+  const getProgramImageUrl = (program: any, width: number = 0) => {
     if (program.video_filename) {
       return getStaticFileUrl(`/api/uploads/programs/${program.video_filename}`)
     }
-    return program.image_url || null
+    const url = program.image_url || null
+    if (url && width > 0 && !url.startsWith('http://') && !url.startsWith('https://')) {
+      return `${url}${url.includes('?') ? '&' : '?'}w=${width}`
+    }
+    return url
   }
 
   const slideshowImages = categoryPrograms
     ?.filter((p: any) => p.image_url || p.video_filename)
     .map((p: any) => ({
-      url: getProgramImageUrl(p),
+      url: getProgramImageUrl(p, IMAGE_WIDTHS.LARGE),
       title: p.title,
       program: p
     })) || []
@@ -154,7 +159,10 @@ const CategoryDetail = () => {
   }
 
   const videoUrl = getVideoUrl(category.video_filename)
-  const imageUrl = category.image_url
+  const rawImageUrl = category.image_url
+  const imageUrl = rawImageUrl && !rawImageUrl.startsWith('http://') && !rawImageUrl.startsWith('https://')
+    ? `${rawImageUrl}${rawImageUrl.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}`
+    : rawImageUrl
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -345,10 +353,13 @@ const CategoryDetail = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {categoryPrograms.map((program: any) => {
-                const programVideoUrl = program.video_filename 
+                const programVideoUrl = program.video_filename
                   ? getStaticFileUrl(`/api/uploads/programs/${program.video_filename}`)
                   : null
-                const programImageUrl = program.image_url
+                const rawProgramImageUrl = program.image_url
+                const programImageUrl = rawProgramImageUrl && !rawProgramImageUrl.startsWith('http://') && !rawProgramImageUrl.startsWith('https://')
+                  ? `${rawProgramImageUrl}${rawProgramImageUrl.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.THUMB}`
+                  : rawProgramImageUrl
 
                 return (
                   <Link

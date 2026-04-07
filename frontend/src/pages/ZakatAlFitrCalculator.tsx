@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Calculator, Info, AlertCircle, Users, DollarSign, Calendar, Gift } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import SEOHead from '../components/SEOHead'
 
 const ZakatAlFitrCalculator = () => {
   const [householdSize, setHouseholdSize] = useState<number>(1)
@@ -41,6 +42,11 @@ const ZakatAlFitrCalculator = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Zakat Al-Fitr Calculator"
+        description="Calculate your Zakat Al-Fitr amount due before Eid Al-Fitr. Determine the correct Fitrah payment per household member for the end of Ramadan."
+        canonicalPath="/zakat-al-fitr-calculator"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12 max-w-4xl mx-auto">
           <div className="flex items-center mb-8">

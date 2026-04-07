@@ -1,4 +1,5 @@
 import { BookOpen } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const BookOfDuas = () => {
   const duas = [
@@ -11,6 +12,11 @@ const BookOfDuas = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
+      <SEOHead
+        title="Book of Duas"
+        description="A curated collection of Islamic duas (supplications) for daily life, prayer, and special occasions. Find authentic duas with translations and guidance."
+        canonicalPath="/book-of-duas"
+      />
       <div className="section-container">
         <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
           <div className="flex items-center mb-8">
