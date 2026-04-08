@@ -13,17 +13,22 @@ DATABASE_URL = os.getenv(
 )
 
 # Optimize database connection pooling for high concurrency
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=20,  # Number of connections to maintain in the pool
-    max_overflow=40,  # Maximum number of connections that can be created beyond pool_size
-    pool_pre_ping=True,  # Verify connections before using them
-    pool_recycle=3600,  # Recycle connections after 1 hour to prevent stale connections
-    connect_args={
-        "connect_timeout": 10,  # Connection timeout in seconds
-        "application_name": "myzakat_backend"
-    }
-)
+# SQLite doesn't support pool_size/max_overflow or PostgreSQL-specific connect_args
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+_engine_kwargs: dict = {}
+if not _is_sqlite:
+    _engine_kwargs.update(
+        pool_size=20,
+        max_overflow=40,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        connect_args={
+            "connect_timeout": 10,
+            "application_name": "myzakat_backend",
+        },
+    )
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

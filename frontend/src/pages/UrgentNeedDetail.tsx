@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useRef, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { urgentNeedsAPI } from '../utils/api'
 import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
@@ -8,8 +8,10 @@ import { Link } from 'react-router-dom'
 
 const UrgentNeedDetail = () => {
   const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
   const jsRef = useRef<HTMLScriptElement | null>(null)
   const cssRef = useRef<HTMLStyleElement | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const { data: need, isLoading, error } = useQuery(
     ['urgent-need', slug],
@@ -44,6 +46,10 @@ const UrgentNeedDetail = () => {
       cssRef.current = styleElement
     }
 
+    // Suppress window.alert so injected JS cannot block navigation with pop-ups
+    const originalAlert = window.alert
+    window.alert = () => {}
+
     // Inject JS
     if (need?.js_content) {
       const script = document.createElement('script')
@@ -55,12 +61,15 @@ const UrgentNeedDetail = () => {
 
     // Cleanup function - remove CSS and JS when component unmounts or need changes
     return () => {
+      // Restore original alert
+      window.alert = originalAlert
+
       // Remove CSS
       if (cssRef.current && cssRef.current.parentNode) {
         cssRef.current.parentNode.removeChild(cssRef.current)
         cssRef.current = null
       }
-      
+
       // Remove JS
       if (jsRef.current && jsRef.current.parentNode) {
         jsRef.current.parentNode.removeChild(jsRef.current)
@@ -68,6 +77,37 @@ const UrgentNeedDetail = () => {
       }
     }
   }, [need])
+
+  // Intercept clicks on donate links/buttons within the injected HTML content.
+  // Redirects to /donate with the urgent need title pre-selected, skipping any
+  // alert() calls that may have been attached by the custom JS.
+  useEffect(() => {
+    const container = contentRef.current
+    if (!container || !need) return
+
+    const handleClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a, button')
+      if (!target) return
+
+      const text = (target.textContent || '').toLowerCase()
+      const href = (target as HTMLAnchorElement).href || ''
+
+      const isDonateAction =
+        text.includes('donate') ||
+        href.includes('/donate') ||
+        target.classList.contains('donate-btn') ||
+        target.getAttribute('data-action') === 'donate'
+
+      if (isDonateAction) {
+        e.preventDefault()
+        e.stopPropagation()
+        navigate(`/donate?purpose=${encodeURIComponent(need.title)}`)
+      }
+    }
+
+    container.addEventListener('click', handleClick, true)
+    return () => container.removeEventListener('click', handleClick, true)
+  }, [need, navigate])
 
   if (isLoading) {
     return (
@@ -117,9 +157,9 @@ const UrgentNeedDetail = () => {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
+        <div ref={contentRef} className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-4xl font-heading font-bold text-gray-900 mb-4">{need.title}</h1>
-          
+
           {need.short_description && (
             <p className="text-xl text-gray-600 mb-8">{need.short_description}</p>
           )}

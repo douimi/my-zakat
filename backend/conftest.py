@@ -158,24 +158,35 @@ def mock_stripe(monkeypatch):
             self.status = "active"
             self.customer = "cus_test_mock_customer_id"
     
+    class MockStripeProduct:
+        def __init__(self, **kwargs):
+            self.id = "prod_test_mock_product_id"
+
+    class MockStripePrice:
+        def __init__(self, **kwargs):
+            self.id = "price_test_mock_price_id"
+
     def mock_session_create(**kwargs):
         return MockStripeSession(**kwargs)
-    
+
     def mock_customer_create(**kwargs):
         return MockStripeCustomer(**kwargs)
-    
+
     def mock_subscription_create(**kwargs):
         return MockStripeSubscription(**kwargs)
-    
+
     def mock_subscription_retrieve(subscription_id):
         return MockStripeSubscription(id=subscription_id)
-    
+
     def mock_subscription_delete(subscription_id):
         return {"id": subscription_id, "status": "canceled"}
-    
+
     monkeypatch.setattr("stripe.checkout.Session.create", mock_session_create)
     monkeypatch.setattr("stripe.Customer.create", mock_customer_create)
+    monkeypatch.setattr("stripe.Product.create", lambda **kw: MockStripeProduct(**kw))
+    monkeypatch.setattr("stripe.Price.create", lambda **kw: MockStripePrice(**kw))
     monkeypatch.setattr("stripe.Subscription.create", mock_subscription_create)
     monkeypatch.setattr("stripe.Subscription.retrieve", mock_subscription_retrieve)
     monkeypatch.setattr("stripe.Subscription.delete", mock_subscription_delete)
+    monkeypatch.setattr("stripe.Subscription.cancel", mock_subscription_delete)
 
