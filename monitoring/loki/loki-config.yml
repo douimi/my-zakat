@@ -40,8 +40,4 @@ compactor:
   retention_enabled: true
   retention_delete_delay: 2h
   retention_delete_worker_count: 150
-
-# Keep logs for 7 days
-table_manager:
-  retention_deletes_enabled: true
-  retention_period: 168h
+  delete_request_store: filesystem
