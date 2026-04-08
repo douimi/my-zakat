@@ -176,6 +176,7 @@ const Donate = () => {
                       <button
                         key={amount}
                         type="button"
+                        data-testid={`donate-amount-${amount}`}
                         onClick={() => {
                           setSelectedAmount(amount)
                           setValue('amount', amount)
@@ -201,6 +202,7 @@ const Donate = () => {
                       step="0.01"
                       min="1"
                       placeholder="Enter custom amount"
+                      data-testid="donate-amount-input"
                       {...register('amount', { required: true, min: 1, valueAsNumber: true })}
                       className="input-field pl-8 text-lg"
                       onChange={(e) => {
@@ -216,7 +218,7 @@ const Donate = () => {
                   <label className="block text-lg font-semibold text-gray-900 mb-2">
                     Purpose
                   </label>
-                  <select {...register('purpose')} className="input-field">
+                  <select data-testid="donate-purpose" {...register('purpose')} className="input-field">
                     {purposes.map((purpose) => (
                       <option key={purpose} value={purpose}>
                         {purpose}
@@ -236,6 +238,7 @@ const Donate = () => {
                         <input
                           type="radio"
                           value={freq}
+                          data-testid={`donate-freq-${freq.toLowerCase()}`}
                           {...register('frequency')}
                           className="mr-3 text-primary-600"
                         />
@@ -264,6 +267,7 @@ const Donate = () => {
                     </label>
                     <input
                       type="text"
+                      data-testid="donate-name"
                       {...register('name', { required: true })}
                       className="input-field"
                       placeholder="Enter your full name"
@@ -275,6 +279,7 @@ const Donate = () => {
                     </label>
                     <input
                       type="email"
+                      data-testid="donate-email"
                       {...register('email', { required: true })}
                       className="input-field"
                       placeholder="Enter your email"
@@ -285,6 +290,7 @@ const Donate = () => {
                 {/* Submit Button */}
                 <button
                   type="submit"
+                  data-testid="donate-submit"
                   disabled={isProcessing || !watchedAmount || watchedAmount < 1}
                   className="btn-primary w-full text-lg py-4 flex items-center justify-center"
                 >
