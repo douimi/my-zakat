@@ -7,6 +7,9 @@ from PIL import Image
 from typing import Optional, Tuple
 import subprocess
 import tempfile
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Image compression settings
 IMAGE_QUALITY = 85  # JPEG quality (1-100)
@@ -70,11 +73,11 @@ def compress_image(image_data: bytes, max_width: int = IMAGE_MAX_WIDTH, max_heig
         compressed_size = len(compressed_data)
         compression_ratio = (1 - compressed_size / original_size) * 100
         
-        print(f"📦 Image compressed: {original_size} bytes → {compressed_size} bytes ({compression_ratio:.1f}% reduction)")
+        logger.info("Image compressed: %s bytes -> %s bytes (%.1f%% reduction)", original_size, compressed_size, compression_ratio)
         
         return compressed_data
     except Exception as e:
-        print(f"⚠️  Warning: Image compression failed: {e}")
+        logger.warning("Image compression failed: %s", e)
         # Return original if compression fails
         return image_data
 
@@ -95,8 +98,8 @@ def generate_video_thumbnail(video_data: bytes, output_format: str = 'JPEG') -> 
         try:
             subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("⚠️  Warning: ffmpeg not found. Video thumbnail generation disabled.")
-            print("   Install ffmpeg: apt-get install ffmpeg (Linux) or brew install ffmpeg (Mac)")
+            logger.warning("ffmpeg not found. Video thumbnail generation disabled.")
+            logger.warning("   Install ffmpeg: apt-get install ffmpeg (Linux) or brew install ffmpeg (Mac)")
             return None
         
         # Create temporary files
@@ -126,10 +129,10 @@ def generate_video_thumbnail(video_data: bytes, output_format: str = 'JPEG') -> 
                 with open(thumbnail_path, 'rb') as f:
                     thumbnail_data = f.read()
                 
-                print(f"✅ Video thumbnail generated: {len(thumbnail_data)} bytes")
+                logger.info("Video thumbnail generated: %s bytes", len(thumbnail_data))
                 return thumbnail_data
             else:
-                print(f"⚠️  Warning: ffmpeg thumbnail generation failed: {result.stderr.decode()}")
+                logger.warning("ffmpeg thumbnail generation failed: %s", result.stderr.decode())
                 return None
         finally:
             # Clean up temporary files
@@ -142,9 +145,9 @@ def generate_video_thumbnail(video_data: bytes, output_format: str = 'JPEG') -> 
             except:
                 pass
     except Exception as e:
-        print(f"⚠️  Warning: Video thumbnail generation error: {e}")
+        logger.warning("Video thumbnail generation error: %s", e)
         import traceback
-        print(traceback.format_exc())
+        logger.warning(traceback.format_exc())
         return None
 
 
@@ -165,7 +168,7 @@ def compress_video(video_data: bytes, max_width: int = VIDEO_MAX_WIDTH, max_heig
         try:
             subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("⚠️  Warning: ffmpeg not found. Video compression disabled.")
+            logger.warning("ffmpeg not found. Video compression disabled.")
             return video_data
         
         # Create temporary files
@@ -234,11 +237,11 @@ def compress_video(video_data: bytes, max_width: int = VIDEO_MAX_WIDTH, max_heig
                 compressed_size = len(compressed_data)
                 compression_ratio = (1 - compressed_size / original_size) * 100
                 
-                print(f"📦 Video compressed: {original_size} bytes → {compressed_size} bytes ({compression_ratio:.1f}% reduction)")
+                logger.info("Video compressed: %s bytes -> %s bytes (%.1f%% reduction)", original_size, compressed_size, compression_ratio)
                 
                 return compressed_data
             else:
-                print(f"⚠️  Warning: Video compression failed: {result.stderr.decode()}")
+                logger.warning("Video compression failed: %s", result.stderr.decode())
                 return video_data
         finally:
             # Clean up temporary files
@@ -251,9 +254,9 @@ def compress_video(video_data: bytes, max_width: int = VIDEO_MAX_WIDTH, max_heig
             except:
                 pass
     except Exception as e:
-        print(f"⚠️  Warning: Video compression error: {e}")
+        logger.warning("Video compression error: %s", e)
         import traceback
-        print(traceback.format_exc())
+        logger.warning(traceback.format_exc())
         # Return original if compression fails
         return video_data
 

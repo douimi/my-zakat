@@ -3,6 +3,9 @@ from fastapi.responses import FileResponse, Response, RedirectResponse
 import os
 from pathlib import Path
 from s3_service import file_exists, get_file_url, download_file, extract_object_key_from_url, get_file_info
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -81,7 +84,7 @@ async def head_video(filename: str):
                     }
                 )
         except Exception as e:
-            print(f"Error getting video info from S3: {e}")
+            logger.error("Error getting video info from S3: %s", e)
     
     # Don't fall back to filesystem - fail if not in S3
     raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
@@ -119,7 +122,7 @@ async def serve_video(filename: str, request: Request):
     # Try to serve from S3 FIRST - never fall back to filesystem
     if object_key and file_exists(object_key):
         try:
-            print(f"📥 Serving video from S3: {object_key}")
+            logger.info("Serving video from S3: %s", object_key)
             
             # Get file info from S3
             file_info = get_file_info(object_key)
@@ -170,7 +173,7 @@ async def serve_video(filename: str, request: Request):
                 chunk_data = response['Body'].read()
                 chunk_size = len(chunk_data)
                 
-                print(f"✅ Serving video range {start}-{end} from S3: {object_key} ({chunk_size} bytes)")
+                logger.info("Serving video range %s-%s from S3: %s (%s bytes)", start, end, object_key, chunk_size)
                 
                 # Return partial content response
                 return Response(
@@ -194,7 +197,7 @@ async def serve_video(filename: str, request: Request):
                 if not file_content:
                     raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
                 
-                print(f"✅ Successfully served full video from S3: {object_key} ({len(file_content)} bytes)")
+                logger.info("Successfully served full video from S3: %s (%s bytes)", object_key, len(file_content))
                 
                 return Response(
                     content=file_content,
@@ -210,14 +213,14 @@ async def serve_video(filename: str, request: Request):
                 )
         except Exception as e:
             import traceback
-            print(f"❌ Error serving video from S3: {object_key}")
-            print(f"   Error: {str(e)}")
-            print(traceback.format_exc())
+            logger.error("Error serving video from S3: %s", object_key)
+            logger.error("   Error: %s", str(e))
+            logger.error(traceback.format_exc())
             # Don't fall back to filesystem - fail instead
             raise HTTPException(status_code=500, detail=f"Failed to retrieve video from S3: {str(e)}")
     
     # If we reach here, file doesn't exist in S3
-    print(f"⚠️  Video not found in S3: {object_key or filename}")
+    logger.warning("Video not found in S3: %s", object_key or filename)
     raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key or filename}")
 
 
@@ -336,7 +339,7 @@ async def serve_image(filename: str, request: Request, w: int = 0, fmt: str = ""
                     output_format=target_format,
                 )
             except Exception as e:
-                print(f"⚠️  Image processing failed, serving original: {e}")
+                logger.warning("Image processing failed, serving original: %s", e)
                 final_data = file_content
                 final_content_type = content_type
 
@@ -377,8 +380,8 @@ async def serve_image(filename: str, request: Request, w: int = 0, fmt: str = ""
         raise
     except Exception as e:
         import traceback
-        print(f"❌ Error serving image from S3: {object_key}")
-        print(traceback.format_exc())
+        logger.error("Error serving image from S3: %s", object_key)
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to retrieve image from S3: {str(e)}")
 
 

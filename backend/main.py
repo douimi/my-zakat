@@ -5,13 +5,17 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
+load_dotenv()
+
+from logging_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger("main")
+
 from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
 from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media
-
-load_dotenv()
 
 # Check if running in test mode
 TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
@@ -69,7 +73,7 @@ def ensure_admin_user():
         # Default settings ensured
         
     except Exception as e:
-        print(f"❌ Error ensuring admin user: {e}")
+        logger.error("Error ensuring admin user: %s", e)
         db.rollback()
     finally:
         db.close()
@@ -107,10 +111,9 @@ if not TESTING_MODE:
     # Initialize S3 bucket
     try:
         ensure_bucket_exists()
-        print("✅ S3 bucket initialized successfully")
+        logger.info("S3 bucket initialized successfully")
     except Exception as e:
-        print(f"⚠️  Warning: Could not initialize S3 bucket: {e}")
-        print("   File uploads will fall back to local storage")
+        logger.warning("Could not initialize S3 bucket: %s — uploads will fall back to local storage", e)
     
     # Run automatic cleanup of orphaned media on startup (in background)
     import threading
@@ -121,20 +124,20 @@ if not TESTING_MODE:
             import time
             # Wait a bit for database to be ready
             time.sleep(5)
-            print("🔍 Running automatic cleanup of orphaned media...")
+            logger.info("Running automatic cleanup of orphaned media")
             db = SessionLocal()
             try:
                 result = cleanup_orphaned_media(db=db, current_admin=None, auto_delete=True)
                 if result["orphaned_count"] > 0:
-                    print(f"✅ Cleaned up {result['deleted_count']} orphaned media entries")
+                    logger.info("Cleaned up %d orphaned media entries", result["deleted_count"])
                 else:
-                    print("✅ No orphaned media found")
+                    logger.info("No orphaned media found")
             except Exception as e:
-                print(f"⚠️  Warning: Could not run automatic cleanup: {e}")
+                logger.warning("Could not run automatic cleanup: %s", e)
             finally:
                 db.close()
         except Exception as e:
-            print(f"⚠️  Warning: Could not initialize cleanup system: {e}")
+            logger.warning("Could not initialize cleanup system: %s", e)
     
     # Run cleanup in background thread
     cleanup_thread = threading.Thread(target=run_startup_cleanup, daemon=True)

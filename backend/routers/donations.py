@@ -15,8 +15,11 @@ from schemas import DonationCreate, DonationResponse, PaymentCreate, PaymentSess
 from auth_utils import get_current_admin
 from pdf_service import generate_donation_certificate, generate_donation_certificate_to_bytes
 from email_service import send_donation_certificate_email
+from logging_config import get_logger
 
 load_dotenv()
+
+logger = get_logger(__name__)
 
 # Configure Stripe API key
 stripe_secret_key = os.getenv("STRIPE_SECRET_KEY")
@@ -65,19 +68,15 @@ def generate_certificate(donation: Donation, db: Session) -> str:
         donation.certificate_filename = filename
         db.commit()
         
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Certificate generated successfully for donation {donation.id}")
-        
+        logger.info("Certificate generated successfully for donation %s", donation.id)
+
         return filepath
-        
+
     except Exception as e:
         # Log error but don't fail the donation processing
-        import logging
         import traceback
-        logger = logging.getLogger(__name__)
-        logger.error(f"Failed to generate certificate for donation {donation.id}: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Failed to generate certificate for donation %s: %s", donation.id, str(e))
+        logger.error("Traceback: %s", traceback.format_exc())
         raise
 
 
@@ -126,12 +125,10 @@ def email_certificate(donation: Donation) -> bool:
                 pdf_path=temp_path
             )
             
-            import logging
-            logger = logging.getLogger(__name__)
             if success:
-                logger.info(f"Certificate emailed successfully for donation {donation.id}")
+                logger.info("Certificate emailed successfully for donation %s", donation.id)
             else:
-                logger.warning(f"Failed to email certificate for donation {donation.id}")
+                logger.warning("Failed to email certificate for donation %s", donation.id)
             
             return success
         finally:
@@ -140,16 +137,12 @@ def email_certificate(donation: Donation) -> bool:
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
             except Exception as cleanup_error:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to delete temporary certificate file: {str(cleanup_error)}")
+                logger.warning("Failed to delete temporary certificate file: %s", str(cleanup_error))
         
     except Exception as e:
-        import logging
         import traceback
-        logger = logging.getLogger(__name__)
-        logger.error(f"Failed to email certificate for donation {donation.id}: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Failed to email certificate for donation %s: %s", donation.id, str(e))
+        logger.error("Traceback: %s", traceback.format_exc())
         return False
 
 
@@ -254,9 +247,6 @@ async def calculate_zakat(calculation: ZakatCalculation):
 
 @router.post("/create-payment-session", response_model=PaymentSession)
 async def create_payment_session(payment: PaymentCreate, db: Session = Depends(get_db)):
-    import logging
-    logger = logging.getLogger(__name__)
-    
     # Validate amount
     if not payment.amount or payment.amount < 1:
         raise HTTPException(
@@ -321,22 +311,18 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         return PaymentSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
-        import logging
         import traceback
-        logger = logging.getLogger(__name__)
-        logger.error(f"Stripe error in create_payment_session: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Stripe error in create_payment_session: %s", str(e))
+        logger.error("Traceback: %s", traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stripe error: {str(e)}"
         )
     except Exception as e:
-        import logging
         import traceback
-        logger = logging.getLogger(__name__)
-        logger.error(f"Payment processing error: {str(e)}")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Payment processing error: %s", str(e))
+        logger.error("Error type: %s", type(e).__name__)
+        logger.error("Traceback: %s", traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment processing error: {str(e)}"
@@ -653,8 +639,7 @@ async def update_subscription_status(db: Session = Depends(get_db)):
                         sub.updated_at = datetime.utcnow()
                         updated_count += 1
                 except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Failed to update pending subscription {sub.id}: {e}")
+                    logger.warning("Failed to update pending subscription %s: %s", sub.id, e)
                     continue
             else:
                 # Update status from existing subscription ID
@@ -665,8 +650,7 @@ async def update_subscription_status(db: Session = Depends(get_db)):
                         sub.updated_at = datetime.utcnow()
                         updated_count += 1
                 except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Failed to retrieve subscription {sub.stripe_subscription_id}: {e}")
+                    logger.warning("Failed to retrieve subscription %s: %s", sub.stripe_subscription_id, e)
                     continue
         
         db.commit()
@@ -789,7 +773,7 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
                             synced_count += 1
                         except Exception as sub_error:
                             # Log subscription sync error but continue with other sessions
-                            print(f"Error syncing subscription {session.subscription}: {str(sub_error)}")
+                            logger.error("Error syncing subscription %s: %s", session.subscription, str(sub_error))
                             continue
         
         db.commit()
@@ -799,8 +783,8 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
         db.rollback()
         # Log the full error for debugging
         import traceback
-        print(f"Stripe sync error: {str(e)}")
-        print(f"Traceback: {traceback.format_exc()}")
+        logger.error("Stripe sync error: %s", str(e))
+        logger.error("Traceback: %s", traceback.format_exc())
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -836,16 +820,12 @@ async def debug_subscriptions(db: Session = Depends(get_db), current_admin = Dep
 @router.post("/stripe-webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhooks for payment confirmation"""
-    
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
         payload = await request.body()
         sig_header = request.headers.get("stripe-signature")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
         
-        logger.info(f"Webhook received: {request.headers.get('stripe-signature', 'no signature')}")
+        logger.info("Webhook received: %s", request.headers.get('stripe-signature', 'no signature'))
         
         if not webhook_secret:
             logger.error("Webhook secret not configured")
@@ -857,15 +837,15 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 payload, sig_header, webhook_secret
             )
         except ValueError as e:
-            logger.error(f"Invalid webhook payload: {str(e)}")
+            logger.error("Invalid webhook payload: %s", str(e))
             return JSONResponse(status_code=400, content={"status": "invalid payload"})
         except stripe.error.SignatureVerificationError as e:
-            logger.error(f"Invalid webhook signature: {str(e)}")
+            logger.error("Invalid webhook signature: %s", str(e))
             return JSONResponse(status_code=400, content={"status": "invalid signature"})
         
         # Process webhook event
         event_type = event["type"]
-        logger.info(f"Processing webhook event: {event_type}")
+        logger.info("Processing webhook event: %s", event_type)
         
         # Handle successful checkout session (one-time or subscription setup)
         if event_type == "checkout.session.completed":
@@ -888,7 +868,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 frequency = session.get("metadata", {}).get("frequency", "One-Time")
                 
                 try:
-                    logger.info(f"Processing one-time payment: email={customer_email}, amount={amount}, session_id={session_id}")
+                    logger.info("Processing one-time payment: email=%s, amount=%s, session_id=%s", customer_email, amount, session_id)
                     
                     # Find and update existing pending donation by session ID
                     existing_donation = db.query(Donation).filter(
@@ -896,7 +876,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     ).first()
                     
                     if existing_donation:
-                        logger.info(f"Found existing donation ID {existing_donation.id}, updating...")
+                        logger.info("Found existing donation ID %s, updating...", existing_donation.id)
                         # Update existing pending donation
                         existing_donation.name = donor_name or existing_donation.name
                         existing_donation.email = customer_email or existing_donation.email
@@ -910,23 +890,23 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         if not existing_donation.certificate_filename:
                             existing_donation.certificate_filename = "available"
                             db.commit()
-                        logger.info(f"Donation {existing_donation.id} marked as having certificate available")
+                        logger.info("Donation %s marked as having certificate available", existing_donation.id)
                         
                         # Automatically send certificate via email
                         db.refresh(existing_donation)
                         try:
                             email_success = email_certificate(existing_donation)
                             if email_success:
-                                logger.info(f"Certificate automatically emailed to {existing_donation.email} for donation {existing_donation.id}")
+                                logger.info("Certificate automatically emailed to %s for donation %s", existing_donation.email, existing_donation.id)
                             else:
-                                logger.warning(f"Failed to automatically email certificate for donation {existing_donation.id}")
+                                logger.warning("Failed to automatically email certificate for donation %s", existing_donation.id)
                         except Exception as email_error:
                             import traceback
-                            logger.error(f"Error automatically emailing certificate for donation {existing_donation.id}: {str(email_error)}")
-                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            logger.error("Error automatically emailing certificate for donation %s: %s", existing_donation.id, str(email_error))
+                            logger.error("Traceback: %s", traceback.format_exc())
                             # Don't fail the webhook if email fails
                     else:
-                        logger.info(f"No existing donation found, creating new donation...")
+                        logger.info("No existing donation found, creating new donation...")
                         # Create new donation if not found (fallback)
                         new_donation = Donation(
                             name=donor_name or "Anonymous",
@@ -940,25 +920,25 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         db.add(new_donation)
                         db.commit()
                         db.refresh(new_donation)
-                        logger.info(f"Created new donation ID {new_donation.id} for email {customer_email}")
+                        logger.info("Created new donation ID %s for email %s", new_donation.id, customer_email)
                         
                         # Automatically send certificate via email
                         try:
                             email_success = email_certificate(new_donation)
                             if email_success:
-                                logger.info(f"Certificate automatically emailed to {new_donation.email} for donation {new_donation.id}")
+                                logger.info("Certificate automatically emailed to %s for donation %s", new_donation.email, new_donation.id)
                             else:
-                                logger.warning(f"Failed to automatically email certificate for donation {new_donation.id}")
+                                logger.warning("Failed to automatically email certificate for donation %s", new_donation.id)
                         except Exception as email_error:
                             import traceback
-                            logger.error(f"Error automatically emailing certificate for donation {new_donation.id}: {str(email_error)}")
-                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            logger.error("Error automatically emailing certificate for donation %s: %s", new_donation.id, str(email_error))
+                            logger.error("Traceback: %s", traceback.format_exc())
                             # Don't fail the webhook if email fails
                             
                 except Exception as db_error:
                     import traceback
-                    logger.error(f"Error processing donation webhook: {str(db_error)}")
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    logger.error("Error processing donation webhook: %s", str(db_error))
+                    logger.error("Traceback: %s", traceback.format_exc())
                     db.rollback()
                     # Re-raise to let Stripe know the webhook failed
                     raise
@@ -977,11 +957,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         existing_subscription.status = "checkout_completed"
                         db.commit()
                 except Exception as db_error:
-                    import logging
                     import traceback
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Error processing subscription creation: {str(db_error)}")
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    logger.error("Error processing subscription creation: %s", str(db_error))
+                    logger.error("Traceback: %s", traceback.format_exc())
                     db.rollback()
         
         # Handle subscription creation (the real subscription setup)
@@ -1102,25 +1080,25 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         # Mark certificate as available (certificates are now generated on-the-fly)
                         donation.certificate_filename = "available"
                         db.commit()
-                        logger.info(f"Subscription donation {donation.id} marked as having certificate available")
+                        logger.info("Subscription donation %s marked as having certificate available", donation.id)
                         
                         # Automatically send certificate via email
                         db.refresh(donation)
                         try:
                             email_success = email_certificate(donation)
                             if email_success:
-                                logger.info(f"Certificate automatically emailed to {donation.email} for subscription donation {donation.id}")
+                                logger.info("Certificate automatically emailed to %s for subscription donation %s", donation.email, donation.id)
                             else:
-                                logger.warning(f"Failed to automatically email certificate for subscription donation {donation.id}")
+                                logger.warning("Failed to automatically email certificate for subscription donation %s", donation.id)
                         except Exception as email_error:
                             import traceback
-                            logger.error(f"Error automatically emailing certificate for subscription donation {donation.id}: {str(email_error)}")
-                            logger.error(f"Traceback: {traceback.format_exc()}")
+                            logger.error("Error automatically emailing certificate for subscription donation %s: %s", donation.id, str(email_error))
+                            logger.error("Traceback: %s", traceback.format_exc())
                             # Don't fail the webhook if email fails
                     except Exception as db_error:
                         import traceback
-                        logger.error(f"Error processing subscription payment: {str(db_error)}")
-                        logger.error(f"Traceback: {traceback.format_exc()}")
+                        logger.error("Error processing subscription payment: %s", str(db_error))
+                        logger.error("Traceback: %s", traceback.format_exc())
                         db.rollback()
         
         # Handle failed subscription payment
@@ -1153,14 +1131,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     db_subscription.updated_at = datetime.utcnow()
                     db.commit()
         
-        logger.info(f"Webhook processed successfully: {event_type}")
+        logger.info("Webhook processed successfully: %s", event_type)
         return {"status": "success"}
         
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Webhook signature verification failed: {str(e)}")
+        logger.error("Webhook signature verification failed: %s", str(e))
         return JSONResponse(status_code=400, content={"status": "signature verification failed"})
     except Exception as e:
         import traceback
-        logger.error(f"Webhook processing error: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Webhook processing error: %s", str(e))
+        logger.error("Traceback: %s", traceback.format_exc())
         return JSONResponse(status_code=500, content={"status": "webhook error"})

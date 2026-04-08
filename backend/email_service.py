@@ -7,12 +7,12 @@ from email.utils import formataddr, formatdate, make_msgid
 from email.header import Header
 import os
 from dotenv import load_dotenv
-import logging
+from logging_config import get_logger
 from datetime import datetime
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # SMTP Configuration
 SMTP_SERVER = os.getenv("SMTP_SERVER", "netsol-smtp-oxcs.hostingplatform.com")
@@ -144,14 +144,14 @@ If you did not create an account with My Zakat, please ignore this email.
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[email])
         
-        logger.info(f"Verification email sent successfully to {email}")
+        logger.info("Verification email sent successfully to %s", email)
         return True
         
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending verification email to {email}: {str(e)}")
+        logger.error("SMTP error sending verification email to %s: %s", email, str(e))
         return False
     except Exception as e:
-        logger.error(f"Failed to send verification email to {email}: {str(e)}")
+        logger.error("Failed to send verification email to %s: %s", email, str(e))
         return False
 
 
@@ -274,14 +274,14 @@ May your generosity be rewarded abundantly.
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[email])
         
-        logger.info(f"Donation certificate email sent successfully to {email}")
+        logger.info("Donation certificate email sent successfully to %s", email)
         return True
         
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending donation certificate email to {email}: {str(e)}")
+        logger.error("SMTP error sending donation certificate email to %s: %s", email, str(e))
         return False
     except Exception as e:
-        logger.error(f"Failed to send donation certificate email to {email}: {str(e)}")
+        logger.error("Failed to send donation certificate email to %s: %s", email, str(e))
         return False
 
 
@@ -410,12 +410,12 @@ The My Zakat Team
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[recipient_email])
         
-        logger.info(f"Contact reply email sent successfully to {recipient_email}")
+        logger.info("Contact reply email sent successfully to %s", recipient_email)
         return True
         
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending contact reply email to {recipient_email}: {str(e)}")
+        logger.error("SMTP error sending contact reply email to %s: %s", recipient_email, str(e))
         return False
     except Exception as e:
-        logger.error(f"Failed to send contact reply email to {recipient_email}: {str(e)}")
+        logger.error("Failed to send contact reply email to %s: %s", recipient_email, str(e))
         return False

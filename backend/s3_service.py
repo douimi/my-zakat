@@ -10,8 +10,11 @@ from typing import Optional, BinaryIO
 from datetime import datetime
 import io
 from dotenv import load_dotenv
+from logging_config import get_logger
 
 load_dotenv()
+
+logger = get_logger(__name__)
 
 # S3 Configuration
 S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://minio:9000")
@@ -61,8 +64,8 @@ def ensure_bucket_cors():
        - Exposed Headers: ETag
        - Max Age: 3600
     """
-    print("ℹ️  CORS is handled by Traefik middleware, but you can also configure it in MinIO Console")
-    print("   Go to: https://minio.myzakat.org -> Buckets -> myzakat-media -> Access Policy -> CORS")
+    logger.info("CORS is handled by Traefik middleware, but you can also configure it in MinIO Console")
+    logger.info("   Go to: https://minio.myzakat.org -> Buckets -> myzakat-media -> Access Policy -> CORS")
     return True
 
 
@@ -98,10 +101,10 @@ def ensure_bucket_exists():
                     Bucket=S3_BUCKET_NAME,
                     Policy=json.dumps(bucket_policy)
                 )
-                print(f"✅ Bucket policy verified/set for public read access on {S3_BUCKET_NAME}")
+                logger.info("Bucket policy verified/set for public read access on %s", S3_BUCKET_NAME)
             except Exception as e:
-                print(f"⚠️  Warning: Could not set bucket policy: {e}")
-                print("   You may need to set it manually in MinIO console")
+                logger.warning("Could not set bucket policy: %s", e)
+                logger.warning("   You may need to set it manually in MinIO console")
             # Ensure CORS is configured on existing bucket
             ensure_bucket_cors()
         except ClientError as e:
@@ -127,10 +130,10 @@ def ensure_bucket_exists():
                         Bucket=S3_BUCKET_NAME,
                         Policy=json.dumps(bucket_policy)
                     )
-                    print(f"✅ Bucket policy set for public read access on {S3_BUCKET_NAME}")
+                    logger.info("Bucket policy set for public read access on %s", S3_BUCKET_NAME)
                 except Exception as e:
-                    print(f"⚠️  Warning: Could not set bucket policy: {e}")
-                    print("   You may need to set it manually in MinIO console")
+                    logger.warning("Could not set bucket policy: %s", e)
+                    logger.warning("   You may need to set it manually in MinIO console")
                 
                 # Set CORS configuration
                 ensure_bucket_cors()
@@ -139,7 +142,7 @@ def ensure_bucket_exists():
             else:
                 raise
     except Exception as e:
-        print(f"Error ensuring bucket exists: {e}")
+        logger.error("Error ensuring bucket exists: %s", e)
         raise
 
 
@@ -172,10 +175,10 @@ def upload_file(
         if metadata:
             extra_args['Metadata'] = {str(k): str(v) for k, v in metadata.items()}
         
-        print(f"📤 Uploading to S3 bucket '{S3_BUCKET_NAME}' with key '{object_key}'")
-        print(f"   Content-Type: {content_type}")
-        print(f"   File size: {len(file_content)} bytes")
-        print(f"   S3 Endpoint: {S3_ENDPOINT}")
+        logger.info("Uploading to S3 bucket '%s' with key '%s'", S3_BUCKET_NAME, object_key)
+        logger.info("   Content-Type: %s", content_type)
+        logger.info("   File size: %s bytes", len(file_content))
+        logger.info("   S3 Endpoint: %s", S3_ENDPOINT)
         
         client.put_object(
             Bucket=S3_BUCKET_NAME,
@@ -187,24 +190,24 @@ def upload_file(
         # Verify upload by checking if file exists
         try:
             client.head_object(Bucket=S3_BUCKET_NAME, Key=object_key)
-            print(f"✅ Verified file exists in S3: {object_key}")
+            logger.info("Verified file exists in S3: %s", object_key)
         except Exception as verify_error:
-            print(f"⚠️  Warning: Could not verify upload: {verify_error}")
+            logger.warning("Could not verify upload: %s", verify_error)
         
         # Return public URL
         url = get_file_url(object_key)
-        print(f"✅ Upload successful. URL: {url}")
+        logger.info("Upload successful. URL: %s", url)
         return url
     except Exception as e:
         import traceback
-        print(f"❌ Error uploading file to S3:")
-        print(f"   Error type: {type(e).__name__}")
-        print(f"   Error message: {str(e)}")
-        print(f"   Bucket: {S3_BUCKET_NAME}")
-        print(f"   Object key: {object_key}")
-        print(f"   Endpoint: {S3_ENDPOINT}")
-        print(f"   Traceback:")
-        print(traceback.format_exc())
+        logger.error("Error uploading file to S3:")
+        logger.error("   Error type: %s", type(e).__name__)
+        logger.error("   Error message: %s", str(e))
+        logger.error("   Bucket: %s", S3_BUCKET_NAME)
+        logger.error("   Object key: %s", object_key)
+        logger.error("   Endpoint: %s", S3_ENDPOINT)
+        logger.error("   Traceback:")
+        logger.error(traceback.format_exc())
         raise
 
 
@@ -222,7 +225,7 @@ def delete_file(object_key: str, cleanup_db: bool = True) -> bool:
     try:
         client = get_s3_client()
         client.delete_object(Bucket=S3_BUCKET_NAME, Key=object_key)
-        print(f"✅ Deleted file from S3: {object_key}")
+        logger.info("Deleted file from S3: %s", object_key)
         
         # Automatically clean up database references if requested
         # Note: This runs in background and may cause a brief delay
@@ -239,22 +242,22 @@ def delete_file(object_key: str, cleanup_db: bool = True) -> bool:
                             # Clean up any references to orphaned files
                             cleanup_orphaned_media(db=db, current_admin=None, auto_delete=True)
                         except Exception as e:
-                            print(f"⚠️  Warning: Could not cleanup DB references for {object_key}: {e}")
+                            logger.warning("Could not cleanup DB references for %s: %s", object_key, e)
                         finally:
                             db.close()
                     except ImportError as e:
-                        print(f"⚠️  Warning: Could not import cleanup module: {e}")
+                        logger.warning("Could not import cleanup module: %s", e)
                     except Exception as e:
-                        print(f"⚠️  Warning: Could not trigger DB cleanup: {e}")
+                        logger.warning("Could not trigger DB cleanup: %s", e)
                 
                 cleanup_thread = threading.Thread(target=cleanup_db_refs, daemon=True)
                 cleanup_thread.start()
             except Exception as e:
-                print(f"⚠️  Warning: Could not trigger DB cleanup: {e}")
-        
+                logger.warning("Could not trigger DB cleanup: %s", e)
+
         return True
     except Exception as e:
-        print(f"Error deleting file from S3: {e}")
+        logger.error("Error deleting file from S3: %s", e)
         return False
 
 
@@ -325,7 +328,7 @@ def get_file_url(object_key: str) -> str:
     if FRONTEND_URL:
         base_url = FRONTEND_URL.rstrip('/')
         proxy_url = f"{base_url}/api/uploads/media/{media_type}/{filename}"
-        print(f"🔗 Generated backend proxy URL (serves from S3): {proxy_url}")
+        logger.info("Generated backend proxy URL (serves from S3): %s", proxy_url)
         return proxy_url
     
     # Fallback: use direct S3 URL if FRONTEND_URL not configured
@@ -370,7 +373,7 @@ def download_file(object_key: str) -> Optional[bytes]:
             return None
         raise
     except Exception as e:
-        print(f"Error downloading file from S3: {e}")
+        logger.error("Error downloading file from S3: %s", e)
         return None
 
 
@@ -398,7 +401,7 @@ def get_file_info(object_key: str) -> Optional[dict]:
             return None
         raise
     except Exception as e:
-        print(f"Error getting file info from S3: {e}")
+        logger.error("Error getting file info from S3: %s", e)
         return None
 
 
@@ -428,7 +431,7 @@ def list_files(prefix: str = "") -> list:
         
         return files
     except Exception as e:
-        print(f"Error listing files from S3: {e}")
+        logger.error("Error listing files from S3: %s", e)
         return []
 
 
