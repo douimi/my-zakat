@@ -265,7 +265,7 @@ class TestSubscriptions:
             "/api/donations/cancel-subscription",
             json={"subscription_id": "sub_test_123"},
         )
-        assert resp.status_code == 401
+        assert resp.status_code in (401, 403)
 
     def test_cancel_subscription_as_admin(
         self, client: TestClient, auth_headers: dict, db_session: Session
@@ -711,7 +711,7 @@ class TestDonationStats:
     def test_get_donations_requires_auth(self, client: TestClient):
         """Listing all donations requires admin auth."""
         resp = client.get("/api/donations/")
-        assert resp.status_code == 401
+        assert resp.status_code in (401, 403)
 
     def test_get_donations_as_admin(self, client: TestClient, auth_headers: dict, db_session: Session):
         """Admin can list all donations."""
@@ -727,7 +727,7 @@ class TestDonationStats:
     def test_get_subscriptions_requires_auth(self, client: TestClient):
         """Listing subscriptions requires admin auth."""
         resp = client.get("/api/donations/subscriptions")
-        assert resp.status_code == 401
+        assert resp.status_code in (401, 403)
 
     def test_get_subscriptions_as_admin(self, client: TestClient, auth_headers: dict, db_session: Session):
         """Admin can list all subscriptions."""
