@@ -212,6 +212,8 @@ services:
     image: grafana/grafana:11.0.0
     container_name: myzakat-grafana
     restart: unless-stopped
+    ports:
+      - "3100:3000"  # Direct IP access: http://<VPS_IP>:3100
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-myzakat2024}
@@ -228,10 +230,13 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
+      # HTTPS access via domain (ready for when DNS is configured)
       - "traefik.http.routers.grafana.rule=Host(`grafana.myzakat.org`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      # HTTP access via VPS IP on port 3100 — temporary until DNS is set up
+      # Access at: http://31.97.131.31:3100
 
 volumes:
   postgres_data:
