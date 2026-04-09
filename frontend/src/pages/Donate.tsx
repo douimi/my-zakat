@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useSearchParams } from 'react-router-dom'
 import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js'
-import { Heart, Shield, CheckCircle, CreditCard } from 'lucide-react'
+import { Heart, Shield, CheckCircle, CreditCard, AlertCircle } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import { useAuthStore } from '../store/authStore'
+import { useToast } from '../contexts/ToastContext'
 import SEOHead from '../components/SEOHead'
 
 interface DonationForm {
@@ -19,20 +20,21 @@ const Donate = () => {
   const [searchParams] = useSearchParams()
   const [isProcessing, setIsProcessing] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
-  
+  const { showError } = useToast()
+
   // Get amount from URL params (supports both 'amount' and 'zakat_amount' for backward compatibility)
   const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
   const urlFrequency = searchParams.get('frequency')
-  
+
   const [selectedAmount, setSelectedAmount] = useState<number | null>(
     urlAmount ? parseFloat(urlAmount) : null
   )
 
-  
+
   const stripe = useStripe()
   const elements = useElements()
 
-  const { register, handleSubmit, setValue, watch } = useForm<DonationForm>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<DonationForm>({
     defaultValues: {
       name: '',
       email: '',
@@ -87,7 +89,15 @@ const Donate = () => {
   ]
 
   const onSubmit = async (data: DonationForm) => {
-    if (!stripe || !elements) return
+    if (!stripe || !elements) {
+      showError('Payment system loading', 'Please wait a moment and try again.')
+      return
+    }
+
+    if (!data.amount || data.amount < 1) {
+      showError('Invalid amount', 'Please enter a donation amount of at least $1.')
+      return
+    }
 
     setIsProcessing(true)
     try {
@@ -109,7 +119,7 @@ const Donate = () => {
         })
 
         if (error) {
-          console.error('Stripe error:', error)
+          showError('Payment redirect failed', error.message || 'Could not redirect to payment page. Please try again.')
         }
       } else {
         // Create one-time payment session
@@ -127,13 +137,28 @@ const Donate = () => {
         })
 
         if (error) {
-          console.error('Stripe error:', error)
+          showError('Payment redirect failed', error.message || 'Could not redirect to payment page. Please try again.')
         }
       }
-    } catch (error) {
-      console.error('Payment error:', error)
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Something went wrong. Please try again or contact us at info@myzakat.org.'
+      showError('Payment failed', message)
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  // Show validation errors via toast when form submit is blocked
+  const onFormError = () => {
+    if (errors.name) {
+      showError('Name required', 'Please enter your full name.')
+    } else if (errors.email) {
+      showError('Email required', 'Please enter a valid email address.')
+    } else if (errors.amount) {
+      showError('Amount required', 'Please select or enter a donation amount of at least $1.')
     }
   }
 
@@ -154,7 +179,7 @@ const Donate = () => {
             Make a Donation
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Your generosity creates real change. Every donation, no matter the size, 
+            Your generosity creates real change. Every donation, no matter the size,
             makes a meaningful difference in someone's life.
           </p>
         </div>
@@ -163,13 +188,13 @@ const Donate = () => {
           {/* Donation Form */}
           <div className="lg:col-span-2">
             <div className="card">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={handleSubmit(onSubmit, onFormError)} className="space-y-6">
                 {/* Amount Selection */}
                 <div>
                   <label className="block text-lg font-semibold text-gray-900 mb-4">
                     Donation Amount
                   </label>
-                  
+
                   {/* Quick Amount Buttons */}
                   <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
                     {quickAmounts.map((amount) => (
@@ -179,7 +204,7 @@ const Donate = () => {
                         data-testid={`donate-amount-${amount}`}
                         onClick={() => {
                           setSelectedAmount(amount)
-                          setValue('amount', amount)
+                          setValue('amount', amount, { shouldValidate: true })
                         }}
                         className={`py-3 px-4 rounded-lg border-2 font-semibold transition-all ${
                           selectedAmount === amount
@@ -203,14 +228,20 @@ const Donate = () => {
                       min="1"
                       placeholder="Enter custom amount"
                       data-testid="donate-amount-input"
-                      {...register('amount', { required: true, min: 1, valueAsNumber: true })}
-                      className="input-field pl-8 text-lg"
+                      {...register('amount', { required: 'Please enter an amount', min: { value: 1, message: 'Minimum donation is $1' }, valueAsNumber: true })}
+                      className={`input-field pl-8 text-lg ${errors.amount ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value)
                         setSelectedAmount(isNaN(value) ? null : value)
                       }}
                     />
                   </div>
+                  {errors.amount && (
+                    <p className="mt-2 text-sm text-red-600 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {errors.amount.message || 'Please enter a valid amount'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Purpose */}
@@ -253,7 +284,7 @@ const Donate = () => {
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <h4 className="text-lg font-semibold text-blue-900 mb-3">Recurring Payment</h4>
                     <p className="text-sm text-blue-800">
-                      <strong>Payment Schedule:</strong> Your first payment will be processed immediately. 
+                      <strong>Payment Schedule:</strong> Your first payment will be processed immediately.
                       Future payments will occur {watch('frequency') === 'Monthly' ? 'monthly' : 'annually'} from today's date.
                     </p>
                   </div>
@@ -268,10 +299,16 @@ const Donate = () => {
                     <input
                       type="text"
                       data-testid="donate-name"
-                      {...register('name', { required: true })}
-                      className="input-field"
+                      {...register('name', { required: 'Please enter your full name' })}
+                      className={`input-field ${errors.name ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       placeholder="Enter your full name"
                     />
+                    {errors.name && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        {errors.name.message}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -280,10 +317,19 @@ const Donate = () => {
                     <input
                       type="email"
                       data-testid="donate-email"
-                      {...register('email', { required: true })}
-                      className="input-field"
+                      {...register('email', {
+                        required: 'Please enter your email address',
+                        pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Please enter a valid email address' }
+                      })}
+                      className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       placeholder="Enter your email"
                     />
+                    {errors.email && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        {errors.email.message}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -291,7 +337,7 @@ const Donate = () => {
                 <button
                   type="submit"
                   data-testid="donate-submit"
-                  disabled={isProcessing || !watchedAmount || watchedAmount < 1}
+                  disabled={isProcessing}
                   className="btn-primary w-full text-lg py-4 flex items-center justify-center"
                 >
                   {isProcessing ? (
@@ -302,8 +348,8 @@ const Donate = () => {
                   ) : (
                     <>
                       <CreditCard className="w-5 h-5 mr-2" />
-                      {watch('frequency') === 'Monthly' || watch('frequency') === 'Annually' 
-                        ? 'Set up Recurring Donation' 
+                      {watch('frequency') === 'Monthly' || watch('frequency') === 'Annually'
+                        ? 'Set up Recurring Donation'
                         : 'Proceed to Payment'
                       }
                     </>
