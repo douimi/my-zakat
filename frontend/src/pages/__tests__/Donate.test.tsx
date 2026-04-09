@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from 'react-query'
 import { HelmetProvider } from 'react-helmet-async'
+import { ToastProvider } from '../../contexts/ToastContext'
 import { Elements } from '@stripe/react-stripe-js'
 
 // Mock Stripe
@@ -50,11 +51,13 @@ function renderDonate(initialEntries = ['/donate']) {
   })
   return render(
     <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={initialEntries}>
-          <Donate />
-        </MemoryRouter>
-      </QueryClientProvider>
+      <ToastProvider>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={initialEntries}>
+            <Donate />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ToastProvider>
     </HelmetProvider>,
   )
 }
