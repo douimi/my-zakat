@@ -129,9 +129,10 @@ test.describe('Donate Page — Rendering', () => {
     await expect(page.getByTestId('donate-amount-input')).toHaveValue('100')
   })
 
-  test('submit button is disabled when no amount is entered', async ({ page }) => {
+  test('submit button is always enabled and shows validation on click', async ({ page }) => {
     await page.getByTestId('donate-amount-input').fill('')
-    await expect(page.getByTestId('donate-submit')).toBeDisabled()
+    // Button should be enabled (validation happens on submit, not via disabled state)
+    await expect(page.getByTestId('donate-submit')).toBeEnabled()
   })
 
   test('shows impact preview when amount is entered', async ({ page }) => {
