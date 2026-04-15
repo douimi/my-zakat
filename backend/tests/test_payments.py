@@ -317,8 +317,11 @@ class TestStripeWebhook:
 
     @pytest.fixture(autouse=True)
     def _setup_webhook_secret(self, monkeypatch):
-        """Set a webhook secret and mock verification."""
+        """Set a webhook secret, mock verification, and clear idempotency cache."""
         monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
+        # Clear the processed events set so each test starts fresh
+        import routers.donations as donations_module
+        donations_module._processed_events.clear()
 
     def _post_webhook(self, client, event, monkeypatch):
         """Helper to post a webhook event with mocked signature verification."""
