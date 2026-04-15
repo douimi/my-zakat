@@ -19,6 +19,11 @@ from logging_config import get_logger
 
 load_dotenv()
 
+# Track processed webhook event IDs to prevent duplicate processing from Stripe retries.
+# In production with multiple workers, consider using Redis or a DB table instead.
+_processed_events: set = set()
+_MAX_PROCESSED_EVENTS = 5000  # Cap memory usage
+
 logger = get_logger(__name__)
 
 # Configure Stripe API key
@@ -516,17 +521,11 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                 next_payment_date=next_payment
             )
             db.add(pending_subscription)
-            
-            # Also create a donation record for the subscription
-            pending_donation = Donation(
-                name=subscription.name,
-                email=subscription.email,
-                amount=subscription.amount,
-                frequency=f"Recurring {subscription.interval}ly - Pending",
-                stripe_session_id=checkout_session.id
-            )
-            db.add(pending_donation)
-            
+
+            # NOTE: No donation record created here.
+            # The donation is created by invoice.payment_succeeded webhook
+            # when Stripe actually charges the card. This prevents duplicates.
+
             db.commit()
         except Exception as e:
             db.rollback()
@@ -817,97 +816,84 @@ async def debug_subscriptions(db: Session = Depends(get_db), current_admin = Dep
         ]
     }
 
+
 @router.post("/stripe-webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
-    """Handle Stripe webhooks for payment confirmation"""
+    """Handle Stripe webhooks for payment confirmation.
+
+    Idempotency: Each event ID is tracked so Stripe retries don't create
+    duplicate records. For one-time payments, the pending donation (created
+    at session time) is updated — never duplicated. For subscriptions,
+    only invoice.payment_succeeded creates a donation record.
+    """
+    global _processed_events
+
     try:
         payload = await request.body()
         sig_header = request.headers.get("stripe-signature")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-        
-        logger.info("Webhook received: %s", request.headers.get('stripe-signature', 'no signature'))
-        
+
         if not webhook_secret:
             logger.error("Webhook secret not configured")
             return JSONResponse(status_code=500, content={"status": "webhook secret not configured"})
-        
+
         # Verify webhook signature
         try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, webhook_secret
-            )
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
         except ValueError as e:
             logger.error("Invalid webhook payload: %s", str(e))
             return JSONResponse(status_code=400, content={"status": "invalid payload"})
         except stripe.error.SignatureVerificationError as e:
             logger.error("Invalid webhook signature: %s", str(e))
             return JSONResponse(status_code=400, content={"status": "invalid signature"})
-        
-        # Process webhook event
+
+        event_id = event.get("id", "")
         event_type = event["type"]
-        logger.info("Processing webhook event: %s", event_type)
-        
-        # Handle successful checkout session (one-time or subscription setup)
+
+        # ── Idempotency: skip already-processed events ──
+        if event_id in _processed_events:
+            logger.info("Skipping duplicate webhook event: %s (%s)", event_id, event_type)
+            return {"status": "already_processed"}
+
+        _processed_events.add(event_id)
+        if len(_processed_events) > _MAX_PROCESSED_EVENTS:
+            _processed_events = set(list(_processed_events)[_MAX_PROCESSED_EVENTS // 2:])
+
+        logger.info("Processing webhook: %s (event %s)", event_type, event_id)
+
+        # ── checkout.session.completed ──
         if event_type == "checkout.session.completed":
-            logger.info("Processing checkout.session.completed event")
             session = event["data"]["object"]
             session_mode = session.get("mode", "payment")
             session_id = session.get("id")
-            
+
             if session_mode == "payment":
-                # One-time payment - update existing pending donation or create new one
                 customer_email = session.get("customer_email", "")
                 amount = session.get("amount_total", 0) / 100.0
-                
-                donor_name = ""
-                if "metadata" in session and session["metadata"]:
-                    donor_name = session["metadata"].get("donor_name", "")
-                elif "customer_details" in session and session["customer_details"]:
-                    donor_name = session["customer_details"].get("name", "")
-                
-                frequency = session.get("metadata", {}).get("frequency", "One-Time")
-                
+                metadata = session.get("metadata") or {}
+                donor_name = metadata.get("donor_name", "")
+                if not donor_name:
+                    details = session.get("customer_details") or {}
+                    donor_name = details.get("name", "")
+                frequency = metadata.get("frequency", "One-Time")
+
                 try:
-                    logger.info("Processing one-time payment: email=%s, amount=%s, session_id=%s", customer_email, amount, session_id)
-                    
-                    # Find and update existing pending donation by session ID
-                    existing_donation = db.query(Donation).filter(
+                    existing = db.query(Donation).filter(
                         Donation.stripe_session_id == session_id
                     ).first()
-                    
-                    if existing_donation:
-                        logger.info("Found existing donation ID %s, updating...", existing_donation.id)
-                        # Update existing pending donation
-                        existing_donation.name = donor_name or existing_donation.name
-                        existing_donation.email = customer_email or existing_donation.email
-                        existing_donation.amount = amount
-                        existing_donation.frequency = frequency  # Remove "Pending -" prefix
-                        if not existing_donation.donated_at:
-                            existing_donation.donated_at = datetime.utcnow()
+
+                    if existing:
+                        existing.name = donor_name or existing.name
+                        existing.email = customer_email or existing.email
+                        existing.amount = amount
+                        existing.frequency = frequency
+                        existing.certificate_filename = "available"
+                        if not existing.donated_at:
+                            existing.donated_at = datetime.utcnow()
                         db.commit()
-                        
-                        # Mark certificate as available (certificates are now generated on-the-fly)
-                        if not existing_donation.certificate_filename:
-                            existing_donation.certificate_filename = "available"
-                            db.commit()
-                        logger.info("Donation %s marked as having certificate available", existing_donation.id)
-                        
-                        # Automatically send certificate via email
-                        db.refresh(existing_donation)
-                        try:
-                            email_success = email_certificate(existing_donation)
-                            if email_success:
-                                logger.info("Certificate automatically emailed to %s for donation %s", existing_donation.email, existing_donation.id)
-                            else:
-                                logger.warning("Failed to automatically email certificate for donation %s", existing_donation.id)
-                        except Exception as email_error:
-                            import traceback
-                            logger.error("Error automatically emailing certificate for donation %s: %s", existing_donation.id, str(email_error))
-                            logger.error("Traceback: %s", traceback.format_exc())
-                            # Don't fail the webhook if email fails
+                        logger.info("Donation %s confirmed (updated pending)", existing.id)
+                        _send_certificate_safe(existing)
                     else:
-                        logger.info("No existing donation found, creating new donation...")
-                        # Create new donation if not found (fallback)
                         new_donation = Donation(
                             name=donor_name or "Anonymous",
                             email=customer_email,
@@ -915,85 +901,54 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             frequency=frequency,
                             stripe_session_id=session_id,
                             donated_at=datetime.utcnow(),
-                            certificate_filename="available"  # Mark as available for on-the-fly generation
+                            certificate_filename="available",
                         )
                         db.add(new_donation)
                         db.commit()
                         db.refresh(new_donation)
-                        logger.info("Created new donation ID %s for email %s", new_donation.id, customer_email)
-                        
-                        # Automatically send certificate via email
-                        try:
-                            email_success = email_certificate(new_donation)
-                            if email_success:
-                                logger.info("Certificate automatically emailed to %s for donation %s", new_donation.email, new_donation.id)
-                            else:
-                                logger.warning("Failed to automatically email certificate for donation %s", new_donation.id)
-                        except Exception as email_error:
-                            import traceback
-                            logger.error("Error automatically emailing certificate for donation %s: %s", new_donation.id, str(email_error))
-                            logger.error("Traceback: %s", traceback.format_exc())
-                            # Don't fail the webhook if email fails
-                            
-                except Exception as db_error:
-                    import traceback
-                    logger.error("Error processing donation webhook: %s", str(db_error))
-                    logger.error("Traceback: %s", traceback.format_exc())
+                        logger.info("Donation %s created (no pending found)", new_donation.id)
+                        _send_certificate_safe(new_donation)
+
+                except Exception as e:
+                    logger.error("Error processing payment webhook: %s", e)
                     db.rollback()
-                    # Re-raise to let Stripe know the webhook failed
                     raise
-                    
+
             elif session_mode == "subscription":
-                logger.info("Processing subscription checkout completion")
-                # Subscription checkout completed - just mark as processed
-                # The actual subscription will be handled by customer.subscription.created
                 try:
-                    # Update pending subscription to mark checkout as completed
-                    existing_subscription = db.query(DonationSubscription).filter(
+                    sub = db.query(DonationSubscription).filter(
                         DonationSubscription.stripe_session_id == session_id
                     ).first()
-                    
-                    if existing_subscription:
-                        existing_subscription.status = "checkout_completed"
+                    if sub:
+                        sub.status = "checkout_completed"
                         db.commit()
-                except Exception as db_error:
-                    import traceback
-                    logger.error("Error processing subscription creation: %s", str(db_error))
-                    logger.error("Traceback: %s", traceback.format_exc())
+                except Exception as e:
+                    logger.error("Error updating subscription checkout: %s", e)
                     db.rollback()
-        
-        # Handle subscription creation (the real subscription setup)
+
+        # ── customer.subscription.created — activate subscription, NO donation ──
         elif event_type == "customer.subscription.created":
             subscription = event["data"]["object"]
             subscription_id = subscription.get("id")
             customer_id = subscription.get("customer")
-            
+
             try:
-                # Get customer and subscription details from Stripe
                 customer = stripe.Customer.retrieve(customer_id)
-                
-                # Get metadata from the subscription or customer
-                metadata = subscription.get("metadata", {}) or customer.get("metadata", {})
+                metadata = subscription.get("metadata") or customer.get("metadata") or {}
                 amount = subscription["items"]["data"][0]["price"]["unit_amount"] / 100.0
                 interval = subscription["items"]["data"][0]["price"]["recurring"]["interval"]
-                
-                # No custom billing cycle - payments will occur naturally from today
-                
-                # Find existing pending subscription by customer email or create new one
-                existing_subscription = db.query(DonationSubscription).filter(
+
+                existing_sub = db.query(DonationSubscription).filter(
                     DonationSubscription.email == customer.email,
                     DonationSubscription.status.in_(["pending", "checkout_completed"])
                 ).first()
-                
-                if existing_subscription:
-                    # Update existing pending subscription
-                    existing_subscription.stripe_subscription_id = subscription_id
-                    existing_subscription.stripe_customer_id = customer_id
-                    existing_subscription.status = "active"
-                    existing_subscription.next_payment_date = None  # Will be set by Stripe naturally
+
+                if existing_sub:
+                    existing_sub.stripe_subscription_id = subscription_id
+                    existing_sub.stripe_customer_id = customer_id
+                    existing_sub.status = "active"
                 else:
-                    # Create new subscription record
-                    db_subscription = DonationSubscription(
+                    db.add(DonationSubscription(
                         stripe_subscription_id=subscription_id,
                         stripe_customer_id=customer_id,
                         name=metadata.get("donor_name", customer.name or ""),
@@ -1001,144 +956,106 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         amount=amount,
                         purpose=metadata.get("purpose", "General Donation"),
                         interval=interval,
-                        payment_day=1,  # Default value
-                        payment_month=None,  # Not used
+                        payment_day=1,
                         status="active",
-                        next_payment_date=None  # Will be set by Stripe naturally
-                    )
-                    db.add(db_subscription)
-                
-                # Create initial donation record for the subscription
-                existing_donation = db.query(Donation).filter(
-                    Donation.email == customer.email,
-                    Donation.frequency.like("Recurring%Pending")
-                ).first()
-                
-                if existing_donation:
-                    # Update existing pending donation
-                    existing_donation.frequency = f"Recurring {interval}ly"
-                else:
-                    # Create new donation record for the subscription
-                    donation = Donation(
-                        name=metadata.get("donor_name", customer.name or ""),
-                        email=customer.email,
-                        amount=amount,
-                        frequency=f"Recurring {interval}ly"
-                    )
-                    db.add(donation)
-                
+                    ))
+
+                # NOTE: No donation record here. invoice.payment_succeeded
+                # creates exactly one donation per actual charge.
                 db.commit()
-            except Exception as db_error:
+                logger.info("Subscription %s activated for %s", subscription_id, customer.email)
+
+            except Exception as e:
+                logger.error("Error processing subscription created: %s", e)
                 db.rollback()
-        
-        # Handle successful subscription payment
+
+        # ── invoice.payment_succeeded — ONE donation per actual charge ──
         elif event_type == "invoice.payment_succeeded":
             invoice = event["data"]["object"]
+            invoice_id = invoice.get("id", "")
             subscription_id = invoice.get("subscription")
-            
+
             if subscription_id:
-                # Get the actual amount paid (this could be prorated)
                 amount_paid = invoice.get("amount_paid", 0) / 100.0
-                billing_reason = invoice.get("billing_reason")
-                
-                # Get subscription details from database
-                db_subscription = db.query(DonationSubscription).filter(
-                    DonationSubscription.stripe_subscription_id == subscription_id
+                billing_reason = invoice.get("billing_reason", "")
+
+                # Guard: check if we already recorded a donation for this invoice
+                existing_invoice_donation = db.query(Donation).filter(
+                    Donation.stripe_session_id == invoice_id
                 ).first()
-                
-                if db_subscription:
-                    try:
-                        # Create donation record for the actual payment
-                        if billing_reason == "subscription_create":
-                            # Initial payment (full amount - no proration)
-                            frequency_label = f"Recurring {db_subscription.interval}ly - Initial Payment"
-                        else:
-                            # Regular recurring payment
-                            frequency_label = f"Recurring {db_subscription.interval}ly"
-                        
-                        donation = Donation(
-                            name=db_subscription.name,
-                            email=db_subscription.email,
-                            amount=amount_paid,  # Use actual amount paid, not subscription amount
-                            frequency=frequency_label,
-                            donated_at=datetime.utcnow()
-                        )
-                        db.add(donation)
-                        db.flush()  # Flush to get donation ID
-                        
-                        # Update next payment date
-                        next_payment = calculate_next_payment_date(
-                            db_subscription.payment_day,
-                            db_subscription.payment_month,
-                            db_subscription.interval
-                        )
-                        db_subscription.next_payment_date = next_payment
-                        db_subscription.updated_at = datetime.utcnow()
-                        
-                        db.commit()
-                        
-                        # Mark certificate as available (certificates are now generated on-the-fly)
-                        donation.certificate_filename = "available"
-                        db.commit()
-                        logger.info("Subscription donation %s marked as having certificate available", donation.id)
-                        
-                        # Automatically send certificate via email
-                        db.refresh(donation)
+                if existing_invoice_donation:
+                    logger.info("Invoice %s already recorded, skipping", invoice_id)
+                else:
+                    db_sub = db.query(DonationSubscription).filter(
+                        DonationSubscription.stripe_subscription_id == subscription_id
+                    ).first()
+
+                    if db_sub:
                         try:
-                            email_success = email_certificate(donation)
-                            if email_success:
-                                logger.info("Certificate automatically emailed to %s for subscription donation %s", donation.email, donation.id)
-                            else:
-                                logger.warning("Failed to automatically email certificate for subscription donation %s", donation.id)
-                        except Exception as email_error:
-                            import traceback
-                            logger.error("Error automatically emailing certificate for subscription donation %s: %s", donation.id, str(email_error))
-                            logger.error("Traceback: %s", traceback.format_exc())
-                            # Don't fail the webhook if email fails
-                    except Exception as db_error:
-                        import traceback
-                        logger.error("Error processing subscription payment: %s", str(db_error))
-                        logger.error("Traceback: %s", traceback.format_exc())
-                        db.rollback()
-        
-        # Handle failed subscription payment
+                            donation = Donation(
+                                name=db_sub.name,
+                                email=db_sub.email,
+                                amount=amount_paid,
+                                frequency=f"Recurring {db_sub.interval}ly",
+                                stripe_session_id=invoice_id,
+                                donated_at=datetime.utcnow(),
+                                certificate_filename="available",
+                            )
+                            db.add(donation)
+
+                            db_sub.next_payment_date = calculate_next_payment_date(
+                                db_sub.payment_day, db_sub.payment_month, db_sub.interval
+                            )
+                            db_sub.updated_at = datetime.utcnow()
+                            db.commit()
+                            db.refresh(donation)
+                            logger.info("Subscription payment recorded: donation %s ($%s)", donation.id, amount_paid)
+                            _send_certificate_safe(donation)
+                        except Exception as e:
+                            logger.error("Error processing subscription payment: %s", e)
+                            db.rollback()
+
+        # ── invoice.payment_failed ──
         elif event_type == "invoice.payment_failed":
-            invoice = event["data"]["object"]
-            subscription_id = invoice.get("subscription")
-            
+            subscription_id = event["data"]["object"].get("subscription")
             if subscription_id:
-                db_subscription = db.query(DonationSubscription).filter(
+                db_sub = db.query(DonationSubscription).filter(
                     DonationSubscription.stripe_subscription_id == subscription_id
                 ).first()
-                
-                if db_subscription:
-                    db_subscription.status = "past_due"
-                    db_subscription.updated_at = datetime.utcnow()
+                if db_sub:
+                    db_sub.status = "past_due"
+                    db_sub.updated_at = datetime.utcnow()
                     db.commit()
-        
-        # Handle subscription cancellation
+
+        # ── customer.subscription.deleted ──
         elif event_type == "customer.subscription.deleted":
-            subscription = event["data"]["object"]
-            subscription_id = subscription.get("id")
-            
+            subscription_id = event["data"]["object"].get("id")
             if subscription_id:
-                db_subscription = db.query(DonationSubscription).filter(
+                db_sub = db.query(DonationSubscription).filter(
                     DonationSubscription.stripe_subscription_id == subscription_id
                 ).first()
-                
-                if db_subscription:
-                    db_subscription.status = "canceled"
-                    db_subscription.updated_at = datetime.utcnow()
+                if db_sub:
+                    db_sub.status = "canceled"
+                    db_sub.updated_at = datetime.utcnow()
                     db.commit()
-        
+
         logger.info("Webhook processed successfully: %s", event_type)
         return {"status": "success"}
-        
+
     except stripe.error.SignatureVerificationError as e:
         logger.error("Webhook signature verification failed: %s", str(e))
         return JSONResponse(status_code=400, content={"status": "signature verification failed"})
     except Exception as e:
-        import traceback
         logger.error("Webhook processing error: %s", str(e))
-        logger.error("Traceback: %s", traceback.format_exc())
         return JSONResponse(status_code=500, content={"status": "webhook error"})
+
+
+def _send_certificate_safe(donation: Donation):
+    """Send certificate email without failing the webhook if it errors."""
+    try:
+        if email_certificate(donation):
+            logger.info("Certificate emailed to %s for donation %s", donation.email, donation.id)
+        else:
+            logger.warning("Failed to email certificate for donation %s", donation.id)
+    except Exception as e:
+        logger.error("Error emailing certificate for donation %s: %s", donation.id, e)

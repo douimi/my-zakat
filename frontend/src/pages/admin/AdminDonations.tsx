@@ -1,14 +1,19 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { Heart, Search, Filter, Download, Eye, RefreshCw } from 'lucide-react'
+import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
 
+type SortField = 'donated_at' | 'amount' | 'name' | 'email' | 'frequency'
+type SortDir = 'asc' | 'desc'
+
 const AdminDonations = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState('')
-  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'pending'>('all')
+  const [sortField, setSortField] = useState<SortField>('donated_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [syncing, setSyncing] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
@@ -20,19 +25,64 @@ const AdminDonations = () => {
 
   const { data: stats } = useQuery('donation-stats', donationsAPI.getStats)
 
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('desc')
+    }
+  }
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 text-gray-400" />
+    return sortDir === 'asc'
+      ? <ArrowUp className="w-3 h-3 ml-1 text-primary-600" />
+      : <ArrowDown className="w-3 h-3 ml-1 text-primary-600" />
+  }
+
   const filteredDonations = useMemo(() => {
     if (!donations) return []
-    
-    return donations.filter((donation: Donation) => {
-      const matchesSearch = !searchTerm || 
-        donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.email.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesFrequency = !frequencyFilter || donation.frequency === frequencyFilter
 
-      return matchesSearch && matchesFrequency
-    })
-  }, [donations, searchTerm, frequencyFilter])
+    return donations
+      .filter((donation: Donation) => {
+        const matchesSearch = !searchTerm ||
+          donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          donation.email.toLowerCase().includes(searchTerm.toLowerCase())
+
+        const matchesFrequency = !frequencyFilter ||
+          donation.frequency.toLowerCase().includes(frequencyFilter.toLowerCase())
+
+        const isPending = donation.frequency.toLowerCase().includes('pending')
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'pending' && isPending) ||
+          (statusFilter === 'confirmed' && !isPending)
+
+        return matchesSearch && matchesFrequency && matchesStatus
+      })
+      .sort((a: Donation, b: Donation) => {
+        let cmp = 0
+        switch (sortField) {
+          case 'donated_at':
+            cmp = new Date(a.donated_at).getTime() - new Date(b.donated_at).getTime()
+            break
+          case 'amount':
+            cmp = a.amount - b.amount
+            break
+          case 'name':
+            cmp = a.name.localeCompare(b.name)
+            break
+          case 'email':
+            cmp = a.email.localeCompare(b.email)
+            break
+          case 'frequency':
+            cmp = a.frequency.localeCompare(b.frequency)
+            break
+        }
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+  }, [donations, searchTerm, frequencyFilter, statusFilter, sortField, sortDir])
 
   const handleSyncStripeData = async () => {
     setSyncing(true)
@@ -42,7 +92,6 @@ const AdminDonations = () => {
       queryClient.invalidateQueries(['admin-donations'])
       queryClient.invalidateQueries('donation-stats')
     } catch (error) {
-      console.error('Sync failed:', error)
       showError('Sync Failed', 'Failed to sync data from Stripe')
     } finally {
       setSyncing(false)
@@ -54,10 +103,10 @@ const AdminDonations = () => {
       ['ID', 'Name', 'Email', 'Amount', 'Frequency', 'Date'].join(','),
       ...filteredDonations.map((donation: Donation) => [
         donation.id,
-        donation.name,
+        `"${donation.name}"`,
         donation.email,
         donation.amount,
-        donation.frequency,
+        `"${donation.frequency}"`,
         new Date(donation.donated_at).toLocaleDateString()
       ].join(','))
     ].join('\n')
@@ -87,6 +136,9 @@ const AdminDonations = () => {
           <div className="flex items-center">
             <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mr-2 sm:mr-3" />
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Donations</h1>
+            <span className="ml-3 text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {filteredDonations.length} {filteredDonations.length === 1 ? 'record' : 'records'}
+            </span>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
             {window.location.hostname === 'localhost' && (
@@ -173,11 +225,20 @@ const AdminDonations = () => {
               onChange={(e) => setFrequencyFilter(e.target.value)}
               className="input-field"
             >
-              <option value="">All Frequencies</option>
+              <option value="">All Types</option>
               <option value="One-Time">One-Time</option>
-              <option value="Monthly">Monthly</option>
-              <option value="Annually">Annually</option>
-              <option value="Ramadan">Ramadan</option>
+              <option value="Recurring">Recurring</option>
+            </select>
+          </div>
+          <div className="w-full md:w-48">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="input-field"
+            >
+              <option value="all">All Statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="pending">Pending</option>
             </select>
           </div>
         </div>
@@ -189,54 +250,77 @@ const AdminDonations = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Donor
+                <th
+                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => toggleSort('name')}
+                >
+                  <div className="flex items-center">
+                    Donor <SortIcon field="name" />
+                  </div>
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
+                <th
+                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => toggleSort('amount')}
+                >
+                  <div className="flex items-center">
+                    Amount <SortIcon field="amount" />
+                  </div>
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Frequency
+                <th
+                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => toggleSort('frequency')}
+                >
+                  <div className="flex items-center">
+                    Type <SortIcon field="frequency" />
+                  </div>
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
+                <th
+                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => toggleSort('donated_at')}
+                >
+                  <div className="flex items-center">
+                    Date <SortIcon field="donated_at" />
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredDonations.map((donation: Donation) => (
-                <tr key={donation.id} className="hover:bg-gray-50">
-                  <td className="px-3 sm:px-6 py-4">
-                    <div>
-                      <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
-                        {donation.name}
+              {filteredDonations.map((donation: Donation) => {
+                const isPending = donation.frequency.toLowerCase().includes('pending')
+                return (
+                  <tr key={donation.id} className={`hover:bg-gray-50 ${isPending ? 'opacity-60' : ''}`}>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div>
+                        <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
+                          {donation.name}
+                        </div>
+                        <div className="text-xs sm:text-sm text-gray-500 break-words">
+                          {donation.email}
+                        </div>
                       </div>
-                      <div className="text-xs sm:text-sm text-gray-500 break-words">
-                        {donation.email}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs sm:text-sm font-medium text-green-600">
+                        ${donation.amount.toLocaleString()}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                    <div className="text-xs sm:text-sm font-medium text-green-600">
-                      ${donation.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-3 sm:px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                      donation.frequency === 'One-Time' 
-                        ? 'bg-blue-100 text-blue-800'
-                        : donation.frequency === 'Monthly'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {donation.frequency}
-                    </span>
-                  </td>
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
-                    {new Date(donation.donated_at).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 sm:px-6 py-4">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
+                        isPending
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : donation.frequency.includes('Recurring')
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {donation.frequency}
+                      </span>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
+                      {new Date(donation.donated_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
