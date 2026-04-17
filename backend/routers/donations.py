@@ -891,7 +891,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         if not existing.donated_at:
                             existing.donated_at = datetime.utcnow()
                         db.commit()
-                        logger.info("Donation %s confirmed (updated pending)", existing.id)
+                        db.refresh(existing)
+                        logger.info("Donation %s confirmed (updated pending) — sending certificate to %s", existing.id, existing.email)
                         _send_certificate_safe(existing)
                     else:
                         new_donation = Donation(
@@ -1053,9 +1054,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 def _send_certificate_safe(donation: Donation):
     """Send certificate email without failing the webhook if it errors."""
     try:
+        logger.info("Auto-sending certificate for donation %s to %s (amount: $%s)", donation.id, donation.email, donation.amount)
         if email_certificate(donation):
-            logger.info("Certificate emailed to %s for donation %s", donation.email, donation.id)
+            logger.info("Certificate auto-emailed to %s for donation %s", donation.email, donation.id)
         else:
-            logger.warning("Failed to email certificate for donation %s", donation.id)
+            logger.error("Certificate auto-email FAILED for donation %s (email_certificate returned False)", donation.id)
     except Exception as e:
-        logger.error("Error emailing certificate for donation %s: %s", donation.id, e)
+        import traceback
+        logger.error("Certificate auto-email ERROR for donation %s: %s", donation.id, e)
+        logger.error("Traceback: %s", traceback.format_exc())
