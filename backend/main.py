@@ -15,6 +15,7 @@ from database import engine, Base, get_db
 from models import User, Setting
 from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
+from audit_middleware import AuditMiddleware
 from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media
 
 # Check if running in test mode
@@ -190,6 +191,10 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Audit middleware — logs every state-changing request with user email
+# Must be added AFTER CORS so CORS preflight requests aren't audited
+app.add_middleware(AuditMiddleware)
 
 # Use router for all static file serving (videos with range support, images, etc.)
 # This ensures proper video streaming with range request support
