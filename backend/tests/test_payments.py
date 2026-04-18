@@ -63,20 +63,21 @@ class TestOneTimePayment:
     """Tests for POST /api/donations/create-payment-session"""
 
     def test_successful_payment_session(self, client: TestClient, db_session: Session):
-        """Create a payment session and verify response + pending record."""
+        """Create a payment session and verify Stripe session ID is returned.
+
+        No donation record is created at this stage — the webhook creates
+        it when Stripe confirms payment succeeded.
+        """
         resp = client.post("/api/donations/create-payment-session", json=_payment_data())
         assert resp.status_code == 200
         body = resp.json()
         assert body["id"] == "cs_test_mock_session_id"
 
-        # A pending donation should exist in the database
-        pending = db_session.query(Donation).filter(
+        # No donation should exist until webhook confirms payment
+        donation = db_session.query(Donation).filter(
             Donation.stripe_session_id == "cs_test_mock_session_id"
         ).first()
-        assert pending is not None
-        assert pending.name == "John Doe"
-        assert pending.amount == 100
-        assert "Pending" in pending.frequency
+        assert donation is None
 
     def test_minimum_amount_rejected(self, client: TestClient):
         """Amounts below $1 should be rejected."""
@@ -112,33 +113,36 @@ class TestOneTimePayment:
         )
         assert resp.status_code == 422
 
-    def test_special_characters_in_name(self, client: TestClient, db_session: Session, monkeypatch):
-        """Names with special characters should be handled correctly."""
+    def test_special_characters_in_name(self, client: TestClient, monkeypatch):
+        """Names with special characters should be accepted by the API."""
         class UniqueSession:
             def __init__(self, **kwargs):
                 self.id = "cs_test_special_chars"
                 self.url = "https://checkout.stripe.com/pay/cs_test_special_chars"
                 self.payment_status = "unpaid"
+                # Capture the metadata passed to verify name handling
+                self.metadata = kwargs.get("metadata", {})
 
-        monkeypatch.setattr("stripe.checkout.Session.create", lambda **kw: UniqueSession(**kw))
+        captured = {}
+
+        def mock_create(**kw):
+            session = UniqueSession(**kw)
+            captured["metadata"] = kw.get("metadata", {})
+            return session
+
+        monkeypatch.setattr("stripe.checkout.Session.create", mock_create)
 
         resp = client.post(
             "/api/donations/create-payment-session",
             json=_payment_data(name="María O'Brien-González"),
         )
         assert resp.status_code == 200
+        # Verify the name was passed correctly to Stripe
+        assert captured["metadata"].get("donor_name") == "María O'Brien-González"
 
-        pending = db_session.query(Donation).filter(
-            Donation.stripe_session_id == "cs_test_special_chars"
-        ).first()
-        assert pending is not None
-        assert pending.name == "María O'Brien-González"
-
-    def test_multiple_donations_same_email(self, client: TestClient, db_session: Session, monkeypatch):
-        """Multiple donations from the same email should all be recorded."""
-        # First donation
+    def test_multiple_donations_same_email(self, client: TestClient, monkeypatch):
+        """Multiple payment sessions for the same email should return unique session IDs."""
         session_counter = {"n": 0}
-        original_create = None
 
         class MockSession:
             def __init__(self, **kwargs):
@@ -154,11 +158,6 @@ class TestOneTimePayment:
         assert resp1.status_code == 200
         assert resp2.status_code == 200
         assert resp1.json()["id"] != resp2.json()["id"]
-
-        donations = db_session.query(Donation).filter(
-            Donation.email == "john@example.com"
-        ).all()
-        assert len(donations) >= 2
 
     def test_purpose_options(self, client: TestClient):
         """Various purpose values should be accepted."""
@@ -200,31 +199,23 @@ class TestSubscriptions:
     """Tests for POST /api/donations/create-subscription"""
 
     def test_monthly_subscription(self, client: TestClient, db_session: Session):
-        """Create a monthly subscription and verify pending records."""
+        """Creating a monthly subscription should succeed and not create DB records yet."""
         resp = client.post("/api/donations/create-subscription", json=_subscription_data())
         assert resp.status_code == 200
         assert resp.json()["id"] == "cs_test_mock_session_id"
 
+        # No subscription record is created until webhook confirms payment
         sub = db_session.query(DonationSubscription).filter(
             DonationSubscription.email == "jane@example.com"
         ).first()
-        assert sub is not None
-        assert sub.interval == "month"
-        assert sub.status == "pending"
-        assert sub.amount == 50
+        assert sub is None
 
     def test_annual_subscription(self, client: TestClient, db_session: Session):
-        """Create an annual subscription with a specific payment month."""
+        """Creating an annual subscription should succeed."""
         data = _subscription_data(interval="year", payment_month=6, payment_day=1)
         resp = client.post("/api/donations/create-subscription", json=data)
         assert resp.status_code == 200
-
-        sub = db_session.query(DonationSubscription).filter(
-            DonationSubscription.email == "jane@example.com"
-        ).first()
-        assert sub is not None
-        assert sub.interval == "year"
-        assert sub.payment_month == 6
+        assert resp.json()["id"] == "cs_test_mock_session_id"
 
     def test_invalid_interval(self, client: TestClient):
         """Only 'month' and 'year' intervals should be accepted."""

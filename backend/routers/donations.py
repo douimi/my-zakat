@@ -298,21 +298,10 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             cancel_url=f"{frontend_url}/donate",
         )
         
-        # Create a pending donation record immediately (fallback for webhook issues)
-        # This will be updated by webhook when payment is confirmed
-        try:
-            pending_donation = Donation(
-                name=payment.name,
-                email=payment.email,
-                amount=payment.amount,
-                frequency=f"Pending - {payment.frequency}",
-                stripe_session_id=checkout_session.id
-            )
-            db.add(pending_donation)
-            db.commit()
-        except Exception as e:
-            db.rollback()
-        
+        # No pending record created. The webhook creates the donation
+        # when Stripe confirms payment succeeded. If the webhook fails,
+        # admins can recover missing donations via the "Sync Stripe" button.
+
         return PaymentSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
@@ -496,40 +485,11 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
             }
         )
         
-        # Create pending subscription record immediately (fallback for webhook issues)
-        # This will be updated by webhook when subscription is confirmed
-        try:
-            # Calculate next payment for pending record
-            next_payment = calculate_next_payment_date(
-                subscription.payment_day,
-                subscription.payment_month,
-                subscription.interval
-            )
-            
-            pending_subscription = DonationSubscription(
-                stripe_subscription_id=f"pending_{checkout_session.id}",
-                stripe_customer_id=customer.id,
-                stripe_session_id=checkout_session.id,
-                name=subscription.name,
-                email=subscription.email,
-                amount=subscription.amount,
-                purpose=purpose,
-                interval=subscription.interval,
-                payment_day=subscription.payment_day,
-                payment_month=subscription.payment_month,
-                status="pending",
-                next_payment_date=next_payment
-            )
-            db.add(pending_subscription)
+        # No pending records created. The webhook creates both the subscription
+        # and donation records when Stripe confirms the payment succeeded.
+        # Abandoned checkouts never clutter the admin console.
 
-            # NOTE: No donation record created here.
-            # The donation is created by invoice.payment_succeeded webhook
-            # when Stripe actually charges the card. This prevents duplicates.
 
-            db.commit()
-        except Exception as e:
-            db.rollback()
-        
         return SubscriptionSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
