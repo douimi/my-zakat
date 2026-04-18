@@ -54,6 +54,11 @@ services:
       dockerfile: Dockerfile
     container_name: myzakat-backend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"   # Keep more log history so Promtail can ship after restart
+        max-file: "5"     # Up to 250MB of buffered logs per container
     env_file:
       - env.production  # Load environment variables from env.production file
     environment:
@@ -202,6 +207,8 @@ services:
     volumes:
       - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail_positions:/positions  # Persist position file across rebuilds
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki
@@ -245,3 +252,4 @@ volumes:
   minio_data:
   loki_data:
   grafana_data:
+  promtail_positions:

@@ -1,0 +1,123 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "🔴 Live Activity",
+      "description": "Everything happening right now. Scrolls automatically. Look for names and actions like 'Omar: uploaded a new image'.",
+      "type": "logs",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=~\".*backend.*\", level=~\"INFO|WARNING|ERROR\"} |~ \"✓|✗\" | line_format \"{{__timestamp__}} {{ __line__ }}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": false,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": false,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "title": "❌ Problems (Errors & Failures)",
+      "description": "Everything that failed in the last period. Check here when something looks wrong.",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=~\".*backend.*\"} |~ \"✗|ERROR|failed|exception|traceback\" != \"Skipping duplicate\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "title": "💳 Payments",
+      "description": "Donations, subscriptions, certificate emails, Stripe webhooks.",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=~\".*backend.*\"} |~ \"(?i)(donation|subscription|payment|checkout|certificate|stripe)\" | line_format \"{{ __line__ }}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": false,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "title": "🔐 Logins & Signups",
+      "description": "Who logged in or registered recently.",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=~\".*backend.*\"} |~ \"logged in|registered\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": false,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "title": "📤 Content Changes (Uploads / Edits / Deletes)",
+      "description": "Every content action: uploads, edits, deletes across stories, events, gallery, etc.",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=~\".*backend.*\"} |~ \"uploaded|created|updated|deleted|approved|reordered\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": false,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["myzakat", "activity"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MyZakat Activity",
+  "uid": "myzakat-activity",
+  "version": 1
+}
