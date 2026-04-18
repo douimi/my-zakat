@@ -8,18 +8,18 @@
   "panels": [
     {
       "title": "🔴 Live Activity",
-      "description": "Everything happening right now. Scrolls automatically. Look for names and actions like 'Omar: uploaded a new image'.",
+      "description": "Everything happening right now. Look for names and actions like 'Omar: uploaded a new image'.",
       "type": "logs",
       "gridPos": { "h": 14, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{container=~\".*backend.*\", level=~\"INFO|WARNING|ERROR\"} |~ \"✓|✗\" | line_format \"{{__timestamp__}} {{ __line__ }}\"",
+          "expr": "{container=~\".*backend.*\"} |~ \"✓|✗\"",
           "refId": "A"
         }
       ],
       "options": {
-        "showTime": false,
+        "showTime": true,
         "showLabels": false,
         "showCommonLabels": false,
         "wrapLogMessage": true,
@@ -31,13 +31,13 @@
     },
     {
       "title": "❌ Problems (Errors & Failures)",
-      "description": "Everything that failed in the last period. Check here when something looks wrong.",
+      "description": "Everything that failed. Check here when something looks wrong.",
       "type": "logs",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 14 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{container=~\".*backend.*\"} |~ \"✗|ERROR|failed|exception|traceback\" != \"Skipping duplicate\"",
+          "expr": "{container=~\".*backend.*\"} |~ \"✗|ERROR|Traceback\" != \"Skipping duplicate\" != \"INFO:\"",
           "refId": "A"
         }
       ],
@@ -45,19 +45,19 @@
         "showTime": true,
         "showLabels": false,
         "wrapLogMessage": true,
-        "enableLogDetails": true,
+        "enableLogDetails": false,
         "sortOrder": "Descending"
       }
     },
     {
       "title": "💳 Payments",
-      "description": "Donations, subscriptions, certificate emails, Stripe webhooks.",
+      "description": "Donations confirmed, subscriptions, certificates sent, Stripe webhooks.",
       "type": "logs",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 14 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{container=~\".*backend.*\"} |~ \"(?i)(donation|subscription|payment|checkout|certificate|stripe)\" | line_format \"{{ __line__ }}\"",
+          "expr": "{container=~\".*backend.*\"} |~ \"(?i)(donation confirmed|donation \\\\d+|certificate emailed|certificate auto|subscription activated|webhook.*(?:completed|succeeded|failed|expired|created|deleted)|recorded (?:abandoned|failed)|Processing webhook|started a (one-time|recurring)|canceled a subscription)\"",
           "refId": "A"
         }
       ],
@@ -77,7 +77,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{container=~\".*backend.*\"} |~ \"logged in|registered\"",
+          "expr": "{container=~\".*backend.*\"} |~ \"logged in|registered a new account\"",
           "refId": "A"
         }
       ],
@@ -91,13 +91,13 @@
     },
     {
       "title": "📤 Content Changes (Uploads / Edits / Deletes)",
-      "description": "Every content action: uploads, edits, deletes across stories, events, gallery, etc.",
+      "description": "Uploads, edits, deletes across stories, events, gallery, testimonials, etc.",
       "type": "logs",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 24 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{container=~\".*backend.*\"} |~ \"uploaded|created|updated|deleted|approved|reordered\"",
+          "expr": "{container=~\".*backend.*\"} |~ \"(uploaded|created|updated|deleted|approved|reordered|resolved) a|✓ \\\\w+: (uploaded|created|updated|deleted|approved|reordered)\"",
           "refId": "A"
         }
       ],
@@ -119,5 +119,5 @@
   "timezone": "browser",
   "title": "MyZakat Activity",
   "uid": "myzakat-activity",
-  "version": 1
+  "version": 2
 }
