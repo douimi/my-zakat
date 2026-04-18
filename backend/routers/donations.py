@@ -175,9 +175,13 @@ async def get_donations(
 async def get_donation_stats(db: Session = Depends(get_db)):
     from models import Setting
     
-    total_donations = db.query(func.sum(Donation.amount)).scalar() or 0
-    total_donors = db.query(Donation.email).distinct().count()
-    recent_donations = db.query(Donation).order_by(Donation.donated_at.desc()).limit(5).all()
+    # Only count confirmed payments (exclude Failed, Abandoned, Pending)
+    confirmed_filter = ~Donation.frequency.like('Failed%') & \
+                       ~Donation.frequency.like('Abandoned%') & \
+                       ~Donation.frequency.like('Pending%')
+    total_donations = db.query(func.sum(Donation.amount)).filter(confirmed_filter).scalar() or 0
+    total_donors = db.query(Donation.email).filter(confirmed_filter).distinct().count()
+    recent_donations = db.query(Donation).filter(confirmed_filter).order_by(Donation.donated_at.desc()).limit(5).all()
     
     # Get impact stats from settings
     settings = db.query(Setting).filter(Setting.key.in_([
@@ -999,6 +1003,69 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     db_sub.status = "canceled"
                     db_sub.updated_at = datetime.utcnow()
                     db.commit()
+
+        # ── checkout.session.expired — user abandoned checkout ──
+        elif event_type == "checkout.session.expired":
+            session = event["data"]["object"]
+            session_id = session.get("id")
+            amount = session.get("amount_total", 0) / 100.0
+            customer_email = session.get("customer_email", "")
+            details = session.get("customer_details") or {}
+            if not customer_email:
+                customer_email = details.get("email", "")
+            donor_name = details.get("name", "") or (session.get("metadata") or {}).get("donor_name", "")
+
+            if customer_email and amount > 0:
+                # Avoid duplicates if the same session already recorded
+                exists = db.query(Donation).filter(
+                    Donation.stripe_session_id == session_id
+                ).first()
+                if not exists:
+                    try:
+                        db.add(Donation(
+                            name=donor_name or "Anonymous",
+                            email=customer_email,
+                            amount=amount,
+                            frequency="Abandoned",
+                            stripe_session_id=session_id,
+                            donated_at=datetime.utcnow(),
+                        ))
+                        db.commit()
+                        logger.info("Recorded abandoned checkout for %s ($%s)", customer_email, amount)
+                    except Exception as e:
+                        logger.error("Error recording abandoned checkout: %s", e)
+                        db.rollback()
+
+        # ── charge.failed — payment was declined ──
+        elif event_type == "charge.failed":
+            charge = event["data"]["object"]
+            charge_id = charge.get("id", "")
+            amount = charge.get("amount", 0) / 100.0
+            customer_email = charge.get("billing_details", {}).get("email") or charge.get("receipt_email", "")
+            donor_name = charge.get("billing_details", {}).get("name", "") or "Anonymous"
+            failure_code = charge.get("failure_code") or charge.get("outcome", {}).get("reason") or "declined"
+            failure_message = charge.get("failure_message") or charge.get("outcome", {}).get("seller_message", "")
+
+            if customer_email and amount > 0:
+                exists = db.query(Donation).filter(
+                    Donation.stripe_session_id == charge_id
+                ).first()
+                if not exists:
+                    try:
+                        reason = failure_code[:40]  # keep frequency column short
+                        db.add(Donation(
+                            name=donor_name,
+                            email=customer_email,
+                            amount=amount,
+                            frequency=f"Failed - {reason}",
+                            stripe_session_id=charge_id,
+                            donated_at=datetime.utcnow(),
+                        ))
+                        db.commit()
+                        logger.info("Recorded failed charge for %s ($%s): %s — %s", customer_email, amount, failure_code, failure_message)
+                    except Exception as e:
+                        logger.error("Error recording failed charge: %s", e)
+                        db.rollback()
 
         logger.info("Webhook processed successfully: %s", event_type)
         return {"status": "success"}

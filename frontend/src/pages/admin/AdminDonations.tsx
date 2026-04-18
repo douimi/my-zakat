@@ -8,10 +8,19 @@ import { useToast } from '../../contexts/ToastContext'
 type SortField = 'donated_at' | 'amount' | 'name' | 'email' | 'frequency'
 type SortDir = 'asc' | 'desc'
 
+function getStatusInfo(frequency: string) {
+  const f = frequency.toLowerCase()
+  if (f.startsWith('failed')) return { status: 'failed', label: frequency, color: 'bg-red-100 text-red-800' }
+  if (f === 'abandoned') return { status: 'abandoned', label: 'Abandoned', color: 'bg-gray-100 text-gray-600' }
+  if (f.includes('pending')) return { status: 'pending', label: frequency, color: 'bg-yellow-100 text-yellow-800' }
+  if (f.includes('recurring')) return { status: 'confirmed', label: frequency, color: 'bg-green-100 text-green-800' }
+  return { status: 'confirmed', label: frequency, color: 'bg-blue-100 text-blue-800' }
+}
+
 const AdminDonations = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'pending'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'pending' | 'failed' | 'abandoned'>('all')
   const [sortField, setSortField] = useState<SortField>('donated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [syncing, setSyncing] = useState(false)
@@ -53,11 +62,8 @@ const AdminDonations = () => {
         const matchesFrequency = !frequencyFilter ||
           donation.frequency.toLowerCase().includes(frequencyFilter.toLowerCase())
 
-        const isPending = donation.frequency.toLowerCase().includes('pending')
-        const matchesStatus =
-          statusFilter === 'all' ||
-          (statusFilter === 'pending' && isPending) ||
-          (statusFilter === 'confirmed' && !isPending)
+        const { status } = getStatusInfo(donation.frequency)
+        const matchesStatus = statusFilter === 'all' || statusFilter === status
 
         return matchesSearch && matchesFrequency && matchesStatus
       })
@@ -239,6 +245,8 @@ const AdminDonations = () => {
               <option value="all">All Statuses</option>
               <option value="confirmed">Confirmed</option>
               <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+              <option value="abandoned">Abandoned</option>
             </select>
           </div>
         </div>
@@ -286,9 +294,10 @@ const AdminDonations = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredDonations.map((donation: Donation) => {
-                const isPending = donation.frequency.toLowerCase().includes('pending')
+                const { status, label, color } = getStatusInfo(donation.frequency)
+                const isSuccess = status === 'confirmed'
                 return (
-                  <tr key={donation.id} className={`hover:bg-gray-50 ${isPending ? 'opacity-60' : ''}`}>
+                  <tr key={donation.id} className={`hover:bg-gray-50 ${!isSuccess ? 'opacity-70' : ''}`}>
                     <td className="px-3 sm:px-6 py-4">
                       <div>
                         <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
@@ -300,19 +309,13 @@ const AdminDonations = () => {
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                      <div className="text-xs sm:text-sm font-medium text-green-600">
+                      <div className={`text-xs sm:text-sm font-medium ${isSuccess ? 'text-green-600' : 'text-gray-500 line-through'}`}>
                         ${donation.amount.toLocaleString()}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                        isPending
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : donation.frequency.includes('Recurring')
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {donation.frequency}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${color}`}>
+                        {label}
                       </span>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
