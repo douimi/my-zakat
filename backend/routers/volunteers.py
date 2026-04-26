@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -6,12 +6,23 @@ from database import get_db
 from models import Volunteer
 from schemas import VolunteerCreate, VolunteerResponse
 from auth_utils import get_current_admin
+from email_service import (
+    send_volunteer_admin_notification,
+    send_volunteer_acknowledgement,
+)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
 
 @router.post("/", response_model=VolunteerResponse)
-async def create_volunteer(volunteer: VolunteerCreate, db: Session = Depends(get_db)):
+async def create_volunteer(
+    volunteer: VolunteerCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     # Only include fields that exist in the Volunteer model (exclude phone and message)
     db_volunteer = Volunteer(
         name=volunteer.name,
@@ -21,6 +32,24 @@ async def create_volunteer(volunteer: VolunteerCreate, db: Session = Depends(get
     db.add(db_volunteer)
     db.commit()
     db.refresh(db_volunteer)
+
+    # Send notifications in the background
+    background_tasks.add_task(
+        send_volunteer_admin_notification,
+        name=volunteer.name,
+        email=volunteer.email,
+        interest=volunteer.interest,
+        phone=volunteer.phone,
+        message=volunteer.message,
+    )
+    background_tasks.add_task(
+        send_volunteer_acknowledgement,
+        name=volunteer.name,
+        email=volunteer.email,
+        interest=volunteer.interest,
+    )
+    logger.info("Volunteer signup from %s — notifications queued", volunteer.email)
+
     return db_volunteer
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
@@ -7,17 +7,44 @@ from database import get_db
 from models import ContactSubmission
 from schemas import ContactCreate, ContactResponse
 from auth_utils import get_current_admin
-from email_service import send_contact_reply_email
+from email_service import (
+    send_contact_reply_email,
+    send_contact_admin_notification,
+    send_contact_acknowledgement,
+)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
 
 @router.post("/", response_model=ContactResponse)
-async def create_contact_submission(contact: ContactCreate, db: Session = Depends(get_db)):
+async def create_contact_submission(
+    contact: ContactCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     db_contact = ContactSubmission(**contact.dict())
     db.add(db_contact)
     db.commit()
     db.refresh(db_contact)
+
+    # Send notifications in the background (don't block the response if SMTP is slow)
+    background_tasks.add_task(
+        send_contact_admin_notification,
+        submitter_name=contact.name,
+        submitter_email=contact.email,
+        message=contact.message,
+    )
+    background_tasks.add_task(
+        send_contact_acknowledgement,
+        name=contact.name,
+        email=contact.email,
+        message=contact.message,
+    )
+    logger.info("Contact form submitted by %s — notifications queued", contact.email)
+
     return db_contact
 
 

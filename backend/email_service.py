@@ -419,3 +419,170 @@ The My Zakat Team
     except Exception as e:
         logger.error("Failed to send contact reply email to %s: %s", recipient_email, str(e))
         return False
+
+
+# Where to send admin notifications (defaults to the SMTP sender = info@myzakat.org)
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", SMTP_USERNAME)
+
+
+def _send_simple_email(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Send a simple multipart email. Returns True on success."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
+        msg["To"] = to_email
+        msg["Reply-To"] = SMTP_USERNAME
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain="myzakat.org")
+
+        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[to_email])
+
+        logger.info("Email sent successfully to %s — %s", to_email, subject)
+        return True
+    except Exception as e:
+        logger.error("Failed to send email to %s (%s): %s", to_email, subject, e)
+        return False
+
+
+def send_contact_admin_notification(submitter_name: str, submitter_email: str, message: str) -> bool:
+    """Notify admin that a new contact form was submitted."""
+    subject = f"New Contact Form Submission from {submitter_name}"
+    text_body = (
+        f"A new contact form has been submitted on MyZakat.\n\n"
+        f"From: {submitter_name} <{submitter_email}>\n"
+        f"Submitted: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+        f"Message:\n{message}\n\n"
+        f"View it in the admin panel: {FRONTEND_URL}/admin/contacts\n"
+    )
+    html_body = f"""<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
+  <tr><td style="background: #2563eb; color: white; padding: 20px; text-align: center;">
+    <h1 style="margin: 0;">New Contact Form Submission</h1>
+  </td></tr>
+  <tr><td style="padding: 30px;">
+    <p><strong>From:</strong> {submitter_name} &lt;<a href="mailto:{submitter_email}">{submitter_email}</a>&gt;</p>
+    <p><strong>Submitted:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+    <p><strong>Message:</strong></p>
+    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; border-radius: 4px; white-space: pre-wrap;">{message}</div>
+    <p style="margin-top: 30px;">
+      <a href="{FRONTEND_URL}/admin/contacts" style="background: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">View in Admin Panel</a>
+    </p>
+  </td></tr>
+</table></body></html>"""
+    return _send_simple_email(ADMIN_NOTIFICATION_EMAIL, subject, html_body, text_body)
+
+
+def send_contact_acknowledgement(name: str, email: str, message: str) -> bool:
+    """Send a 'we received your message' confirmation to the user who contacted us."""
+    subject = "We received your message — MyZakat"
+    text_body = (
+        f"Dear {name},\n\n"
+        f"Thank you for reaching out to MyZakat. We have received your message and "
+        f"a member of our team will get back to you as soon as possible.\n\n"
+        f"For your records, here is a copy of your message:\n\n"
+        f"---\n{message}\n---\n\n"
+        f"If you have additional information to share, simply reply to this email.\n\n"
+        f"With gratitude,\nThe MyZakat Team\n"
+    )
+    html_body = f"""<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
+  <tr><td style="background: #2563eb; color: white; padding: 30px; text-align: center;">
+    <h1 style="margin: 0;">Thank you for contacting us</h1>
+  </td></tr>
+  <tr><td style="padding: 30px; color: #374151; line-height: 1.6;">
+    <p>Dear {name},</p>
+    <p>Thank you for reaching out to <strong>MyZakat</strong>. We have received your message
+       and a member of our team will get back to you as soon as possible.</p>
+    <p style="color: #6b7280; font-size: 14px;">For your records, here is a copy of your message:</p>
+    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; border-radius: 4px; white-space: pre-wrap;">{message}</div>
+    <p>If you have additional information to share, simply reply to this email.</p>
+    <p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+  </td></tr>
+  <tr><td style="background: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
+    MyZakat – Zakat Distribution Foundation • <a href="{FRONTEND_URL}" style="color: #2563eb;">myzakat.org</a>
+  </td></tr>
+</table></body></html>"""
+    return _send_simple_email(email, subject, html_body, text_body)
+
+
+def send_volunteer_admin_notification(name: str, email: str, interest: str, phone: str = None, message: str = None) -> bool:
+    """Notify admin that someone signed up to volunteer."""
+    subject = f"New Volunteer Sign-up: {name}"
+    extras = ""
+    if phone:
+        extras += f"\nPhone: {phone}"
+    if message:
+        extras += f"\n\nMessage:\n{message}"
+    text_body = (
+        f"A new volunteer has signed up on MyZakat.\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Interest: {interest}{extras}\n\n"
+        f"Submitted: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+        f"View all volunteers: {FRONTEND_URL}/admin/volunteers\n"
+    )
+    extras_html = ""
+    if phone:
+        extras_html += f'<p><strong>Phone:</strong> <a href="tel:{phone}">{phone}</a></p>'
+    if message:
+        extras_html += f'<p><strong>Message:</strong></p><div style="background: #f9fafb; padding: 15px; border-left: 4px solid #16a34a; border-radius: 4px; white-space: pre-wrap;">{message}</div>'
+    html_body = f"""<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
+  <tr><td style="background: #16a34a; color: white; padding: 20px; text-align: center;">
+    <h1 style="margin: 0;">New Volunteer Sign-up</h1>
+  </td></tr>
+  <tr><td style="padding: 30px;">
+    <p><strong>Name:</strong> {name}</p>
+    <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
+    <p><strong>Interest:</strong> {interest}</p>
+    {extras_html}
+    <p><strong>Submitted:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
+    <p style="margin-top: 30px;">
+      <a href="{FRONTEND_URL}/admin/volunteers" style="background: #16a34a; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">View Volunteers</a>
+    </p>
+  </td></tr>
+</table></body></html>"""
+    return _send_simple_email(ADMIN_NOTIFICATION_EMAIL, subject, html_body, text_body)
+
+
+def send_volunteer_acknowledgement(name: str, email: str, interest: str) -> bool:
+    """Thank-you email to the volunteer."""
+    subject = "Thank you for volunteering with MyZakat"
+    text_body = (
+        f"Assalamu alaikum {name},\n\n"
+        f"Thank you for offering to volunteer with MyZakat. We have received your application "
+        f"and will be in touch soon to discuss next steps for '{interest}'.\n\n"
+        f"Your willingness to give your time helps us serve communities in need — "
+        f"may Allah reward your generosity.\n\n"
+        f"With gratitude,\nThe MyZakat Team\n"
+    )
+    html_body = f"""<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
+  <tr><td style="background: #16a34a; color: white; padding: 30px; text-align: center;">
+    <h1 style="margin: 0;">Thank You for Volunteering</h1>
+  </td></tr>
+  <tr><td style="padding: 30px; color: #374151; line-height: 1.6;">
+    <p>Assalamu alaikum {name},</p>
+    <p>Thank you for offering to volunteer with <strong>MyZakat</strong>. We have received your application
+       and will be in touch soon to discuss next steps for <strong>{interest}</strong>.</p>
+    <p>Your willingness to give your time helps us serve communities in need —
+       may Allah reward your generosity.</p>
+    <p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+  </td></tr>
+  <tr><td style="background: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
+    MyZakat – Zakat Distribution Foundation • <a href="{FRONTEND_URL}" style="color: #16a34a;">myzakat.org</a>
+  </td></tr>
+</table></body></html>"""
+    return _send_simple_email(email, subject, html_body, text_body)

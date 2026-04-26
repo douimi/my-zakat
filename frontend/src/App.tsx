@@ -61,6 +61,7 @@ const ZakatOnGold = lazy(() => import('./pages/ZakatOnGold'))
 const UmrahGuidelines = lazy(() => import('./pages/UmrahGuidelines'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
@@ -121,6 +122,7 @@ function App() {
                 <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
                 <Route path="privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="donation-policy" element={<DonationPolicy />} />
+                <Route path="terms-of-service" element={<TermsOfService />} />
               </Route>
 
               {/* User authentication routes */}

@@ -110,6 +110,11 @@ const Footer = () => {
                   Donation Policy
                 </Link>
               </li>
+              <li>
+                <Link to="/terms-of-service" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
+                  Terms of Service
+                </Link>
+              </li>
             </ul>
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
