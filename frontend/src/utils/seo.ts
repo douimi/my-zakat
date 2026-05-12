@@ -7,13 +7,13 @@ export const SEO = {
   baseUrl: 'https://myzakat.org',
   defaultDescription:
     'MyZakat is a nonprofit Zakat distribution foundation empowering communities through transparent Zakat, Sadaqa, and charitable giving. Calculate your Zakat, donate securely, and support families in need.',
-  phone: '+1-540-676-0330',
+  phone: '+1-833-699-2528',
   email: 'info@myzakat.org',
   address: {
-    street: '544 Monticello Street',
+    street: 'P.O. BOX 2250',
     city: 'Winchester',
     state: 'VA',
-    zip: '22601',
+    zip: '22604',
     country: 'US',
   },
 } as const

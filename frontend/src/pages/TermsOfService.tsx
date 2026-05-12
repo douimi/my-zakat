@@ -218,10 +218,10 @@ const TermsOfService = () => {
                 <p>If you have any questions about these Terms, please contact us:</p>
                 <p>
                   <strong>MyZakat – Zakat Distribution Foundation</strong><br />
-                  544 Monticello Street<br />
-                  Winchester, VA 22601<br />
+                  P.O. BOX 2250<br />
+                  Winchester, VA 22604<br />
                   Email: <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a><br />
-                  Phone: <a href="tel:+15406760330" className="text-primary-600 hover:underline">+1-540-676-0330</a>
+                  Phone: <a href="tel:+18336992528" className="text-primary-600 hover:underline">1-833-MYZAKAT</a>
                 </p>
               </div>
             </section>

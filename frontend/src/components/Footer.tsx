@@ -125,13 +125,13 @@ const Footer = () => {
               </div>
               <div className="flex items-center space-x-3">
                 <Phone className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <a href="tel:+15406760330" className="text-gray-300 hover:text-white transition-colors duration-200">
-                  +540-676-0330
+                <a href="tel:+18336992528" className="text-gray-300 hover:text-white transition-colors duration-200">
+                  1-833-MYZAKAT
                 </a>
               </div>
               <div className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-primary-400 flex-shrink-0 mt-1" />
-                <span className="text-gray-300">544 Monticello Street<br />Winchester, VA 22601</span>
+                <span className="text-gray-300">P.O. BOX 2250<br />Winchester, VA 22604</span>
               </div>
             </div>
           </div>

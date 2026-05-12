@@ -178,8 +178,8 @@ const DonationPolicy = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-gray-700"><strong>MyZakat – Zakat Distribution Foundation</strong></p>
                 <p className="text-gray-600">Email: info@myzakat.org</p>
-                <p className="text-gray-600">Phone: +540-676-0330</p>
-                <p className="text-gray-600">Address: 544 Monticello Street, Winchester, VA 22601</p>
+                <p className="text-gray-600">Phone: 1-833-MYZAKAT</p>
+                <p className="text-gray-600">Address: P.O. BOX 2250, Winchester, VA 22604</p>
               </div>
             </section>
           </div>
