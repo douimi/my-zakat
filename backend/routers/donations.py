@@ -61,12 +61,13 @@ def generate_certificate(donation: Donation, db: Session) -> str:
         filename = f"certificate_{donation.id}_{safe_name}_{timestamp}.pdf"
         filepath = os.path.join(certificates_dir, filename)
         
-        # Generate PDF certificate
+        # Generate PDF receipt
         generate_donation_certificate(
             donor_name=donation.name,
             amount=donation.amount,
             donation_date=donation.donated_at,
-            output_path=filepath
+            output_path=filepath,
+            donation_id=donation.id,
         )
         
         # Update donation record with certificate filename
@@ -99,19 +100,20 @@ def email_certificate(donation: Donation) -> bool:
         # Ensure donated_at is set
         if not donation.donated_at:
             donation.donated_at = datetime.utcnow()
-        
-        # Generate PDF certificate on-the-fly (no file storage)
+
+        # Generate PDF receipt on-the-fly (no file storage)
         pdf_bytes = generate_donation_certificate_to_bytes(
             donor_name=donation.name,
             amount=donation.amount,
-            donation_date=donation.donated_at
+            donation_date=donation.donated_at,
+            donation_id=donation.id,
         )
-        
+
         # Create temporary file for email attachment
         import tempfile
         certificates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certificates")
         os.makedirs(certificates_dir, exist_ok=True)
-        
+
         with tempfile.NamedTemporaryFile(
             mode='wb',
             suffix='.pdf',
@@ -120,14 +122,15 @@ def email_certificate(donation: Donation) -> bool:
         ) as temp_file:
             temp_file.write(pdf_bytes)
             temp_path = temp_file.name
-        
+
         try:
             # Send email with PDF attachment
             success = send_donation_certificate_email(
                 email=donation.email,
                 name=donation.name,
                 amount=donation.amount,
-                pdf_path=temp_path
+                pdf_path=temp_path,
+                donation_date=donation.donated_at,
             )
             
             if success:

@@ -209,19 +209,21 @@ async def download_certificate(
         db.commit()
     
     try:
-        # Generate PDF certificate on-the-fly (no file storage)
+        # Generate PDF receipt on-the-fly (no file storage)
         pdf_bytes = generate_donation_certificate_to_bytes(
             donor_name=donation.name,
             amount=donation.amount,
-            donation_date=donation.donated_at
+            donation_date=donation.donated_at,
+            donation_id=donation.id,
         )
-        
+
         # Return PDF as streaming response
+        safe_name = donation.name.replace(" ", "_") if donation.name else "donor"
         return StreamingResponse(
             BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="donation_certificate_{donation.id}.pdf"'
+                "Content-Disposition": f'attachment; filename="ZDF_Donation_Receipt_{safe_name}_{donation.donated_at.strftime("%Y%m%d")}.pdf"'
             }
         )
     except Exception as e:

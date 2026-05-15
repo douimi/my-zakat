@@ -155,48 +155,50 @@ If you did not create an account with My Zakat, please ignore this email.
         return False
 
 
-def send_donation_certificate_email(email: str, name: str, amount: float, pdf_path: str) -> bool:
+def send_donation_certificate_email(email: str, name: str, amount: float, pdf_path: str, donation_date: datetime = None) -> bool:
     """
-    Send donation certificate PDF via email
-    
+    Send donation receipt PDF via email with the official ZDF acknowledgement wording.
+
     Args:
         email: Donor's email address
         name: Donor's name
         amount: Donation amount
-        pdf_path: Path to the PDF certificate file
-        
+        pdf_path: Path to the PDF receipt file
+        donation_date: Date of donation (defaults to today)
+
     Returns:
         True if email sent successfully, False otherwise
     """
     try:
-        # Create email message
+        if donation_date is None:
+            donation_date = datetime.utcnow()
+        donation_date_str = donation_date.strftime("%B %d, %Y")
+        amount_str = f"${amount:,.2f}"
+        donor_name = name or "Donor"
+
         msg = MIMEMultipart()
-        
-        # Essential headers for deliverability
-        msg["Subject"] = Header("Thank You for Your Donation - Certificate of Donation", "utf-8")
+
+        # Headers for deliverability
+        msg["Subject"] = Header("Your Donation Receipt — Zakat Distribution Foundation", "utf-8")
         msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
         msg["To"] = email
         msg["Reply-To"] = SMTP_USERNAME
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain="myzakat.org")
         msg["MIME-Version"] = "1.0"
-        
-        # Add List-Unsubscribe header
         msg["List-Unsubscribe"] = f"<mailto:{SMTP_USERNAME}?subject=Unsubscribe>"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        
-        # X-Headers
         msg["X-Mailer"] = "My Zakat Platform"
         msg["X-Priority"] = "1"
         msg["X-MSMail-Priority"] = "High"
-        
-        # Create HTML email body
+
+        # HTML email body — ZDF official acknowledgement
         html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thank You for Your Donation</title>
+    <title>Your Donation Receipt</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
     <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -205,25 +207,33 @@ def send_donation_certificate_email(email: str, name: str, amount: float, pdf_pa
                 <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <!-- Header -->
                     <tr>
-                        <td style="background-color: #2563eb; color: #ffffff; padding: 30px 20px; text-align: center;">
-                            <h1 style="margin: 0; font-size: 24px; font-weight: bold;">My Zakat</h1>
+                        <td style="background-color: #1e3a8a; color: #ffffff; padding: 30px 20px; text-align: center;">
+                            <h1 style="margin: 0; font-size: 22px; font-weight: bold;">Zakat Distribution Foundation</h1>
+                            <p style="margin: 8px 0 0 0; font-size: 13px; font-style: italic; opacity: 0.95;">Your Zakat, Their Lifeline.</p>
                         </td>
                     </tr>
                     <!-- Content -->
                     <tr>
-                        <td style="padding: 40px 30px;">
-                            <h2 style="color: #2563eb; margin-top: 0; font-size: 20px;">Thank You for Your Generous Donation</h2>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Hello {name or 'there'},</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">We are deeply grateful for your generous donation of <strong>${amount:,.2f}</strong>. Your contribution makes a meaningful difference in our community.</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Please find attached your Certificate of Donation as a token of our appreciation.</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">You can also download your certificate anytime from your user dashboard.</p>
-                            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e5e5;">May your generosity be rewarded abundantly.</p>
+                        <td style="padding: 40px 30px; color: #1f2937; font-size: 15px; line-height: 1.6;">
+                            <p>Dear {donor_name},</p>
+                            <p>On behalf of the <strong>Zakat Distribution Foundation (ZDF)</strong>, we sincerely thank you for your generous donation of <strong>{amount_str}</strong> received on <strong>{donation_date_str}</strong>.</p>
+                            <p>Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.</p>
+                            <p>Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section <strong>501(c)(3)</strong> of the Internal Revenue Code.</p>
+                            <p style="background-color: #f3f4f6; padding: 12px 16px; border-left: 4px solid #1e3a8a; border-radius: 4px; margin: 20px 0;"><strong>EIN: 33-2494058</strong></p>
+                            <p>No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.</p>
+                            <p>Please keep this email — and the attached PDF receipt — as your official donation receipt for tax purposes.</p>
+                            <p style="margin-top: 30px;">With gratitude,</p>
+                            <p style="margin: 4px 0;"><strong>Naser Hdieb</strong></p>
+                            <p style="margin: 0; color: #4b5563;">Chairperson</p>
+                            <p style="margin: 0 0 16px 0; color: #4b5563;">Zakat Distribution Foundation</p>
+                            <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-style: italic; color: #6b7280; font-size: 14px;">Your Zakat, Their Lifeline.</p>
                         </td>
                     </tr>
                     <!-- Footer -->
                     <tr>
                         <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e5e5;">
-                            <p style="color: #999999; font-size: 12px; margin: 0;">© {datetime.now().year} My Zakat. All rights reserved.</p>
+                            <p style="color: #6b7280; font-size: 12px; margin: 0;">Zakat Distribution Foundation · P.O. BOX 2250, Winchester, VA 22604</p>
+                            <p style="color: #6b7280; font-size: 12px; margin: 4px 0 0 0;"><a href="https://myzakat.org" style="color: #1e3a8a;">www.myzakat.org</a> · 1-833-MYZAKAT · info@myzakat.org</p>
                         </td>
                     </tr>
                 </table>
@@ -232,22 +242,34 @@ def send_donation_certificate_email(email: str, name: str, amount: float, pdf_pa
     </table>
 </body>
 </html>"""
-        
-        # Create plain text version
-        text_body = f"""My Zakat - Thank You for Your Donation
 
-Hello {name or 'there'},
+        # Plain text version
+        text_body = f"""Dear {donor_name},
 
-We are deeply grateful for your generous donation of ${amount:,.2f}. Your contribution makes a meaningful difference in our community.
+On behalf of the Zakat Distribution Foundation (ZDF), we sincerely thank you for your generous donation of {amount_str} received on {donation_date_str}.
 
-Please find attached your Certificate of Donation as a token of our appreciation.
+Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.
 
-You can also download your certificate anytime from your user dashboard.
+Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section 501(c)(3) of the Internal Revenue Code.
 
-May your generosity be rewarded abundantly.
+EIN: 33-2494058
 
----
-© {datetime.now().year} My Zakat. All rights reserved."""
+No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.
+
+Please keep this email as your official donation receipt for tax purposes.
+
+With gratitude,
+
+Naser Hdieb
+Chairperson
+Zakat Distribution Foundation
+
+Your Zakat, Their Lifeline.
+
+--
+Zakat Distribution Foundation
+P.O. BOX 2250, Winchester, VA 22604
+www.myzakat.org · 1-833-MYZAKAT · info@myzakat.org"""
         
         # Attach text versions
         part1 = MIMEText(text_body, "plain", "utf-8")
@@ -255,7 +277,7 @@ May your generosity be rewarded abundantly.
         msg.attach(part1)
         msg.attach(part2)
         
-        # Attach PDF certificate
+        # Attach PDF receipt
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as pdf_file:
                 pdf_attachment = MIMEBase("application", "pdf")
@@ -263,7 +285,7 @@ May your generosity be rewarded abundantly.
                 encoders.encode_base64(pdf_attachment)
                 pdf_attachment.add_header(
                     "Content-Disposition",
-                    f'attachment; filename="donation_certificate_{name.replace(" ", "_")}_{datetime.now().strftime("%Y%m%d")}.pdf"'
+                    f'attachment; filename="ZDF_Donation_Receipt_{donor_name.replace(" ", "_")}_{donation_date.strftime("%Y%m%d")}.pdf"'
                 )
                 msg.attach(pdf_attachment)
         
