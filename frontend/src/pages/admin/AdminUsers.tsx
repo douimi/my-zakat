@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Shield, ShieldOff, Eye, Trash2, UserCheck, UserX, X } from 'lucide-react'
+import { Users, Shield, ShieldOff, Eye, Trash2, UserCheck, UserX, X, UserPlus, Edit2, Key } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -49,6 +49,22 @@ const AdminUsers = () => {
     userName: string
     action: string
   } | null>(null)
+
+  // Create-user modal
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({ email: '', password: '', name: '', is_admin: false })
+  const [creating, setCreating] = useState(false)
+
+  // Edit-user modal
+  const [editUser, setEditUser] = useState<User | null>(null)
+  const [editForm, setEditForm] = useState({ email: '', name: '' })
+  const [updating, setUpdating] = useState(false)
+
+  // Reset-password modal
+  const [resetUser, setResetUser] = useState<User | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetting, setResetting] = useState(false)
+
   const token = useAuthStore((state) => state.token)
   const currentUser = useAuthStore((state) => state.user)
   const { showSuccess, showError } = useToast()
@@ -231,6 +247,110 @@ const AdminUsers = () => {
     }
   }
 
+  // --- Admin user management actions ---
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (createForm.password.length < 8) {
+      showError('Validation', 'Password must be at least 8 characters')
+      return
+    }
+    setCreating(true)
+    try {
+      const response = await fetch(`${API_URL}/api/admin/users`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: createForm.email.trim(),
+          password: createForm.password,
+          name: createForm.name.trim() || null,
+          is_admin: createForm.is_admin,
+          is_active: true,
+        }),
+      })
+      if (response.ok) {
+        showSuccess('Success', 'User created successfully')
+        setShowCreateModal(false)
+        setCreateForm({ email: '', password: '', name: '', is_admin: false })
+        fetchUsers()
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to create user' }))
+        showError('Error', errorData.detail || 'Failed to create user')
+      }
+    } catch (error) {
+      showError('Error', 'Network error while creating user')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editUser) return
+    setUpdating(true)
+    try {
+      const response = await fetch(`${API_URL}/api/admin/users/${editUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: editForm.email.trim() || undefined,
+          name: editForm.name.trim() || null,
+        }),
+      })
+      if (response.ok) {
+        showSuccess('Success', 'User updated successfully')
+        setEditUser(null)
+        fetchUsers()
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to update user' }))
+        showError('Error', errorData.detail || 'Failed to update user')
+      }
+    } catch (error) {
+      showError('Error', 'Network error while updating user')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetUser) return
+    if (resetPassword.length < 8) {
+      showError('Validation', 'Password must be at least 8 characters')
+      return
+    }
+    setResetting(true)
+    try {
+      const response = await fetch(`${API_URL}/api/admin/users/${resetUser.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ new_password: resetPassword }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        showSuccess('Success', data.message || 'Password reset successfully')
+        setResetUser(null)
+        setResetPassword('')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to reset password' }))
+        showError('Error', errorData.detail || 'Failed to reset password')
+      }
+    } catch (error) {
+      showError('Error', 'Network error while resetting password')
+    } finally {
+      setResetting(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -253,7 +373,17 @@ const AdminUsers = () => {
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
           <Users className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-blue-600" />
           User Management
+          <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+            {users.length}
+          </span>
         </h1>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          <UserPlus className="w-5 h-5" />
+          Create User
+        </button>
       </div>
 
       {/* Success Message */}
@@ -341,6 +471,26 @@ const AdminUsers = () => {
                       title="View Details"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditUser(user)
+                        setEditForm({ email: user.email, name: user.name || '' })
+                      }}
+                      className="text-indigo-600 hover:text-indigo-900"
+                      title="Edit User"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setResetUser(user)
+                        setResetPassword('')
+                      }}
+                      className="text-orange-600 hover:text-orange-900"
+                      title="Reset Password"
+                    >
+                      <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => toggleUserActive(user.id)}
@@ -581,6 +731,225 @@ const AdminUsers = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <form onSubmit={handleCreateUser} className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                  <UserPlus className="w-5 h-5 mr-2 text-blue-600" />
+                  Create New User
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="user@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Full name (optional)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="At least 8 characters"
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.is_admin}
+                    onChange={(e) => setCreateForm({ ...createForm, is_admin: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-gray-700">Grant admin privileges</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium"
+                >
+                  {creating ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <form onSubmit={handleUpdateUser} className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                  <Edit2 className="w-5 h-5 mr-2 text-indigo-600" />
+                  Edit User
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setEditUser(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Full name"
+                  />
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  To change the password, use the <strong>Reset Password</strong> action instead.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setEditUser(null)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updating}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
+                >
+                  {updating ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <form onSubmit={handleResetPassword} className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                  <Key className="w-5 h-5 mr-2 text-orange-600" />
+                  Reset Password
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => { setResetUser(null); setResetPassword('') }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-orange-800">
+                  Setting a new password for <strong>{resetUser.name || resetUser.email}</strong>.
+                  The user will need this new password to log in.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
+                <input
+                  type="text"
+                  required
+                  minLength={8}
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="At least 8 characters"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Make sure to share this password securely with the user.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => { setResetUser(null); setResetPassword('') }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetting}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg font-medium"
+                >
+                  {resetting ? 'Resetting...' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

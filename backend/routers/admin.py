@@ -9,8 +9,11 @@ from media_processing import compress_image, compress_video, generate_video_thum
 
 from database import get_db
 from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting, User
-from schemas import UserResponse, PasswordChange
+from schemas import UserResponse, PasswordChange, AdminUserCreate, AdminUserUpdate, AdminPasswordReset
 from auth_utils import get_current_admin, verify_password, get_password_hash
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -194,7 +197,7 @@ async def get_all_users(
 ):
     """Get all registered users"""
     users = db.query(User).offset(skip).limit(limit).all()
-    
+
     return [{
         "id": user.id,
         "email": user.email,
@@ -203,6 +206,115 @@ async def get_all_users(
         "is_admin": user.is_admin,
         "created_at": user.created_at
     } for user in users]
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: AdminUserCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Create a new user account (admin only).
+
+    The created account is marked as email_verified so the new user can log in
+    immediately without going through the email verification flow.
+    """
+    # Reject if email already exists
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists",
+        )
+
+    new_user = User(
+        email=payload.email,
+        password=get_password_hash(payload.password),
+        name=payload.name,
+        is_active=payload.is_active,
+        is_admin=payload.is_admin,
+        email_verified=True,  # Admin-created accounts skip verification
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    logger.info("Admin %s created user %s (admin=%s)", current_admin.email, new_user.email, new_user.is_admin)
+
+    return {
+        "id": new_user.id,
+        "email": new_user.email,
+        "name": new_user.name,
+        "is_active": new_user.is_active,
+        "is_admin": new_user.is_admin,
+        "created_at": new_user.created_at,
+    }
+
+
+@router.put("/users/{user_id}")
+async def update_user(
+    user_id: int,
+    payload: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Update a user's name and/or email (admin only)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.email and payload.email != user.email:
+        # Check for email collision
+        clash = db.query(User).filter(User.email == payload.email, User.id != user_id).first()
+        if clash:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A user with this email already exists",
+            )
+        user.email = payload.email
+
+    if payload.name is not None:
+        user.name = payload.name
+
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+
+    logger.info("Admin %s updated user #%s", current_admin.email, user_id)
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+    }
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: int,
+    payload: AdminPasswordReset,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Reset another user's password (admin only).
+
+    No current-password check is required since this is an administrative action.
+    The new password must be at least 8 characters.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password = get_password_hash(payload.new_password)
+    user.updated_at = datetime.utcnow()
+    db.commit()
+
+    logger.info("Admin %s reset password for user %s", current_admin.email, user.email)
+
+    return {"message": f"Password reset successfully for {user.email}"}
 
 
 @router.get("/users/{user_id}")
@@ -336,19 +448,21 @@ async def change_password(
     current_admin: User = Depends(get_current_admin)
 ):
     """Change the current admin user's password"""
-    # Verify the old password
-    if not verify_password(password_data.old_password, current_admin.password):
+    # Verify the current password (schema field is `current_password`, not `old_password`)
+    if not verify_password(password_data.current_password, current_admin.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect old password"
+            detail="Incorrect current password"
         )
-    
-    # Hash the new password
-    hashed_password = get_password_hash(password_data.new_password)
-    
-    # Update the password
-    current_admin.password = hashed_password
+
+    if len(password_data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters",
+        )
+
+    current_admin.password = get_password_hash(password_data.new_password)
     current_admin.updated_at = datetime.utcnow()
     db.commit()
-    
+
     return {"message": "Password changed successfully"}

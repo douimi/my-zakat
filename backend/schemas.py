@@ -35,6 +35,21 @@ class PasswordChange(BaseModel):
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
+# Admin user-management schemas
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    name: Optional[str] = None
+    is_admin: bool = False
+    is_active: bool = True
+
+class AdminUserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    name: Optional[str] = None
+
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8)
+
 # Contact schemas
 class ContactCreate(BaseModel):
     name: str
