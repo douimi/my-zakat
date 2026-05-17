@@ -583,7 +583,7 @@ class TestZakatCalculation:
     """Tests for POST /api/donations/calculate-zakat"""
 
     def test_comprehensive_calculation(self, client: TestClient):
-        """Verify Zakat calculation with all asset types."""
+        """Verify Zakat calculation with all asset types, Nisab met, liabilities prorated."""
         data = {
             "liabilities": 1000,
             "cash": 10000,
@@ -605,12 +605,21 @@ class TestZakatCalculation:
         assert resp.status_code == 200
 
         result = resp.json()
+        # Nisab check (87.48g × $70 = $6,124); net zakatable $26,400 > Nisab
+        assert result["meets_nisab"] is True
+        # All non-zero buckets should produce non-zero Zakat
         assert result["wealth"] > 0
-        assert result["gold"] == (100 * 70) * 0.025  # 175.0
-        assert result["silver"] == (500 * 0.8) * 0.025  # 10.0
-        assert result["business_goods"] == 3000 * 0.025  # 75.0
+        assert result["gold"] > 0
+        assert result["silver"] > 0
+        assert result["business_goods"] > 0
+        # Agriculture uses 5% (and not subject to wealth Nisab)
         assert result["agriculture"] == 2000 * 0.05  # 100.0
-        assert result["total"] == result["wealth"] + result["gold"] + result["silver"] + result["business_goods"] + result["agriculture"]
+        # Total equals sum of components
+        assert abs(result["total"] - (result["wealth"] + result["gold"] + result["silver"]
+                                      + result["business_goods"] + result["agriculture"])) < 0.01
+        # Liabilities should reduce each component proportionally — total slightly
+        # less than the no-liabilities version
+        assert result["total"] < (17000 * 0.025 + 7000 * 0.025 + 400 * 0.025 + 3000 * 0.025 + 100)
 
     def test_zero_assets_returns_zero(self, client: TestClient):
         """No assets should yield zero Zakat."""
@@ -642,8 +651,25 @@ class TestZakatCalculation:
         with_debt = resp_with_debt.json()["wealth"]
         assert with_debt < no_debt
 
-    def test_gold_only_calculation(self, client: TestClient):
-        """Zakat on gold alone should be 2.5% of (weight * price)."""
+    def test_gold_only_above_nisab(self, client: TestClient):
+        """Zakat on gold alone, above Nisab, should be 2.5% of (weight * price)."""
+        # 100g × $70 = $7,000 (Nisab is 87.48 × $70 = $6,124 — above)
+        data = {
+            "liabilities": 0, "cash": 0, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 100, "gold_price_per_gram": 70,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        resp = client.post("/api/donations/calculate-zakat", json=data)
+        result = resp.json()
+        assert result["meets_nisab"] is True
+        assert result["gold"] == pytest.approx(100 * 70 * 0.025, rel=0.01)
+        assert result["wealth"] == 0
+
+    def test_gold_below_nisab_returns_zero(self, client: TestClient):
+        """Gold below the Nisab threshold should produce no Zakat."""
+        # 85g × $60 = $5,100 (Nisab is 87.48 × $60 = $5,249 — BELOW)
         data = {
             "liabilities": 0, "cash": 0, "receivables": 0, "stocks": 0,
             "retirement": 0, "gold_weight": 85, "gold_price_per_gram": 60,
@@ -653,11 +679,13 @@ class TestZakatCalculation:
         }
         resp = client.post("/api/donations/calculate-zakat", json=data)
         result = resp.json()
-        assert result["gold"] == pytest.approx(85 * 60 * 0.025)
-        assert result["wealth"] == 0
+        assert result["meets_nisab"] is False
+        assert result["gold"] == 0
+        assert result["total"] == 0
 
     def test_agriculture_uses_5_percent(self, client: TestClient):
-        """Agriculture Zakat should be 5% (not 2.5%)."""
+        """Agriculture Zakat should be 5% (not 2.5%) and not subject to wealth Nisab."""
+        # Note: agriculture is per-harvest and not bound by wealth Nisab
         data = {
             "liabilities": 0, "cash": 0, "receivables": 0, "stocks": 0,
             "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
@@ -666,7 +694,53 @@ class TestZakatCalculation:
             "other_valuables": 0, "livestock": 0, "other_assets": 0,
         }
         resp = client.post("/api/donations/calculate-zakat", json=data)
-        assert resp.json()["agriculture"] == 500.0  # 10000 * 0.05
+        result = resp.json()
+        assert result["agriculture"] == 500.0  # 10000 * 0.05
+        assert result["total"] == 500.0  # only agriculture contributes
+
+    def test_negative_inputs_rejected(self, client: TestClient):
+        """Negative asset values should be rejected with 422."""
+        data = {
+            "liabilities": 0, "cash": -5000, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        resp = client.post("/api/donations/calculate-zakat", json=data)
+        assert resp.status_code == 422
+
+    def test_liabilities_exceed_assets_returns_zero(self, client: TestClient):
+        """If liabilities exceed assets, no Zakat is due."""
+        data = {
+            "liabilities": 100000, "cash": 50000, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        resp = client.post("/api/donations/calculate-zakat", json=data)
+        result = resp.json()
+        assert result["meets_nisab"] is False
+        assert result["total"] == 0
+
+    def test_meets_nisab_field_returned(self, client: TestClient):
+        """Result should include Nisab status fields."""
+        data = {
+            "liabilities": 0, "cash": 100000, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 70,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        resp = client.post("/api/donations/calculate-zakat", json=data)
+        result = resp.json()
+        assert "meets_nisab" in result
+        assert "nisab_threshold" in result
+        assert "net_zakatable" in result
+        assert "total_assets" in result
+        assert result["nisab_threshold"] == pytest.approx(87.48 * 70, rel=0.01)
+        assert result["meets_nisab"] is True
 
 
 # ---------------------------------------------------------------------------

@@ -98,6 +98,10 @@ export interface ZakatResult {
   business_goods: number
   agriculture: number
   total: number
+  total_assets: number
+  net_zakatable: number
+  nisab_threshold: number
+  meets_nisab: boolean
 }
 
 export interface DonationStats {

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -271,21 +271,22 @@ class PaymentSession(BaseModel):
     id: str
 
 class ZakatCalculation(BaseModel):
-    liabilities: float = 0
-    cash: float = 0
-    receivables: float = 0
-    stocks: float = 0
-    retirement: float = 0
-    gold_weight: float = 0
-    gold_price_per_gram: float = 0
-    silver_weight: float = 0
-    silver_price_per_gram: float = 0
-    business_goods: float = 0
-    agriculture_value: float = 0
-    investment_property: float = 0
-    other_valuables: float = 0
-    livestock: float = 0
-    other_assets: float = 0
+    """All amounts in USD; weights in grams. All fields must be >= 0."""
+    liabilities: float = Field(default=0, ge=0)
+    cash: float = Field(default=0, ge=0)
+    receivables: float = Field(default=0, ge=0)
+    stocks: float = Field(default=0, ge=0)
+    retirement: float = Field(default=0, ge=0)
+    gold_weight: float = Field(default=0, ge=0)
+    gold_price_per_gram: float = Field(default=0, ge=0)
+    silver_weight: float = Field(default=0, ge=0)
+    silver_price_per_gram: float = Field(default=0, ge=0)
+    business_goods: float = Field(default=0, ge=0)
+    agriculture_value: float = Field(default=0, ge=0)
+    investment_property: float = Field(default=0, ge=0)
+    other_valuables: float = Field(default=0, ge=0)
+    livestock: float = Field(default=0, ge=0)
+    other_assets: float = Field(default=0, ge=0)
 
 class ZakatResult(BaseModel):
     wealth: float
@@ -294,6 +295,11 @@ class ZakatResult(BaseModel):
     business_goods: float
     agriculture: float
     total: float
+    # Nisab status
+    total_assets: float = 0          # sum of all zakatable assets in USD
+    net_zakatable: float = 0          # total_assets - liabilities
+    nisab_threshold: float = 0        # current Nisab in USD (gold-based)
+    meets_nisab: bool = False         # whether net_zakatable >= nisab_threshold
 
 class SubscriptionCreate(BaseModel):
     name: str

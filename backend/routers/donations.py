@@ -211,49 +211,98 @@ async def get_donation_stats(db: Session = Depends(get_db)):
 
 @router.post("/calculate-zakat", response_model=ZakatResult)
 async def calculate_zakat(calculation: ZakatCalculation):
-    # Sum all zakatable assets
-    total_assets = (
-        calculation.cash +
-        calculation.receivables +
-        calculation.stocks +
-        calculation.retirement +
-        (calculation.gold_weight * calculation.gold_price_per_gram) +
-        (calculation.silver_weight * calculation.silver_price_per_gram) +
-        calculation.business_goods +
-        calculation.agriculture_value +
-        calculation.investment_property +
-        calculation.other_valuables +
-        calculation.livestock +
-        calculation.other_assets
+    """Calculate Zakat with Nisab threshold check and proper liability deduction.
+
+    Methodology:
+      1. Compute total zakatable assets (cash + gold + silver + business + ...).
+      2. Subtract liabilities to get the net zakatable amount.
+      3. Determine Nisab threshold: equivalent of 87.48 g of gold using the
+         user-provided gold price (falls back to $65/g if not provided).
+      4. If net zakatable < Nisab → no Zakat due (return zeros + meets_nisab=False).
+      5. Otherwise apply the standard 2.5% rate to wealth/gold/silver/business
+         and 5% to agriculture (agriculture is per-harvest and not subject to
+         the wealth Nisab check in classical jurisprudence — kept separate).
+
+    Liabilities are deducted from the combined wealth pool (cash + investments
+    + business + metals + other), prorated. This avoids the previous bug
+    where debts only reduced the cash-bucket Zakat.
+    """
+    # 1. Compute USD values of each bucket
+    gold_value = calculation.gold_weight * calculation.gold_price_per_gram
+    silver_value = calculation.silver_weight * calculation.silver_price_per_gram
+
+    wealth_bucket = (
+        calculation.cash
+        + calculation.receivables
+        + calculation.stocks
+        + calculation.retirement
+        + calculation.investment_property
+        + calculation.other_valuables
+        + calculation.livestock
+        + calculation.other_assets
     )
-    
-    net_assets = max(total_assets - calculation.liabilities, 0)
-    
-    # Zakat calculations
-    wealth_zakat = max(
-        (calculation.cash + calculation.receivables + calculation.stocks + 
-         calculation.retirement + calculation.investment_property + 
-         calculation.other_valuables + calculation.livestock + 
-         calculation.other_assets - calculation.liabilities), 0
-    ) * 0.025 if any([calculation.cash, calculation.receivables, calculation.stocks, 
-                      calculation.retirement, calculation.investment_property, 
-                      calculation.other_valuables, calculation.livestock, 
-                      calculation.other_assets]) else 0
-    
-    gold_zakat = (calculation.gold_weight * calculation.gold_price_per_gram) * 0.025 if calculation.gold_weight and calculation.gold_price_per_gram else 0
-    silver_zakat = (calculation.silver_weight * calculation.silver_price_per_gram) * 0.025 if calculation.silver_weight and calculation.silver_price_per_gram else 0
-    business_zakat = calculation.business_goods * 0.025 if calculation.business_goods else 0
-    agriculture_zakat = calculation.agriculture_value * 0.05 if calculation.agriculture_value else 0
-    
-    total_zakat = wealth_zakat + gold_zakat + silver_zakat + business_zakat + agriculture_zakat
-    
+    business_bucket = calculation.business_goods
+    agriculture_bucket = calculation.agriculture_value  # Treated separately (5%)
+
+    # 2. Total zakatable assets (excluding agriculture which has its own rules)
+    zakatable_for_nisab = wealth_bucket + gold_value + silver_value + business_bucket
+    net_zakatable = max(zakatable_for_nisab - calculation.liabilities, 0)
+
+    # 3. Nisab threshold — 87.48g of gold (the standard scholarly value)
+    NISAB_GOLD_GRAMS = 87.48
+    gold_price = calculation.gold_price_per_gram if calculation.gold_price_per_gram > 0 else 65.0
+    nisab_threshold = NISAB_GOLD_GRAMS * gold_price
+
+    meets_nisab = net_zakatable >= nisab_threshold
+
+    # 4. If below Nisab, no Zakat is due on the wealth pool
+    if not meets_nisab:
+        wealth_zakat = 0.0
+        gold_zakat = 0.0
+        silver_zakat = 0.0
+        business_zakat = 0.0
+    else:
+        # 5. Apply 2.5% on each net component (after liabilities prorated)
+        if zakatable_for_nisab > 0:
+            wealth_share = wealth_bucket / zakatable_for_nisab
+            gold_share = gold_value / zakatable_for_nisab
+            silver_share = silver_value / zakatable_for_nisab
+            business_share = business_bucket / zakatable_for_nisab
+
+            net_wealth = max(wealth_bucket - calculation.liabilities * wealth_share, 0)
+            net_gold = max(gold_value - calculation.liabilities * gold_share, 0)
+            net_silver = max(silver_value - calculation.liabilities * silver_share, 0)
+            net_business = max(business_bucket - calculation.liabilities * business_share, 0)
+        else:
+            net_wealth = net_gold = net_silver = net_business = 0.0
+
+        wealth_zakat = round(net_wealth * 0.025, 2)
+        gold_zakat = round(net_gold * 0.025, 2)
+        silver_zakat = round(net_silver * 0.025, 2)
+        business_zakat = round(net_business * 0.025, 2)
+
+    # Agriculture Zakat is per-harvest, not bound by annual Nisab on wealth.
+    # 5% applies (matches classical scholarly opinion for irrigated land;
+    # 10% for naturally rain-watered land — we use 5% as the conservative default).
+    agriculture_zakat = round(agriculture_bucket * 0.05, 2)
+
+    total_zakat = round(
+        wealth_zakat + gold_zakat + silver_zakat + business_zakat + agriculture_zakat,
+        2,
+    )
+    total_assets = round(zakatable_for_nisab + agriculture_bucket, 2)
+
     return ZakatResult(
         wealth=wealth_zakat,
         gold=gold_zakat,
         silver=silver_zakat,
         business_goods=business_zakat,
         agriculture=agriculture_zakat,
-        total=total_zakat
+        total=total_zakat,
+        total_assets=total_assets,
+        net_zakatable=round(net_zakatable, 2),
+        nisab_threshold=round(nisab_threshold, 2),
+        meets_nisab=meets_nisab,
     )
 
 
