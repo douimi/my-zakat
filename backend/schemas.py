@@ -271,7 +271,10 @@ class DonationResponse(BaseModel):
     stripe_session_id: Optional[str]
     certificate_filename: Optional[str]
     donated_at: datetime
-    
+    payment_method: Optional[str] = None
+    proof_filename: Optional[str] = None
+    notes: Optional[str] = None
+
     class Config:
         from_attributes = True
 

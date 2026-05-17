@@ -23,10 +23,16 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
-    # Donation stats
-    total_donations = db.query(func.sum(Donation.amount)).scalar() or 0
-    total_donors = db.query(Donation.email).distinct().count()
-    top_donor = db.query(Donation).order_by(Donation.amount.desc()).first()
+    # Donation stats — only count confirmed donations
+    # (exclude Failed, Abandoned, and any legacy Pending records)
+    confirmed_filter = (
+        ~Donation.frequency.like('Failed%')
+        & ~Donation.frequency.like('Abandoned%')
+        & ~Donation.frequency.like('Pending%')
+    )
+    total_donations = db.query(func.sum(Donation.amount)).filter(confirmed_filter).scalar() or 0
+    total_donors = db.query(Donation.email).filter(confirmed_filter).distinct().count()
+    top_donor = db.query(Donation).filter(confirmed_filter).order_by(Donation.amount.desc()).first()
     
     # Contact stats
     total_messages = db.query(ContactSubmission).count()

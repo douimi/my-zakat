@@ -5,6 +5,11 @@ export interface Donation {
   amount: number
   frequency: string
   donated_at: string
+  payment_method?: string | null
+  proof_filename?: string | null
+  notes?: string | null
+  certificate_filename?: string | null
+  stripe_session_id?: string | null
 }
 
 export interface ContactSubmission {

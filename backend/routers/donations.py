@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request, File, Form, UploadFile
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -16,6 +16,7 @@ from auth_utils import get_current_admin
 from pdf_service import generate_donation_certificate, generate_donation_certificate_to_bytes
 from email_service import send_donation_certificate_email
 from logging_config import get_logger
+from s3_service import upload_file, download_file, generate_object_key, file_exists
 
 load_dotenv()
 
@@ -165,13 +166,155 @@ async def create_donation(donation: DonationCreate, db: Session = Depends(get_db
 
 @router.get("/", response_model=List[DonationResponse])
 async def get_donations(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):
     donations = db.query(Donation).offset(skip).limit(limit).all()
     return donations
+
+
+# Allowed payment methods for manual donations
+ALLOWED_PAYMENT_METHODS = {"Cash", "Cheque", "Credit Card", "Other"}
+
+# Allowed proof file types (images + PDF)
+ALLOWED_PROOF_MIME_PREFIXES = ("image/", "application/pdf")
+MAX_PROOF_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post("/manual", response_model=DonationResponse, status_code=status.HTTP_201_CREATED)
+async def create_manual_donation(
+    name: str = Form(...),
+    email: str = Form(...),
+    amount: float = Form(...),
+    payment_method: str = Form(...),
+    notes: Optional[str] = Form(None),
+    donated_at: Optional[str] = Form(None),  # ISO date string, optional
+    proof: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: manually record a donation (cash, cheque, credit card, other).
+
+    The donation is tagged with frequency='Manual' so it stands out in the
+    list, plus a `payment_method` column with the specific channel. An
+    optional proof file (image/PDF, max 10 MB) is uploaded to S3.
+    """
+    # Validate inputs
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    if payment_method not in ALLOWED_PAYMENT_METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment method must be one of: {', '.join(sorted(ALLOWED_PAYMENT_METHODS))}",
+        )
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Donor name is required")
+
+    # Parse the donation date (defaults to now if omitted/invalid)
+    donation_date = datetime.utcnow()
+    if donated_at:
+        try:
+            # Accept both "YYYY-MM-DD" and full ISO strings
+            donation_date = datetime.fromisoformat(donated_at.replace("Z", "+00:00"))
+            # Strip timezone info — DB column is naive UTC
+            if donation_date.tzinfo is not None:
+                donation_date = donation_date.replace(tzinfo=None)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid donated_at format (use ISO 8601)")
+
+    # Handle optional proof file upload
+    proof_filename = None
+    if proof is not None and proof.filename:
+        if not any(proof.content_type.startswith(p) for p in ALLOWED_PROOF_MIME_PREFIXES):
+            raise HTTPException(
+                status_code=400,
+                detail="Proof must be an image or a PDF",
+            )
+        content = await proof.read()
+        if len(content) > MAX_PROOF_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Proof file is too large (max {MAX_PROOF_SIZE // (1024 * 1024)} MB)",
+            )
+
+        timestamp = donation_date.strftime("%Y%m%d_%H%M%S")
+        safe_name = "".join(c if c.isalnum() else "_" for c in name)[:30]
+        ext = os.path.splitext(proof.filename)[1].lower() or ""
+        object_key = f"manual_proofs/manual_{timestamp}_{safe_name}{ext}"
+        try:
+            upload_file(
+                file_content=content,
+                object_key=object_key,
+                content_type=proof.content_type,
+                metadata={"type": "manual_donation_proof", "donor_email": email},
+            )
+            proof_filename = object_key
+        except Exception as e:
+            logger.error("Failed to upload manual donation proof: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to upload proof file")
+
+    donation = Donation(
+        name=name.strip(),
+        email=email.strip(),
+        amount=amount,
+        frequency="Manual",
+        payment_method=payment_method,
+        proof_filename=proof_filename,
+        notes=notes.strip() if notes else None,
+        donated_at=donation_date,
+        certificate_filename="available",  # Allow certificate generation
+    )
+    db.add(donation)
+    db.commit()
+    db.refresh(donation)
+
+    logger.info(
+        "Manual donation recorded by admin %s: $%s from %s via %s",
+        current_admin.email, amount, email, payment_method,
+    )
+
+    return donation
+
+
+@router.get("/{donation_id}/proof")
+async def get_donation_proof(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: stream a manual donation's proof file from S3."""
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+    if not donation.proof_filename:
+        raise HTTPException(status_code=404, detail="No proof file attached to this donation")
+
+    if not file_exists(donation.proof_filename):
+        raise HTTPException(status_code=404, detail="Proof file is no longer available in storage")
+
+    content = download_file(donation.proof_filename)
+    if content is None:
+        raise HTTPException(status_code=500, detail="Failed to retrieve proof file")
+
+    # Infer content type from extension
+    ext = os.path.splitext(donation.proof_filename)[1].lower()
+    content_type_map = {
+        ".pdf": "application/pdf",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+    }
+    content_type = content_type_map.get(ext, "application/octet-stream")
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="proof_{donation_id}{ext}"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
 
 
 @router.get("/stats")
