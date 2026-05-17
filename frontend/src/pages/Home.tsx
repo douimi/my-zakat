@@ -183,6 +183,48 @@ const Home = () => {
       {/* Slideshow Section */}
       <Slideshow />
 
+      {/* Our Work teaser — scrolls to the gallery section */}
+      <button
+        type="button"
+        onClick={() => {
+          document.getElementById('our-work-in-action')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        }}
+        aria-label="Scroll to Our Work in Action"
+        className="group w-full bg-gradient-to-r from-primary-600 via-blue-600 to-primary-700 text-white py-5 px-4 hover:from-primary-700 hover:via-blue-700 hover:to-primary-800 transition-all duration-300 cursor-pointer relative overflow-hidden"
+      >
+        {/* Animated shimmer overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+
+        <div className="section-container relative z-10 flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
+          {/* Pulsing play icon */}
+          <span className="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center flex-shrink-0">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-30 animate-ping"></span>
+            <span className="relative inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+              <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white" />
+            </span>
+          </span>
+
+          {/* Text */}
+          <div className="text-center sm:text-left">
+            <p className="font-bold text-base sm:text-lg leading-tight">
+              See Our Work in Action
+            </p>
+            <p className="text-xs sm:text-sm text-blue-100">
+              Discover our latest projects through photos and videos
+            </p>
+          </div>
+
+          {/* Animated down arrow */}
+          <div className="hidden sm:flex items-center ml-2">
+            <div className="flex flex-col items-center animate-bounce">
+              <ChevronRight className="w-5 h-5 rotate-90" />
+            </div>
+          </div>
+        </div>
+      </button>
 
       {/* Impact Stats */}
       {(() => {
@@ -826,7 +868,7 @@ const Home = () => {
       )}
 
       {/* Gallery Section */}
-      <section className="py-20 bg-white relative overflow-hidden">
+      <section id="our-work-in-action" className="py-20 bg-white relative overflow-hidden scroll-mt-20">
         <div className="absolute inset-0 opacity-5">
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
         </div>
