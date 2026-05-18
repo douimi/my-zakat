@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText } from 'lucide-react'
+import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
@@ -42,6 +42,9 @@ const AdminDonations = () => {
   const [detailsDonation, setDetailsDonation] = useState<Donation | null>(null)
   const [proofBlobUrl, setProofBlobUrl] = useState<string | null>(null)
   const [proofMimeType, setProofMimeType] = useState<string | null>(null)
+  // Receipt action loading states (per donation)
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false)
+  const [emailingReceipt, setEmailingReceipt] = useState(false)
 
   const token = useAuthStore((state) => state.token)
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -231,6 +234,58 @@ const AdminDonations = () => {
       showError('Error', 'Network error while creating donation')
     } finally {
       setSubmittingManual(false)
+    }
+  }
+
+  // --- Receipt actions ---
+
+  const downloadReceipt = async (donation: Donation) => {
+    setDownloadingReceipt(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/donations/${donation.id}/receipt`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({ detail: 'Failed to download receipt' }))
+        showError('Error', errorData.detail || 'Failed to download receipt')
+        return
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const safeName = (donation.name || 'donor').replace(/\s+/g, '_')
+      const dateStr = new Date(donation.donated_at).toISOString().slice(0, 10).replace(/-/g, '')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ZDF_Donation_Receipt_${safeName}_${dateStr}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      showSuccess('Success', 'Receipt downloaded')
+    } catch {
+      showError('Error', 'Network error while downloading receipt')
+    } finally {
+      setDownloadingReceipt(false)
+    }
+  }
+
+  const emailReceipt = async (donation: Donation) => {
+    setEmailingReceipt(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/donations/${donation.id}/email-receipt`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      const data = await resp.json().catch(() => ({} as any))
+      if (resp.ok) {
+        showSuccess('Success', data.message || `Receipt emailed to ${donation.email}`)
+      } else {
+        showError('Error', data.detail || 'Failed to send receipt')
+      }
+    } catch {
+      showError('Error', 'Network error while sending receipt')
+    } finally {
+      setEmailingReceipt(false)
     }
   }
 
@@ -658,6 +713,47 @@ const AdminDonations = () => {
                   </div>
                 )}
               </dl>
+
+              {/* Receipt actions — only for valid donations */}
+              {(() => {
+                const f = (detailsDonation.frequency || '').toLowerCase()
+                const isEligible = !f.startsWith('failed') && !f.startsWith('abandoned') && !f.startsWith('pending') && detailsDonation.amount > 0
+                if (!isEligible) {
+                  return (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <p className="text-sm text-gray-500">
+                        Receipts are only available for successfully completed donations.
+                      </p>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3">Donation receipt</h4>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => downloadReceipt(detailsDonation)}
+                        disabled={downloadingReceipt}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium text-sm"
+                      >
+                        <FileDown className="w-4 h-4 mr-2" />
+                        {downloadingReceipt ? 'Downloading...' : 'Download PDF'}
+                      </button>
+                      <button
+                        onClick={() => emailReceipt(detailsDonation)}
+                        disabled={emailingReceipt}
+                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-medium text-sm"
+                      >
+                        <Mail className="w-4 h-4 mr-2" />
+                        {emailingReceipt ? 'Sending...' : `Email receipt to ${detailsDonation.email}`}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      The receipt is generated on the fly with the official ZDF template (signed by the Chairperson).
+                    </p>
+                  </div>
+                )
+              })()}
 
               {detailsDonation.proof_filename && (
                 <div className="mt-6 pt-6 border-t border-gray-200">

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, Form, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from io import BytesIO
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -315,6 +316,108 @@ async def get_donation_proof(
             "Cache-Control": "private, max-age=300",
         },
     )
+
+
+def _is_eligible_for_receipt(donation: Donation) -> bool:
+    """A receipt is only meaningful for successfully received donations."""
+    f = (donation.frequency or "").lower()
+    if f.startswith(("failed", "abandoned", "pending")):
+        return False
+    if not donation.amount or donation.amount <= 0:
+        return False
+    return True
+
+
+@router.get("/{donation_id}/receipt")
+async def admin_download_receipt(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: download the PDF receipt for any donation."""
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+
+    if not _is_eligible_for_receipt(donation):
+        raise HTTPException(
+            status_code=400,
+            detail="Receipts are only available for successfully completed donations",
+        )
+
+    # Make sure donated_at is set
+    if not donation.donated_at:
+        donation.donated_at = datetime.utcnow()
+        db.commit()
+
+    try:
+        pdf_bytes = generate_donation_certificate_to_bytes(
+            donor_name=donation.name,
+            amount=donation.amount,
+            donation_date=donation.donated_at,
+            donation_id=donation.id,
+        )
+    except Exception as e:
+        logger.error("Failed to generate receipt for donation %s: %s", donation.id, e)
+        raise HTTPException(status_code=500, detail="Failed to generate receipt")
+
+    safe_name = (donation.name or "donor").replace(" ", "_")
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="ZDF_Donation_Receipt_'
+                f'{safe_name}_{donation.donated_at.strftime("%Y%m%d")}.pdf"'
+            )
+        },
+    )
+
+
+@router.post("/{donation_id}/email-receipt")
+async def admin_email_receipt(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: send the donation receipt to the donor's email."""
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+
+    if not _is_eligible_for_receipt(donation):
+        raise HTTPException(
+            status_code=400,
+            detail="Receipts are only available for successfully completed donations",
+        )
+
+    if not donation.email or "@" not in donation.email:
+        raise HTTPException(
+            status_code=400,
+            detail="This donation has no valid donor email on file",
+        )
+
+    if not donation.donated_at:
+        donation.donated_at = datetime.utcnow()
+        db.commit()
+
+    try:
+        success = email_certificate(donation)
+    except Exception as e:
+        logger.error("Failed to email receipt for donation %s: %s", donation.id, e)
+        raise HTTPException(status_code=500, detail=f"Failed to send receipt: {e}")
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Email delivery failed. Check backend logs for SMTP errors.",
+        )
+
+    logger.info(
+        "Admin %s emailed receipt for donation %s to %s",
+        current_admin.email, donation.id, donation.email,
+    )
+    return {"message": f"Receipt sent to {donation.email}"}
 
 
 @router.get("/stats")
