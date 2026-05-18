@@ -177,7 +177,9 @@ async def get_donations(
 
 
 # Allowed payment methods for manual donations
-ALLOWED_PAYMENT_METHODS = {"Cash", "Cheque", "Credit Card", "Other"}
+# "Cheque" is accepted for backward compatibility but normalized to "Check"
+ALLOWED_PAYMENT_METHODS = {"Cash", "Check", "Cheque", "Credit Card", "Other"}
+PAYMENT_METHOD_ALIASES = {"Cheque": "Check"}
 
 # Allowed proof file types (images + PDF)
 ALLOWED_PROOF_MIME_PREFIXES = ("image/", "application/pdf")
@@ -196,7 +198,7 @@ async def create_manual_donation(
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin),
 ):
-    """Admin-only: manually record a donation (cash, cheque, credit card, other).
+    """Admin-only: manually record a donation (cash, check, credit card, other).
 
     The donation is tagged with frequency='Manual' so it stands out in the
     list, plus a `payment_method` column with the specific channel. An
@@ -206,10 +208,13 @@ async def create_manual_donation(
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
     if payment_method not in ALLOWED_PAYMENT_METHODS:
+        valid = sorted(m for m in ALLOWED_PAYMENT_METHODS if m not in PAYMENT_METHOD_ALIASES)
         raise HTTPException(
             status_code=400,
-            detail=f"Payment method must be one of: {', '.join(sorted(ALLOWED_PAYMENT_METHODS))}",
+            detail=f"Payment method must be one of: {', '.join(valid)}",
         )
+    # Normalize aliases (e.g. "Cheque" -> "Check") so the DB stays consistent
+    payment_method = PAYMENT_METHOD_ALIASES.get(payment_method, payment_method)
     if not name.strip():
         raise HTTPException(status_code=400, detail="Donor name is required")
 

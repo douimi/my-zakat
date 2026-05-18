@@ -1,5 +1,5 @@
 -- Migration 18: Add manual donation fields to donations table
--- Supports admin-created donations (cash, cheque, credit card, other) with optional proof file.
+-- Supports admin-created donations (cash, check, credit card, other) with optional proof file.
 
 ALTER TABLE donations ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
 ALTER TABLE donations ADD COLUMN IF NOT EXISTS proof_filename VARCHAR(500);

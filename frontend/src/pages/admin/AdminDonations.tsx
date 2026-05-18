@@ -589,7 +589,7 @@ const AdminDonations = () => {
                       className="input-field"
                     >
                       <option value="Cash">Cash</option>
-                      <option value="Cheque">Cheque</option>
+                      <option value="Check">Check</option>
                       <option value="Credit Card">Credit Card</option>
                       <option value="Other">Other</option>
                     </select>
@@ -613,7 +613,7 @@ const AdminDonations = () => {
                     value={manualForm.notes}
                     onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })}
                     className="input-field"
-                    placeholder="e.g. handed over at the office, cheque #1234"
+                    placeholder="e.g. handed over at the office, check #1234"
                   />
                 </div>
 
@@ -633,7 +633,7 @@ const AdminDonations = () => {
                     </p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Image or PDF, max 10 MB. Optional — used for cheques, receipts, etc.
+                    Image or PDF, max 10 MB. Optional — used for checks, receipts, etc.
                   </p>
                 </div>
               </div>

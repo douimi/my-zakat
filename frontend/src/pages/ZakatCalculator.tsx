@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
-import { Calculator, DollarSign, TrendingUp, Info, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Calculator, DollarSign, TrendingUp, Info, ArrowRight, CheckCircle, AlertCircle, X, RotateCcw } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import type { ZakatCalculation, ZakatResult } from '../types'
 import SEOHead from '../components/SEOHead'
@@ -26,6 +26,8 @@ const ZakatCalculator = () => {
   const [result, setResult] = useState<ZakatResult | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showResultModal, setShowResultModal] = useState(false)
+  const navigate = useNavigate()
 
   const { register, handleSubmit, watch, reset } = useForm<ZakatCalculation>({
     defaultValues: {
@@ -57,6 +59,7 @@ const ZakatCalculator = () => {
     try {
       const calculationResult = await donationsAPI.calculateZakat(data)
       setResult(calculationResult)
+      setShowResultModal(true)
     } catch (error: any) {
       const detail = error?.response?.data?.detail
       if (Array.isArray(detail)) {
@@ -215,6 +218,7 @@ const ZakatCalculator = () => {
                       reset()
                       setResult(null)
                       setSubmitError(null)
+                      setShowResultModal(false)
                     }}
                     className="btn-outline flex-1"
                   >
@@ -351,6 +355,172 @@ const ZakatCalculator = () => {
           </div>
         </div>
       </div>
+
+      {/* Zakat Result Modal */}
+      {showResultModal && result && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowResultModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <div className="flex justify-end p-4 pb-0">
+              <button
+                onClick={() => setShowResultModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 pb-6 -mt-4">
+              {result.meets_nisab && result.total >= 1 ? (
+                <>
+                  {/* Header — celebrates the calculation */}
+                  <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 to-blue-600 rounded-full mb-4 shadow-lg">
+                      <CheckCircle className="w-8 h-8 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                      Your Zakat Calculation is Ready
+                    </h2>
+                    <p className="text-sm text-gray-600">Here is the Zakat amount you owe</p>
+                  </div>
+
+                  {/* Big amount */}
+                  <div className="bg-gradient-to-br from-primary-50 via-blue-50 to-primary-50 border-2 border-primary-200 rounded-xl p-6 mb-6 text-center">
+                    <p className="text-sm font-medium text-primary-700 mb-1 uppercase tracking-wide">
+                      Total Zakat Due
+                    </p>
+                    <p className="text-5xl font-bold text-primary-700 mb-1">
+                      {formatUSD(result.total)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      Based on net zakatable wealth of {formatUSD(result.net_zakatable)}
+                    </p>
+                  </div>
+
+                  {/* Compact breakdown */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-gray-700">
+                      {result.wealth > 0 && (
+                        <>
+                          <span>Wealth Zakat</span>
+                          <span className="text-right font-medium">{formatUSD(result.wealth)}</span>
+                        </>
+                      )}
+                      {result.gold > 0 && (
+                        <>
+                          <span>Gold Zakat</span>
+                          <span className="text-right font-medium">{formatUSD(result.gold)}</span>
+                        </>
+                      )}
+                      {result.silver > 0 && (
+                        <>
+                          <span>Silver Zakat</span>
+                          <span className="text-right font-medium">{formatUSD(result.silver)}</span>
+                        </>
+                      )}
+                      {result.business_goods > 0 && (
+                        <>
+                          <span>Business Zakat</span>
+                          <span className="text-right font-medium">{formatUSD(result.business_goods)}</span>
+                        </>
+                      )}
+                      {result.agriculture > 0 && (
+                        <>
+                          <span>Agriculture Zakat (5%)</span>
+                          <span className="text-right font-medium">{formatUSD(result.agriculture)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => {
+                        setShowResultModal(false)
+                        navigate(`/donate?zakat_amount=${result.total.toFixed(2)}`)
+                      }}
+                      className="btn-primary flex-1 flex items-center justify-center py-3"
+                    >
+                      <ArrowRight className="w-5 h-5 mr-2" />
+                      Proceed with Donation
+                    </button>
+                    <button
+                      onClick={() => setShowResultModal(false)}
+                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                    >
+                      <RotateCcw className="w-5 h-5 mr-2" />
+                      Recalculate
+                    </button>
+                  </div>
+
+                  <p className="text-center text-xs text-gray-500 mt-4">
+                    "Proceed with Donation" will pre-fill the donation page with your Zakat amount.
+                  </p>
+                </>
+              ) : (
+                <>
+                  {/* Below-Nisab state */}
+                  <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-4">
+                      <AlertCircle className="w-8 h-8 text-yellow-600" />
+                    </div>
+                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                      No Zakat Due
+                    </h2>
+                    <p className="text-sm text-gray-600">
+                      Your net zakatable wealth is below the Nisab threshold.
+                    </p>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-sm">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-yellow-900 font-medium">Your net zakatable:</span>
+                      <span className="text-yellow-900 font-semibold">{formatUSD(result.net_zakatable)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-900 font-medium">Nisab threshold:</span>
+                      <span className="text-yellow-900 font-semibold">{formatUSD(result.nisab_threshold)}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-6">
+                    Since your wealth is below the Nisab, Zakat is not obligatory this year.
+                    You can still make a voluntary Sadaqa donation if you wish.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => {
+                        setShowResultModal(false)
+                        navigate('/donate')
+                      }}
+                      className="btn-primary flex-1 flex items-center justify-center py-3"
+                    >
+                      <ArrowRight className="w-5 h-5 mr-2" />
+                      Make a Sadaqa Donation
+                    </button>
+                    <button
+                      onClick={() => setShowResultModal(false)}
+                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                    >
+                      <RotateCcw className="w-5 h-5 mr-2" />
+                      Recalculate
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

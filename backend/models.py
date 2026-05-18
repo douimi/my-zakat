@@ -38,8 +38,8 @@ class Donation(Base):
     stripe_session_id = Column(String(255), nullable=True)  # Track Stripe session for updates
     certificate_filename = Column(String(255), nullable=True)  # PDF certificate filename
     donated_at = Column(DateTime, default=datetime.utcnow)
-    # Manual donation fields (cash, cheque, etc.)
-    payment_method = Column(String(50), nullable=True)        # Cash / Cheque / Credit Card / Other / Stripe
+    # Manual donation fields (cash, check, etc.)
+    payment_method = Column(String(50), nullable=True)        # Cash / Check / Credit Card / Other / Stripe
     proof_filename = Column(String(500), nullable=True)       # S3 key of the proof file
     notes = Column(Text, nullable=True)                       # Admin notes
 
