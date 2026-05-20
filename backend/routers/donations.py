@@ -519,6 +519,49 @@ async def get_donation_stats(db: Session = Depends(get_db)):
     }
 
 
+def _mask_donor_name(full_name: Optional[str]) -> str:
+    """Return a privacy-safe display name: first name + last initial.
+
+    "Sarah Mitchell"  -> "Sarah M."
+    "Ahmed"           -> "Ahmed"
+    "" / None         -> "Anonymous"
+    """
+    if not full_name or not full_name.strip():
+        return "Anonymous"
+    parts = full_name.strip().split()
+    first = parts[0]
+    if len(parts) == 1:
+        return first
+    last_initial = parts[-1][0].upper()
+    return f"{first} {last_initial}."
+
+
+@router.get("/recent-public")
+async def get_recent_public_donations(limit: int = 5, db: Session = Depends(get_db)):
+    """Public, privacy-safe list of top recent donations for the donate page.
+
+    Returns only a masked donor name and amount — never email or full name.
+    Sorted by amount (largest first). Excludes failed/abandoned/pending.
+    """
+    limit = max(1, min(limit, 10))
+    confirmed_filter = (
+        ~Donation.frequency.like('Failed%')
+        & ~Donation.frequency.like('Abandoned%')
+        & ~Donation.frequency.like('Pending%')
+    )
+    donations = (
+        db.query(Donation)
+        .filter(confirmed_filter, Donation.amount > 0)
+        .order_by(Donation.amount.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"name": _mask_donor_name(d.name), "amount": d.amount}
+        for d in donations
+    ]
+
+
 @router.post("/calculate-zakat", response_model=ZakatResult)
 async def calculate_zakat(calculation: ZakatCalculation):
     """Calculate Zakat with Nisab threshold check and proper liability deduction.

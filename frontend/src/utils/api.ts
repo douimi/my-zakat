@@ -95,6 +95,11 @@ export const donationsAPI = {
     const response = await api.get('/api/donations/stats')
     return response.data
   },
+
+  getRecentPublic: async (limit = 5): Promise<{ name: string; amount: number }[]> => {
+    const response = await api.get(`/api/donations/recent-public?limit=${limit}`)
+    return response.data
+  },
   
   calculateZakat: async (calculation: ZakatCalculation): Promise<ZakatResult> => {
     const response = await api.post('/api/donations/calculate-zakat', calculation)

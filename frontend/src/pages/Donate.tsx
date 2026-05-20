@@ -22,6 +22,16 @@ const Donate = () => {
   const { isAuthenticated, user } = useAuthStore()
   const { showError } = useToast()
 
+  // Recent donations (real, privacy-masked, sorted by amount)
+  const [recentDonations, setRecentDonations] = useState<{ name: string; amount: number }[]>([])
+
+  useEffect(() => {
+    donationsAPI
+      .getRecentPublic(5)
+      .then(setRecentDonations)
+      .catch(() => setRecentDonations([]))
+  }, [])
+
   // Get amount from URL params (supports both 'amount' and 'zakat_amount' for backward compatibility)
   const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
   const urlFrequency = searchParams.get('frequency')
@@ -409,26 +419,26 @@ const Donate = () => {
             </div>
 
             {/* Recent Donations */}
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Donations</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Sarah M.</span>
-                  <span className="font-semibold text-green-600">$250</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Ahmed K.</span>
-                  <span className="font-semibold text-green-600">$100</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Anonymous</span>
-                  <span className="font-semibold text-green-600">$500</span>
-                </div>
-                <div className="text-center pt-3 border-t border-gray-200">
-                  <span className="text-primary-600 font-medium">Join 10,000+ donors</span>
+            {recentDonations.length > 0 && (
+              <div className="card">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Donations</h3>
+                <div className="space-y-3 text-sm">
+                  {recentDonations.map((donation, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                      <span className="text-gray-600">{donation.name}</span>
+                      <span className="font-semibold text-green-600">
+                        ${donation.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="text-center pt-3 border-t border-gray-200">
+                    <span className="text-primary-600 font-medium">
+                      Be part of something bigger — every gift changes a life 💚
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

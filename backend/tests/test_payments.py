@@ -853,6 +853,28 @@ class TestDonationStats:
         resp = client.delete("/api/donations/999999", headers=auth_headers)
         assert resp.status_code == 404
 
+    def test_recent_public_masks_names_and_sorts(self, client: TestClient, db_session: Session):
+        """Public recent donations: masked names, sorted by amount, no email exposed."""
+        db_session.add_all([
+            Donation(name="Sarah Mitchell", email="sarah@example.com", amount=250, frequency="One-Time"),
+            Donation(name="Ahmed", email="ahmed@example.com", amount=500, frequency="One-Time"),
+            Donation(name="Failed Guy", email="f@example.com", amount=9999, frequency="Failed - declined"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/api/donations/recent-public")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # Sorted by amount desc; failed excluded
+        assert data[0]["amount"] == 500
+        assert data[0]["name"] == "Ahmed"
+        assert data[1]["name"] == "Sarah M."
+        # No email field exposed
+        assert all("email" not in item for item in data)
+        # Failed donation excluded
+        assert all(item["amount"] != 9999 for item in data)
+
     def test_get_subscriptions_requires_auth(self, client: TestClient):
         """Listing subscriptions requires admin auth."""
         resp = client.get("/api/donations/subscriptions")
