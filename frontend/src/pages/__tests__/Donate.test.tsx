@@ -28,6 +28,7 @@ vi.mock('../../utils/api', () => ({
       recent_donations: [],
       impact: { meals: 25000, families: 1200, orphans: 500 },
     }),
+    getRecentPublic: vi.fn().mockResolvedValue([]),
   },
   getStaticFileUrl: (path: string) => `http://localhost:8000${path}`,
 }))
