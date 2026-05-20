@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from database import get_db
 from models import Donation, DonationSubscription
-from schemas import DonationCreate, DonationResponse, PaymentCreate, PaymentSession, ZakatCalculation, ZakatResult, SubscriptionCreate, SubscriptionSession
+from schemas import DonationCreate, DonationUpdate, DonationResponse, PaymentCreate, PaymentSession, ZakatCalculation, ZakatResult, SubscriptionCreate, SubscriptionSession
 from auth_utils import get_current_admin
 from pdf_service import generate_donation_certificate, generate_donation_certificate_to_bytes
 from email_service import send_donation_certificate_email
@@ -174,6 +174,65 @@ async def get_donations(
 ):
     donations = db.query(Donation).offset(skip).limit(limit).all()
     return donations
+
+
+@router.put("/{donation_id}", response_model=DonationResponse)
+async def update_donation(
+    donation_id: int,
+    payload: DonationUpdate,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: edit a donation's details."""
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+
+    data = payload.dict(exclude_unset=True)
+
+    if "amount" in data and (data["amount"] is None or data["amount"] <= 0):
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+
+    # Normalize payment method alias (Cheque -> Check)
+    if "payment_method" in data and data["payment_method"]:
+        data["payment_method"] = PAYMENT_METHOD_ALIASES.get(
+            data["payment_method"], data["payment_method"]
+        )
+
+    for field, value in data.items():
+        setattr(donation, field, value)
+
+    db.commit()
+    db.refresh(donation)
+
+    logger.info("Admin %s updated donation #%s", current_admin.email, donation_id)
+    return donation
+
+
+@router.delete("/{donation_id}")
+async def delete_donation(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: permanently delete a donation. Also removes its S3 proof if any."""
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+
+    # Best-effort cleanup of the proof file in S3 (don't fail the delete if it errors)
+    if donation.proof_filename:
+        try:
+            from s3_service import delete_file
+            delete_file(donation.proof_filename, cleanup_db=False)
+        except Exception as e:
+            logger.warning("Could not delete proof file for donation %s: %s", donation_id, e)
+
+    db.delete(donation)
+    db.commit()
+
+    logger.info("Admin %s deleted donation #%s (%s)", current_admin.email, donation_id, donation.email)
+    return {"message": "Donation deleted successfully"}
 
 
 # Allowed payment methods for manual donations

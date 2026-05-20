@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown } from 'lucide-react'
+import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
@@ -45,6 +45,15 @@ const AdminDonations = () => {
   // Receipt action loading states (per donation)
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
   const [emailingReceipt, setEmailingReceipt] = useState(false)
+  // Edit donation modal
+  const [editDonation, setEditDonation] = useState<Donation | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '', email: '', amount: '', payment_method: '', notes: '', donated_at: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<Donation | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const token = useAuthStore((state) => state.token)
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -289,6 +298,89 @@ const AdminDonations = () => {
     }
   }
 
+  // --- Edit / Delete actions ---
+
+  const openEditModal = (donation: Donation) => {
+    setEditDonation(donation)
+    setEditForm({
+      name: donation.name || '',
+      email: donation.email || '',
+      amount: String(donation.amount ?? ''),
+      payment_method: donation.payment_method || '',
+      notes: donation.notes || '',
+      donated_at: donation.donated_at ? new Date(donation.donated_at).toISOString().slice(0, 10) : '',
+    })
+  }
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editDonation) return
+    const amount = parseFloat(editForm.amount)
+    if (isNaN(amount) || amount <= 0) {
+      showError('Validation', 'Amount must be greater than zero')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const body: Record<string, any> = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        amount,
+        notes: editForm.notes.trim() || null,
+      }
+      // Only send payment_method/date if present (avoid wiping Stripe metadata)
+      if (editForm.payment_method) body.payment_method = editForm.payment_method
+      if (editForm.donated_at) body.donated_at = new Date(editForm.donated_at).toISOString()
+
+      const response = await fetch(`${API_URL}/api/donations/${editDonation.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (response.ok) {
+        showSuccess('Success', 'Donation updated')
+        setEditDonation(null)
+        queryClient.invalidateQueries(['admin-donations'])
+        queryClient.invalidateQueries('donation-stats')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to update donation' }))
+        showError('Error', errorData.detail || 'Failed to update donation')
+      }
+    } catch {
+      showError('Error', 'Network error while updating donation')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/api/donations/${deleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (response.ok) {
+        showSuccess('Success', 'Donation deleted')
+        setDeleteTarget(null)
+        setDetailsDonation(null)
+        queryClient.invalidateQueries(['admin-donations'])
+        queryClient.invalidateQueries('donation-stats')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to delete donation' }))
+        showError('Error', errorData.detail || 'Failed to delete donation')
+      }
+    } catch {
+      showError('Error', 'Network error while deleting donation')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="section-container">
@@ -502,13 +594,29 @@ const AdminDonations = () => {
                       {new Date(donation.donated_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-xs sm:text-sm">
-                      <button
-                        onClick={() => setDetailsDonation(donation)}
-                        className="text-blue-600 hover:text-blue-800 inline-flex items-center"
-                        title="View details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => setDetailsDonation(donation)}
+                          className="text-blue-600 hover:text-blue-800"
+                          title="View details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openEditModal(donation)}
+                          className="text-indigo-600 hover:text-indigo-800"
+                          title="Edit donation"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(donation)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Delete donation"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -782,6 +890,162 @@ const AdminDonations = () => {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Donation Modal */}
+      {editDonation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <form onSubmit={submitEdit} className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                  <Pencil className="w-5 h-5 mr-2 text-indigo-600" />
+                  Edit Donation
+                </h3>
+                <button type="button" onClick={() => setEditDonation(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Donor name</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (USD)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Donation date</label>
+                    <input
+                      type="date"
+                      value={editForm.donated_at}
+                      onChange={(e) => setEditForm({ ...editForm, donated_at: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                {/* Only show payment method for manual donations */}
+                {editDonation.payment_method && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment method</label>
+                    <select
+                      value={editForm.payment_method}
+                      onChange={(e) => setEditForm({ ...editForm, payment_method: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Check">Check</option>
+                      <option value="Credit Card">Credit Card</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setEditDonation(null)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Donation</h3>
+                <p className="text-sm text-gray-500 mt-1">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+              <p className="text-gray-700">
+                You are about to permanently delete the donation from{' '}
+                <strong>{deleteTarget.name}</strong> ({deleteTarget.email}) of{' '}
+                <strong>${deleteTarget.amount.toLocaleString()}</strong>.
+              </p>
+              {deleteTarget.proof_filename && (
+                <p className="text-gray-500 mt-2 text-xs">
+                  The attached proof file will also be removed from storage.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-medium inline-flex items-center"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {deleting ? 'Deleting...' : 'Delete Donation'}
+              </button>
             </div>
           </div>
         </div>

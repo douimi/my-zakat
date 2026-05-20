@@ -262,6 +262,15 @@ class DonationCreate(BaseModel):
     amount: float
     frequency: str
 
+class DonationUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    frequency: Optional[str] = None
+    payment_method: Optional[str] = None
+    notes: Optional[str] = None
+    donated_at: Optional[datetime] = None
+
 class DonationResponse(BaseModel):
     id: int
     name: str

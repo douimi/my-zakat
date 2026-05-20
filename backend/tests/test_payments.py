@@ -792,6 +792,67 @@ class TestDonationStats:
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
 
+    def test_update_donation_requires_auth(self, client: TestClient):
+        """Editing a donation requires admin auth."""
+        resp = client.put("/api/donations/1", json={"amount": 50})
+        assert resp.status_code in (401, 403)
+
+    def test_update_donation_as_admin(self, client: TestClient, auth_headers: dict, db_session: Session):
+        """Admin can edit a donation's fields."""
+        d = Donation(name="Before", email="before@example.com", amount=25, frequency="One-Time")
+        db_session.add(d)
+        db_session.commit()
+        db_session.refresh(d)
+
+        resp = client.put(
+            f"/api/donations/{d.id}",
+            json={"name": "After", "amount": 99.5, "notes": "corrected"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["name"] == "After"
+        assert body["amount"] == 99.5
+        assert body["notes"] == "corrected"
+        assert body["email"] == "before@example.com"  # unchanged
+
+    def test_update_donation_rejects_zero_amount(self, client: TestClient, auth_headers: dict, db_session: Session):
+        """Editing to a zero/negative amount is rejected."""
+        d = Donation(name="Zero", email="zero@example.com", amount=25, frequency="One-Time")
+        db_session.add(d)
+        db_session.commit()
+        db_session.refresh(d)
+
+        resp = client.put(f"/api/donations/{d.id}", json={"amount": 0}, headers=auth_headers)
+        assert resp.status_code in (400, 422)
+
+    def test_update_donation_not_found(self, client: TestClient, auth_headers: dict):
+        resp = client.put("/api/donations/999999", json={"amount": 10}, headers=auth_headers)
+        assert resp.status_code == 404
+
+    def test_delete_donation_requires_auth(self, client: TestClient):
+        """Deleting a donation requires admin auth."""
+        resp = client.delete("/api/donations/1")
+        assert resp.status_code in (401, 403)
+
+    def test_delete_donation_as_admin(self, client: TestClient, auth_headers: dict, db_session: Session):
+        """Admin can delete a donation."""
+        d = Donation(name="DeleteMe", email="del@example.com", amount=40, frequency="One-Time")
+        db_session.add(d)
+        db_session.commit()
+        db_session.refresh(d)
+        donation_id = d.id
+
+        resp = client.delete(f"/api/donations/{donation_id}", headers=auth_headers)
+        assert resp.status_code == 200
+
+        # Verify it's gone
+        assert db_session.query(Donation).filter(Donation.id == donation_id).first() is None
+
+    def test_delete_donation_not_found(self, client: TestClient, auth_headers: dict):
+        resp = client.delete("/api/donations/999999", headers=auth_headers)
+        assert resp.status_code == 404
+
     def test_get_subscriptions_requires_auth(self, client: TestClient):
         """Listing subscriptions requires admin auth."""
         resp = client.get("/api/donations/subscriptions")
