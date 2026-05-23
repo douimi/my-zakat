@@ -87,32 +87,36 @@ const CampaignPopup = () => {
           <button
             type="button"
             onClick={handleCTA}
-            className="block w-full bg-gray-50 cursor-pointer group focus:outline-none"
+            className="block w-full bg-gray-50 cursor-pointer group focus:outline-none flex-shrink-0"
             aria-label={campaign.cta_text}
           >
             <img
               src={campaign.image_url!}
               alt={campaign.title}
-              className="w-full max-h-[78vh] object-contain group-hover:opacity-95 transition-opacity"
+              className="w-full max-h-[60vh] object-contain group-hover:opacity-95 transition-opacity"
             />
           </button>
         )}
 
-        {/* Compact footer: only the CTA + optional title for accessibility */}
-        <div className={`px-5 py-4 border-t border-gray-100 ${hasImage ? '' : 'pt-6'}`}>
-          {/* Visually-hidden title when image carries the content; visible otherwise */}
+        {/* Footer: title, description, and CTA — sized to complement, not compete with, the image */}
+        <div className="px-6 py-5 border-t border-gray-100 overflow-y-auto">
           <h2
             id="campaign-popup-title"
-            className={hasImage
-              ? 'sr-only'
-              : 'text-2xl font-heading font-bold text-gray-900 mb-3'}
+            className={`font-heading font-bold text-gray-900 leading-snug mb-2 ${
+              hasImage ? 'text-lg sm:text-xl' : 'text-2xl mb-3'
+            }`}
           >
             {campaign.title}
           </h2>
 
-          {/* When there is no image, fall back to text so the popup still works */}
-          {!hasImage && campaign.description && (
-            <p className="text-gray-600 leading-relaxed mb-5 whitespace-pre-wrap">
+          {campaign.description && (
+            <p
+              className={`text-gray-600 whitespace-pre-wrap ${
+                hasImage
+                  ? 'text-sm leading-relaxed mb-4 line-clamp-3'
+                  : 'leading-relaxed mb-5'
+              }`}
+            >
               {campaign.description}
             </p>
           )}
