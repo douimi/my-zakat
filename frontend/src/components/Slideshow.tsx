@@ -85,7 +85,9 @@ const Slideshow = () => {
     }
     return 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200&h=600&fit=crop'
   }
-  const imageUrl = getSlideImageUrl()
+  // Encode unsafe characters (spaces, etc.) so CSS background-image: url(...) doesn't
+  // silently fail. encodeURI preserves already-encoded sequences, so it's idempotent.
+  const imageUrl = encodeURI(getSlideImageUrl())
   
   // Reset animation when slide changes by using a key
   const slideKey = `slide-${currentSlide.id}-${currentIndex}`
@@ -96,7 +98,7 @@ const Slideshow = () => {
       <div
         className="absolute inset-0 bg-cover bg-center transition-opacity duration-2000"
         style={{
-          backgroundImage: `url(${imageUrl})`,
+          backgroundImage: `url("${imageUrl}")`,
         }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent"></div>
