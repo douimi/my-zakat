@@ -27,6 +27,7 @@ import type { Event, ProgramCategory } from '../types'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
+import CampaignPopup from '../components/CampaignPopup'
 
 const Home = () => {
 
@@ -170,6 +171,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen">
+      <CampaignPopup />
       <SEOHead
         description="MyZakat is a nonprofit Zakat distribution foundation. Donate Zakat and Sadaqa online, calculate your Zakat, explore programs, and see the impact of your generosity on communities in need."
         canonicalPath="/"

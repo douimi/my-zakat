@@ -181,7 +181,7 @@ class SlideshowSlide(Base):
 
 class UrgentNeed(Base):
     __tablename__ = "urgent_needs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False, unique=True, index=True)
@@ -192,6 +192,27 @@ class UrgentNeed(Base):
     image_url = Column(String(500), nullable=True)
     display_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Campaign(Base):
+    """Occasional campaign shown as a centered popup on the homepage.
+
+    Only one campaign should be active at a time — the API enforces this when
+    toggling. Clicking the popup redirects to /donate with the amount
+    pre-filled, or to a custom redirect_url if provided.
+    """
+    __tablename__ = "campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    amount = Column(Float, nullable=False, default=0)
+    cta_text = Column(String(100), nullable=False, default="Donate Now")
+    redirect_url = Column(String(500), nullable=True)
+    is_active = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

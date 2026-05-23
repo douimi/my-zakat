@@ -35,6 +35,7 @@ const Donate = () => {
   // Get amount from URL params (supports both 'amount' and 'zakat_amount' for backward compatibility)
   const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
   const urlFrequency = searchParams.get('frequency')
+  const urlPurpose = searchParams.get('purpose')
 
   const [selectedAmount, setSelectedAmount] = useState<number | null>(
     urlAmount ? parseFloat(urlAmount) : null
@@ -44,17 +45,21 @@ const Donate = () => {
   const stripe = useStripe()
   const elements = useElements()
 
+  const initialPurpose = urlPurpose && urlPurpose.trim()
+    ? urlPurpose.trim()
+    : (searchParams.get('zakat_amount') ? 'Zakat' : 'General Donation')
+
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<DonationForm>({
     defaultValues: {
       name: '',
       email: '',
       amount: selectedAmount || 0,
       frequency: urlFrequency || 'One-Time',
-      purpose: searchParams.get('zakat_amount') ? 'Zakat' : 'General Donation'
+      purpose: initialPurpose
     }
   })
 
-  // Pre-fill amount and frequency from URL params
+  // Pre-fill amount, frequency, and purpose from URL params
   useEffect(() => {
     if (urlAmount) {
       const amount = parseFloat(urlAmount)
@@ -66,7 +71,10 @@ const Donate = () => {
     if (urlFrequency && ['One-Time', 'Monthly', 'Annually'].includes(urlFrequency)) {
       setValue('frequency', urlFrequency)
     }
-  }, [urlAmount, urlFrequency, setValue])
+    if (urlPurpose && urlPurpose.trim()) {
+      setValue('purpose', urlPurpose.trim())
+    }
+  }, [urlAmount, urlFrequency, urlPurpose, setValue])
 
   // Pre-fill form with user data if logged in
   useEffect(() => {
@@ -88,7 +96,7 @@ const Donate = () => {
   const watchedAmount = watch('amount')
 
   const quickAmounts = [25, 50, 100, 250, 500, 1000]
-  const purposes = [
+  const basePurposes = [
     'General Donation',
     'Zakat',
     'Emergency Relief',
@@ -97,6 +105,11 @@ const Donate = () => {
     'Education',
     'Healthcare'
   ]
+  // Include the campaign / URL-provided purpose at the top if it isn't a standard option
+  const watchedPurpose = watch('purpose')
+  const purposes = watchedPurpose && !basePurposes.includes(watchedPurpose)
+    ? [watchedPurpose, ...basePurposes]
+    : basePurposes
 
   const onSubmit = async (data: DonationForm) => {
     if (!stripe || !elements) {

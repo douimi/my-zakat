@@ -251,7 +251,42 @@ class UrgentNeedResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    
+
+    class Config:
+        from_attributes = True
+
+
+# Campaign schemas (homepage popup campaigns)
+class CampaignCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    amount: float = Field(default=0, ge=0)
+    cta_text: str = Field(default="Donate Now", max_length=100)
+    redirect_url: Optional[str] = None
+    is_active: bool = False
+
+class CampaignUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    amount: Optional[float] = Field(default=None, ge=0)
+    cta_text: Optional[str] = Field(default=None, max_length=100)
+    redirect_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CampaignResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    image_url: Optional[str]
+    amount: float
+    cta_text: str
+    redirect_url: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True
 
