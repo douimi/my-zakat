@@ -194,6 +194,31 @@ async def upload_media(
 
 
 # User Management Endpoints
+VALID_ROLES = {"admin", "manager", "user"}
+
+
+def _resolve_role(payload_role, fallback_is_admin: bool) -> str:
+    """Pick the role from the payload, falling back to legacy is_admin for callers
+    that haven't been updated to send `role` yet."""
+    if payload_role:
+        if payload_role not in VALID_ROLES:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {payload_role}")
+        return payload_role
+    return "admin" if fallback_is_admin else "user"
+
+
+def _user_to_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "role": getattr(user, "role", None) or ("admin" if user.is_admin else "user"),
+        "created_at": user.created_at,
+    }
+
+
 @router.get("/users")
 async def get_all_users(
     skip: int = 0,
@@ -203,15 +228,7 @@ async def get_all_users(
 ):
     """Get all registered users"""
     users = db.query(User).offset(skip).limit(limit).all()
-
-    return [{
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "is_active": user.is_active,
-        "is_admin": user.is_admin,
-        "created_at": user.created_at
-    } for user in users]
+    return [_user_to_dict(u) for u in users]
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -225,7 +242,6 @@ async def create_user(
     The created account is marked as email_verified so the new user can log in
     immediately without going through the email verification flow.
     """
-    # Reject if email already exists
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         raise HTTPException(
@@ -233,28 +249,24 @@ async def create_user(
             detail="A user with this email already exists",
         )
 
+    role = _resolve_role(payload.role, payload.is_admin)
+
     new_user = User(
         email=payload.email,
         password=get_password_hash(payload.password),
         name=payload.name,
         is_active=payload.is_active,
-        is_admin=payload.is_admin,
+        role=role,
+        is_admin=(role == "admin"),
         email_verified=True,  # Admin-created accounts skip verification
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    logger.info("Admin %s created user %s (admin=%s)", current_admin.email, new_user.email, new_user.is_admin)
+    logger.info("Admin %s created user %s (role=%s)", current_admin.email, new_user.email, role)
 
-    return {
-        "id": new_user.id,
-        "email": new_user.email,
-        "name": new_user.name,
-        "is_active": new_user.is_active,
-        "is_admin": new_user.is_admin,
-        "created_at": new_user.created_at,
-    }
+    return _user_to_dict(new_user)
 
 
 @router.put("/users/{user_id}")
@@ -264,13 +276,12 @@ async def update_user(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Update a user's name and/or email (admin only)."""
+    """Update a user's name, email, and/or role (admin only)."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if payload.email and payload.email != user.email:
-        # Check for email collision
         clash = db.query(User).filter(User.email == payload.email, User.id != user_id).first()
         if clash:
             raise HTTPException(
@@ -282,20 +293,21 @@ async def update_user(
     if payload.name is not None:
         user.name = payload.name
 
+    if payload.role is not None:
+        if payload.role not in VALID_ROLES:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+        if current_admin.id == user_id and payload.role != "admin":
+            raise HTTPException(status_code=400, detail="You cannot demote yourself from admin")
+        user.role = payload.role
+        user.is_admin = payload.role == "admin"
+
     user.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(user)
 
-    logger.info("Admin %s updated user #%s", current_admin.email, user_id)
+    logger.info("Admin %s updated user #%s (role=%s)", current_admin.email, user_id, user.role)
 
-    return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "is_active": user.is_active,
-        "is_admin": user.is_admin,
-        "created_at": user.created_at,
-    }
+    return _user_to_dict(user)
 
 
 @router.post("/users/{user_id}/reset-password")
@@ -419,10 +431,11 @@ async def toggle_user_admin(
         raise HTTPException(status_code=400, detail="You cannot modify your own admin privileges")
     
     user.is_admin = not user.is_admin
+    user.role = "admin" if user.is_admin else "user"
     user.updated_at = datetime.utcnow()
     db.commit()
-    
-    return {"message": f"User admin status {'granted' if user.is_admin else 'revoked'} successfully", "is_admin": user.is_admin}
+
+    return {"message": f"User admin status {'granted' if user.is_admin else 'revoked'} successfully", "is_admin": user.is_admin, "role": user.role}
 
 
 @router.delete("/users/{user_id}")

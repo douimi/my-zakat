@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { ToastProvider } from './contexts/ToastContext'
@@ -66,6 +66,14 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
+
+// Managers don't have access to the admin dashboard — send them to their
+// landing page (stories) instead of the admin metrics view.
+const AdminIndex = () => {
+  const isManager = useAuthStore((s) => s.isManager)
+  if (isManager) return <Navigate to="/admin/stories" replace />
+  return <AdminDashboard />
+}
 
 function App() {
   const initFromStorage = useAuthStore((state) => state.initFromStorage)
@@ -136,7 +144,7 @@ function App() {
 
               {/* Admin routes */}
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-                <Route index element={<AdminDashboard />} />
+                <Route index element={<AdminIndex />} />
                 <Route path="donations" element={<AdminDonations />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="contacts" element={<AdminContacts />} />

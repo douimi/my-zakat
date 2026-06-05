@@ -104,5 +104,19 @@ def get_current_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Admin access required."
         )
-    
+
+    return current_user
+
+
+def get_current_manager_or_admin(
+    current_user: User = Depends(get_current_user)
+):
+    """Allow either admins or managers — used for endpoints that managers can access."""
+    role = getattr(current_user, "role", None) or ("admin" if current_user.is_admin else "user")
+    if role not in ("admin", "manager"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Manager or admin access required."
+        )
+
     return current_user

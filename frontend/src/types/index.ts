@@ -40,6 +40,8 @@ export interface Story {
   video_filename?: string
   is_active: boolean
   is_featured: boolean
+  is_pending_approval?: boolean
+  created_by_user_id?: number | null
 }
 
 export interface Testimonial {

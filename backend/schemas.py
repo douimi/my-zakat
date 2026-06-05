@@ -18,9 +18,10 @@ class UserResponse(BaseModel):
     name: Optional[str]
     is_active: bool
     is_admin: bool
+    role: str = "user"
     email_verified: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -40,12 +41,15 @@ class AdminUserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: Optional[str] = None
+    # 'admin' | 'manager' | 'user'. If omitted, falls back to is_admin for legacy callers.
+    role: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True
 
 class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     name: Optional[str] = None
+    role: Optional[str] = None
 
 class AdminPasswordReset(BaseModel):
     new_password: str = Field(min_length=8)
@@ -89,8 +93,10 @@ class StoryResponse(BaseModel):
     video_filename: Optional[str]
     is_active: bool
     is_featured: bool
+    is_pending_approval: bool = False
+    created_by_user_id: Optional[int] = None
     created_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 

@@ -336,7 +336,24 @@ export const storiesAPI = {
     const response = await api.get('/api/stories/', { params })
     return response.data
   },
-  
+
+  // Staff listing: admins see all stories, managers see approved + their own pending
+  getAllForStaff: async (pendingOnly = false) => {
+    const params = { pending_only: pendingOnly }
+    const response = await api.get('/api/stories/admin/list', { params })
+    return response.data
+  },
+
+  approve: async (id: number) => {
+    const response = await api.post(`/api/stories/${id}/approve`)
+    return response.data
+  },
+
+  reject: async (id: number) => {
+    const response = await api.post(`/api/stories/${id}/reject`)
+    return response.data
+  },
+
   getById: async (id: number): Promise<Story> => {
     const response = await api.get(`/api/stories/${id}`)
     return response.data

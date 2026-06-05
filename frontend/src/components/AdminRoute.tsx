@@ -7,13 +7,15 @@ interface AdminRouteProps {
 }
 
 const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { isAuthenticated, isAdmin } = useAuthStore()
+  const { isAuthenticated, isStaff } = useAuthStore()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
-  if (!isAdmin) {
+  // Both admins and managers can access /admin/*; route-level gating in the
+  // layout / individual pages enforces per-section permissions.
+  if (!isStaff) {
     return <Navigate to="/" replace />
   }
 

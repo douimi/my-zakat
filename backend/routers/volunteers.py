@@ -5,7 +5,7 @@ from typing import List
 from database import get_db
 from models import Volunteer
 from schemas import VolunteerCreate, VolunteerResponse
-from auth_utils import get_current_admin
+from auth_utils import get_current_manager_or_admin as get_current_admin
 from email_service import (
     send_volunteer_admin_notification,
     send_volunteer_acknowledgement,

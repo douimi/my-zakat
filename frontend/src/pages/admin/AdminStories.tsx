@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star } from 'lucide-react'
+import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star, CheckCircle2, Clock } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
-import { getImageUrl } from '../../utils/mediaHelpers'
+import { useAuthStore } from '../../store/authStore'
 import type { Story } from '../../types'
 import axios from 'axios'
 import MediaInput from '../../components/MediaInput'
@@ -39,10 +39,22 @@ const AdminStories = () => {
   
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
-  
-  const { data: stories, isLoading } = useQuery('admin-stories', () => 
-    storiesAPI.getAll(false, false) // Get all stories, not just active/featured
+  const { isAdmin, user: currentUser } = useAuthStore()
+
+  // Staff listing returns: admins → everything; managers → approved stories + their own pending ones.
+  const { data: stories, isLoading } = useQuery('admin-stories', () =>
+    storiesAPI.getAllForStaff(false)
   )
+
+  const approveMutation = useMutation(storiesAPI.approve, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('admin-stories')
+      showSuccess('Approved', 'Story is now visible on the public site')
+    },
+    onError: (error: any) => {
+      showError('Approval failed', parseErrorMessage(error))
+    },
+  })
 
   // Helper function to parse error messages from backend
   const parseErrorMessage = (error: any): string => {
@@ -250,6 +262,16 @@ const AdminStories = () => {
             Add New Story
           </button>
         </div>
+        {!isAdmin && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+            <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>
+              Stories you create are submitted for admin review and won't appear on
+              the public site until an admin approves them. Editing an already-approved
+              story sends it back to pending.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Story Form Modal */}
@@ -456,17 +478,24 @@ const AdminStories = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <div className="flex items-center space-x-2">
-                        <div className="flex items-center">
-                          {story.is_active ? (
-                            <Eye className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <EyeOff className="w-4 h-4 text-gray-400" />
-                          )}
-                          <span className={`ml-1 text-sm ${story.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                            {story.is_active ? 'Active' : 'Inactive'}
+                      <div className="flex flex-col gap-1">
+                        {story.is_pending_approval ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-1 rounded-full w-fit">
+                            <Clock className="w-3.5 h-3.5" />
+                            Pending approval
                           </span>
-                        </div>
+                        ) : (
+                          <div className="flex items-center">
+                            {story.is_active ? (
+                              <Eye className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <EyeOff className="w-4 h-4 text-gray-400" />
+                            )}
+                            <span className={`ml-1 text-sm ${story.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                              {story.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        )}
                         {story.is_featured && (
                           <div className="flex items-center text-yellow-600">
                             <Star className="w-4 h-4" />
@@ -505,21 +534,47 @@ const AdminStories = () => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEdit(story)}
-                          className="text-primary-600 hover:text-primary-700 p-2 rounded-lg hover:bg-primary-50"
-                          title="Edit story"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(story.id)}
-                          disabled={deleteMutation.isLoading}
-                          className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
-                          title="Delete story"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isAdmin && story.is_pending_approval && (
+                          <button
+                            onClick={() => approveMutation.mutate(story.id)}
+                            disabled={approveMutation.isLoading}
+                            className="text-green-700 hover:text-green-800 p-2 rounded-lg hover:bg-green-50 disabled:opacity-50"
+                            title="Approve story"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {(() => {
+                          const canEdit = isAdmin || story.created_by_user_id === currentUser?.id
+                          return (
+                            <>
+                              <button
+                                onClick={() => canEdit && handleEdit(story)}
+                                disabled={!canEdit}
+                                className={
+                                  canEdit
+                                    ? 'text-primary-600 hover:text-primary-700 p-2 rounded-lg hover:bg-primary-50'
+                                    : 'text-gray-300 p-2 cursor-not-allowed'
+                                }
+                                title={canEdit ? 'Edit story' : 'Only the creator or an admin can edit'}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => canEdit && handleDelete(story.id)}
+                                disabled={!canEdit || deleteMutation.isLoading}
+                                className={
+                                  canEdit
+                                    ? 'text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50'
+                                    : 'text-gray-300 p-2 cursor-not-allowed'
+                                }
+                                title={canEdit ? 'Delete story' : 'Only the creator or an admin can delete'}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )
+                        })()}
                       </div>
                     </td>
                   </tr>

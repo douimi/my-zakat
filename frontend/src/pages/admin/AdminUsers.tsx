@@ -3,13 +3,30 @@ import { Users, Shield, ShieldOff, Eye, Trash2, UserCheck, UserX, X, UserPlus, E
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
+type Role = 'admin' | 'manager' | 'user'
+
 interface User {
   id: number
   email: string
   name: string | null
   is_active: boolean
   is_admin: boolean
+  role?: Role
   created_at: string
+}
+
+const roleOf = (u: User): Role => (u.role as Role) || (u.is_admin ? 'admin' : 'user')
+
+const ROLE_LABEL: Record<Role, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  user: 'User',
+}
+
+const ROLE_BADGE: Record<Role, string> = {
+  admin: 'bg-purple-100 text-purple-800',
+  manager: 'bg-amber-100 text-amber-800',
+  user: 'bg-gray-100 text-gray-800',
 }
 
 interface UserDetails {
@@ -52,12 +69,14 @@ const AdminUsers = () => {
 
   // Create-user modal
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ email: '', password: '', name: '', is_admin: false })
+  const [createForm, setCreateForm] = useState<{ email: string; password: string; name: string; role: Role }>({
+    email: '', password: '', name: '', role: 'user',
+  })
   const [creating, setCreating] = useState(false)
 
   // Edit-user modal
   const [editUser, setEditUser] = useState<User | null>(null)
-  const [editForm, setEditForm] = useState({ email: '', name: '' })
+  const [editForm, setEditForm] = useState<{ email: string; name: string; role: Role }>({ email: '', name: '', role: 'user' })
   const [updating, setUpdating] = useState(false)
 
   // Reset-password modal
@@ -267,14 +286,15 @@ const AdminUsers = () => {
           email: createForm.email.trim(),
           password: createForm.password,
           name: createForm.name.trim() || null,
-          is_admin: createForm.is_admin,
+          role: createForm.role,
+          is_admin: createForm.role === 'admin',
           is_active: true,
         }),
       })
       if (response.ok) {
         showSuccess('Success', 'User created successfully')
         setShowCreateModal(false)
-        setCreateForm({ email: '', password: '', name: '', is_admin: false })
+        setCreateForm({ email: '', password: '', name: '', role: 'user' })
         fetchUsers()
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to create user' }))
@@ -301,6 +321,7 @@ const AdminUsers = () => {
         body: JSON.stringify({
           email: editForm.email.trim() || undefined,
           name: editForm.name.trim() || null,
+          role: editForm.role,
         }),
       })
       if (response.ok) {
@@ -452,13 +473,9 @@ const AdminUsers = () => {
                   </td>
                   <td className="px-3 sm:px-6 py-4">
                     <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${
-                        user.is_admin
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${ROLE_BADGE[roleOf(user)]}`}
                     >
-                      {user.is_admin ? 'Admin' : 'User'}
+                      {ROLE_LABEL[roleOf(user)]}
                     </span>
                   </td>
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 hidden md:table-cell">
@@ -475,7 +492,7 @@ const AdminUsers = () => {
                     <button
                       onClick={() => {
                         setEditUser(user)
-                        setEditForm({ email: user.email, name: user.name || '' })
+                        setEditForm({ email: user.email, name: user.name || '', role: roleOf(user) })
                       }}
                       className="text-indigo-600 hover:text-indigo-900"
                       title="Edit User"
@@ -791,15 +808,18 @@ const AdminUsers = () => {
                   />
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={createForm.is_admin}
-                    onChange={(e) => setCreateForm({ ...createForm, is_admin: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded"
-                  />
-                  <span className="text-sm text-gray-700">Grant admin privileges</span>
-                </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                  <select
+                    value={createForm.role}
+                    onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="user">User — public donor / signup</option>
+                    <option value="manager">Manager — contacts, volunteers, stories (with approval)</option>
+                    <option value="admin">Admin — full access</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-6">
@@ -862,6 +882,23 @@ const AdminUsers = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Full name"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
+                    disabled={currentUser?.id === editUser?.id}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                  >
+                    <option value="user">User</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  {currentUser?.id === editUser?.id && (
+                    <p className="text-xs text-gray-500 mt-1">You can't change your own role.</p>
+                  )}
                 </div>
 
                 <p className="text-xs text-gray-500">

@@ -30,9 +30,17 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const location = useLocation()
-  const { logout, user } = useAuthStore()
+  const { logout, user, isAdmin, isManager } = useAuthStore()
 
-  const navigation = [
+  // Managers see only the items they have access to: contacts, volunteers,
+  // and stories (with the approval workflow). Everything else is admin-only.
+  const managerAllowed = new Set([
+    '/admin/contacts',
+    '/admin/volunteers',
+    '/admin/stories',
+  ])
+
+  const allNavigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Donations', href: '/admin/donations', icon: Heart },
     { name: 'Users', href: '/admin/users', icon: UserCog },
@@ -52,6 +60,10 @@ const AdminLayout = () => {
     { name: 'S3 Media Browser', href: '/admin/s3-media', icon: FolderOpen },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
   ]
+
+  const navigation = isAdmin
+    ? allNavigation
+    : allNavigation.filter((item) => managerAllowed.has(item.href))
 
   const isActive = (href: string) => {
     if (href === '/admin') {

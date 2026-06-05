@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey
 from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime
@@ -46,18 +46,24 @@ class Donation(Base):
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(100), nullable=False, unique=True, index=True)
     password = Column(String(200), nullable=False)
     name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False)  # Flag to identify admin users
+    # role: 'admin' | 'manager' | 'user'. `is_admin` is kept in sync for legacy code.
+    role = Column(String(20), nullable=False, default="user", server_default="user", index=True)
+    is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     verification_token = Column(String(255), nullable=True, unique=True, index=True)
     verification_token_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def is_manager(self) -> bool:
+        return self.role == "manager"
 
 
 class Event(Base):
@@ -84,7 +90,7 @@ class Volunteer(Base):
 
 class Story(Base):
     __tablename__ = "stories"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(150), nullable=False)
     summary = Column(Text, nullable=False)
@@ -93,6 +99,10 @@ class Story(Base):
     video_filename = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     is_featured = Column(Boolean, default=False)
+    # Approval workflow: manager-created (or manager-edited) stories stay hidden
+    # from the public site until an admin approves them.
+    is_pending_approval = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
 class PressRelease(Base):

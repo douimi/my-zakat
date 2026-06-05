@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import ContactSubmission
 from schemas import ContactCreate, ContactResponse
-from auth_utils import get_current_admin
+from auth_utils import get_current_manager_or_admin as get_current_admin
 from email_service import (
     send_contact_reply_email,
     send_contact_admin_notification,
