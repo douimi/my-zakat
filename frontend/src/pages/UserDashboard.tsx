@@ -48,7 +48,7 @@ const UserDashboard = () => {
   const [cancellingId, setCancellingId] = useState<number | null>(null)
   const [regeneratingId, setRegeneratingId] = useState<number | null>(null)
   const [emailingId, setEmailingId] = useState<number | null>(null)
-  const { user, token, isAuthenticated, isAdmin, logout } = useAuthStore()
+  const { user, token, isAuthenticated, isAdmin, isStaff, logout } = useAuthStore()
   const navigate = useNavigate()
   const { showSuccess, showError } = useToast()
 
@@ -304,13 +304,13 @@ const UserDashboard = () => {
                 <Home className="w-4 h-4" />
                 <span>Back to Home</span>
               </button>
-              {isAdmin && (
+              {isStaff && (
                 <button
                   onClick={() => navigate('/admin')}
                   className="flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200"
                 >
                   <Shield className="w-4 h-4" />
-                  <span>Admin Console</span>
+                  <span>{isAdmin ? 'Admin Console' : 'Manager Console'}</span>
                 </button>
               )}
               <button

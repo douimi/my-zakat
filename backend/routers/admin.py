@@ -366,6 +366,7 @@ async def get_user_details(
             "name": user.name,
             "is_active": user.is_active,
             "is_admin": user.is_admin,
+            "role": getattr(user, "role", None) or ("admin" if user.is_admin else "user"),
             "created_at": user.created_at
         },
         "donations": [{

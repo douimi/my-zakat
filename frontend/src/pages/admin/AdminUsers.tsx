@@ -610,9 +610,11 @@ const AdminUsers = () => {
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Role</p>
-                        <p className="font-medium">
-                          {selectedUser.user.is_admin ? '👑 Admin' : '👤 User'}
-                        </p>
+                        <span
+                          className={`inline-flex items-center mt-0.5 px-2 py-1 text-xs font-semibold rounded-full ${ROLE_BADGE[roleOf(selectedUser.user)]}`}
+                        >
+                          {ROLE_LABEL[roleOf(selectedUser.user)]}
+                        </span>
                       </div>
                     </div>
                   </div>

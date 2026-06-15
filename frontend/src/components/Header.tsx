@@ -49,7 +49,7 @@ const Header = () => {
   const profileDropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const navigate = useNavigate()
-  const { isAuthenticated, isAdmin, logout } = useAuthStore()
+  const { isAuthenticated, isAdmin, isStaff, logout } = useAuthStore()
 
   // Fetch urgent needs for dropdown
   const { data: urgentNeeds } = useQuery('urgent-needs-nav', () => urgentNeedsAPI.getAll(true), {
@@ -526,14 +526,14 @@ const Header = () => {
                           <Gift className="w-4 h-4" />
                           <span className="font-medium">My Donations</span>
                         </Link>
-                        {isAdmin && (
+                        {isStaff && (
                           <Link
                             to="/admin"
                             onClick={() => setIsProfileDropdownOpen(false)}
                             className="flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg text-sm text-gray-700 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
                           >
                             <Shield className="w-4 h-4" />
-                            <span className="font-medium">Admin Console</span>
+                            <span className="font-medium">{isAdmin ? 'Admin Console' : 'Manager Console'}</span>
                           </Link>
                         )}
                         <div className="border-t border-gray-100 my-2"></div>
@@ -839,14 +839,14 @@ const Header = () => {
                         <Gift className="w-4 h-4" />
                         <span>My Donations</span>
                       </Link>
-                      {isAdmin && (
+                      {isStaff && (
                         <Link
                           to="/admin"
                           onClick={() => setIsMobileMenuOpen(false)}
                           className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-purple-600 border border-purple-600 rounded-lg hover:bg-purple-50"
                         >
                           <Shield className="w-4 h-4" />
-                          <span>Admin Console</span>
+                          <span>{isAdmin ? 'Admin Console' : 'Manager Console'}</span>
                         </Link>
                       )}
                       <button
