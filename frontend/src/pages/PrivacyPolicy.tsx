@@ -170,8 +170,8 @@ const PrivacyPolicy = () => {
                       MyZakat.
                     </li>
                     <li>
-                      Texting our published keyword (e.g., <strong>JOIN</strong>) to our SMS
-                      number, which constitutes your written consent to receive messages.
+                      Texting the keyword <strong>START</strong> to our SMS number, which
+                      constitutes your written consent to receive messages.
                     </li>
                   </ul>
                   <p className="text-gray-600 leading-relaxed mt-2">
@@ -191,7 +191,7 @@ const PrivacyPolicy = () => {
                       Reply <strong>STOP</strong> to any text message you receive from us.
                       You will receive one final confirmation message acknowledging your
                       opt-out, and you will not receive any further texts from us unless
-                      you re-subscribe.
+                      you re-subscribe by texting <strong>START</strong> again.
                     </li>
                     <li>
                       Email <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a> with
