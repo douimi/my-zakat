@@ -147,7 +147,95 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Data Security</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Opt-In and Opt-Out</h2>
+              <p className="text-gray-600 leading-relaxed mb-4">
+                You are in full control of the communications you receive from MyZakat.
+                This section describes exactly how to opt in and how to opt out of each
+                channel.
+              </p>
+
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">SMS / Text Messages — Opt-In</h3>
+                  <p className="text-gray-600 leading-relaxed mb-2">
+                    You can opt in to receive text messages from MyZakat in either of the
+                    following ways. We will never add your phone number to our SMS list
+                    without one of these explicit, affirmative actions:
+                  </p>
+                  <ul className="list-disc list-inside text-gray-600 space-y-1 ml-4">
+                    <li>
+                      Submitting your mobile number through our SMS opt-in form on the
+                      MyZakat website and <strong>checking the consent box</strong> that
+                      explicitly states you agree to receive recurring text messages from
+                      MyZakat.
+                    </li>
+                    <li>
+                      Texting our published keyword (e.g., <strong>JOIN</strong>) to our SMS
+                      number, which constitutes your written consent to receive messages.
+                    </li>
+                  </ul>
+                  <p className="text-gray-600 leading-relaxed mt-2">
+                    Your consent is not required as a condition of purchasing any goods or
+                    services, or of making a donation.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">SMS / Text Messages — Opt-Out</h3>
+                  <p className="text-gray-600 leading-relaxed mb-2">
+                    You may opt out of MyZakat text messages at any time, free of charge,
+                    using any of the following methods:
+                  </p>
+                  <ul className="list-disc list-inside text-gray-600 space-y-1 ml-4">
+                    <li>
+                      Reply <strong>STOP</strong> to any text message you receive from us.
+                      You will receive one final confirmation message acknowledging your
+                      opt-out, and you will not receive any further texts from us unless
+                      you re-subscribe.
+                    </li>
+                    <li>
+                      Email <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a> with
+                      the subject line "Unsubscribe SMS" and the mobile number you wish to
+                      remove.
+                    </li>
+                    <li>
+                      Call us at <a href="tel:+18336992528" className="text-primary-600 hover:underline">1-833-MYZAKAT</a> and
+                      ask to be removed from our SMS list.
+                    </li>
+                  </ul>
+                  <p className="text-gray-600 leading-relaxed mt-2">
+                    Opting out of SMS does not opt you out of other channels (such as
+                    email or postal mail). To re-subscribe at a later date, simply repeat
+                    the opt-in process above.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Email — Opt-In and Opt-Out</h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    You opt in to email communications by providing your email address
+                    through one of our forms (donation, newsletter signup, contact, or
+                    account registration). You can opt out at any time by clicking the
+                    <strong> "Unsubscribe"</strong> link at the bottom of any marketing
+                    email we send you, or by emailing <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>.
+                    Transactional emails (donation receipts, account security notices) are
+                    sent regardless of marketing-email preferences.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Cookies and Tracking — Opt-Out</h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    You can disable non-essential cookies through your browser settings.
+                    Disabling cookies may affect some functionality of our website but
+                    will not prevent you from making donations or contacting us.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Data Security</h2>
               <p className="text-gray-600 leading-relaxed">
                 We implement appropriate technical and organizational security measures to protect your personal information 
                 against unauthorized access, alteration, disclosure, or destruction. However, no method of transmission over 
@@ -156,7 +244,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Your Rights</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Your Rights</h2>
               <p className="text-gray-600 leading-relaxed mb-4">
                 Depending on your location, you may have certain rights regarding your personal information, including:
               </p>
@@ -174,7 +262,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Cookies and Tracking Technologies</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Cookies and Tracking Technologies</h2>
               <p className="text-gray-600 leading-relaxed">
                 We use cookies and similar tracking technologies to enhance your experience on our website. You can control 
                 cookie preferences through your browser settings. However, disabling cookies may limit some functionality of our website.
@@ -182,7 +270,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Children's Privacy</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Children's Privacy</h2>
               <p className="text-gray-600 leading-relaxed">
                 Our services are not directed to individuals under the age of 18. We do not knowingly collect personal 
                 information from children. If you believe we have collected information from a child, please contact us immediately.
@@ -190,7 +278,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Changes to This Privacy Policy</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Changes to This Privacy Policy</h2>
               <p className="text-gray-600 leading-relaxed">
                 We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new 
                 Privacy Policy on this page and updating the "Last updated" date. You are advised to review this Privacy 
@@ -199,7 +287,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Contact Us</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">12. Contact Us</h2>
               <p className="text-gray-600 leading-relaxed mb-4">
                 If you have any questions about this Privacy Policy or our data practices, please contact us:
               </p>
