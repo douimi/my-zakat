@@ -171,74 +171,65 @@ jobs:
   # ---------------------------------------------------------------
   deploy:
     name: Deploy to Production
-    runs-on: ubuntu-latest
+    # Self-hosted runner installed on the VPS itself. Bypasses GitHub Actions
+    # → Hostinger egress filtering (the previous appleboy/ssh-action setup
+    # kept failing with `dial tcp ***:22: i/o timeout` when upstream routing
+    # to the VPS was flaky).
+    runs-on: [self-hosted, deploy]
     timeout-minutes: 15
     needs: [test, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Deploy on VPS
+        env:
+          # Ensure /usr/local/bin is in PATH so docker / docker compose are found
+          # regardless of how the runner service was started.
+          PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        run: |
+          set -e
 
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          command_timeout: 12m
-          script: |
-            set -e
+          DEPLOY_DIR="/root/prod/my-zakat"
+          COMPOSE_FILE="docker-compose.traefik.yml"
+          ENV_FILE="env.production"
 
-            DEPLOY_DIR="/root/prod/my-zakat"
-            COMPOSE_FILE="docker-compose.traefik.yml"
-            ENV_FILE="env.production"
+          echo "=== Deployment started at $(date) ==="
 
-            echo "=== Deployment started at $(date) ==="
+          cd "$DEPLOY_DIR"
 
-            cd "$DEPLOY_DIR"
+          echo "--- Pulling latest code from GitHub ---"
+          git fetch origin main
+          git reset --hard origin/main
 
-            # Pull latest code
-            echo "--- Pulling latest code from GitHub ---"
-            git fetch origin main
-            git reset --hard origin/main
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "ERROR: $ENV_FILE not found in $DEPLOY_DIR"
+            exit 1
+          fi
 
-            # Verify env.production exists
-            if [ ! -f "$ENV_FILE" ]; then
-              echo "ERROR: $ENV_FILE not found in $DEPLOY_DIR"
-              exit 1
-            fi
+          docker network create traefik-network 2>/dev/null || true
+          mkdir -p letsencrypt
 
-            # Ensure traefik network exists
-            docker network create traefik-network 2>/dev/null || true
-            mkdir -p letsencrypt
+          echo "--- Building Docker images ---"
+          docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend
 
-            # Build new images
-            echo "--- Building Docker images ---"
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend
+          echo "--- Restarting services ---"
+          docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
-            # Restart services
-            echo "--- Restarting services ---"
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+          echo "--- Waiting for services to be healthy ---"
+          sleep 15
 
-            # Health check
-            echo "--- Waiting for services to be healthy ---"
-            sleep 15
+          HEALTH=$(curl -sf http://localhost:8000/health || echo "FAILED")
+          if echo "$HEALTH" | grep -q "healthy"; then
+            echo "Backend health check: PASSED"
+          else
+            echo "WARNING: Backend health check returned: $HEALTH"
+            docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
+          fi
 
-            HEALTH=$(curl -sf http://localhost:8000/health || echo "FAILED")
-            if echo "$HEALTH" | grep -q "healthy"; then
-              echo "Backend health check: PASSED"
-            else
-              echo "WARNING: Backend health check returned: $HEALTH"
-              docker compose -f "$COMPOSE_FILE" logs --tail=30 backend
-            fi
+          docker image prune -f
+          docker compose -f "$COMPOSE_FILE" ps
 
-            # Cleanup
-            docker image prune -f
-            docker compose -f "$COMPOSE_FILE" ps
-
-            echo "=== Deployment completed at $(date) ==="
+          echo "=== Deployment completed at $(date) ==="
 
       - name: Notify deployment result
         if: always()
