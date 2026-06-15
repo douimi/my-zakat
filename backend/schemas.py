@@ -378,6 +378,25 @@ class SubscriptionCreate(BaseModel):
     payment_day: int
     payment_month: Optional[int] = None
 
+
+class SmsOptInRequest(BaseModel):
+    """Public SMS opt-in form payload (TCPA / 10DLC compliant)."""
+    name: str = Field(min_length=2, max_length=100)
+    phone: str = Field(min_length=7, max_length=30)
+    email: Optional[EmailStr] = None
+    consent: bool = Field(description="Must be True — user checked the consent box")
+    agreed_to_text: str = Field(
+        min_length=10,
+        max_length=2000,
+        description="Exact disclosure text the user agreed to, stored for proof of consent",
+    )
+
+
+class SmsOptInResponse(BaseModel):
+    success: bool
+    message: str
+    masked_phone: str
+
 class SubscriptionSession(BaseModel):
     id: str
 

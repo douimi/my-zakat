@@ -133,14 +133,19 @@ class Testimonial(Base):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=True)
     email = Column(String(100), nullable=False)
-    phone = Column(String(30), nullable=True)
+    phone = Column(String(30), nullable=True, index=True)
     wants_email = Column(Boolean, default=True)
     wants_sms = Column(Boolean, default=False)
     subscribed_at = Column(DateTime, default=datetime.utcnow)
+    # 10DLC / TCPA proof-of-consent: capture the exact moment, source IP, and
+    # disclosure wording the user agreed to when they opted in to SMS.
+    sms_consent_at = Column(DateTime, nullable=True)
+    sms_consent_ip = Column(String(45), nullable=True)
+    sms_consent_text = Column(Text, nullable=True)
 
 
 class DonationSubscription(Base):

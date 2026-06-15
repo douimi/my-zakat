@@ -115,6 +115,11 @@ const Footer = () => {
                   Terms of Service
                 </Link>
               </li>
+              <li>
+                <Link to="/sms-opt-in" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
+                  Text Updates (SMS Opt-In)
+                </Link>
+              </li>
             </ul>
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
