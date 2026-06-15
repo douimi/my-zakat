@@ -81,10 +81,73 @@ const PrivacyPolicy = () => {
                 <li><strong>Protection of Rights:</strong> We may share information to protect our rights, property, or safety, or that of our users</li>
                 <li><strong>With Your Consent:</strong> We may share information with your explicit consent</li>
               </ul>
+              <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-gray-800 leading-relaxed">
+                  <strong>No Sharing of Mobile / SMS Opt-In Data:</strong> No mobile information,
+                  phone numbers, or SMS opt-in consent will be shared with third parties or
+                  affiliates for marketing or promotional purposes. Information collected from
+                  you as part of SMS / text-messaging consent (including your phone number and
+                  the fact that you opted in) is used solely to deliver the messages you have
+                  agreed to receive and is not sold, rented, or shared with any third party for
+                  marketing. This exclusion applies to all of the sharing categories listed
+                  above.
+                </p>
+              </div>
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">5. Data Security</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">5. SMS / Text Messaging Communications</h2>
+              <p className="text-gray-600 leading-relaxed mb-4">
+                If you opt in to receive text (SMS) messages from MyZakat, the following terms apply:
+              </p>
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+                <li>
+                  <strong>Program description:</strong> By opting in you agree to receive
+                  recurring transactional and informational text messages from MyZakat —
+                  including donation receipts, campaign updates, urgent-need appeals, and
+                  event reminders.
+                </li>
+                <li>
+                  <strong>Opt-in required:</strong> You will only receive text messages from us
+                  after you have explicitly opted in by submitting your mobile number through
+                  our SMS opt-in form or by texting our published keyword to our number. We
+                  never add a phone number to our SMS list without that explicit consent.
+                </li>
+                <li>
+                  <strong>Message frequency:</strong> Message frequency varies depending on the
+                  type of communication you have opted in to (typically up to 4 messages per
+                  month).
+                </li>
+                <li>
+                  <strong>Message and data rates:</strong> Message and data rates may apply
+                  depending on your wireless carrier and plan. MyZakat does not charge for the
+                  messages themselves.
+                </li>
+                <li>
+                  <strong>HELP and STOP:</strong> You can reply <strong>HELP</strong> at any time
+                  for help, or <strong>STOP</strong> at any time to unsubscribe and stop receiving
+                  text messages from us. After sending STOP, you will receive one final
+                  confirmation message and will not be texted again unless you re-subscribe.
+                </li>
+                <li>
+                  <strong>Supported carriers:</strong> Carriers (including but not limited to
+                  AT&amp;T, T-Mobile, Verizon, US Cellular) are not liable for delayed or
+                  undelivered messages.
+                </li>
+                <li>
+                  <strong>Data confidentiality:</strong> As stated in Section 4, your mobile
+                  phone number and SMS opt-in consent will <strong>not</strong> be shared with
+                  any third party or affiliate for marketing purposes under any circumstances.
+                </li>
+              </ul>
+              <p className="text-gray-600 leading-relaxed mt-4">
+                For questions about our SMS program, email <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a> or
+                call 1-833-MYZAKAT.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Data Security</h2>
               <p className="text-gray-600 leading-relaxed">
                 We implement appropriate technical and organizational security measures to protect your personal information 
                 against unauthorized access, alteration, disclosure, or destruction. However, no method of transmission over 
@@ -93,7 +156,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Your Rights</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Your Rights</h2>
               <p className="text-gray-600 leading-relaxed mb-4">
                 Depending on your location, you may have certain rights regarding your personal information, including:
               </p>
@@ -111,7 +174,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Cookies and Tracking Technologies</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Cookies and Tracking Technologies</h2>
               <p className="text-gray-600 leading-relaxed">
                 We use cookies and similar tracking technologies to enhance your experience on our website. You can control 
                 cookie preferences through your browser settings. However, disabling cookies may limit some functionality of our website.
@@ -119,7 +182,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Children's Privacy</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Children's Privacy</h2>
               <p className="text-gray-600 leading-relaxed">
                 Our services are not directed to individuals under the age of 18. We do not knowingly collect personal 
                 information from children. If you believe we have collected information from a child, please contact us immediately.
@@ -127,7 +190,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Changes to This Privacy Policy</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Changes to This Privacy Policy</h2>
               <p className="text-gray-600 leading-relaxed">
                 We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new 
                 Privacy Policy on this page and updating the "Last updated" date. You are advised to review this Privacy 
@@ -136,7 +199,7 @@ const PrivacyPolicy = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Contact Us</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Contact Us</h2>
               <p className="text-gray-600 leading-relaxed mb-4">
                 If you have any questions about this Privacy Policy or our data practices, please contact us:
               </p>
