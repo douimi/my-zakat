@@ -111,28 +111,59 @@ def generate_video_thumbnail(video_data: bytes, output_format: str = 'JPEG') -> 
             thumbnail_path = thumbnail_file.name
         
         try:
-            # Use ffmpeg to extract frame at 1 second
+            # Use ffmpeg to extract frame at 1 second.
+            #
+            # PERFORMANCE NOTE: `-ss` is placed BEFORE `-i` (input seeking) so
+            # ffmpeg uses the MP4 index to jump directly to the nearest keyframe.
+            # If `-ss` were placed after `-i` (output seeking) ffmpeg would decode
+            # from byte 0 until reaching the seek point, which can take 15-30s on
+            # a large phone-recorded video. Input seeking is ~instant regardless
+            # of file size.
+            #
+            # `-an` skips the audio stream entirely (no decoder setup), and
+            # `-loglevel error` drops verbose progress lines that slow the pipe.
             cmd = [
                 'ffmpeg',
+                '-loglevel', 'error',
+                '-ss', '00:00:01',
                 '-i', video_path,
-                '-ss', '00:00:01',  # Seek to 1 second
-                '-vframes', '1',  # Extract 1 frame
+                '-frames:v', '1',
+                '-an',
                 '-vf', f'scale={THUMBNAIL_WIDTH}:{THUMBNAIL_HEIGHT}:force_original_aspect_ratio=decrease',
-                '-q:v', '2',  # High quality
-                '-y',  # Overwrite output file
-                thumbnail_path
+                '-q:v', '2',
+                '-y',
+                thumbnail_path,
             ]
-            
+
             result = subprocess.run(cmd, capture_output=True, timeout=30)
-            
-            if result.returncode == 0 and os.path.exists(thumbnail_path):
+
+            # Fallback: if input-seek failed (e.g. the keyframe at ~1s could not
+            # be located in an unusual / damaged container), retry with output
+            # seeking which is slower but more tolerant of broken indices.
+            if result.returncode != 0 or not os.path.exists(thumbnail_path) or os.path.getsize(thumbnail_path) == 0:
+                logger.info("Input-seek thumbnail failed, falling back to output-seek")
+                cmd_fallback = [
+                    'ffmpeg',
+                    '-loglevel', 'error',
+                    '-i', video_path,
+                    '-ss', '00:00:01',
+                    '-frames:v', '1',
+                    '-an',
+                    '-vf', f'scale={THUMBNAIL_WIDTH}:{THUMBNAIL_HEIGHT}:force_original_aspect_ratio=decrease',
+                    '-q:v', '2',
+                    '-y',
+                    thumbnail_path,
+                ]
+                result = subprocess.run(cmd_fallback, capture_output=True, timeout=60)
+
+            if result.returncode == 0 and os.path.exists(thumbnail_path) and os.path.getsize(thumbnail_path) > 0:
                 with open(thumbnail_path, 'rb') as f:
                     thumbnail_data = f.read()
-                
+
                 logger.info("Video thumbnail generated: %s bytes", len(thumbnail_data))
                 return thumbnail_data
             else:
-                logger.warning("ffmpeg thumbnail generation failed: %s", result.stderr.decode())
+                logger.warning("ffmpeg thumbnail generation failed: %s", result.stderr.decode(errors='replace'))
                 return None
         finally:
             # Clean up temporary files
