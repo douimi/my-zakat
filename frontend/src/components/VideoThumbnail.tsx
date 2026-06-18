@@ -76,7 +76,6 @@ const VideoThumbnail = ({
 
     const generateThumbnail = () => {
       if (!videoRef.current || !canvasRef.current || !mounted) {
-        console.log('VideoThumbnail: Missing refs or unmounted', { videoRef: !!videoRef.current, canvasRef: !!canvasRef.current, mounted })
         return
       }
 
@@ -90,26 +89,16 @@ const VideoThumbnail = ({
         return
       }
       
-      console.log('VideoThumbnail: Starting thumbnail generation for', videoSrc)
 
       const handleLoadedMetadata = () => {
         if (!video || !mounted) return
-        console.log('VideoThumbnail: loadedmetadata', { 
-          videoSrc, 
-          duration: video.duration, 
-          readyState: video.readyState,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight
-        })
         
         // Try to seek to a specific time to get a frame
         // Use a small offset from the start
         const seekTime = Math.min(0.5, (video.duration || 10) * 0.1)
         try {
           video.currentTime = seekTime
-          console.log('VideoThumbnail: Seeking to', seekTime)
         } catch (e) {
-          console.warn('VideoThumbnail: Could not set currentTime, trying immediate capture', e)
           // If seek fails, try immediate capture
           setTimeout(() => {
             if (mounted && video.readyState >= 2) {
@@ -121,17 +110,10 @@ const VideoThumbnail = ({
 
       const captureCurrentFrame = () => {
         if (!video || !canvas || !ctx || !mounted) {
-          console.log('VideoThumbnail: captureCurrentFrame - missing refs', { video: !!video, canvas: !!canvas, ctx: !!ctx, mounted })
           setIsGenerating(false)
           return false
         }
         
-        console.log('VideoThumbnail: captureCurrentFrame called', {
-          readyState: video.readyState,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          currentTime: video.currentTime
-        })
         
         // Direct capture attempt
         const doCapture = () => {
@@ -139,7 +121,6 @@ const VideoThumbnail = ({
             const width = video.videoWidth
             const height = video.videoHeight
             
-            console.log('VideoThumbnail: doCapture attempt', { width, height })
             
             if (width > 0 && height > 0) {
               canvas.width = width
@@ -149,10 +130,6 @@ const VideoThumbnail = ({
                 ctx.drawImage(video, 0, 0, width, height)
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
                 
-                console.log('VideoThumbnail: Canvas draw successful', { 
-                  dataUrlLength: dataUrl?.length,
-                  isValid: dataUrl && dataUrl !== 'data:,'
-                })
                 
                 if (mounted && dataUrl && dataUrl !== 'data:,') {
                   try {
@@ -165,16 +142,13 @@ const VideoThumbnail = ({
                   if (onThumbnailGenerated) {
                     onThumbnailGenerated(dataUrl)
                   }
-                  console.log('VideoThumbnail: ✅ Thumbnail set successfully!')
                   return true
                 } else {
-                  console.warn('VideoThumbnail: Invalid dataUrl', { dataUrl: dataUrl?.substring(0, 50) })
                 }
               } catch (drawError) {
                 console.error('VideoThumbnail: Canvas drawImage error', drawError)
               }
             } else {
-              console.warn('VideoThumbnail: Invalid dimensions', { width, height })
             }
           } catch (error) {
             console.error('VideoThumbnail: Error in doCapture', error)
@@ -191,7 +165,6 @@ const VideoThumbnail = ({
         
         // If immediate capture failed, try playing briefly
         if (video.paused && video.readyState >= 2) {
-          console.log('VideoThumbnail: Trying to play video to get frame')
           video.play().then(() => {
             setTimeout(() => {
               if (mounted) {
@@ -214,7 +187,6 @@ const VideoThumbnail = ({
       
       const tryCapture = () => {
         if (!video || !canvas || !ctx || !mounted) {
-          console.log('VideoThumbnail: tryCapture - missing refs')
           setIsGenerating(false)
           return false
         }
@@ -223,12 +195,6 @@ const VideoThumbnail = ({
           const width = video.videoWidth || 640
           const height = video.videoHeight || 360
           
-          console.log('VideoThumbnail: tryCapture attempt', { 
-            width, 
-            height, 
-            readyState: video.readyState,
-            paused: video.paused 
-          })
           
           if (width > 0 && height > 0) {
             canvas.width = width
@@ -238,10 +204,6 @@ const VideoThumbnail = ({
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
               const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
               
-              console.log('VideoThumbnail: Captured frame', { 
-                dataUrlLength: dataUrl.length,
-                isValid: dataUrl && dataUrl !== 'data:,'
-              })
               
               if (mounted && dataUrl && dataUrl !== 'data:,') {
                 try {
@@ -259,18 +221,15 @@ const VideoThumbnail = ({
                 }
                 return true
               } else {
-                console.warn('VideoThumbnail: Invalid dataUrl', { dataUrl: dataUrl?.substring(0, 50) })
               }
             } catch (drawError) {
               console.error('VideoThumbnail: Error drawing to canvas', drawError)
             }
           } else {
-            console.warn('VideoThumbnail: Invalid dimensions', { width, height })
           }
           
           // If immediate capture failed, try playing briefly
           if (video.paused && video.readyState >= 2) {
-            console.log('VideoThumbnail: Trying to play video for frame capture')
             video.play().then(() => {
               setTimeout(() => {
                 if (mounted) {
@@ -325,12 +284,6 @@ const VideoThumbnail = ({
       }
 
       const handleSeeked = () => {
-        console.log('VideoThumbnail: seeked event', {
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          readyState: video.readyState,
-          currentTime: video.currentTime
-        })
         
         // Wait a moment for the frame to render, then capture
         setTimeout(() => {
@@ -339,7 +292,6 @@ const VideoThumbnail = ({
           const width = video.videoWidth
           const height = video.videoHeight
           
-          console.log('VideoThumbnail: Attempting capture after seek', { width, height })
           
           if (width > 0 && height > 0) {
             try {
@@ -348,13 +300,8 @@ const VideoThumbnail = ({
               ctx.drawImage(video, 0, 0, width, height)
               const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
               
-              console.log('VideoThumbnail: Canvas draw result', { 
-                dataUrlLength: dataUrl?.length,
-                isValid: dataUrl && dataUrl !== 'data:,'
-              })
               
               if (mounted && dataUrl && dataUrl !== 'data:,') {
-                console.log('VideoThumbnail: ✅ Thumbnail captured from seeked event!')
                 try {
                   localStorage.setItem(cacheKey, dataUrl)
                 } catch (e) {
@@ -374,7 +321,6 @@ const VideoThumbnail = ({
           
           // If capture failed, try playing briefly to ensure frame is rendered
           if (mounted && video.paused && video.readyState >= 2) {
-            console.log('VideoThumbnail: Playing video briefly to render frame')
             video.play().then(() => {
               // Wait for frame to render
               requestAnimationFrame(() => {
@@ -392,7 +338,6 @@ const VideoThumbnail = ({
                         const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
                         
                         if (mounted && dataUrl && dataUrl !== 'data:,') {
-                          console.log('VideoThumbnail: ✅ Thumbnail captured after play!')
                           try {
                             localStorage.setItem(cacheKey, dataUrl)
                           } catch (e) {
@@ -439,13 +384,6 @@ const VideoThumbnail = ({
       
       // Also listen for loadeddata as a fallback
       video.addEventListener('loadeddata', () => {
-        console.log('VideoThumbnail: loadeddata event', { 
-          videoSrc, 
-          videoWidth: video.videoWidth, 
-          videoHeight: video.videoHeight, 
-          readyState: video.readyState,
-          currentTime: video.currentTime
-        })
         
         // If we haven't captured yet and video has dimensions, try to capture
         if (!thumbnailUrl && mounted && video.videoWidth > 0 && video.videoHeight > 0) {
@@ -463,7 +401,6 @@ const VideoThumbnail = ({
                   const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
                   
                   if (mounted && dataUrl && dataUrl !== 'data:,') {
-                    console.log('VideoThumbnail: ✅ Thumbnail captured from loadeddata!')
                     try {
                       localStorage.setItem(cacheKey, dataUrl)
                     } catch (e) {
@@ -483,7 +420,6 @@ const VideoThumbnail = ({
               
               // If capture failed, ensure we're at the start and try playing
               if (video.paused && video.readyState >= 2) {
-                console.log('VideoThumbnail: Playing video briefly from loadeddata to render frame')
                 video.currentTime = 0.1
                 video.play().then(() => {
                   // Use requestAnimationFrame to ensure frame is rendered
@@ -502,7 +438,6 @@ const VideoThumbnail = ({
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
                             
                             if (mounted && dataUrl && dataUrl !== 'data:,') {
-                              console.log('VideoThumbnail: ✅ Thumbnail captured after play from loadeddata!')
                               try {
                                 localStorage.setItem(cacheKey, dataUrl)
                               } catch (e) {
@@ -541,7 +476,7 @@ const VideoThumbnail = ({
       video.preload = 'metadata'
       video.muted = true
       video.playsInline = true
-      video.crossOrigin = videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined
+      video.crossOrigin = (videoSrc.startsWith('http://') || videoSrc.startsWith('https://')) ? 'anonymous' : null
       
       // Set timeout
       const timeout = setTimeout(() => {
@@ -582,10 +517,8 @@ const VideoThumbnail = ({
         playsInline
         crossOrigin={videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined}
         onLoadedMetadata={() => {
-          console.log('VideoThumbnail: Video metadata loaded', { videoSrc, readyState: videoRef.current?.readyState })
         }}
         onLoadedData={() => {
-          console.log('VideoThumbnail: Video data loaded', { videoSrc, videoWidth: videoRef.current?.videoWidth, videoHeight: videoRef.current?.videoHeight })
         }}
         onError={(e) => {
           console.error('VideoThumbnail: Video load error', { videoSrc, error: e, target: e.target })

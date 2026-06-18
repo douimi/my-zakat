@@ -220,7 +220,7 @@ export const galleryAPI = {
     return response.data
   },
   
-  update: async (id: number, item: { media_filename?: string; display_order?: number; is_active?: boolean }) => {
+  update: async (id: number, item: { media_filename?: string; thumbnail_url?: string | null; display_order?: number; is_active?: boolean }) => {
     const response = await api.put(`/api/gallery/${id}`, item)
     return response.data
   },

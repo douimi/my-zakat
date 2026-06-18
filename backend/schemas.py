@@ -425,6 +425,7 @@ class GalleryItemCreate(BaseModel):
 
 class GalleryItemUpdate(BaseModel):
     media_filename: Optional[str] = None
+    thumbnail_url: Optional[str] = None  # Admin-set custom thumbnail URL (for videos)
     display_order: Optional[int] = None
     is_active: Optional[bool] = None
 

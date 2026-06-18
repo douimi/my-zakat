@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X, Play } from 'lucide-react'
+import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X, Play, ImagePlus } from 'lucide-react'
 import { galleryAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import type { GalleryItem } from '../../types'
 import MediaInput from '../../components/MediaInput'
+import MediaPicker from '../../components/MediaPicker'
 import LazyVideo from '../../components/LazyVideo'
 
 interface GalleryItemType extends GalleryItem {
@@ -19,6 +20,8 @@ const AdminGallery = () => {
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlValue, setUrlValue] = useState('')
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null)
+  // Which video gallery item is currently picking a custom thumbnail.
+  const [thumbnailPickerItemId, setThumbnailPickerItemId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
@@ -79,6 +82,42 @@ const AdminGallery = () => {
       }
     }
   )
+
+  // Custom-thumbnail mutation: lets admin replace an auto-generated thumbnail
+  // with one they've uploaded to S3 (selected via MediaPicker).
+  const setThumbnailMutation = useMutation(
+    ({ id, thumbnail_url }: { id: number; thumbnail_url: string | null }) =>
+      galleryAPI.update(id, { thumbnail_url }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('admin-gallery')
+        queryClient.invalidateQueries('public-gallery')
+        showSuccess('Success', 'Thumbnail updated')
+      },
+      onError: (error: any) => {
+        showError('Error', error?.response?.data?.detail || 'Failed to update thumbnail')
+      }
+    }
+  )
+
+  const handleThumbnailSelect = (url: string) => {
+    if (thumbnailPickerItemId == null) return
+    setThumbnailMutation.mutate({ id: thumbnailPickerItemId, thumbnail_url: url })
+    setThumbnailPickerItemId(null)
+  }
+
+  const handleClearThumbnail = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Reset thumbnail',
+      message: 'Remove the custom thumbnail and fall back to the auto-generated one?',
+      confirmText: 'Reset',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    })
+    if (confirmed) {
+      setThumbnailMutation.mutate({ id, thumbnail_url: null })
+    }
+  }
 
   const reorderMutation = useMutation(galleryAPI.reorder, {
     onSuccess: () => {
@@ -425,19 +464,47 @@ const AdminGallery = () => {
                       {item.media_filename}
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {isVideo && (
+                      <button
+                        onClick={() => setThumbnailPickerItemId(item.id)}
+                        className="text-indigo-600 hover:text-indigo-700 p-2 rounded-lg hover:bg-indigo-50"
+                        title={item.thumbnail_url ? 'Change custom thumbnail' : 'Set custom thumbnail from S3'}
+                      >
+                        <ImagePlus className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isVideo && item.thumbnail_url && (
+                      <button
+                        onClick={() => handleClearThumbnail(item.id)}
+                        className="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-50"
+                        title="Reset to auto-generated thumbnail"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )
           })}
         </div>
         )}
+
+      {/* Custom-thumbnail picker — opened from the per-item ImagePlus button */}
+      <MediaPicker
+        isOpen={thumbnailPickerItemId !== null}
+        onClose={() => setThumbnailPickerItemId(null)}
+        onSelect={handleThumbnailSelect}
+        mediaType="images"
+      />
 
       <ConfirmationDialog />
     </div>

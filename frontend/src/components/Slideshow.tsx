@@ -13,6 +13,17 @@ interface SlideshowSlide {
   cta_url?: string
   display_order: number
   is_active: boolean
+  updated_at?: string
+}
+
+// Append a cache-busting version param to a URL so a freshly-updated slide
+// image isn't served from a stale browser/CDN cache. Uses the slide's
+// updated_at when available so the URL only changes when the slide actually
+// changes — clients still benefit from caching between updates.
+function bustCache(url: string, version: string | number | undefined): string {
+  if (!url || !version) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}v=${encodeURIComponent(String(version))}`
 }
 
 const Slideshow = () => {
@@ -87,7 +98,10 @@ const Slideshow = () => {
   }
   // Encode unsafe characters (spaces, etc.) so CSS background-image: url(...) doesn't
   // silently fail. encodeURI preserves already-encoded sequences, so it's idempotent.
-  const imageUrl = encodeURI(getSlideImageUrl())
+  // Cache-bust with the slide's updated_at — guarantees that re-uploading an
+  // image to the same S3 key still shows the new version on next load.
+  const versionKey = currentSlide.updated_at ? new Date(currentSlide.updated_at).getTime() : currentSlide.id
+  const imageUrl = bustCache(encodeURI(getSlideImageUrl()), versionKey)
   
   // Reset animation when slide changes by using a key
   const slideKey = `slide-${currentSlide.id}-${currentIndex}`
