@@ -366,3 +366,118 @@ class EmailUnsubscribeToken(Base):
     used_ip = Column(String(45), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Marketing P2 — templates + segments + tags + campaigns
+# ─────────────────────────────────────────────────────────────────────
+
+class EmailTemplate(Base):
+    """Reusable Jinja-templated email body. Versioned via EmailTemplateVersion."""
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    category = Column(String(50), nullable=False, default="marketing", index=True)
+    subject = Column(String(500), nullable=False)
+    preheader = Column(String(500), nullable=True)
+    body_html = Column(Text, nullable=False)
+    body_text = Column(Text, nullable=True)
+    variables = Column(JSONB, nullable=False, default=list)
+    current_version = Column(Integer, nullable=False, default=1)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EmailTemplateVersion(Base):
+    """Immutable historical snapshot of a template. Created on every save."""
+    __tablename__ = "email_template_versions"
+    __table_args__ = (UniqueConstraint("template_id", "version", name="uq_template_version"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("email_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    subject = Column(String(500), nullable=False)
+    preheader = Column(String(500), nullable=True)
+    body_html = Column(Text, nullable=False)
+    body_text = Column(Text, nullable=True)
+    saved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    saved_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AudienceSegment(Base):
+    """Named, reusable audience filter stored as a JSONB predicate."""
+    __tablename__ = "audience_segments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    definition = Column(JSONB, nullable=False, default=list)
+    cached_count = Column(Integer, nullable=True)
+    cached_count_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ContactTag(Base):
+    __tablename__ = "contact_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    color = Column(String(20), nullable=False, default="gray")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class ContactTagAssignment(Base):
+    __tablename__ = "contact_tag_assignments"
+
+    email = Column(String(255), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("contact_tags.id", ondelete="CASCADE"), primary_key=True)
+    assigned_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class MarketingCampaign(Base):
+    """A broadcast email job. Renders a template, fans out per-recipient sends."""
+    __tablename__ = "marketing_campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    template_id = Column(Integer, ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True)
+    segment_id = Column(Integer, ForeignKey("audience_segments.id", ondelete="SET NULL"), nullable=True)
+    subject_override = Column(String(500), nullable=True)
+    preheader_override = Column(String(500), nullable=True)
+    body_html_override = Column(Text, nullable=True)
+    body_text_override = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    scheduled_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    dispatch_token = Column(String(64), nullable=True)
+    total_recipients = Column(Integer, nullable=False, default=0)
+    queued_count = Column(Integer, nullable=False, default=0)
+    sent_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    suppressed_count = Column(Integer, nullable=False, default=0)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CampaignSend(Base):
+    """One row per (campaign, recipient) — joins to email_outbox for the actual delivery."""
+    __tablename__ = "campaign_sends"
+    __table_args__ = (UniqueConstraint("campaign_id", "recipient_email", name="uq_campaign_recipient"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    recipient_email = Column(String(255), nullable=False)
+    recipient_name = Column(String(255), nullable=True)
+    outbox_id = Column(Integer, ForeignKey("email_outbox.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

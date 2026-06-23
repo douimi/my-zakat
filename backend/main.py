@@ -16,7 +16,7 @@ from models import User, Setting
 from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
 from audit_middleware import AuditMiddleware
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media, campaigns, marketing
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media, campaigns, marketing, marketing_templates, marketing_segments, marketing_campaigns
 
 # Check if running in test mode
 TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
@@ -222,6 +222,9 @@ app.include_router(cleanup.router, prefix="/api/cleanup", tags=["cleanup"])
 app.include_router(s3_media.router, prefix="/api/s3-media", tags=["s3-media"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
 app.include_router(marketing.router, prefix="/api/marketing", tags=["marketing"])
+app.include_router(marketing_templates.router, prefix="/api/marketing", tags=["marketing-templates"])
+app.include_router(marketing_segments.router, prefix="/api/marketing", tags=["marketing-segments"])
+app.include_router(marketing_campaigns.router, prefix="/api/marketing", tags=["marketing-campaigns"])
 
 @app.get("/")
 async def root():

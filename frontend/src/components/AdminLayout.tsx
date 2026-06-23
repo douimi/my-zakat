@@ -27,6 +27,9 @@ import {
   Mail,
   ShieldOff,
   Send,
+  FileText,
+  Filter,
+  Rocket,
   ExternalLink,
   type LucideIcon,
 } from 'lucide-react'
@@ -125,6 +128,9 @@ const NAV: NavEntry[] = [
     label: 'Marketing',
     icon: Send,
     items: [
+      { kind: 'link', name: 'Campaigns', href: '/admin/marketing-campaigns', icon: Rocket },
+      { kind: 'link', name: 'Templates', href: '/admin/email-templates', icon: FileText },
+      { kind: 'link', name: 'Audiences', href: '/admin/audiences', icon: Filter },
       { kind: 'link', name: 'Email Log', href: '/admin/email-log', icon: Mail },
       { kind: 'link', name: 'Suppressions', href: '/admin/suppressions', icon: ShieldOff },
     ],

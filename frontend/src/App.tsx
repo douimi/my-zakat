@@ -67,6 +67,9 @@ const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
 const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
+const AdminEmailTemplates = lazy(() => import('./pages/admin/AdminEmailTemplates'))
+const AdminSegments = lazy(() => import('./pages/admin/AdminSegments'))
+const AdminMarketingCampaigns = lazy(() => import('./pages/admin/AdminMarketingCampaigns'))
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
@@ -167,6 +170,9 @@ function App() {
                 <Route path="campaigns" element={<AdminCampaigns />} />
                 <Route path="email-log" element={<AdminEmailLog />} />
                 <Route path="suppressions" element={<AdminSuppressions />} />
+                <Route path="email-templates" element={<AdminEmailTemplates />} />
+                <Route path="audiences" element={<AdminSegments />} />
+                <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
                 <Route path="cleanup" element={<AdminCleanup />} />
                 <Route path="s3-media" element={<AdminS3Media />} />
                 <Route path="settings" element={<AdminSettings />} />
