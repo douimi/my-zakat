@@ -1,0 +1,14 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #2563eb; margin: 0 0 20px 0; font-size: 20px;">Verify your email address</h2>
+<p>Hello {{ name | default('there') }},</p>
+<p>Thank you for registering with MyZakat. Please verify your email address by clicking the button below:</p>
+<p style="text-align: center; margin: 30px 0;">
+    <a href="{{ verification_link }}" class="btn">Verify Email Address</a>
+</p>
+<p style="color: #6b7280; font-size: 14px;">Or copy and paste this link into your browser:</p>
+<p style="color: #2563eb; font-size: 13px; word-break: break-all; background-color: #f9fafb; border-radius: 4px; padding: 10px;">{{ verification_link }}</p>
+<p style="color: #6b7280; font-size: 12px; margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+    If you did not create an account with MyZakat, please ignore this email. This verification link will expire in 7 days.
+</p>
+{% endblock %}

@@ -21,3 +21,9 @@ httpx==0.25.2
 factory-boy==3.3.0
 reportlab==4.0.7
 boto3==1.34.0
+# Marketing P1 — durable email queue + Resend transport + CSS-inlined templates
+resend==2.5.1
+arq==0.26.1
+redis==5.0.4
+premailer==3.10.0
+svix==1.40.0  # Resend webhook signature verification

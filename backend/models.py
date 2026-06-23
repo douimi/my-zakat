@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime
@@ -276,3 +277,92 @@ class Program(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# ─────────────────────────────────────────────────────────────────────
+# Marketing P1 — durable outbox + compliance core
+# ─────────────────────────────────────────────────────────────────────
+
+class EmailOutbox(Base):
+    """Every outbound email is recorded here BEFORE it's enqueued.
+
+    The Arq worker pulls rows in `pending` state, attempts delivery via
+    Resend, and updates `status`. Restart-safe — a container crash never
+    loses a queued email.
+    """
+    __tablename__ = "email_outbox"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(20), nullable=False, default="transactional", index=True)
+    template_slug = Column(String(100), nullable=True)
+    to_email = Column(String(255), nullable=False, index=True)
+    to_name = Column(String(255), nullable=True)
+    from_email = Column(String(255), nullable=False)
+    from_name = Column(String(255), nullable=True)
+    reply_to = Column(String(255), nullable=True)
+    subject = Column(String(500), nullable=False)
+    body_html = Column(Text, nullable=False)
+    body_text = Column(Text, nullable=True)
+    attachments = Column(JSONB, nullable=False, default=list)
+    context = Column(JSONB, nullable=False, default=dict)
+    idempotency_key = Column(String(128), unique=True, nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    provider_message_id = Column(String(255), nullable=True)
+    error = Column(Text, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    queue_after = Column(DateTime, nullable=False, default=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EmailSuppression(Base):
+    """Global suppression list — checked by ComplianceMailer before every send.
+
+    Hard bounces and complaints are inserted automatically via the Resend
+    webhook; manual entries via the admin Suppressions page.
+    """
+    __tablename__ = "email_suppressions"
+    __table_args__ = (UniqueConstraint("email", "scope", name="uq_email_suppression"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    scope = Column(String(20), nullable=False, default="all")  # marketing | all | <category>
+    reason = Column(String(50), nullable=False)  # hard_bounce | complaint | unsubscribe | manual | gdpr_erasure
+    source_message_id = Column(String(255), nullable=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class EmailConsentLog(Base):
+    """Append-only audit trail of every email consent event.
+
+    Mirrors the SMS consent fields on Subscription. Required for
+    CAN-SPAM / GDPR audits — never updated, only inserted.
+    """
+    __tablename__ = "email_consent_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    channel = Column(String(20), nullable=False, default="email")
+    action = Column(String(30), nullable=False)  # opt_in | opt_out | re_confirmed | ...
+    source = Column(String(100), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    consent_text = Column(Text, nullable=True)
+    extra_metadata = Column("metadata", JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class EmailUnsubscribeToken(Base):
+    """One-use unsubscribe tokens for one-click links and RFC 8058 compliance."""
+    __tablename__ = "email_unsubscribe_tokens"
+
+    token = Column(String(128), primary_key=True)
+    email = Column(String(255), nullable=False, index=True)
+    scope = Column(String(20), nullable=False, default="all")
+    issued_for = Column(String(50), nullable=True)
+    used_at = Column(DateTime, nullable=True)
+    used_ip = Column(String(45), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)

@@ -1,0 +1,13 @@
+MyZakat — Email Verification Required
+
+Hello {{ name | default('there') }},
+
+Thank you for registering with MyZakat. Please verify your email address by visiting the following link:
+
+{{ verification_link }}
+
+This verification link will expire in 7 days.
+
+If you did not create an account with MyZakat, please ignore this email.
+
+— The MyZakat Team

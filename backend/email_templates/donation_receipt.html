@@ -1,0 +1,14 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<p>Dear {{ donor_name | default('Donor') }},</p>
+<p>On behalf of the <strong>Zakat Distribution Foundation (ZDF)</strong>, we sincerely thank you for your generous donation of <strong>{{ amount_str }}</strong> received on <strong>{{ donation_date_str }}</strong>.</p>
+<p>Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.</p>
+<p>Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section <strong>501(c)(3)</strong> of the Internal Revenue Code.</p>
+<p style="background-color: #f3f4f6; padding: 12px 16px; border-left: 4px solid #1e3a8a; border-radius: 4px;"><strong>EIN: 33-2494058</strong></p>
+<p>No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.</p>
+<p>Please keep this email — and the attached PDF receipt — as your official donation receipt for tax purposes.</p>
+<p style="margin-top: 28px;">With gratitude,</p>
+<p style="margin: 2px 0;"><strong>Naser Hdieb</strong></p>
+<p style="margin: 0; color: #4b5563;">Chairperson, Zakat Distribution Foundation</p>
+<p style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; font-style: italic; color: #6b7280; font-size: 13px;">Your Zakat, Their Lifeline.</p>
+{% endblock %}

@@ -1,0 +1,8 @@
+Assalamu alaikum {{ name }},
+
+Thank you for offering to volunteer with MyZakat. We have received your application and will be in touch soon to discuss next steps for '{{ interest }}'.
+
+Your willingness to give your time helps us serve communities in need — may Allah reward your generosity.
+
+With gratitude,
+The MyZakat Team

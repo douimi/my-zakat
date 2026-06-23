@@ -1,0 +1,14 @@
+Hello {{ recipient_name | default('there') }},
+
+Thank you for reaching out to us. We have received your message and are responding below:
+
+YOUR ORIGINAL MESSAGE:
+{{ original_message }}
+
+OUR RESPONSE:
+{{ reply_message }}
+
+If you have any further questions or concerns, please don't hesitate to contact us again.
+
+Best regards,
+The MyZakat Team

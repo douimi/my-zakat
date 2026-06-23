@@ -64,6 +64,9 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
+const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
+const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
@@ -134,6 +137,7 @@ function App() {
                 <Route path="donation-policy" element={<DonationPolicy />} />
                 <Route path="terms-of-service" element={<TermsOfService />} />
                 <Route path="sms-opt-in" element={<SmsOptIn />} />
+                <Route path="unsubscribe" element={<Unsubscribe />} />
               </Route>
 
               {/* User authentication routes */}
@@ -161,6 +165,8 @@ function App() {
                 <Route path="slideshow" element={<AdminSlideshow />} />
                 <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
                 <Route path="campaigns" element={<AdminCampaigns />} />
+                <Route path="email-log" element={<AdminEmailLog />} />
+                <Route path="suppressions" element={<AdminSuppressions />} />
                 <Route path="cleanup" element={<AdminCleanup />} />
                 <Route path="s3-media" element={<AdminS3Media />} />
                 <Route path="settings" element={<AdminSettings />} />

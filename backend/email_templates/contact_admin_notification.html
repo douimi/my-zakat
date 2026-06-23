@@ -1,0 +1,12 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #2563eb; margin: 0 0 16px 0; font-size: 20px;">New contact form submission</h2>
+<p><strong>From:</strong> {{ submitter_name }} &lt;<a href="mailto:{{ submitter_email }}">{{ submitter_email }}</a>&gt;</p>
+<p><strong>Submitted:</strong> {{ submitted_at }}</p>
+<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
+<p><strong>Message:</strong></p>
+<div style="background-color: #f9fafb; padding: 14px; border-left: 4px solid #2563eb; border-radius: 4px; white-space: pre-wrap;">{{ message }}</div>
+<p style="margin-top: 24px;">
+    <a href="{{ admin_url }}" class="btn">View in Admin Panel</a>
+</p>
+{% endblock %}

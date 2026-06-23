@@ -1,610 +1,206 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
-from email.utils import formataddr, formatdate, make_msgid
-from email.header import Header
-import os
-from dotenv import load_dotenv
-from logging_config import get_logger
-from datetime import datetime
+"""Email service — thin shims that enqueue templated emails via the marketing pipeline.
 
-load_dotenv()
+Every function in this module renders a Jinja template (under
+backend/email_templates/) and enqueues the result through ComplianceMailer.
+The actual delivery happens asynchronously in the Arq worker — these
+functions return True immediately if the row was queued (or skipped because
+of suppression), False only on an unexpected error.
+
+This file replaces the old SMTP-direct implementation. The 7 existing
+public functions (send_verification_email, send_donation_certificate_email,
+etc.) are kept with the same signatures so callers don't have to change.
+"""
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from typing import Optional
+
+from logging_config import get_logger
+from database import SessionLocal
+
+from marketing.mailer import enqueue_email
+from marketing.resend_client import encode_attachment
 
 logger = get_logger(__name__)
 
-# SMTP Configuration
-SMTP_SERVER = os.getenv("SMTP_SERVER", "netsol-smtp-oxcs.hostingplatform.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "info@myzakat.org")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "emailPassWord123@")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "My Zakat")
+ADMIN_NOTIFICATION_EMAIL = os.getenv(
+    "ADMIN_NOTIFICATION_EMAIL",
+    os.getenv("RESEND_REPLY_TO", "info@myzakat.org"),
+)
 
+
+def _enqueue(template_slug: str, **kwargs) -> bool:
+    """Open a short-lived DB session and enqueue. Returns True on success."""
+    db = SessionLocal()
+    try:
+        row = enqueue_email(db, template_slug=template_slug, **kwargs)
+        return row is not None and row.status in ("pending", "sending", "suppressed")
+    except Exception as exc:
+        logger.exception("Failed to enqueue %s: %s", template_slug, exc)
+        return False
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Transactional emails (called from routers)
+# ─────────────────────────────────────────────────────────────────────
 
 def send_verification_email(email: str, name: str, verification_token: str) -> bool:
-    """
-    Send email verification link to user with best practices for deliverability
-    
-    Args:
-        email: User's email address
-        name: User's name
-        verification_token: Unique verification token
-        
-    Returns:
-        True if email sent successfully, False otherwise
-    """
-    try:
-        # Create verification link
-        verification_link = f"{FRONTEND_URL}/verify-email?token={verification_token}"
-        
-        # Create email message with proper headers
-        msg = MIMEMultipart("alternative")
-        
-        # Essential headers for deliverability
-        msg["Subject"] = Header("Verify Your Email Address - My Zakat", "utf-8")
-        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
-        msg["To"] = email
-        msg["Reply-To"] = SMTP_USERNAME
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(domain="myzakat.org")
-        msg["MIME-Version"] = "1.0"
-        
-        # Add List-Unsubscribe header (helps with deliverability)
-        msg["List-Unsubscribe"] = f"<mailto:{SMTP_USERNAME}?subject=Unsubscribe>"
-        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        
-        # X-Headers for better deliverability
-        msg["X-Mailer"] = "My Zakat Platform"
-        msg["X-Priority"] = "1"  # High priority for transactional emails
-        msg["X-MSMail-Priority"] = "High"
-        
-        # Create HTML email body with better structure
-        html_body = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Your Email Address</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse;">
-        <tr>
-            <td style="padding: 20px 0; text-align: center;">
-                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background-color: #2563eb; color: #ffffff; padding: 30px 20px; text-align: center;">
-                            <h1 style="margin: 0; font-size: 24px; font-weight: bold;">My Zakat</h1>
-                        </td>
-                    </tr>
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px 30px;">
-                            <h2 style="color: #2563eb; margin-top: 0; font-size: 20px;">Email Verification Required</h2>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Hello {name or 'there'},</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Thank you for registering with My Zakat. Please verify your email address by clicking the button below:</p>
-                            
-                            <!-- CTA Button -->
-                            <table role="presentation" style="width: 100%; margin: 30px 0;">
-                                <tr>
-                                    <td style="text-align: center;">
-                                        <a href="{verification_link}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: bold; font-size: 16px;">Verify Email Address</a>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0;">Or copy and paste this link into your browser:</p>
-                            <p style="color: #2563eb; font-size: 14px; word-break: break-all; margin: 10px 0; padding: 10px; background-color: #f9fafb; border-radius: 4px;">{verification_link}</p>
-                            
-                            <p style="color: #666666; font-size: 12px; line-height: 1.6; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e5e5;">If you did not create an account with My Zakat, please ignore this email. This verification link will expire in 7 days.</p>
-                        </td>
-                    </tr>
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e5e5;">
-                            <p style="color: #999999; font-size: 12px; margin: 0;">© {datetime.now().year} My Zakat. All rights reserved.</p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>"""
-        
-        # Create plain text version (important for deliverability)
-        text_body = f"""My Zakat - Email Verification Required
-
-Hello {name or 'there'},
-
-Thank you for registering with My Zakat. Please verify your email address by visiting the following link:
-
-{verification_link}
-
-This verification link will expire in 7 days.
-
-If you did not create an account with My Zakat, please ignore this email.
-
----
-© {datetime.now().year} My Zakat. All rights reserved."""
-        
-        # Attach both versions (plain text first, then HTML)
-        part1 = MIMEText(text_body, "plain", "utf-8")
-        part2 = MIMEText(html_body, "html", "utf-8")
-        
-        msg.attach(part1)
-        msg.attach(part2)
-        
-        # Send email with proper error handling
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(0)  # Set to 1 for debugging
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[email])
-        
-        logger.info("Verification email sent successfully to %s", email)
-        return True
-        
-    except smtplib.SMTPException as e:
-        logger.error("SMTP error sending verification email to %s: %s", email, str(e))
-        return False
-    except Exception as e:
-        logger.error("Failed to send verification email to %s: %s", email, str(e))
-        return False
-
-
-def send_donation_certificate_email(email: str, name: str, amount: float, pdf_path: str, donation_date: datetime = None) -> bool:
-    """
-    Send donation receipt PDF via email with the official ZDF acknowledgement wording.
-
-    Args:
-        email: Donor's email address
-        name: Donor's name
-        amount: Donation amount
-        pdf_path: Path to the PDF receipt file
-        donation_date: Date of donation (defaults to today)
-
-    Returns:
-        True if email sent successfully, False otherwise
-    """
-    try:
-        if donation_date is None:
-            donation_date = datetime.utcnow()
-        donation_date_str = donation_date.strftime("%B %d, %Y")
-        amount_str = f"${amount:,.2f}"
-        donor_name = name or "Donor"
-
-        msg = MIMEMultipart()
-
-        # Headers for deliverability
-        msg["Subject"] = Header("Your Donation Receipt — Zakat Distribution Foundation", "utf-8")
-        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
-        msg["To"] = email
-        msg["Reply-To"] = SMTP_USERNAME
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(domain="myzakat.org")
-        msg["MIME-Version"] = "1.0"
-        msg["List-Unsubscribe"] = f"<mailto:{SMTP_USERNAME}?subject=Unsubscribe>"
-        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        msg["X-Mailer"] = "My Zakat Platform"
-        msg["X-Priority"] = "1"
-        msg["X-MSMail-Priority"] = "High"
-
-        # HTML email body — ZDF official acknowledgement
-        html_body = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Donation Receipt</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse;">
-        <tr>
-            <td style="padding: 20px 0; text-align: center;">
-                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background-color: #1e3a8a; color: #ffffff; padding: 30px 20px; text-align: center;">
-                            <h1 style="margin: 0; font-size: 22px; font-weight: bold;">Zakat Distribution Foundation</h1>
-                            <p style="margin: 8px 0 0 0; font-size: 13px; font-style: italic; opacity: 0.95;">Your Zakat, Their Lifeline.</p>
-                        </td>
-                    </tr>
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px 30px; color: #1f2937; font-size: 15px; line-height: 1.6;">
-                            <p>Dear {donor_name},</p>
-                            <p>On behalf of the <strong>Zakat Distribution Foundation (ZDF)</strong>, we sincerely thank you for your generous donation of <strong>{amount_str}</strong> received on <strong>{donation_date_str}</strong>.</p>
-                            <p>Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.</p>
-                            <p>Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section <strong>501(c)(3)</strong> of the Internal Revenue Code.</p>
-                            <p style="background-color: #f3f4f6; padding: 12px 16px; border-left: 4px solid #1e3a8a; border-radius: 4px; margin: 20px 0;"><strong>EIN: 33-2494058</strong></p>
-                            <p>No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.</p>
-                            <p>Please keep this email — and the attached PDF receipt — as your official donation receipt for tax purposes.</p>
-                            <p style="margin-top: 30px;">With gratitude,</p>
-                            <p style="margin: 4px 0;"><strong>Naser Hdieb</strong></p>
-                            <p style="margin: 0; color: #4b5563;">Chairperson</p>
-                            <p style="margin: 0 0 16px 0; color: #4b5563;">Zakat Distribution Foundation</p>
-                            <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-style: italic; color: #6b7280; font-size: 14px;">Your Zakat, Their Lifeline.</p>
-                        </td>
-                    </tr>
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e5e5;">
-                            <p style="color: #6b7280; font-size: 12px; margin: 0;">Zakat Distribution Foundation · P.O. BOX 2250, Winchester, VA 22604</p>
-                            <p style="color: #6b7280; font-size: 12px; margin: 4px 0 0 0;"><a href="https://myzakat.org" style="color: #1e3a8a;">www.myzakat.org</a> · 1-833-MYZAKAT · info@myzakat.org</p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>"""
-
-        # Plain text version
-        text_body = f"""Dear {donor_name},
-
-On behalf of the Zakat Distribution Foundation (ZDF), we sincerely thank you for your generous donation of {amount_str} received on {donation_date_str}.
-
-Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.
-
-Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section 501(c)(3) of the Internal Revenue Code.
-
-EIN: 33-2494058
-
-No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.
-
-Please keep this email as your official donation receipt for tax purposes.
-
-With gratitude,
-
-Naser Hdieb
-Chairperson
-Zakat Distribution Foundation
-
-Your Zakat, Their Lifeline.
-
---
-Zakat Distribution Foundation
-P.O. BOX 2250, Winchester, VA 22604
-www.myzakat.org · 1-833-MYZAKAT · info@myzakat.org"""
-        
-        # Attach text versions
-        part1 = MIMEText(text_body, "plain", "utf-8")
-        part2 = MIMEText(html_body, "html", "utf-8")
-        msg.attach(part1)
-        msg.attach(part2)
-        
-        # Attach PDF receipt
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as pdf_file:
-                pdf_attachment = MIMEBase("application", "pdf")
-                pdf_attachment.set_payload(pdf_file.read())
-                encoders.encode_base64(pdf_attachment)
-                pdf_attachment.add_header(
-                    "Content-Disposition",
-                    f'attachment; filename="ZDF_Donation_Receipt_{donor_name.replace(" ", "_")}_{donation_date.strftime("%Y%m%d")}.pdf"'
-                )
-                msg.attach(pdf_attachment)
-        
-        # Send email
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(0)
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[email])
-        
-        logger.info("Donation certificate email sent successfully to %s", email)
-        return True
-        
-    except smtplib.SMTPException as e:
-        logger.error("SMTP error sending donation certificate email to %s: %s", email, str(e))
-        return False
-    except Exception as e:
-        logger.error("Failed to send donation certificate email to %s: %s", email, str(e))
-        return False
-
-
-def send_contact_reply_email(recipient_email: str, recipient_name: str, original_message: str, reply_message: str) -> bool:
-    """
-    Send reply email to contact form submission
-    
-    Args:
-        recipient_email: Contact's email address
-        recipient_name: Contact's name
-        original_message: Original message from contact
-        reply_message: Admin's reply message
-        
-    Returns:
-        True if email sent successfully, False otherwise
-    """
-    try:
-        # Create email message with proper headers
-        msg = MIMEMultipart("alternative")
-        
-        # Essential headers for deliverability
-        msg["Subject"] = Header("Re: Your Contact Form Submission - My Zakat", "utf-8")
-        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
-        msg["To"] = recipient_email
-        msg["Reply-To"] = SMTP_USERNAME
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(domain="myzakat.org")
-        msg["MIME-Version"] = "1.0"
-        
-        # Add List-Unsubscribe header
-        msg["List-Unsubscribe"] = f"<mailto:{SMTP_USERNAME}?subject=Unsubscribe>"
-        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        
-        # X-Headers
-        msg["X-Mailer"] = "My Zakat Platform"
-        msg["X-Priority"] = "1"
-        msg["X-MSMail-Priority"] = "High"
-        
-        # Create HTML email body
-        html_body = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Re: Your Contact Form Submission</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse;">
-        <tr>
-            <td style="padding: 20px 0; text-align: center;">
-                <table role="presentation" style="width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background-color: #2563eb; color: #ffffff; padding: 30px 20px; text-align: center;">
-                            <h1 style="margin: 0; font-size: 24px; font-weight: bold;">My Zakat</h1>
-                        </td>
-                    </tr>
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px 30px;">
-                            <h2 style="color: #2563eb; margin-top: 0; font-size: 20px;">Thank You for Contacting Us</h2>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Hello {recipient_name or 'there'},</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">Thank you for reaching out to us. We have received your message and are responding below:</p>
-                            
-                            <!-- Original Message -->
-                            <div style="background-color: #f9fafb; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                                <p style="color: #666666; font-size: 12px; margin: 0 0 10px 0; font-weight: bold; text-transform: uppercase;">Your Original Message:</p>
-                                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">{original_message}</p>
-                            </div>
-                            
-                            <!-- Reply Message -->
-                            <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                                <p style="color: #1e40af; font-size: 12px; margin: 0 0 10px 0; font-weight: bold; text-transform: uppercase;">Our Response:</p>
-                                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">{reply_message}</p>
-                            </div>
-                            
-                            <p style="color: #333333; font-size: 16px; line-height: 1.6; margin-top: 30px;">If you have any further questions or concerns, please don't hesitate to contact us again.</p>
-                            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e5e5;">Best regards,<br>The My Zakat Team</p>
-                        </td>
-                    </tr>
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e5e5;">
-                            <p style="color: #999999; font-size: 12px; margin: 0;">© {datetime.now().year} My Zakat. All rights reserved.</p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>"""
-        
-        # Create plain text version
-        text_body = f"""My Zakat - Re: Your Contact Form Submission
-
-Hello {recipient_name or 'there'},
-
-Thank you for reaching out to us. We have received your message and are responding below:
-
-Your Original Message:
-{original_message}
-
-Our Response:
-{reply_message}
-
-If you have any further questions or concerns, please don't hesitate to contact us again.
-
-Best regards,
-The My Zakat Team
-
----
-© {datetime.now().year} My Zakat. All rights reserved."""
-        
-        # Attach both versions
-        part1 = MIMEText(text_body, "plain", "utf-8")
-        part2 = MIMEText(html_body, "html", "utf-8")
-        
-        msg.attach(part1)
-        msg.attach(part2)
-        
-        # Send email
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(0)
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[recipient_email])
-        
-        logger.info("Contact reply email sent successfully to %s", recipient_email)
-        return True
-        
-    except smtplib.SMTPException as e:
-        logger.error("SMTP error sending contact reply email to %s: %s", recipient_email, str(e))
-        return False
-    except Exception as e:
-        logger.error("Failed to send contact reply email to %s: %s", recipient_email, str(e))
-        return False
-
-
-# Where to send admin notifications (defaults to the SMTP sender = info@myzakat.org)
-ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", SMTP_USERNAME)
-
-
-def _send_simple_email(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-    """Send a simple multipart email. Returns True on success."""
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USERNAME))
-        msg["To"] = to_email
-        msg["Reply-To"] = SMTP_USERNAME
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(domain="myzakat.org")
-
-        msg.attach(MIMEText(text_body, "plain", "utf-8"))
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg, from_addr=SMTP_USERNAME, to_addrs=[to_email])
-
-        logger.info("Email sent successfully to %s — %s", to_email, subject)
-        return True
-    except Exception as e:
-        logger.error("Failed to send email to %s (%s): %s", to_email, subject, e)
-        return False
-
-
-def send_contact_admin_notification(submitter_name: str, submitter_email: str, message: str) -> bool:
-    """Notify admin that a new contact form was submitted."""
-    subject = f"New Contact Form Submission from {submitter_name}"
-    text_body = (
-        f"A new contact form has been submitted on MyZakat.\n\n"
-        f"From: {submitter_name} <{submitter_email}>\n"
-        f"Submitted: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-        f"Message:\n{message}\n\n"
-        f"View it in the admin panel: {FRONTEND_URL}/admin/contacts\n"
+    """Send email-verification link to a new user."""
+    verification_link = f"{FRONTEND_URL}/verify-email?token={verification_token}"
+    return _enqueue(
+        "verification",
+        to_email=email,
+        to_name=name,
+        subject="Verify Your Email Address — MyZakat",
+        context={"name": name, "verification_link": verification_link},
+        category="transactional",
+        idempotency_key=f"verify-{verification_token[:32]}",
     )
-    html_body = f"""<!DOCTYPE html>
-<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
-  <tr><td style="background: #2563eb; color: white; padding: 20px; text-align: center;">
-    <h1 style="margin: 0;">New Contact Form Submission</h1>
-  </td></tr>
-  <tr><td style="padding: 30px;">
-    <p><strong>From:</strong> {submitter_name} &lt;<a href="mailto:{submitter_email}">{submitter_email}</a>&gt;</p>
-    <p><strong>Submitted:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-    <p><strong>Message:</strong></p>
-    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; border-radius: 4px; white-space: pre-wrap;">{message}</div>
-    <p style="margin-top: 30px;">
-      <a href="{FRONTEND_URL}/admin/contacts" style="background: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">View in Admin Panel</a>
-    </p>
-  </td></tr>
-</table></body></html>"""
-    return _send_simple_email(ADMIN_NOTIFICATION_EMAIL, subject, html_body, text_body)
+
+
+def send_donation_certificate_email(
+    email: str,
+    name: str,
+    amount: float,
+    pdf_path: str,
+    donation_date: Optional[datetime] = None,
+) -> bool:
+    """Send the official ZDF donation receipt PDF + acknowledgement email."""
+    if donation_date is None:
+        donation_date = datetime.utcnow()
+    donation_date_str = donation_date.strftime("%B %d, %Y")
+    amount_str = f"${amount:,.2f}"
+    donor_name = name or "Donor"
+
+    attachments = []
+    try:
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as pdf_file:
+                attachments.append(
+                    encode_attachment(
+                        f"ZDF_Donation_Receipt_{donor_name.replace(' ', '_')}_"
+                        f"{donation_date.strftime('%Y%m%d')}.pdf",
+                        pdf_file.read(),
+                        content_type="application/pdf",
+                    )
+                )
+    except Exception as exc:
+        logger.warning("Could not attach PDF receipt %s: %s", pdf_path, exc)
+
+    return _enqueue(
+        "donation_receipt",
+        to_email=email,
+        to_name=donor_name,
+        subject="Your Donation Receipt — Zakat Distribution Foundation",
+        context={
+            "donor_name": donor_name,
+            "amount_str": amount_str,
+            "donation_date_str": donation_date_str,
+            "brand_color": "#1e3a8a",
+            "brand_title": "Zakat Distribution Foundation",
+            "brand_subtitle": "Your Zakat, Their Lifeline.",
+        },
+        category="transactional",
+        attachments=attachments or None,
+        idempotency_key=f"receipt-{email}-{int(donation_date.timestamp())}",
+    )
+
+
+def send_contact_reply_email(
+    recipient_email: str,
+    recipient_name: str,
+    original_message: str,
+    reply_message: str,
+) -> bool:
+    """Send the admin's reply to a contact-form submission."""
+    return _enqueue(
+        "contact_reply",
+        to_email=recipient_email,
+        to_name=recipient_name,
+        subject="Re: Your Contact Form Submission — MyZakat",
+        context={
+            "recipient_name": recipient_name,
+            "original_message": original_message,
+            "reply_message": reply_message,
+        },
+        category="transactional",
+    )
+
+
+def send_contact_admin_notification(
+    submitter_name: str,
+    submitter_email: str,
+    message: str,
+) -> bool:
+    """Notify admins that a new contact form has been submitted."""
+    return _enqueue(
+        "contact_admin_notification",
+        to_email=ADMIN_NOTIFICATION_EMAIL,
+        subject=f"New Contact Form Submission from {submitter_name}",
+        context={
+            "submitter_name": submitter_name,
+            "submitter_email": submitter_email,
+            "message": message,
+            "submitted_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "admin_url": f"{FRONTEND_URL}/admin/contacts",
+        },
+        category="transactional",
+    )
 
 
 def send_contact_acknowledgement(name: str, email: str, message: str) -> bool:
-    """Send a 'we received your message' confirmation to the user who contacted us."""
-    subject = "We received your message — MyZakat"
-    text_body = (
-        f"Dear {name},\n\n"
-        f"Thank you for reaching out to MyZakat. We have received your message and "
-        f"a member of our team will get back to you as soon as possible.\n\n"
-        f"For your records, here is a copy of your message:\n\n"
-        f"---\n{message}\n---\n\n"
-        f"If you have additional information to share, simply reply to this email.\n\n"
-        f"With gratitude,\nThe MyZakat Team\n"
+    """Auto-reply to the user who submitted the contact form."""
+    return _enqueue(
+        "contact_acknowledgement",
+        to_email=email,
+        to_name=name,
+        subject="We received your message — MyZakat",
+        context={"name": name, "message": message},
+        category="transactional",
     )
-    html_body = f"""<!DOCTYPE html>
-<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
-  <tr><td style="background: #2563eb; color: white; padding: 30px; text-align: center;">
-    <h1 style="margin: 0;">Thank you for contacting us</h1>
-  </td></tr>
-  <tr><td style="padding: 30px; color: #374151; line-height: 1.6;">
-    <p>Dear {name},</p>
-    <p>Thank you for reaching out to <strong>MyZakat</strong>. We have received your message
-       and a member of our team will get back to you as soon as possible.</p>
-    <p style="color: #6b7280; font-size: 14px;">For your records, here is a copy of your message:</p>
-    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #2563eb; border-radius: 4px; white-space: pre-wrap;">{message}</div>
-    <p>If you have additional information to share, simply reply to this email.</p>
-    <p>With gratitude,<br><strong>The MyZakat Team</strong></p>
-  </td></tr>
-  <tr><td style="background: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
-    MyZakat – Zakat Distribution Foundation • <a href="{FRONTEND_URL}" style="color: #2563eb;">myzakat.org</a>
-  </td></tr>
-</table></body></html>"""
-    return _send_simple_email(email, subject, html_body, text_body)
 
 
-def send_volunteer_admin_notification(name: str, email: str, interest: str, phone: str = None, message: str = None) -> bool:
-    """Notify admin that someone signed up to volunteer."""
-    subject = f"New Volunteer Sign-up: {name}"
-    extras = ""
-    if phone:
-        extras += f"\nPhone: {phone}"
-    if message:
-        extras += f"\n\nMessage:\n{message}"
-    text_body = (
-        f"A new volunteer has signed up on MyZakat.\n\n"
-        f"Name: {name}\n"
-        f"Email: {email}\n"
-        f"Interest: {interest}{extras}\n\n"
-        f"Submitted: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-        f"View all volunteers: {FRONTEND_URL}/admin/volunteers\n"
+def send_volunteer_admin_notification(
+    name: str,
+    email: str,
+    interest: str,
+    phone: Optional[str] = None,
+    message: Optional[str] = None,
+) -> bool:
+    """Notify admins that a new volunteer signed up."""
+    return _enqueue(
+        "volunteer_admin_notification",
+        to_email=ADMIN_NOTIFICATION_EMAIL,
+        subject=f"New Volunteer Sign-up: {name}",
+        context={
+            "name": name,
+            "email": email,
+            "interest": interest,
+            "phone": phone,
+            "message": message,
+            "submitted_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "admin_url": f"{FRONTEND_URL}/admin/volunteers",
+            "brand_color": "#16a34a",
+        },
+        category="transactional",
     )
-    extras_html = ""
-    if phone:
-        extras_html += f'<p><strong>Phone:</strong> <a href="tel:{phone}">{phone}</a></p>'
-    if message:
-        extras_html += f'<p><strong>Message:</strong></p><div style="background: #f9fafb; padding: 15px; border-left: 4px solid #16a34a; border-radius: 4px; white-space: pre-wrap;">{message}</div>'
-    html_body = f"""<!DOCTYPE html>
-<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
-  <tr><td style="background: #16a34a; color: white; padding: 20px; text-align: center;">
-    <h1 style="margin: 0;">New Volunteer Sign-up</h1>
-  </td></tr>
-  <tr><td style="padding: 30px;">
-    <p><strong>Name:</strong> {name}</p>
-    <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
-    <p><strong>Interest:</strong> {interest}</p>
-    {extras_html}
-    <p><strong>Submitted:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</p>
-    <p style="margin-top: 30px;">
-      <a href="{FRONTEND_URL}/admin/volunteers" style="background: #16a34a; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">View Volunteers</a>
-    </p>
-  </td></tr>
-</table></body></html>"""
-    return _send_simple_email(ADMIN_NOTIFICATION_EMAIL, subject, html_body, text_body)
 
 
 def send_volunteer_acknowledgement(name: str, email: str, interest: str) -> bool:
-    """Thank-you email to the volunteer."""
-    subject = "Thank you for volunteering with MyZakat"
-    text_body = (
-        f"Assalamu alaikum {name},\n\n"
-        f"Thank you for offering to volunteer with MyZakat. We have received your application "
-        f"and will be in touch soon to discuss next steps for '{interest}'.\n\n"
-        f"Your willingness to give your time helps us serve communities in need — "
-        f"may Allah reward your generosity.\n\n"
-        f"With gratitude,\nThe MyZakat Team\n"
+    """Thank-you email to a new volunteer."""
+    return _enqueue(
+        "volunteer_acknowledgement",
+        to_email=email,
+        to_name=name,
+        subject="Thank you for volunteering with MyZakat",
+        context={
+            "name": name,
+            "interest": interest,
+            "brand_color": "#16a34a",
+        },
+        category="transactional",
     )
-    html_body = f"""<!DOCTYPE html>
-<html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-<table style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
-  <tr><td style="background: #16a34a; color: white; padding: 30px; text-align: center;">
-    <h1 style="margin: 0;">Thank You for Volunteering</h1>
-  </td></tr>
-  <tr><td style="padding: 30px; color: #374151; line-height: 1.6;">
-    <p>Assalamu alaikum {name},</p>
-    <p>Thank you for offering to volunteer with <strong>MyZakat</strong>. We have received your application
-       and will be in touch soon to discuss next steps for <strong>{interest}</strong>.</p>
-    <p>Your willingness to give your time helps us serve communities in need —
-       may Allah reward your generosity.</p>
-    <p>With gratitude,<br><strong>The MyZakat Team</strong></p>
-  </td></tr>
-  <tr><td style="background: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
-    MyZakat – Zakat Distribution Foundation • <a href="{FRONTEND_URL}" style="color: #16a34a;">myzakat.org</a>
-  </td></tr>
-</table></body></html>"""
-    return _send_simple_email(email, subject, html_body, text_body)

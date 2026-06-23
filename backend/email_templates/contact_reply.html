@@ -1,0 +1,16 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #2563eb; margin: 0 0 18px 0; font-size: 20px;">Thank you for contacting us</h2>
+<p>Hello {{ recipient_name | default('there') }},</p>
+<p>Thank you for reaching out to us. We have received your message and are responding below:</p>
+<div style="background-color: #f9fafb; border-left: 4px solid #2563eb; padding: 14px; margin: 18px 0; border-radius: 4px;">
+    <p style="color: #6b7280; font-size: 12px; font-weight: bold; text-transform: uppercase; margin: 0 0 8px 0;">Your original message:</p>
+    <p style="color: #1f2937; font-size: 14px; margin: 0; white-space: pre-wrap;">{{ original_message }}</p>
+</div>
+<div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 14px; margin: 18px 0; border-radius: 4px;">
+    <p style="color: #1e40af; font-size: 12px; font-weight: bold; text-transform: uppercase; margin: 0 0 8px 0;">Our response:</p>
+    <p style="color: #1f2937; font-size: 14px; margin: 0; white-space: pre-wrap;">{{ reply_message }}</p>
+</div>
+<p>If you have any further questions or concerns, please don't hesitate to contact us again.</p>
+<p style="color: #6b7280; font-size: 14px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">Best regards,<br>The MyZakat Team</p>
+{% endblock %}

@@ -24,6 +24,9 @@ import {
   Layers,
   Newspaper,
   Megaphone,
+  Mail,
+  ShieldOff,
+  Send,
   ExternalLink,
   type LucideIcon,
 } from 'lucide-react'
@@ -113,6 +116,17 @@ const NAV: NavEntry[] = [
       { kind: 'link', name: 'Gallery', href: '/admin/gallery', icon: Film },
       { kind: 'link', name: 'S3 Browser', href: '/admin/s3-media', icon: FolderOpen },
       { kind: 'link', name: 'Cleanup', href: '/admin/cleanup', icon: Trash2 },
+    ],
+  },
+
+  {
+    kind: 'group',
+    id: 'marketing',
+    label: 'Marketing',
+    icon: Send,
+    items: [
+      { kind: 'link', name: 'Email Log', href: '/admin/email-log', icon: Mail },
+      { kind: 'link', name: 'Suppressions', href: '/admin/suppressions', icon: ShieldOff },
     ],
   },
 

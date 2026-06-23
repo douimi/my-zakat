@@ -1,0 +1,16 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #16a34a; margin: 0 0 16px 0; font-size: 20px;">New volunteer sign-up</h2>
+<p><strong>Name:</strong> {{ name }}</p>
+<p><strong>Email:</strong> <a href="mailto:{{ email }}">{{ email }}</a></p>
+<p><strong>Interest:</strong> {{ interest }}</p>
+{% if phone %}<p><strong>Phone:</strong> <a href="tel:{{ phone }}">{{ phone }}</a></p>{% endif %}
+{% if message %}
+<p><strong>Message:</strong></p>
+<div style="background-color: #f9fafb; padding: 14px; border-left: 4px solid #16a34a; border-radius: 4px; white-space: pre-wrap;">{{ message }}</div>
+{% endif %}
+<p><strong>Submitted:</strong> {{ submitted_at }}</p>
+<p style="margin-top: 24px;">
+    <a href="{{ admin_url }}" class="btn" style="background-color: #16a34a;">View Volunteers</a>
+</p>
+{% endblock %}

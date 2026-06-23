@@ -1,0 +1,13 @@
+A new volunteer has signed up on MyZakat.
+
+Name: {{ name }}
+Email: {{ email }}
+Interest: {{ interest }}
+{% if phone %}Phone: {{ phone }}
+{% endif %}{% if message %}
+Message:
+{{ message }}
+{% endif %}
+Submitted: {{ submitted_at }}
+
+View all volunteers: {{ admin_url }}

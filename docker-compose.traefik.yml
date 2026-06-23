@@ -79,16 +79,69 @@ services:
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_SSL=false
       - S3_PUBLIC_URL=${S3_PUBLIC_URL:-http://31.97.131.31:9000}
+      # Marketing P1 — Resend transport + Redis-backed Arq queue
+      - REDIS_URL=redis://redis:6379/0
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-noreply@myzakat.org}
+      - RESEND_FROM_NAME=${RESEND_FROM_NAME:-MyZakat}
+      - RESEND_REPLY_TO=${RESEND_REPLY_TO:-info@myzakat.org}
+      - RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET}
     depends_on:
       db:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
     networks:
       - traefik-network
       - internal
+
+  # Marketing email worker — pulls outbox rows from Redis and delivers via Resend.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myzakat-worker
+    restart: unless-stopped
+    command: arq marketing.queue.WorkerSettings
+    env_file:
+      - env.production
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD}@db:5432/myzakat
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-noreply@myzakat.org}
+      - RESEND_FROM_NAME=${RESEND_FROM_NAME:-MyZakat}
+      - RESEND_REPLY_TO=${RESEND_REPLY_TO:-info@myzakat.org}
+      - FRONTEND_URL=https://myzakat.org
+      - ENVIRONMENT=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: myzakat-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=(Host(`myzakat.org`) || Host(`www.myzakat.org`)) && PathPrefix(`/api`)"

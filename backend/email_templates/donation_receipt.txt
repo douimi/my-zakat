@@ -1,0 +1,26 @@
+Dear {{ donor_name | default('Donor') }},
+
+On behalf of the Zakat Distribution Foundation (ZDF), we sincerely thank you for your generous donation of {{ amount_str }} received on {{ donation_date_str }}.
+
+Your support helps us provide food, emergency relief, support for orphans and families in need, and humanitarian assistance to vulnerable communities around the world.
+
+Zakat Distribution Foundation is recognized as a tax-exempt nonprofit organization under Section 501(c)(3) of the Internal Revenue Code.
+
+EIN: 33-2494058
+
+No goods or services were provided in exchange for this contribution. Therefore, the full amount of your donation may be tax-deductible as allowed by law.
+
+Please keep this email — and the attached PDF receipt — as your official donation receipt for tax purposes.
+
+With gratitude,
+
+Naser Hdieb
+Chairperson
+Zakat Distribution Foundation
+
+Your Zakat, Their Lifeline.
+
+—
+MyZakat — Zakat Distribution Foundation
+P.O. BOX 2250, Winchester, VA 22604
+myzakat.org · 1-833-MYZAKAT · info@myzakat.org

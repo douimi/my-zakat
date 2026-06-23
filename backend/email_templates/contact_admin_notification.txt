@@ -1,0 +1,9 @@
+A new contact form has been submitted on MyZakat.
+
+From: {{ submitter_name }} <{{ submitter_email }}>
+Submitted: {{ submitted_at }}
+
+Message:
+{{ message }}
+
+View it in the admin panel: {{ admin_url }}
