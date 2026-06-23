@@ -1,8 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime
+
+# Cross-dialect JSON: real JSONB on Postgres (production), plain JSON on
+# SQLite (the in-memory test runner in CI). Behaviour from Python is
+# identical — dicts/lists serialize the same way.
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 
 class GalleryItem(Base):
@@ -302,8 +307,8 @@ class EmailOutbox(Base):
     subject = Column(String(500), nullable=False)
     body_html = Column(Text, nullable=False)
     body_text = Column(Text, nullable=True)
-    attachments = Column(JSONB, nullable=False, default=list)
-    context = Column(JSONB, nullable=False, default=dict)
+    attachments = Column(JSONType, nullable=False, default=list)
+    context = Column(JSONType, nullable=False, default=dict)
     idempotency_key = Column(String(128), unique=True, nullable=True)
     status = Column(String(20), nullable=False, default="pending", index=True)
     provider_message_id = Column(String(255), nullable=True)
@@ -350,7 +355,7 @@ class EmailConsentLog(Base):
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     consent_text = Column(Text, nullable=True)
-    extra_metadata = Column("metadata", JSONB, nullable=False, default=dict)
+    extra_metadata = Column("metadata", JSONType, nullable=False, default=dict)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
 
 
@@ -384,7 +389,7 @@ class EmailTemplate(Base):
     preheader = Column(String(500), nullable=True)
     body_html = Column(Text, nullable=False)
     body_text = Column(Text, nullable=True)
-    variables = Column(JSONB, nullable=False, default=list)
+    variables = Column(JSONType, nullable=False, default=list)
     current_version = Column(Integer, nullable=False, default=1)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -415,7 +420,7 @@ class AudienceSegment(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    definition = Column(JSONB, nullable=False, default=list)
+    definition = Column(JSONType, nullable=False, default=list)
     cached_count = Column(Integer, nullable=True)
     cached_count_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
