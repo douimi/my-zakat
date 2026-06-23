@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useForm } from 'react-hook-form'
-import { Image as ImageIcon, Edit, Trash2, Save, X, ArrowUp, ArrowDown } from 'lucide-react'
+import { Image as ImageIcon, Edit, Trash2, Save, X, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
 import { slideshowAPI } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
@@ -93,6 +93,25 @@ const AdminSlideshow = () => {
       onError: () => {
         showError('Error', 'Failed to delete slide')
       }
+    }
+  )
+
+  // One-click enable / disable a slide without opening the edit form. Mirrors
+  // the same UX pattern used in the Gallery admin (Eye / EyeOff toggle).
+  const toggleActiveMutation = useMutation(
+    ({ id, is_active }: { id: number; is_active: boolean }) =>
+      slideshowAPI.update(id, { is_active }),
+    {
+      onSuccess: (_data, variables) => {
+        queryClient.invalidateQueries('admin-slideshow')
+        showSuccess(
+          'Success',
+          variables.is_active ? 'Slide enabled — visible on the homepage' : 'Slide disabled — hidden from the homepage',
+        )
+      },
+      onError: () => {
+        showError('Error', 'Failed to update slide status')
+      },
     }
   )
 
@@ -191,15 +210,22 @@ const AdminSlideshow = () => {
               [...slides]
                 .sort((a, b) => a.display_order - b.display_order)
                 .map((slide: SlideshowSlide) => (
-                  <div key={slide.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start space-x-4">
+                  <div
+                    key={slide.id}
+                    className={`border rounded-lg p-4 transition-colors ${
+                      slide.is_active
+                        ? 'border-gray-200 bg-white'
+                        : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className={`flex items-start space-x-4 ${!slide.is_active ? 'opacity-60' : ''}`}>
                       {/* Image Preview */}
                       <div className="flex-shrink-0">
                         {slide.image_url || slide.image_filename ? (
                           <img
                             src={slide.image_url || (slide.image_filename ? `/api/uploads/media/images/${slide.image_filename}` : '')}
                             alt={slide.title}
-                            className="w-24 h-16 object-cover rounded"
+                            className={`w-24 h-16 object-cover rounded ${!slide.is_active ? 'grayscale' : ''}`}
                             onError={(e) => {
                               e.currentTarget.src = ''
                               e.currentTarget.style.display = 'none'
@@ -214,9 +240,19 @@ const AdminSlideshow = () => {
 
                       {/* Slide Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold text-gray-900 truncate">{slide.title}</h3>
-                          <div className="flex items-center space-x-2">
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <h3 className="font-semibold text-gray-900 truncate flex-1">{slide.title}</h3>
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              slide.is_active
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {slide.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                            {slide.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          <div className="flex items-center space-x-1">
                             <button
                               onClick={() => handleOrderChange(slide.id, 'up')}
                               className="p-1 text-gray-600 hover:text-primary-600"
@@ -238,14 +274,26 @@ const AdminSlideshow = () => {
                         )}
                         <div className="flex items-center space-x-4 text-xs text-gray-500">
                           <span>Order: {slide.display_order}</span>
-                          <span className={slide.is_active ? 'text-green-600' : 'text-gray-400'}>
-                            {slide.is_active ? 'Active' : 'Inactive'}
-                          </span>
+                          {!slide.is_active && (
+                            <span className="italic text-gray-400">Hidden from homepage slideshow</span>
+                          )}
                         </div>
                       </div>
 
                       {/* Actions */}
                       <div className="flex flex-col space-y-2">
+                        <button
+                          onClick={() => toggleActiveMutation.mutate({ id: slide.id, is_active: !slide.is_active })}
+                          disabled={toggleActiveMutation.isLoading}
+                          className={`p-2 rounded transition-colors ${
+                            slide.is_active
+                              ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                              : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                          }`}
+                          title={slide.is_active ? 'Disable slide (hide from homepage)' : 'Enable slide (show on homepage)'}
+                        >
+                          {slide.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                         <button
                           onClick={() => handleEdit(slide)}
                           className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded"
