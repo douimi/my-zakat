@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Send, Plus, Edit, Trash2, X, Rocket, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Send, Plus, Edit, Trash2, X, Rocket, AlertTriangle, BarChart3 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -196,6 +197,9 @@ const AdminMarketingCampaigns = () => {
                     <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell whitespace-nowrap">{formatDate(c.created_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        {(c.status === 'sent' || c.status === 'sending') && (
+                          <Link to={`/admin/marketing-campaigns/${c.id}/analytics`} className="text-pink-600 hover:text-pink-800 p-1.5 rounded hover:bg-pink-50" title="View analytics"><BarChart3 className="w-4 h-4" /></Link>
+                        )}
                         {(c.status === 'draft' || c.status === 'scheduled') && (
                           <button onClick={() => setSending(c)} className="text-green-700 hover:text-green-900 p-1.5 rounded hover:bg-green-50" title="Send now"><Send className="w-4 h-4" /></button>
                         )}

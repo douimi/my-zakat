@@ -32,7 +32,7 @@ from marketing.compliance import (
     suppress_email,
     unsuppress_email,
 )
-from models import EmailOutbox, EmailSuppression, User
+from models import CampaignSend, EmailEvent, EmailOutbox, EmailSuppression, MarketingCampaign, User
 
 logger = get_logger(__name__)
 
@@ -141,27 +141,72 @@ async def resend_webhook(request: Request, db: Session = Depends(get_db)):
     if not recipient:
         return {"received": True, "action": "no-op (no recipient)"}
 
-    if event_type in ("email.bounced", "bounced"):
-        bounce_type = (data.get("bounce", {}) or {}).get("type", "")
-        # Only suppress on hard bounces / permanent failures.
-        if "hard" in bounce_type.lower() or "permanent" in bounce_type.lower() or not bounce_type:
-            suppress_email(db, recipient, reason="hard_bounce", source_message_id=message_id)
-        else:
-            logger.info("Soft bounce for %s — not suppressing", recipient)
-    elif event_type in ("email.complained", "complained"):
-        suppress_email(db, recipient, reason="complaint", source_message_id=message_id)
-    elif event_type in ("email.delivered", "delivered"):
-        # Mark outbox row as delivered if we can find it.
-        if message_id:
-            row = (
-                db.query(EmailOutbox)
-                .filter(EmailOutbox.provider_message_id == message_id)
+    # Find the associated campaign_send via outbox.provider_message_id so we
+    # can update aggregate counters and insert an event row.
+    outbox_row = None
+    cs_row: CampaignSend | None = None
+    if message_id:
+        outbox_row = (
+            db.query(EmailOutbox)
+            .filter(EmailOutbox.provider_message_id == message_id)
+            .first()
+        )
+        if outbox_row:
+            cs_row = (
+                db.query(CampaignSend)
+                .filter(CampaignSend.outbox_id == outbox_row.id)
                 .first()
             )
-            if row and row.status != "sent":
-                row.status = "sent"
-                row.sent_at = row.sent_at or datetime.utcnow()
-                db.commit()
+
+    def _log_event(etype: str, *, url_value: str | None = None, meta: dict | None = None) -> None:
+        ev = EmailEvent(
+            campaign_send_id=cs_row.id if cs_row else None,
+            outbox_id=outbox_row.id if outbox_row else None,
+            recipient_email=recipient.lower(),
+            campaign_id=cs_row.campaign_id if cs_row else None,
+            event_type=etype,
+            url=url_value,
+            event_metadata=meta or {},
+        )
+        db.add(ev)
+
+    if event_type in ("email.bounced", "bounced"):
+        bounce_type = (data.get("bounce", {}) or {}).get("type", "")
+        is_hard = "hard" in bounce_type.lower() or "permanent" in bounce_type.lower() or not bounce_type
+        if is_hard:
+            suppress_email(db, recipient, reason="hard_bounce", source_message_id=message_id)
+        _log_event("bounce", meta={"bounce_type": bounce_type, "is_hard": is_hard})
+        if cs_row and is_hard and not cs_row.bounced:
+            cs_row.bounced = True
+            if cs_row.campaign_id:
+                camp = db.query(MarketingCampaign).filter(MarketingCampaign.id == cs_row.campaign_id).first()
+                if camp:
+                    camp.bounced_count = (camp.bounced_count or 0) + 1
+        db.commit()
+
+    elif event_type in ("email.complained", "complained"):
+        suppress_email(db, recipient, reason="complaint", source_message_id=message_id)
+        _log_event("complaint", meta={})
+        if cs_row and not cs_row.complained:
+            cs_row.complained = True
+            if cs_row.campaign_id:
+                camp = db.query(MarketingCampaign).filter(MarketingCampaign.id == cs_row.campaign_id).first()
+                if camp:
+                    camp.complained_count = (camp.complained_count or 0) + 1
+        db.commit()
+
+    elif event_type in ("email.delivered", "delivered"):
+        if outbox_row and outbox_row.status != "sent":
+            outbox_row.status = "sent"
+            outbox_row.sent_at = outbox_row.sent_at or datetime.utcnow()
+        _log_event("delivered", meta={})
+        if cs_row and cs_row.status != "sent":
+            cs_row.status = "sent"
+            if cs_row.campaign_id:
+                camp = db.query(MarketingCampaign).filter(MarketingCampaign.id == cs_row.campaign_id).first()
+                if camp:
+                    camp.delivered_count = (camp.delivered_count or 0) + 1
+        db.commit()
 
     return {"received": True, "event_type": event_type, "recipient": recipient}
 

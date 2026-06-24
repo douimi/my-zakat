@@ -468,6 +468,13 @@ class MarketingCampaign(Base):
     sent_count = Column(Integer, nullable=False, default=0)
     failed_count = Column(Integer, nullable=False, default=0)
     suppressed_count = Column(Integer, nullable=False, default=0)
+    # P3 tracking aggregates (counts unique recipients, not raw events).
+    delivered_count = Column(Integer, nullable=False, default=0)
+    opened_count = Column(Integer, nullable=False, default=0)
+    clicked_count = Column(Integer, nullable=False, default=0)
+    bounced_count = Column(Integer, nullable=False, default=0)
+    complained_count = Column(Integer, nullable=False, default=0)
+    unsubscribed_count = Column(Integer, nullable=False, default=0)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -486,3 +493,44 @@ class CampaignSend(Base):
     status = Column(String(20), nullable=False, default="pending", index=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # P3 tracking — per-recipient engagement counters + tokens.
+    open_count = Column(Integer, nullable=False, default=0)
+    click_count = Column(Integer, nullable=False, default=0)
+    first_open_at = Column(DateTime, nullable=True)
+    first_click_at = Column(DateTime, nullable=True)
+    bounced = Column(Boolean, nullable=False, default=False)
+    complained = Column(Boolean, nullable=False, default=False)
+    unsubscribed = Column(Boolean, nullable=False, default=False)
+    is_mpp = Column(Boolean, nullable=False, default=False)
+    open_token = Column(String(128), unique=True, nullable=True, index=True)
+    click_token = Column(String(128), unique=True, nullable=True, index=True)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Marketing P3 — event tracking (opens, clicks, bounces, conversions)
+# ─────────────────────────────────────────────────────────────────────
+
+class EmailEvent(Base):
+    """Append-only timeline of email engagement events.
+
+    Inserted by:
+      - /track/open/{token}.gif  (open pixel)
+      - /track/click/{token}     (link redirect)
+      - Resend webhook           (delivered / bounce / complaint)
+      - Unsubscribe endpoint     (unsubscribe)
+      - Stripe webhook           (conversion — links a donation back to a send)
+    """
+    __tablename__ = "email_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_send_id = Column(Integer, ForeignKey("campaign_sends.id", ondelete="SET NULL"), nullable=True, index=True)
+    outbox_id = Column(Integer, ForeignKey("email_outbox.id", ondelete="SET NULL"), nullable=True, index=True)
+    recipient_email = Column(String(255), nullable=False, index=True)
+    campaign_id = Column(Integer, ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type = Column(String(30), nullable=False, index=True)
+    occurred_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    url = Column(Text, nullable=True)
+    is_mpp = Column(Boolean, nullable=False, default=False)
+    event_metadata = Column("metadata", JSONType, nullable=False, default=dict)

@@ -22,6 +22,7 @@ from logging_config import get_logger
 from marketing.audience import iter_segment_recipients
 from marketing.mailer import ComplianceMailer
 from marketing.renderer import _default_context, _env_html, _env_text
+from marketing.tracking import make_token, rewrite_html_for_tracking
 from premailer import transform as premailer_transform
 from jinja2 import Template as JinjaTemplate
 from models import (
@@ -77,6 +78,11 @@ def _serialize(c: MarketingCampaign) -> dict:
         "sent_count": c.sent_count,
         "failed_count": c.failed_count,
         "suppressed_count": c.suppressed_count,
+        "delivered_count": getattr(c, "delivered_count", 0) or 0,
+        "opened_count": getattr(c, "opened_count", 0) or 0,
+        "clicked_count": getattr(c, "clicked_count", 0) or 0,
+        "bounced_count": getattr(c, "bounced_count", 0) or 0,
+        "complained_count": getattr(c, "complained_count", 0) or 0,
         "created_at": c.created_at,
         "updated_at": c.updated_at,
     }
@@ -251,27 +257,48 @@ async def send_campaign_now(
                 continue
             inlined_html = premailer_transform(rendered_html, keep_style_tags=False, disable_validation=True)
 
-            outbox = mailer.queue(
-                to_email=email,
-                to_name=recipient.get("name"),
-                subject=rendered_subject,
-                body_html=inlined_html,
-                body_text=rendered_text,
-                category="marketing",
-                context={"campaign_id": c.id, "first_name": ctx.get("first_name")},
-                idempotency_key=f"campaign-{c.id}-{email}-{c.dispatch_token[:16]}",
-            )
-
+            # Create / fetch the per-recipient send row FIRST so we have a stable
+            # id to embed in tracking URLs. Tokens are HMAC-signed and recorded
+            # on the send row for verification at the public endpoint.
             cs = existing or CampaignSend(
                 campaign_id=c.id,
                 recipient_email=email,
                 recipient_name=recipient.get("name"),
             )
+            if not existing:
+                db.add(cs)
+                db.flush()  # populate cs.id without ending the transaction
+            if not cs.open_token:
+                cs.open_token = make_token("open", cs.id)
+            if not cs.click_token:
+                cs.click_token = make_token("click", cs.id)
+            db.flush()
+
+            # Rewrite outgoing links + inject the open pixel BEFORE we hand off
+            # to ComplianceMailer. Skip URLs we never want to wrap (mailto:,
+            # tel:, unsubscribe links — those are appended later by ComplianceMailer).
+            tracked_html = rewrite_html_for_tracking(
+                inlined_html,
+                campaign_id=c.id,
+                send_id=cs.id,
+                click_token=cs.click_token,
+                open_token=cs.open_token,
+            )
+
+            outbox = mailer.queue(
+                to_email=email,
+                to_name=recipient.get("name"),
+                subject=rendered_subject,
+                body_html=tracked_html,
+                body_text=rendered_text,
+                category="marketing",
+                context={"campaign_id": c.id, "send_id": cs.id, "first_name": ctx.get("first_name")},
+                idempotency_key=f"campaign-{c.id}-{email}-{c.dispatch_token[:16]}",
+            )
+
             cs.outbox_id = outbox.id if outbox else None
             cs.status = "suppressed" if (outbox and outbox.status == "suppressed") else ("queued" if outbox else "failed")
             cs.error = outbox.error if (outbox and outbox.error) else None
-            if not existing:
-                db.add(cs)
             db.commit()
 
             if cs.status == "suppressed":
@@ -336,4 +363,75 @@ async def list_campaign_sends(
             }
             for r in rows
         ],
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Analytics
+# ─────────────────────────────────────────────────────────────────────
+
+from sqlalchemy import func as _f
+from models import EmailEvent
+
+
+@router.get("/campaigns/{campaign_id}/analytics")
+async def campaign_analytics(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Per-campaign engagement metrics + top-clicked URLs.
+
+    Rates are computed against the delivered-or-queued audience to avoid the
+    "100% open rate on a 1-recipient campaign" trap when delivered_count is
+    still 0 (e.g. the Resend webhook hasn't fired yet).
+    """
+    c = db.query(MarketingCampaign).filter(MarketingCampaign.id == campaign_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Per-recipient counts from campaign_sends (always up-to-date).
+    base_q = db.query(CampaignSend).filter(CampaignSend.campaign_id == c.id)
+    total_rows = base_q.count()
+    queued = base_q.filter(CampaignSend.status.in_(("queued", "sent"))).count()
+    sent_status = base_q.filter(CampaignSend.status == "sent").count()
+    suppressed = base_q.filter(CampaignSend.status == "suppressed").count()
+    failed = base_q.filter(CampaignSend.status == "failed").count()
+    opened = base_q.filter(CampaignSend.open_count > 0, CampaignSend.is_mpp == False).count()  # noqa: E712
+    clicked = base_q.filter(CampaignSend.click_count > 0).count()
+    bounced = base_q.filter(CampaignSend.bounced == True).count()  # noqa: E712
+    complained = base_q.filter(CampaignSend.complained == True).count()  # noqa: E712
+    mpp_only = base_q.filter(CampaignSend.is_mpp == True, CampaignSend.click_count == 0).count()  # noqa: E712
+
+    denom = max(queued, 1)  # avoid div/0 in the rate display
+
+    # Top 10 clicked URLs.
+    top_urls = (
+        db.query(EmailEvent.url, _f.count(EmailEvent.id).label("clicks"))
+        .filter(EmailEvent.campaign_id == c.id, EmailEvent.event_type == "click", EmailEvent.url.isnot(None))
+        .group_by(EmailEvent.url)
+        .order_by(_f.count(EmailEvent.id).desc())
+        .limit(10)
+        .all()
+    )
+
+    return {
+        "campaign_id": c.id,
+        "name": c.name,
+        "status": c.status,
+        "total_recipients": total_rows,
+        "queued": queued,
+        "sent": sent_status,
+        "suppressed": suppressed,
+        "failed": failed,
+        "opened": opened,
+        "clicked": clicked,
+        "bounced": bounced,
+        "complained": complained,
+        "mpp_only_opens": mpp_only,
+        "open_rate":   round(opened / denom * 100, 1),
+        "click_rate":  round(clicked / denom * 100, 1),
+        "ctor":        round(clicked / max(opened, 1) * 100, 1),  # click-to-open rate
+        "bounce_rate": round(bounced / denom * 100, 1),
+        "top_urls": [{"url": u or "", "clicks": int(n)} for (u, n) in top_urls],
     }
