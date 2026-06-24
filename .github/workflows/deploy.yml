@@ -210,7 +210,9 @@ jobs:
           mkdir -p letsencrypt
 
           echo "--- Building Docker images ---"
-          docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend
+          # `worker` is also built from ./backend but is a SEPARATE docker image —
+          # it MUST be in this list or it keeps running stale code after a deploy.
+          docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend worker
 
           echo "--- Restarting services ---"
           docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
