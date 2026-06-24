@@ -37,6 +37,29 @@ const Donate = () => {
   const urlFrequency = searchParams.get('frequency')
   const urlPurpose = searchParams.get('purpose')
 
+  // Marketing attribution — captured from inbound campaign links so we can
+  // forward them through Stripe and credit the originating campaign on the
+  // donation webhook. Read once on mount and persist in sessionStorage so
+  // they survive form re-submits and back/forward navigation.
+  const getAttribution = () => {
+    const fromUrl = (k: string) => searchParams.get(k) || ''
+    const stored = (() => {
+      try { return JSON.parse(sessionStorage.getItem('myzakat_attribution') || '{}') }
+      catch { return {} as Record<string, string> }
+    })()
+    const merged = {
+      utm_source: fromUrl('utm_source') || stored.utm_source || '',
+      utm_medium: fromUrl('utm_medium') || stored.utm_medium || '',
+      utm_campaign: fromUrl('utm_campaign') || stored.utm_campaign || '',
+      utm_content: fromUrl('utm_content') || stored.utm_content || '',
+    }
+    if (merged.utm_source || merged.utm_campaign) {
+      try { sessionStorage.setItem('myzakat_attribution', JSON.stringify(merged)) } catch { /* ignore */ }
+    }
+    return merged
+  }
+  const attribution = getAttribution()
+
   const [selectedAmount, setSelectedAmount] = useState<number | null>(
     urlAmount ? parseFloat(urlAmount) : null
   )
@@ -122,6 +145,15 @@ const Donate = () => {
       return
     }
 
+    // Marketing attribution: forward UTMs captured from the inbound campaign
+    // link through Stripe metadata so the webhook can credit the campaign.
+    const attributionPayload = {
+      utm_source: attribution.utm_source || undefined,
+      utm_medium: attribution.utm_medium || undefined,
+      utm_campaign: attribution.utm_campaign || undefined,
+      utm_content: attribution.utm_content || undefined,
+    }
+
     setIsProcessing(true)
     try {
       if (data.frequency === 'Monthly' || data.frequency === 'Annually') {
@@ -133,7 +165,8 @@ const Donate = () => {
           purpose: data.purpose,
           interval: data.frequency === 'Monthly' ? 'month' : 'year',
           payment_day: 1,  // Default to 1st of month
-          payment_month: undefined  // Not used anymore
+          payment_month: undefined,  // Not used anymore
+          ...attributionPayload,
         })
 
         // Redirect to Stripe Checkout
@@ -151,7 +184,8 @@ const Donate = () => {
           name: data.name,
           email: data.email,
           purpose: data.purpose,
-          frequency: data.frequency
+          frequency: data.frequency,
+          ...attributionPayload,
         })
 
         // Redirect to Stripe Checkout

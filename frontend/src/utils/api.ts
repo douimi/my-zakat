@@ -112,11 +112,15 @@ export const donationsAPI = {
     email: string
     purpose?: string
     frequency?: string
+    utm_source?: string
+    utm_medium?: string
+    utm_campaign?: string
+    utm_content?: string
   }): Promise<PaymentSession> => {
     const response = await api.post('/api/donations/create-payment-session', payment)
     return response.data
   },
-  
+
   createSubscription: async (subscription: {
     amount: number
     name: string
@@ -125,6 +129,10 @@ export const donationsAPI = {
     interval: 'month' | 'year'
     payment_day: number
     payment_month?: number
+    utm_source?: string
+    utm_medium?: string
+    utm_campaign?: string
+    utm_content?: string
   }): Promise<{ id: string }> => {
     const response = await api.post('/api/donations/create-subscription', subscription)
     return response.data

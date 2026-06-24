@@ -22,6 +22,10 @@ interface Analytics {
   click_rate: number
   ctor: number
   bounce_rate: number
+  conversions?: number
+  revenue?: number
+  avg_donation?: number
+  conversion_rate?: number
   top_urls: { url: string; clicks: number }[]
 }
 
@@ -128,6 +132,36 @@ const AdminCampaignAnalytics = () => {
           accent="text-purple-700"
         />
       </div>
+
+      {/* Attribution / revenue KPIs — only shown if any conversions yet */}
+      {(data.conversions ?? 0) > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KpiCard
+            label="Revenue raised"
+            value={`$${(data.revenue ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+            secondary={`from ${data.conversions} donation${(data.conversions ?? 0) === 1 ? '' : 's'}`}
+            accent="text-pink-700"
+          />
+          <KpiCard
+            label="Donations"
+            value={(data.conversions ?? 0).toLocaleString()}
+            secondary="attributed to this campaign"
+            accent="text-pink-700"
+          />
+          <KpiCard
+            label="Avg gift"
+            value={`$${(data.avg_donation ?? 0).toFixed(0)}`}
+            secondary="mean donation amount"
+            accent="text-pink-700"
+          />
+          <KpiCard
+            label="Conversion rate"
+            value={`${data.conversion_rate ?? 0}%`}
+            secondary="recipients who donated"
+            accent="text-pink-700"
+          />
+        </div>
+      )}
 
       {/* Engagement breakdown */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

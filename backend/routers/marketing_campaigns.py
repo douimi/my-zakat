@@ -371,7 +371,7 @@ async def list_campaign_sends(
 # ─────────────────────────────────────────────────────────────────────
 
 from sqlalchemy import func as _f
-from models import EmailEvent
+from models import Donation, EmailEvent
 
 
 @router.get("/campaigns/{campaign_id}/analytics")
@@ -415,6 +415,21 @@ async def campaign_analytics(
         .all()
     )
 
+    # P3b — donation attribution rollups. Read directly from donations table
+    # (rather than the cached counters) so the page is always accurate even
+    # if a webhook missed a counter update.
+    conversion_stats = (
+        db.query(
+            _f.count(Donation.id).label("conversions"),
+            _f.coalesce(_f.sum(Donation.amount), 0).label("revenue"),
+        )
+        .filter(Donation.utm_campaign == str(c.id))
+        .first()
+    )
+    conversions = int(conversion_stats.conversions) if conversion_stats else 0
+    revenue = float(conversion_stats.revenue) if conversion_stats else 0.0
+    aov = round(revenue / conversions, 2) if conversions > 0 else 0.0
+
     return {
         "campaign_id": c.id,
         "name": c.name,
@@ -433,5 +448,10 @@ async def campaign_analytics(
         "click_rate":  round(clicked / denom * 100, 1),
         "ctor":        round(clicked / max(opened, 1) * 100, 1),  # click-to-open rate
         "bounce_rate": round(bounced / denom * 100, 1),
+        # P3b — attribution
+        "conversions":     conversions,
+        "revenue":         revenue,
+        "avg_donation":    aov,
+        "conversion_rate": round(conversions / denom * 100, 2),
         "top_urls": [{"url": u or "", "clicks": int(n)} for (u, n) in top_urls],
     }

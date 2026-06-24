@@ -48,6 +48,13 @@ class Donation(Base):
     payment_method = Column(String(50), nullable=True)        # Cash / Check / Credit Card / Other / Stripe
     proof_filename = Column(String(500), nullable=True)       # S3 key of the proof file
     notes = Column(Text, nullable=True)                       # Admin notes
+    # P3b marketing attribution — populated from Stripe metadata when the
+    # donor arrived via a campaign link (utm_campaign = campaign_id,
+    # utm_content = campaign_send_id).
+    utm_source = Column(String(100), nullable=True)
+    utm_medium = Column(String(100), nullable=True)
+    utm_campaign = Column(String(100), nullable=True, index=True)
+    utm_content = Column(String(100), nullable=True)
 
 
 class User(Base):
@@ -172,6 +179,11 @@ class DonationSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     next_payment_date = Column(DateTime, nullable=True)
+    # P3b marketing attribution
+    utm_source = Column(String(100), nullable=True)
+    utm_medium = Column(String(100), nullable=True)
+    utm_campaign = Column(String(100), nullable=True, index=True)
+    utm_content = Column(String(100), nullable=True)
 
 
 class Setting(Base):
@@ -475,6 +487,9 @@ class MarketingCampaign(Base):
     bounced_count = Column(Integer, nullable=False, default=0)
     complained_count = Column(Integer, nullable=False, default=0)
     unsubscribed_count = Column(Integer, nullable=False, default=0)
+    # P3b — donation attribution rollups.
+    converted_count = Column(Integer, nullable=False, default=0)
+    revenue_cents = Column(Integer, nullable=False, default=0)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

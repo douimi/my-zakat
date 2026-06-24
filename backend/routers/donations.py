@@ -682,6 +682,19 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         
         # Create Stripe checkout session
         purpose = payment.purpose or "General Donation"
+        # Marketing attribution — forward any UTMs supplied by the donate page
+        # into Stripe metadata so the webhook can persist them on the Donation row.
+        stripe_metadata = {
+            "purpose": purpose,
+            "frequency": payment.frequency,
+            "donor_name": payment.name,
+            "donor_email": payment.email,
+        }
+        for utm_field in ("utm_source", "utm_medium", "utm_campaign", "utm_content"):
+            value = getattr(payment, utm_field, None)
+            if value:
+                stripe_metadata[utm_field] = str(value)[:100]
+
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
@@ -697,12 +710,7 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             }],
             mode="payment",
             customer_email=payment.email,
-            metadata={
-                "purpose": purpose,
-                "frequency": payment.frequency,
-                "donor_name": payment.name,
-                "donor_email": payment.email
-            },
+            metadata=stripe_metadata,
             success_url=f"{frontend_url}/donation-success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{frontend_url}/donate",
         )
@@ -891,6 +899,10 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                 "donor_name": subscription.name,
                 "payment_day": str(subscription.payment_day),
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
+                # P3b marketing attribution
+                **{f: str(getattr(subscription, f))[:100] for f in
+                   ("utm_source", "utm_medium", "utm_campaign", "utm_content")
+                   if getattr(subscription, f, None)},
             }
         )
         
@@ -1246,6 +1258,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     donor_name = details.get("name", "")
                 frequency = metadata.get("frequency", "One-Time")
 
+                # Marketing attribution carried through from Donate page → Stripe metadata.
+                utm_source = metadata.get("utm_source")
+                utm_medium = metadata.get("utm_medium")
+                utm_campaign = metadata.get("utm_campaign")
+                utm_content = metadata.get("utm_content")
+
                 try:
                     existing = db.query(Donation).filter(
                         Donation.stripe_session_id == session_id
@@ -1257,11 +1275,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         existing.amount = amount
                         existing.frequency = frequency
                         existing.certificate_filename = "available"
+                        if utm_source:   existing.utm_source = utm_source
+                        if utm_medium:   existing.utm_medium = utm_medium
+                        if utm_campaign: existing.utm_campaign = utm_campaign
+                        if utm_content:  existing.utm_content = utm_content
                         if not existing.donated_at:
                             existing.donated_at = datetime.utcnow()
                         db.commit()
                         db.refresh(existing)
                         logger.info("Donation %s confirmed (updated pending) — sending certificate to %s", existing.id, existing.email)
+                        _record_marketing_conversion(db, existing)
                         _send_certificate_safe(existing)
                     else:
                         new_donation = Donation(
@@ -1272,11 +1295,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             stripe_session_id=session_id,
                             donated_at=datetime.utcnow(),
                             certificate_filename="available",
+                            utm_source=utm_source,
+                            utm_medium=utm_medium,
+                            utm_campaign=utm_campaign,
+                            utm_content=utm_content,
                         )
                         db.add(new_donation)
                         db.commit()
                         db.refresh(new_donation)
                         logger.info("Donation %s created (no pending found)", new_donation.id)
+                        _record_marketing_conversion(db, new_donation)
                         _send_certificate_safe(new_donation)
 
                 except Exception as e:
@@ -1495,3 +1523,102 @@ def _send_certificate_safe(donation: Donation):
         import traceback
         logger.error("Certificate auto-email ERROR for donation %s: %s", donation.id, e)
         logger.error("Traceback: %s", traceback.format_exc())
+
+
+def _record_marketing_conversion(db: Session, donation: Donation) -> None:
+    """If the donation carries marketing UTMs, log a conversion EmailEvent and
+    bump the originating campaign's revenue + converted_count counters.
+
+    Designed to never break the webhook — any failure is logged and swallowed.
+    """
+    if not donation.utm_campaign and not donation.utm_content:
+        return  # not a marketing-attributed donation
+
+    try:
+        from models import CampaignSend, EmailEvent, MarketingCampaign
+
+        campaign_id: Optional[int] = None
+        send_id: Optional[int] = None
+        try:
+            if donation.utm_campaign:
+                campaign_id = int(donation.utm_campaign)
+        except (TypeError, ValueError):
+            pass
+        try:
+            if donation.utm_content:
+                send_id = int(donation.utm_content)
+        except (TypeError, ValueError):
+            pass
+
+        # Verify the send actually exists and belongs to the named campaign so a
+        # malicious link can't credit an arbitrary campaign.
+        cs = None
+        if send_id is not None:
+            cs = db.query(CampaignSend).filter(CampaignSend.id == send_id).first()
+            if cs is None:
+                send_id = None
+            elif campaign_id is not None and cs.campaign_id != campaign_id:
+                # Mismatch — trust the send_id over the URL-supplied campaign_id.
+                campaign_id = cs.campaign_id
+
+        amount_cents = int(round((donation.amount or 0) * 100))
+
+        # Idempotency: don't double-credit if the webhook fires twice for the
+        # same Stripe session. Check whether a conversion event already exists
+        # for this donation.
+        existing = (
+            db.query(EmailEvent)
+            .filter(
+                EmailEvent.event_type == "conversion",
+                EmailEvent.event_metadata["donation_id"].astext == str(donation.id),
+            )
+            .first()
+        ) if hasattr(EmailEvent.event_metadata, "astext") else None
+        # The JSONB-on-Postgres / JSON-on-SQLite split means astext only works
+        # on Postgres. On SQLite (CI) we just do a naive duplicate check.
+        if existing is None:
+            existing = (
+                db.query(EmailEvent)
+                .filter(
+                    EmailEvent.event_type == "conversion",
+                    EmailEvent.campaign_send_id == send_id,
+                    EmailEvent.recipient_email == (donation.email or "").lower(),
+                )
+                .first()
+            )
+        if existing is not None:
+            return
+
+        event = EmailEvent(
+            campaign_send_id=send_id,
+            outbox_id=None,
+            recipient_email=(donation.email or "").lower(),
+            campaign_id=campaign_id,
+            event_type="conversion",
+            event_metadata={
+                "donation_id": str(donation.id),
+                "amount_cents": amount_cents,
+                "frequency": donation.frequency or "",
+                "utm_source": donation.utm_source or "",
+                "utm_medium": donation.utm_medium or "",
+            },
+        )
+        db.add(event)
+
+        # Roll up to per-campaign aggregates so the analytics page reads fast.
+        if campaign_id is not None:
+            camp = db.query(MarketingCampaign).filter(MarketingCampaign.id == campaign_id).first()
+            if camp is not None:
+                camp.converted_count = (camp.converted_count or 0) + 1
+                camp.revenue_cents = (camp.revenue_cents or 0) + amount_cents
+
+        db.commit()
+        logger.info(
+            "Marketing conversion recorded for donation %s — campaign=%s send=%s amount_cents=%s",
+            donation.id, campaign_id, send_id, amount_cents,
+        )
+    except Exception as e:
+        import traceback
+        logger.warning("Could not record marketing conversion for donation %s: %s", donation.id, e)
+        logger.warning(traceback.format_exc())
+        db.rollback()

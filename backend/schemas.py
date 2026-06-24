@@ -334,6 +334,12 @@ class PaymentCreate(BaseModel):
     email: EmailStr
     purpose: Optional[str] = None
     frequency: str
+    # Marketing attribution (P3b) — forwarded from the Donate page URL into
+    # Stripe Checkout's metadata, then back onto the Donation row in the webhook.
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
 
 class PaymentSession(BaseModel):
     id: str
@@ -377,6 +383,11 @@ class SubscriptionCreate(BaseModel):
     interval: str
     payment_day: int
     payment_month: Optional[int] = None
+    # Marketing attribution (P3b)
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
 
 
 class SmsOptInRequest(BaseModel):
