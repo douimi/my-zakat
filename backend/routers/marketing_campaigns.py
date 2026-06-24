@@ -8,9 +8,12 @@ campaigns automatically.
 """
 from __future__ import annotations
 
+import mimetypes
+import os
 import secrets
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -22,7 +25,9 @@ from logging_config import get_logger
 from marketing.audience import iter_segment_recipients
 from marketing.mailer import ComplianceMailer
 from marketing.renderer import _default_context, _env_html, _env_text
+from marketing.resend_client import encode_attachment
 from marketing.tracking import make_token, rewrite_html_for_tracking
+from s3_service import download_file, extract_object_key_from_url
 from premailer import transform as premailer_transform
 from jinja2 import Template as JinjaTemplate
 from models import (
@@ -37,6 +42,52 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+def _fetch_campaign_attachments(urls: list[str]) -> list[dict[str, Any]]:
+    """Resolve each campaign attachment URL into Resend-shaped bytes.
+
+    Supports:
+      - Backend-proxy URLs:  /api/uploads/media/... → S3 download_file
+      - Direct S3 URLs containing the bucket name
+      - Any other HTTPS URL → fetched via stdlib (no requests dependency)
+
+    Failures on individual attachments are logged and skipped — they should
+    never block a campaign from sending.
+    """
+    if not urls:
+        return []
+
+    results: list[dict[str, Any]] = []
+    for raw_url in urls:
+        if not raw_url:
+            continue
+        url = raw_url.strip()
+        filename = os.path.basename(urlparse(url).path) or "attachment"
+        try:
+            object_key = extract_object_key_from_url(url)
+            content: bytes | None = None
+            if object_key:
+                content = download_file(object_key)
+            if content is None:
+                # Fall back to an HTTP GET (works for any reachable URL).
+                from urllib.request import Request, urlopen
+                req = Request(url, headers={"User-Agent": "MyZakat-Marketing/1.0"})
+                with urlopen(req, timeout=20) as resp:
+                    content = resp.read()
+            if not content:
+                logger.warning("Campaign attachment %s returned empty body", url)
+                continue
+            if len(content) > 25 * 1024 * 1024:
+                logger.warning("Skipping attachment %s — too large (%s bytes)", url, len(content))
+                continue
+            content_type, _ = mimetypes.guess_type(filename)
+            results.append(encode_attachment(filename, content, content_type=content_type or "application/octet-stream"))
+            logger.info("Attached %s (%s bytes) to campaign send", filename, len(content))
+        except Exception as exc:
+            logger.warning("Could not fetch campaign attachment %s: %s", url, exc)
+            continue
+    return results
+
+
 # ── Schemas ──────────────────────────────────────────────────────────
 
 class CampaignCreate(BaseModel):
@@ -47,6 +98,7 @@ class CampaignCreate(BaseModel):
     preheader_override: Optional[str] = None
     body_html_override: Optional[str] = None
     body_text_override: Optional[str] = None
+    attachment_urls: Optional[list[str]] = None  # S3 / HTTPS URLs to attach to every recipient's send
 
 
 class CampaignUpdate(BaseModel):
@@ -57,6 +109,7 @@ class CampaignUpdate(BaseModel):
     preheader_override: Optional[str] = None
     body_html_override: Optional[str] = None
     body_text_override: Optional[str] = None
+    attachment_urls: Optional[list[str]] = None
 
 
 def _serialize(c: MarketingCampaign) -> dict:
@@ -69,6 +122,7 @@ def _serialize(c: MarketingCampaign) -> dict:
         "preheader_override": c.preheader_override,
         "body_html_override": c.body_html_override,
         "body_text_override": c.body_text_override,
+        "attachment_urls": c.attachment_urls or [],
         "status": c.status,
         "scheduled_at": c.scheduled_at,
         "started_at": c.started_at,
@@ -128,6 +182,7 @@ async def create_campaign(
         preheader_override=payload.preheader_override,
         body_html_override=payload.body_html_override,
         body_text_override=payload.body_text_override,
+        attachment_urls=payload.attachment_urls or [],
         status="draft",
         created_by=current_admin.id,
     )
@@ -216,6 +271,13 @@ async def send_campaign_now(
     c.started_at = datetime.utcnow()
     db.commit()
 
+    # Resolve attachments ONCE before the fan-out so we don't re-download the
+    # same file N times (one per recipient). Resend re-uses the base64 payload
+    # for each recipient — fine for small files, but limits the practical
+    # per-campaign attachment payload to ~25MB before the email-size limit
+    # bites. Big files belong on S3 with a download link in the body.
+    resolved_attachments = _fetch_campaign_attachments(c.attachment_urls or [])
+
     mailer = ComplianceMailer(db)
     total = 0
     queued = 0
@@ -292,6 +354,7 @@ async def send_campaign_now(
                 body_html=tracked_html,
                 body_text=rendered_text,
                 category="marketing",
+                attachments=resolved_attachments or None,
                 context={"campaign_id": c.id, "send_id": cs.id, "first_name": ctx.get("first_name")},
                 idempotency_key=f"campaign-{c.id}-{email}-{c.dispatch_token[:16]}",
             )

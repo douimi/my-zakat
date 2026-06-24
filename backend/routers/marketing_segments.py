@@ -165,7 +165,19 @@ async def segment_meta(current_admin: User = Depends(get_current_admin)):
             {"id": "name", "label": "Name", "type": "string"},
             {"id": "has_email_consent", "label": "Has email consent", "type": "bool"},
             {"id": "sms_consent", "label": "Has SMS consent", "type": "bool"},
-            {"id": "sources", "label": "Source", "type": "string", "hint": "comma-joined list; use 'contains'"},
+            {
+                "id": "sources",
+                "label": "Source / list",
+                "type": "enum",
+                "hint": "Where this contact came from — pick one source",
+                "options": [
+                    {"value": "user",         "label": "Registered users"},
+                    {"value": "subscription", "label": "Newsletter subscribers"},
+                    {"value": "volunteer",    "label": "Volunteers"},
+                    {"value": "donor",        "label": "One-time donors"},
+                    {"value": "recurring",    "label": "Recurring donors"},
+                ],
+            },
             {"id": "total_donated", "label": "Total donated ($)", "type": "number"},
             {"id": "donation_count", "label": "Number of donations", "type": "number"},
             {"id": "last_donation_at", "label": "Last donation date", "type": "date"},
@@ -174,6 +186,7 @@ async def segment_meta(current_admin: User = Depends(get_current_admin)):
             "string": ["eq", "neq", "contains", "in", "not_in", "is_null", "is_not_null"],
             "number": ["eq", "neq", "gt", "gte", "lt", "lte", "is_null", "is_not_null"],
             "bool":   ["is_true", "is_false"],
+            "enum":   ["contains", "neq"],  # 'contains' is the natural fit for the comma-joined sources string
             "date":   ["gt", "gte", "lt", "lte", "is_null", "is_not_null"],
         },
     }

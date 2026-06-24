@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Edit, Trash2, X, Rocket, AlertTriangle, BarChart3 } from 'lucide-react'
+import { Send, Plus, Edit, Trash2, X, Rocket, AlertTriangle, BarChart3, Paperclip, Image as ImageIcon } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import MediaPicker from '../../components/MediaPicker'
 
 interface Campaign {
   id: number
@@ -13,6 +14,7 @@ interface Campaign {
   preheader_override: string | null
   body_html_override: string | null
   body_text_override: string | null
+  attachment_urls: string[]
   status: string
   scheduled_at: string | null
   started_at: string | null
@@ -46,10 +48,20 @@ const AdminMarketingCampaigns = () => {
   const [editing, setEditing] = useState<Campaign | null>(null)
   const [deleting, setDeleting] = useState<Campaign | null>(null)
   const [sending, setSending] = useState<Campaign | null>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string
+    template_id: string
+    segment_id: string
+    subject_override: string
+    body_html_override: string
+    attachment_urls: string[]
+  }>({
     name: '', template_id: '', segment_id: '',
     subject_override: '', body_html_override: '',
+    attachment_urls: [],
   })
+  const [attachmentInput, setAttachmentInput] = useState('')
+  const [attachmentPickerOpen, setAttachmentPickerOpen] = useState(false)
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
@@ -72,7 +84,8 @@ const AdminMarketingCampaigns = () => {
   useEffect(() => { fetchAll() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
-    setForm({ name: '', template_id: '', segment_id: '', subject_override: '', body_html_override: '' })
+    setForm({ name: '', template_id: '', segment_id: '', subject_override: '', body_html_override: '', attachment_urls: [] })
+    setAttachmentInput('')
     setEditing(null); setShowForm(false)
   }
 
@@ -84,8 +97,26 @@ const AdminMarketingCampaigns = () => {
       segment_id: c.segment_id ? String(c.segment_id) : '',
       subject_override: c.subject_override || '',
       body_html_override: c.body_html_override || '',
+      attachment_urls: c.attachment_urls || [],
     })
     setShowForm(true)
+  }
+
+  const addAttachmentUrl = (raw: string) => {
+    const url = (raw || '').trim()
+    if (!url) return
+    if (form.attachment_urls.includes(url)) {
+      showError('Already added', 'That URL is already in the attachments list')
+      return
+    }
+    setForm({ ...form, attachment_urls: [...form.attachment_urls, url] })
+    setAttachmentInput('')
+  }
+  const removeAttachmentUrl = (url: string) => {
+    setForm({ ...form, attachment_urls: form.attachment_urls.filter((u) => u !== url) })
+  }
+  const filenameOf = (url: string) => {
+    try { return new URL(url).pathname.split('/').pop() || url } catch { return url }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,6 +127,7 @@ const AdminMarketingCampaigns = () => {
       segment_id: form.segment_id ? parseInt(form.segment_id) : null,
       subject_override: form.subject_override.trim() || null,
       body_html_override: form.body_html_override.trim() || null,
+      attachment_urls: form.attachment_urls,
     }
     const url = editing ? `${API_URL}/api/marketing/campaigns/${editing.id}` : `${API_URL}/api/marketing/campaigns`
     try {
@@ -255,6 +287,48 @@ const AdminMarketingCampaigns = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">HTML body override <span className="text-gray-400">(optional)</span></label>
                 <textarea rows={8} value={form.body_html_override} onChange={(e) => setForm({ ...form, body_html_override: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 font-mono text-sm" placeholder="Leave blank to use template's body" />
               </div>
+
+              {/* Attachments */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-gray-500" />
+                  Attachments <span className="text-gray-400 text-xs">(optional — same file attached to every recipient)</span>
+                </label>
+                {form.attachment_urls.length > 0 && (
+                  <ul className="mb-2 space-y-1">
+                    {form.attachment_urls.map((url) => (
+                      <li key={url} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                        <span className="truncate flex-1" title={url}>
+                          <Paperclip className="w-3.5 h-3.5 inline mr-1.5 text-gray-400" />
+                          {filenameOf(url)}
+                        </span>
+                        <button type="button" onClick={() => removeAttachmentUrl(url)} className="text-red-500 hover:text-red-700 p-1" title="Remove">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={attachmentInput}
+                    onChange={(e) => setAttachmentInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAttachmentUrl(attachmentInput) } }}
+                    placeholder="https://myzakat.org/api/uploads/media/images/flyer.pdf"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm"
+                  />
+                  <button type="button" onClick={() => addAttachmentUrl(attachmentInput)} disabled={!attachmentInput.trim()} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-sm font-medium">Add</button>
+                  <button type="button" onClick={() => setAttachmentPickerOpen(true)} className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1" title="Browse S3">
+                    <ImageIcon className="w-4 h-4" /> Browse
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Paste an S3 URL or pick from your media library. Each file is fetched once and attached to every recipient.
+                  Keep total size under ~25 MB for inbox delivery.
+                </p>
+              </div>
+
               <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
                 <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium">{editing ? 'Save draft' : 'Create draft'}</button>
@@ -293,6 +367,13 @@ const AdminMarketingCampaigns = () => {
           </div>
         </div>
       )}
+
+      <MediaPicker
+        isOpen={attachmentPickerOpen}
+        onClose={() => setAttachmentPickerOpen(false)}
+        onSelect={(url) => { addAttachmentUrl(url); setAttachmentPickerOpen(false) }}
+        mediaType="all"
+      />
     </div>
   )
 }

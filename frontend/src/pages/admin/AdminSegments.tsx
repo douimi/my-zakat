@@ -14,7 +14,13 @@ interface Segment {
   created_at: string
   updated_at: string
 }
-interface FieldMeta { id: string; label: string; type: 'string' | 'number' | 'bool' | 'date'; hint?: string }
+interface FieldMeta {
+  id: string
+  label: string
+  type: 'string' | 'number' | 'bool' | 'date' | 'enum'
+  hint?: string
+  options?: { value: string; label: string }[]
+}
 interface FieldsMeta { fields: FieldMeta[]; ops_by_type: Record<string, string[]> }
 
 const OP_LABEL: Record<string, string> = {
@@ -78,12 +84,9 @@ const AdminSegments = () => {
     setShowForm(true)
   }
 
-  const getFieldType = (fieldId: string): 'string' | 'number' | 'bool' | 'date' => {
-    return meta?.fields.find((f) => f.id === fieldId)?.type || 'string'
-  }
-  const opsForField = (fieldId: string): string[] => {
-    return meta?.ops_by_type[getFieldType(fieldId)] || []
-  }
+  const getField = (fieldId: string): FieldMeta | undefined => meta?.fields.find((f) => f.id === fieldId)
+  const getFieldType = (fieldId: string): FieldMeta['type'] => getField(fieldId)?.type || 'string'
+  const opsForField = (fieldId: string): string[] => meta?.ops_by_type[getFieldType(fieldId)] || []
 
   const addRule = () => {
     if (!meta?.fields[0]) return
@@ -218,17 +221,27 @@ const AdminSegments = () => {
                 <div className="space-y-2">
                   {form.definition.length === 0 && <p className="text-sm text-gray-500 italic">No rules — segment will include everyone with email consent.</p>}
                   {form.definition.map((r, idx) => {
-                    const type = getFieldType(r.field)
+                    const field = getField(r.field)
+                    const type = field?.type || 'string'
                     const needsValue = !NO_VALUE_OPS.has(r.op)
                     return (
                       <div key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
-                        <select value={r.field} onChange={(e) => { const nf = e.target.value; const ops = opsForField(nf); updateRule(idx, { field: nf, op: ops[0] || 'eq' }) }} className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1">
+                        <select value={r.field} onChange={(e) => { const nf = e.target.value; const ops = opsForField(nf); updateRule(idx, { field: nf, op: ops[0] || 'eq', value: '' }) }} className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1">
                           {meta.fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                         </select>
                         <select value={r.op} onChange={(e) => updateRule(idx, { op: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded text-sm">
                           {opsForField(r.field).map((op) => <option key={op} value={op}>{OP_LABEL[op] || op}</option>)}
                         </select>
-                        {needsValue && (
+                        {needsValue && type === 'enum' && field?.options ? (
+                          <select
+                            value={r.value ?? ''}
+                            onChange={(e) => updateRule(idx, { value: e.target.value })}
+                            className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1"
+                          >
+                            <option value="">— pick —</option>
+                            {field.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        ) : needsValue && (
                           <input
                             type={type === 'number' ? 'number' : (type === 'date' ? 'date' : 'text')}
                             value={r.value ?? ''}

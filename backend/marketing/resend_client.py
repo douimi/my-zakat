@@ -80,13 +80,11 @@ def send_email(
             for a in attachments
         ]
 
-    send_kwargs: dict[str, Any] = {}
-    if idempotency_key:
-        # Resend supports the Idempotency-Key header for safe retries.
-        send_kwargs["options"] = {"idempotency_key": idempotency_key}
-
+    # NOTE: the Resend Python SDK does NOT accept extra kwargs on Emails.send().
+    # We persist `idempotency_key` on email_outbox.idempotency_key for retry-safety
+    # at OUR layer (the worker checks status before sending), which is sufficient.
     try:
-        response = resend.Emails.send(payload, **send_kwargs) if send_kwargs else resend.Emails.send(payload)
+        response = resend.Emails.send(payload)
     except Exception as exc:
         logger.error("Resend send failed for %s: %s", to_email, exc)
         raise ResendDeliveryError(str(exc)) from exc

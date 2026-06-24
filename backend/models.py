@@ -490,6 +490,8 @@ class MarketingCampaign(Base):
     # P3b — donation attribution rollups.
     converted_count = Column(Integer, nullable=False, default=0)
     revenue_cents = Column(Integer, nullable=False, default=0)
+    # P3c — list of S3 URLs (or any HTTPS URLs) attached to every recipient's send.
+    attachment_urls = Column(JSONType, nullable=False, default=list)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
