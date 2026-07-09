@@ -551,3 +551,33 @@ class EmailEvent(Base):
     url = Column(Text, nullable=True)
     is_mpp = Column(Boolean, nullable=False, default=False)
     event_metadata = Column("metadata", JSONType, nullable=False, default=dict)
+
+
+class FundraisingProject(Base):
+    """A visible fundraising target with a public progress bar.
+
+    Money is stored in cents to avoid float rounding. Two derived fields —
+    `remaining_cents` and `progress_percent` — are computed on the response
+    schema, not stored, so the numbers can never drift out of sync.
+    """
+    __tablename__ = "fundraising_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    slug = Column(String(200), unique=True, nullable=False, index=True)
+    short_description = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    goal_cents = Column(Integer, nullable=False)
+    spent_cents = Column(Integer, nullable=False, default=0)
+    currency = Column(String(3), nullable=False, default="USD")
+    suggested_donation_cents = Column(Integer, nullable=True)
+    deadline = Column(DateTime, nullable=True)
+    status = Column(String(20), nullable=False, default="active")
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_featured = Column(Boolean, nullable=False, default=False)
+    category = Column(String(100), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

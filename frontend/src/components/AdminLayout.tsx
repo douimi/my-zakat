@@ -30,6 +30,7 @@ import {
   FileText,
   Filter,
   Rocket,
+  HeartHandshake,
   ExternalLink,
   type LucideIcon,
 } from 'lucide-react'
@@ -96,6 +97,7 @@ const NAV: NavEntry[] = [
       { kind: 'link', name: 'Slideshow', href: '/admin/slideshow', icon: ImageIcon },
       { kind: 'link', name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
       { kind: 'link', name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
+      { kind: 'link', name: 'Fund Projects', href: '/admin/fundraising-projects', icon: HeartHandshake },
     ],
   },
 

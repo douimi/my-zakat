@@ -28,6 +28,7 @@ import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail from '../components/VideoThumbnail'
 import CampaignPopup from '../components/CampaignPopup'
+import FundraisingProjectsSection from '../components/FundraisingProjectsSection'
 
 const Home = () => {
 
@@ -184,6 +185,9 @@ const Home = () => {
       />
       {/* Slideshow Section */}
       <Slideshow />
+
+      {/* Fundraising projects — public progress cards with animated bars */}
+      <FundraisingProjectsSection />
 
       {/* Our Work teaser — scrolls to the gallery section */}
       <button
