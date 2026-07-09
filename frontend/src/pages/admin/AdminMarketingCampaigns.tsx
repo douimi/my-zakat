@@ -181,9 +181,9 @@ const AdminMarketingCampaigns = () => {
           Marketing Campaigns
           <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
         </h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg font-medium">
+        <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg font-medium">
           <Plus className="w-4 h-4" /> New campaign
-        </button>
+        </Link>
       </div>
       <p className="text-sm text-gray-600">
         A campaign sends one template to one audience segment. Suppression and unsubscribe rules are
@@ -197,7 +197,10 @@ const AdminMarketingCampaigns = () => {
         <div className="text-center py-16 bg-white rounded-lg shadow-sm">
           <Rocket className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900">No campaigns yet</h3>
-          <p className="text-gray-500 mt-1">Create a template and a segment first, then compose your first broadcast.</p>
+          <p className="text-gray-500 mt-1 mb-4">The guided wizard walks you through picking an audience, writing the email, and sending — all in one flow.</p>
+          <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg font-medium">
+            <Plus className="w-4 h-4" /> Start your first campaign
+          </Link>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">

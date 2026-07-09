@@ -70,6 +70,7 @@ const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
 const AdminEmailTemplates = lazy(() => import('./pages/admin/AdminEmailTemplates'))
 const AdminSegments = lazy(() => import('./pages/admin/AdminSegments'))
 const AdminMarketingCampaigns = lazy(() => import('./pages/admin/AdminMarketingCampaigns'))
+const AdminMarketingWizard = lazy(() => import('./pages/admin/AdminMarketingWizard'))
 const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAnalytics'))
 
 // Initialize Stripe
@@ -174,6 +175,7 @@ function App() {
                 <Route path="email-templates" element={<AdminEmailTemplates />} />
                 <Route path="audiences" element={<AdminSegments />} />
                 <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
+                <Route path="marketing-campaigns/new" element={<AdminMarketingWizard />} />
                 <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
                 <Route path="cleanup" element={<AdminCleanup />} />
                 <Route path="s3-media" element={<AdminS3Media />} />
