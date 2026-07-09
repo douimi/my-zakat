@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -25,16 +25,31 @@ class SegmentDefinition(BaseModel):
     value: object | None = None
 
 
+class SegmentDefinitionGroup(BaseModel):
+    """Container that groups a list of rules with an AND/OR operator.
+
+    This is the new shape (P3d). The legacy plain-list shape is still
+    accepted and treated as AND for backwards compatibility.
+    """
+    operator: str = Field(default="AND", pattern=r"^(AND|OR)$")
+    rules: list[SegmentDefinition] = Field(default_factory=list)
+
+
+# The frontend can send EITHER shape. Both are handled by the compiler's
+# _normalize_definition() at the audience layer.
+SegmentDefinitionShape = Union[list[SegmentDefinition], SegmentDefinitionGroup]
+
+
 class SegmentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
-    definition: list[SegmentDefinition] = Field(default_factory=list)
+    definition: SegmentDefinitionShape = Field(default_factory=list)
 
 
 class SegmentUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    definition: Optional[list[SegmentDefinition]] = None
+    definition: Optional[SegmentDefinitionShape] = None
 
 
 def _serialize(s: AudienceSegment) -> dict:
@@ -48,6 +63,16 @@ def _serialize(s: AudienceSegment) -> dict:
         "created_at": s.created_at,
         "updated_at": s.updated_at,
     }
+
+
+def _serialize_definition(definition: SegmentDefinitionShape) -> Union[list, dict]:
+    """Return a JSON-serialisable representation. Preserves the shape the
+    caller sent — list stays list, group stays group — so we don't
+    silently rewrite existing segments."""
+    if isinstance(definition, list):
+        return [d.model_dump() if hasattr(d, "model_dump") else d for d in definition]
+    # SegmentDefinitionGroup
+    return definition.model_dump() if hasattr(definition, "model_dump") else definition
 
 
 def _refresh_cached_count(db: Session, segment: AudienceSegment) -> None:
@@ -91,7 +116,7 @@ async def create_segment(
     s = AudienceSegment(
         name=payload.name,
         description=payload.description,
-        definition=[d.model_dump() for d in payload.definition],
+        definition=_serialize_definition(payload.definition),
         created_by=current_admin.id,
     )
     db.add(s)
@@ -112,8 +137,8 @@ async def update_segment(
     if not s:
         raise HTTPException(status_code=404, detail="Segment not found")
     data = payload.model_dump(exclude_unset=True)
-    if "definition" in data and data["definition"] is not None:
-        data["definition"] = [d if isinstance(d, dict) else d.model_dump() for d in data["definition"]]
+    # `definition` already came out of model_dump as native Python types
+    # (list of dicts, or dict with 'operator'/'rules'). Just pass through.
     for field, value in data.items():
         setattr(s, field, value)
     s.updated_at = datetime.utcnow()
@@ -149,7 +174,8 @@ async def preview_segment_endpoint(
     Segment builder UI to give live feedback as the admin edits the rules.
     """
     try:
-        result = preview_segment(db, [d.model_dump() for d in payload.definition], sample_size=10)
+        # _normalize_definition inside preview_segment handles either shape.
+        result = preview_segment(db, _serialize_definition(payload.definition), sample_size=10)
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

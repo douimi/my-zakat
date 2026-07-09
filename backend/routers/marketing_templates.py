@@ -205,7 +205,7 @@ async def render_preview(
         # Render the user-authored HTML through Jinja.
         rendered = _env_html.from_string(payload.body_html).render(**ctx)
         # CSS-inline.
-        inlined = premailer_transform(rendered, keep_style_tags=False, disable_validation=True)
+        inlined = premailer_transform(rendered, base_url=ctx.get("frontend_url"), keep_style_tags=False, disable_validation=True)
         return {"body_html": inlined, "subject": JinjaTemplate(payload.subject).render(**ctx)}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Render error: {exc}")
@@ -232,7 +232,7 @@ async def send_test_email(
     rendered_subject = JinjaTemplate(t.subject).render(**ctx)
     rendered_html = _env_html.from_string(t.body_html).render(**ctx)
     rendered_text = _env_text.from_string(t.body_text or "").render(**ctx) if t.body_text else ""
-    inlined_html = premailer_transform(rendered_html, keep_style_tags=False, disable_validation=True)
+    inlined_html = premailer_transform(rendered_html, base_url=ctx.get("frontend_url"), keep_style_tags=False, disable_validation=True)
 
     from marketing.mailer import ComplianceMailer
 

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { FileText, Plus, Edit, Trash2, Eye, Send, X, AlertTriangle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FileText, Plus, Edit, Trash2, Eye, Send, X, AlertTriangle, Image as ImageIcon } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import MediaPicker from '../../components/MediaPicker'
 
 interface Template {
   id: number
@@ -52,6 +53,8 @@ const AdminEmailTemplates = () => {
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit')
   const [previewHtml, setPreviewHtml] = useState('')
   const [testEmail, setTestEmail] = useState('')
+  const [imagePickerOpen, setImagePickerOpen] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   const [form, setForm] = useState({
     slug: '',
@@ -152,6 +155,24 @@ const AdminEmailTemplates = () => {
         fetchItems()
       } else showError('Error', 'Failed to delete')
     } catch { showError('Error', 'Network error') }
+  }
+
+  const insertInlineImage = (url: string) => {
+    if (!url) return
+    const absolute = url.startsWith('http') ? url : new URL(url, window.location.origin).toString()
+    const tag = `\n<p style="text-align:center;margin:16px 0;"><img src="${absolute}" alt="" style="max-width:100%;height:auto;border-radius:6px;" /></p>\n`
+    const el = bodyRef.current
+    if (!el) { setForm((prev) => ({ ...prev, body_html: prev.body_html + tag })); return }
+    const start = el.selectionStart ?? form.body_html.length
+    const end = el.selectionEnd ?? form.body_html.length
+    const next = form.body_html.slice(0, start) + tag + form.body_html.slice(end)
+    setForm((prev) => ({ ...prev, body_html: next }))
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      const pos = start + tag.length
+      el.setSelectionRange(pos, pos)
+    })
   }
 
   const handleSendTest = async () => {
@@ -259,8 +280,24 @@ const AdminEmailTemplates = () => {
                 </div>
                 {previewMode === 'edit' ? (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">HTML body *</label>
-                    <textarea required rows={16} value={form.body_html} onChange={(e) => setForm({ ...form, body_html: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700">HTML body *</label>
+                      <button
+                        type="button"
+                        onClick={() => setImagePickerOpen(true)}
+                        className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900 font-medium"
+                        title="Pick an image from your S3 media library and insert it at the cursor"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" /> Insert image from S3
+                      </button>
+                    </div>
+                    <textarea
+                      ref={bodyRef}
+                      required rows={16}
+                      value={form.body_html}
+                      onChange={(e) => setForm({ ...form, body_html: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                    />
                     <button type="button" onClick={renderPreview} className="mt-2 text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Eye className="w-4 h-4" /> Render preview with sample data</button>
                   </div>
                 ) : (
@@ -308,6 +345,13 @@ const AdminEmailTemplates = () => {
           </div>
         </div>
       )}
+
+      <MediaPicker
+        isOpen={imagePickerOpen}
+        onClose={() => setImagePickerOpen(false)}
+        onSelect={(url) => { insertInlineImage(url); setImagePickerOpen(false) }}
+        mediaType="images"
+      />
     </div>
   )
 }

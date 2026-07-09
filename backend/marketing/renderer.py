@@ -72,6 +72,12 @@ def render(template_slug: str, context: dict[str, Any] | None = None) -> tuple[s
     raw_html = html_tpl.render(**ctx)
     inlined_html = premailer_transform(
         raw_html,
+        # base_url makes premailer resolve relative <img src>, <a href>, and
+        # background: url(...) references to absolute URLs. WITHOUT it, an
+        # image the admin picked from S3 (returned as /api/uploads/media/...)
+        # stays relative in the sent email and the recipient's inbox shows a
+        # broken-image placeholder.
+        base_url=ctx.get("frontend_url"),
         keep_style_tags=False,
         remove_classes=False,
         strip_important=False,

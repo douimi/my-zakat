@@ -11,11 +11,11 @@
  * (if new), then the campaign, then dispatches send-now — all as one atomic
  * action from the user's perspective.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, Check, Rocket, Users, FileText, Eye, Send, Paperclip,
-  Sparkles, PenTool, X, ImagePlus, Loader2, AlertTriangle, Info,
+  Sparkles, PenTool, X, ImagePlus, Image as ImageIcon, Loader2, AlertTriangle, Info,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -67,6 +67,7 @@ const AdminMarketingWizard = () => {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string>('')
   const [presetId, setPresetId] = useState<string>('everyone')
   const [customRules, setCustomRules] = useState<Predicate[]>([])
+  const [customOperator, setCustomOperator] = useState<'AND' | 'OR'>('AND')
   const [saveAudienceAsName, setSaveAudienceAsName] = useState('')
   const [audienceCount, setAudienceCount] = useState<number | null>(null)
   const [audienceCountLoading, setAudienceCountLoading] = useState(false)
@@ -82,6 +83,8 @@ const AdminMarketingWizard = () => {
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
   const [attachmentInput, setAttachmentInput] = useState('')
   const [attachmentPickerOpen, setAttachmentPickerOpen] = useState(false)
+  const [inlineImagePickerOpen, setInlineImagePickerOpen] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState(false)
 
@@ -105,14 +108,15 @@ const AdminMarketingWizard = () => {
   }, [])
 
   // ── Compute effective audience definition (for preview + save) ──
-  const effectiveDefinition = useMemo<Predicate[]>(() => {
+  // Always emits the new operator/rules shape; the backend accepts both.
+  const effectiveDefinition = useMemo(() => {
     if (audienceMode === 'preset') {
       const preset = AUDIENCE_PRESETS.find((p) => p.id === presetId)
-      return preset ? preset.definition : []
+      return { operator: 'AND' as const, rules: preset ? preset.definition : [] }
     }
-    if (audienceMode === 'custom') return customRules
-    return []
-  }, [audienceMode, presetId, customRules])
+    if (audienceMode === 'custom') return { operator: customOperator, rules: customRules }
+    return { operator: 'AND' as const, rules: [] }
+  }, [audienceMode, presetId, customRules, customOperator])
 
   const selectedSegment = existingSegments.find((x) => String(x.id) === selectedSegmentId)
 
@@ -139,7 +143,7 @@ const AdminMarketingWizard = () => {
       finally { setAudienceCountLoading(false) }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, audienceMode, presetId, customRules, selectedSegmentId])
+  }, [step, audienceMode, presetId, customRules, customOperator, selectedSegmentId])
 
   // ── Effective content (subject + body) ────────────────────
   const effectiveSubject = useMemo(() => {
@@ -195,6 +199,33 @@ const AdminMarketingWizard = () => {
     ? !!selectedTemplateId
     : subject.trim().length > 0 && bodyHtml.trim().length > 0
   const canSend = canContinueFromStep1 && canContinueFromStep2 && canContinueFromStep3
+
+  // ── Inline image helper ──────────────────────────────────
+  // MediaPicker returns URLs from the backend media proxy (which can be
+  // relative in some setups). We force to absolute using window.location.origin
+  // so the image resolves in recipients' inboxes.
+  const toAbsoluteUrl = (url: string) => {
+    if (!url) return url
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    try { return new URL(url, window.location.origin).toString() } catch { return url }
+  }
+  const insertInlineImage = (url: string) => {
+    const absolute = toAbsoluteUrl(url)
+    const tag = `\n<p style="text-align:center;margin:16px 0;"><img src="${absolute}" alt="" style="max-width:100%;height:auto;border-radius:6px;" /></p>\n`
+    const el = bodyRef.current
+    if (!el) { setBodyHtml((prev) => prev + tag); return }
+    const start = el.selectionStart ?? bodyHtml.length
+    const end = el.selectionEnd ?? bodyHtml.length
+    const next = bodyHtml.slice(0, start) + tag + bodyHtml.slice(end)
+    setBodyHtml(next)
+    // Move caret to end of inserted tag on next tick.
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      const pos = start + tag.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
 
   // ── Attachment helpers ───────────────────────────────────
   const addAttachment = (raw: string) => {
@@ -451,6 +482,23 @@ const AdminMarketingWizard = () => {
           {/* Custom rule builder (simplified) */}
           {audienceMode === 'custom' && (
             <div className="space-y-2">
+              {/* Match ALL / Match ANY toggle */}
+              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs mb-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomOperator('AND')}
+                  className={`px-3 py-1.5 rounded font-medium transition-colors ${customOperator === 'AND' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Match ALL rules (AND)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomOperator('OR')}
+                  className={`px-3 py-1.5 rounded font-medium transition-colors ${customOperator === 'OR' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Match ANY rule (OR)
+                </button>
+              </div>
               {customRules.length === 0 && <p className="text-sm text-gray-500 italic">No rules yet — click "Add rule" to build a custom audience.</p>}
               {customRules.map((r, idx) => (
                 <div key={idx} className="flex flex-wrap items-center gap-2 p-2 border border-gray-200 rounded bg-gray-50">
@@ -564,8 +612,24 @@ const AdminMarketingWizard = () => {
                   <input value={preheader} onChange={(e) => setPreheader(e.target.value)} placeholder="A short tagline shown in the inbox list" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HTML body *</label>
-                  <textarea required rows={12} value={bodyHtml} onChange={(e) => setBodyHtml(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-xs" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">HTML body *</label>
+                    <button
+                      type="button"
+                      onClick={() => setInlineImagePickerOpen(true)}
+                      className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900 font-medium"
+                      title="Pick an image from your S3 media library and insert it at the cursor"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" /> Insert image from S3
+                    </button>
+                  </div>
+                  <textarea
+                    ref={bodyRef}
+                    required rows={12}
+                    value={bodyHtml}
+                    onChange={(e) => setBodyHtml(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Save as reusable template <span className="text-gray-400 text-xs">(optional)</span></label>
@@ -697,6 +761,12 @@ const AdminMarketingWizard = () => {
         onClose={() => setAttachmentPickerOpen(false)}
         onSelect={(url) => { addAttachment(url); setAttachmentPickerOpen(false) }}
         mediaType="all"
+      />
+      <MediaPicker
+        isOpen={inlineImagePickerOpen}
+        onClose={() => setInlineImagePickerOpen(false)}
+        onSelect={(url) => { insertInlineImage(url); setInlineImagePickerOpen(false) }}
+        mediaType="images"
       />
     </div>
   )

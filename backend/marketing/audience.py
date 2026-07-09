@@ -214,7 +214,11 @@ VALID_OPS = {
 
 
 def compile_predicates(predicates: list[dict[str, Any]], subq) -> list:
-    """Translate a list of predicate dicts into SQLAlchemy expressions (ANDed)."""
+    """Translate a list of predicate dicts into SQLAlchemy expressions.
+
+    The caller decides whether to combine them with and_/or_. This helper
+    just validates + compiles each rule to a single expression.
+    """
     if not predicates:
         return []
     exprs_by_field = _field_exprs(subq)
@@ -234,24 +238,72 @@ def compile_predicates(predicates: list[dict[str, Any]], subq) -> list:
     return where_clauses
 
 
+def _normalize_definition(definition: Any) -> tuple[str, list[dict[str, Any]]]:
+    """Normalise a segment definition into (operator, rules).
+
+    Accepts either shape for backwards compatibility:
+      - list  → treated as AND across the rules (legacy)
+      - dict  → {"operator": "AND"|"OR", "rules": [...]} (new)
+
+    Returns a tuple whose operator is always "AND" or "OR", and rules is
+    always a list (possibly empty).
+    """
+    if definition is None:
+        return "AND", []
+    if isinstance(definition, list):
+        return "AND", definition
+    if isinstance(definition, dict):
+        op = str(definition.get("operator") or "AND").upper()
+        if op not in ("AND", "OR"):
+            raise ValueError(f"Unknown segment operator: {op!r}")
+        rules = definition.get("rules") or []
+        if not isinstance(rules, list):
+            raise ValueError("Segment 'rules' must be a list")
+        return op, rules
+    raise ValueError("Segment definition must be a list or an object")
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Public helpers — preview / count / iterate
 # ─────────────────────────────────────────────────────────────────────
 
-def build_segment_query(db: Session, predicates: list[dict[str, Any]], *, require_email_consent: bool = True):
-    """Return a (final_query, count_query) tuple compiled against marketing_contacts."""
-    inner = marketing_contacts_query(db).subquery("mc")
-    where = compile_predicates(predicates, inner)
-    if require_email_consent:
-        where.append(inner.c.has_email_consent.is_(True))
+def build_segment_query(db: Session, definition: Any, *, require_email_consent: bool = True):
+    """Return a (final_query, count_query) tuple compiled against marketing_contacts.
 
-    # ALWAYS exclude suppressed addresses (marketing scope OR all).
+    `definition` may be either the legacy list-of-rules (AND) or the new
+    dict shape {"operator": "AND"|"OR", "rules": [...]}. The consent +
+    suppression filters are always ANDed with the user's chosen operator.
+    """
+    inner = marketing_contacts_query(db).subquery("mc")
+    operator, rules = _normalize_definition(definition)
+    rule_exprs = compile_predicates(rules, inner)
+
+    # Combine the user's rules by their chosen operator.
+    if not rule_exprs:
+        user_clause = None
+    elif len(rule_exprs) == 1:
+        user_clause = rule_exprs[0]
+    elif operator == "OR":
+        user_clause = or_(*rule_exprs)
+    else:
+        user_clause = and_(*rule_exprs)
+
+    # Enforced-baseline filters ALWAYS AND with the user clause, regardless
+    # of the user's operator choice. You can't OR your way out of consent.
+    baseline: list = []
+    if require_email_consent:
+        baseline.append(inner.c.has_email_consent.is_(True))
     suppressed_subq = (
         select(EmailSuppression.email)
         .where(EmailSuppression.scope.in_(("all", "marketing")))
         .subquery()
     )
-    where.append(~inner.c.email.in_(select(suppressed_subq.c.email)))
+    baseline.append(~inner.c.email.in_(select(suppressed_subq.c.email)))
+
+    if user_clause is not None:
+        final_where = and_(user_clause, *baseline)
+    else:
+        final_where = and_(*baseline)
 
     final = select(
         inner.c.email,
@@ -261,15 +313,19 @@ def build_segment_query(db: Session, predicates: list[dict[str, Any]], *, requir
         inner.c.total_donated,
         inner.c.donation_count,
         inner.c.last_donation_at,
-    ).where(and_(*where)) if where else select(inner)
+    ).where(final_where)
 
     count = select(func.count()).select_from(final.subquery())
     return final, count
 
 
-def preview_segment(db: Session, predicates: list[dict[str, Any]], sample_size: int = 5):
-    """Return {'count': int, 'sample': [{email, name, ...}, ...]} for a segment definition."""
-    final, count_q = build_segment_query(db, predicates)
+def preview_segment(db: Session, definition: Any, sample_size: int = 5):
+    """Return {'count': int, 'sample': [{email, name, ...}, ...]} for a segment definition.
+
+    Accepts either the legacy list-of-rules or the new
+    {'operator': 'AND'|'OR', 'rules': [...]} shape.
+    """
+    final, count_q = build_segment_query(db, definition)
     total = db.execute(count_q).scalar() or 0
     sample_rows = db.execute(final.limit(sample_size)).mappings().all()
     return {
@@ -288,9 +344,12 @@ def preview_segment(db: Session, predicates: list[dict[str, Any]], sample_size: 
     }
 
 
-def iter_segment_recipients(db: Session, predicates: list[dict[str, Any]], *, batch_size: int = 500):
-    """Yield recipient dicts in batches — used by the campaign send dispatcher."""
-    final, _ = build_segment_query(db, predicates)
+def iter_segment_recipients(db: Session, definition: Any, *, batch_size: int = 500):
+    """Yield recipient dicts in batches — used by the campaign send dispatcher.
+
+    Accepts either legacy list-of-rules or the new operator+rules shape.
+    """
+    final, _ = build_segment_query(db, definition)
     offset = 0
     while True:
         rows = db.execute(final.limit(batch_size).offset(offset)).mappings().all()

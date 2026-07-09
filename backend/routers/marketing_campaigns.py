@@ -317,7 +317,7 @@ async def send_campaign_now(
                     db.add(cs)
                 db.commit()
                 continue
-            inlined_html = premailer_transform(rendered_html, keep_style_tags=False, disable_validation=True)
+            inlined_html = premailer_transform(rendered_html, base_url=ctx.get("frontend_url"), keep_style_tags=False, disable_validation=True)
 
             # Create / fetch the per-recipient send row FIRST so we have a stable
             # id to embed in tracking URLs. Tokens are HMAC-signed and recorded

@@ -4,6 +4,19 @@ import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
 interface Predicate { field: string; op: string; value: any }
+type Operator = 'AND' | 'OR'
+// Normalise a saved definition (which may be legacy list or new group shape)
+// into the group shape used internally by the form.
+const normalizeDef = (def: any): { operator: Operator; rules: Predicate[] } => {
+  if (Array.isArray(def)) return { operator: 'AND', rules: def as Predicate[] }
+  if (def && typeof def === 'object') {
+    return {
+      operator: def.operator === 'OR' ? 'OR' : 'AND',
+      rules: Array.isArray(def.rules) ? (def.rules as Predicate[]) : [],
+    }
+  }
+  return { operator: 'AND', rules: [] }
+}
 interface Segment {
   id: number
   name: string
@@ -41,8 +54,8 @@ const AdminSegments = () => {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Segment | null>(null)
   const [deleting, setDeleting] = useState<Segment | null>(null)
-  const [form, setForm] = useState<{ name: string; description: string; definition: Predicate[] }>({
-    name: '', description: '', definition: [],
+  const [form, setForm] = useState<{ name: string; description: string; operator: Operator; rules: Predicate[] }>({
+    name: '', description: '', operator: 'AND', rules: [],
   })
   const [previewCount, setPreviewCount] = useState<number | null>(null)
   const [previewSample, setPreviewSample] = useState<any[]>([])
@@ -71,7 +84,7 @@ const AdminSegments = () => {
   useEffect(() => { fetchItems(); fetchMeta() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
-    setForm({ name: '', description: '', definition: [] })
+    setForm({ name: '', description: '', operator: 'AND', rules: [] })
     setEditing(null)
     setShowForm(false)
     setPreviewCount(null)
@@ -80,7 +93,8 @@ const AdminSegments = () => {
 
   const openEdit = (s: Segment) => {
     setEditing(s)
-    setForm({ name: s.name, description: s.description || '', definition: s.definition || [] })
+    const norm = normalizeDef(s.definition)
+    setForm({ name: s.name, description: s.description || '', operator: norm.operator, rules: norm.rules })
     setShowForm(true)
   }
 
@@ -92,13 +106,13 @@ const AdminSegments = () => {
     if (!meta?.fields[0]) return
     const f = meta.fields[0]
     const op = (meta.ops_by_type[f.type] || ['eq'])[0]
-    setForm({ ...form, definition: [...form.definition, { field: f.id, op, value: '' }] })
+    setForm({ ...form, rules: [...form.rules, { field: f.id, op, value: '' }] })
   }
-  const removeRule = (idx: number) => setForm({ ...form, definition: form.definition.filter((_, i) => i !== idx) })
+  const removeRule = (idx: number) => setForm({ ...form, rules: form.rules.filter((_, i) => i !== idx) })
   const updateRule = (idx: number, patch: Partial<Predicate>) => {
-    const next = [...form.definition]
+    const next = [...form.rules]
     next[idx] = { ...next[idx], ...patch }
-    setForm({ ...form, definition: next })
+    setForm({ ...form, rules: next })
   }
 
   const runPreview = async () => {
@@ -107,7 +121,10 @@ const AdminSegments = () => {
       const resp = await fetch(`${API_URL}/api/marketing/segments/preview`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name || 'preview', definition: form.definition }),
+        body: JSON.stringify({
+          name: form.name || 'preview',
+          definition: { operator: form.operator, rules: form.rules },
+        }),
       })
       if (resp.ok) {
         const data = await resp.json()
@@ -125,10 +142,15 @@ const AdminSegments = () => {
     e.preventDefault()
     const url = editing ? `${API_URL}/api/marketing/segments/${editing.id}` : `${API_URL}/api/marketing/segments`
     try {
+      const body = {
+        name: form.name,
+        description: form.description,
+        definition: { operator: form.operator, rules: form.rules },
+      }
       const resp = await fetch(url, {
         method: editing ? 'PUT' : 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       })
       if (resp.ok) {
         showSuccess('Saved', editing ? 'Segment updated' : 'Segment created')
@@ -215,12 +237,33 @@ const AdminSegments = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Rules (joined with AND)</label>
+                  <label className="block text-sm font-medium text-gray-700">Rules</label>
                   <button type="button" onClick={addRule} className="text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Plus className="w-4 h-4" /> Add rule</button>
                 </div>
+
+                {/* Match ALL / Match ANY toggle */}
+                <div className="mb-3 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, operator: 'AND' })}
+                    className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'AND' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    title="Contact must match every rule"
+                  >
+                    Match ALL rules (AND)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, operator: 'OR' })}
+                    className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'OR' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    title="Contact must match at least one rule"
+                  >
+                    Match ANY rule (OR)
+                  </button>
+                </div>
+
                 <div className="space-y-2">
-                  {form.definition.length === 0 && <p className="text-sm text-gray-500 italic">No rules — segment will include everyone with email consent.</p>}
-                  {form.definition.map((r, idx) => {
+                  {form.rules.length === 0 && <p className="text-sm text-gray-500 italic">No rules — segment will include everyone with email consent.</p>}
+                  {form.rules.map((r, idx) => {
                     const field = getField(r.field)
                     const type = field?.type || 'string'
                     const needsValue = !NO_VALUE_OPS.has(r.op)
