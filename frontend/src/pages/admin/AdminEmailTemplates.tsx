@@ -176,11 +176,11 @@ const AdminEmailTemplates = () => {
     <div className="space-y-6 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <FileText className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-purple-600" />
+          <FileText className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
           Email Templates
           <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
         </h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium">
+        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium">
           <Plus className="w-4 h-4" /> New template
         </button>
       </div>
@@ -190,7 +190,7 @@ const AdminEmailTemplates = () => {
       </p>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"/></div>
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"/></div>
       ) : items.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg shadow-sm">
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -232,17 +232,17 @@ const AdminEmailTemplates = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Slug *</label>
-                    <input required value={form.slug} disabled={!!editing} pattern="^[a-z0-9_-]+$" onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100" placeholder="welcome-series-1" />
+                    <input required value={form.slug} disabled={!!editing} pattern="^[a-z0-9_-]+$" onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100" placeholder="welcome-series-1" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="Welcome Series – Day 1" />
+                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Welcome Series – Day 1" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
                       <option value="marketing">Marketing</option>
                       <option value="transactional">Transactional</option>
                       <option value="system">System</option>
@@ -250,18 +250,18 @@ const AdminEmailTemplates = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                    <input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="Welcome to MyZakat, {{ first_name }}" />
+                    <input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Welcome to MyZakat, {{ first_name }}" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Preheader <span className="text-gray-400">(inbox preview text)</span></label>
-                  <input value={form.preheader} onChange={(e) => setForm({ ...form, preheader: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="A short tagline shown in the inbox list" />
+                  <input value={form.preheader} onChange={(e) => setForm({ ...form, preheader: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="A short tagline shown in the inbox list" />
                 </div>
                 {previewMode === 'edit' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">HTML body *</label>
-                    <textarea required rows={16} value={form.body_html} onChange={(e) => setForm({ ...form, body_html: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 font-mono text-sm" />
-                    <button type="button" onClick={renderPreview} className="mt-2 text-sm text-purple-700 hover:text-purple-900 inline-flex items-center gap-1"><Eye className="w-4 h-4" /> Render preview with sample data</button>
+                    <textarea required rows={16} value={form.body_html} onChange={(e) => setForm({ ...form, body_html: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm" />
+                    <button type="button" onClick={renderPreview} className="mt-2 text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Eye className="w-4 h-4" /> Render preview with sample data</button>
                   </div>
                 ) : (
                   <div>
@@ -271,7 +271,7 @@ const AdminEmailTemplates = () => {
                 )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Plain text fallback <span className="text-gray-400">(optional)</span></label>
-                  <textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 font-mono text-xs" />
+                  <textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-xs" />
                 </div>
 
                 {editing && (
@@ -286,7 +286,7 @@ const AdminEmailTemplates = () => {
 
                 <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
                   <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create template'}</button>
+                  <button type="submit" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create template'}</button>
                 </div>
               </form>
             </div>

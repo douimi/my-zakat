@@ -338,7 +338,7 @@ const AdminMarketingWizard = () => {
       <div className="flex items-center justify-between">
         <div>
           <Link to="/admin/marketing-campaigns" className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"><ArrowLeft className="w-4 h-4" /> Back to campaigns</Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center"><Rocket className="w-7 h-7 mr-2 text-pink-600" /> New marketing campaign</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center"><Rocket className="w-7 h-7 mr-2 text-primary-600" /> New marketing campaign</h1>
           <p className="text-sm text-gray-600 mt-1">Four quick steps and you're done.</p>
         </div>
       </div>
@@ -355,12 +355,12 @@ const AdminMarketingWizard = () => {
           const done = step > n
           return (
             <li key={n} className={`flex items-center gap-2 rounded-lg p-3 border ${
-              active ? 'border-pink-500 bg-pink-50 text-pink-800'
+              active ? 'border-primary-500 bg-primary-50 text-primary-800'
               : done ? 'border-green-300 bg-green-50 text-green-800'
               : 'border-gray-200 bg-white text-gray-500'
             }`}>
               <span className={`w-7 h-7 rounded-full flex items-center justify-center font-semibold ${
-                active ? 'bg-pink-600 text-white' : done ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
+                active ? 'bg-primary-600 text-white' : done ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
               }`}>{done ? <Check className="w-4 h-4" /> : n}</span>
               <span className="flex flex-col leading-tight">
                 <span className="font-semibold flex items-center gap-1"><Icon className="w-3.5 h-3.5" /> Step {n}</span>
@@ -383,10 +383,10 @@ const AdminMarketingWizard = () => {
             value={campaignName}
             onChange={(e) => setCampaignName(e.target.value)}
             placeholder="e.g. Ramadan 2026 launch"
-            className="w-full text-lg px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+            className="w-full text-lg px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
           <div className="flex justify-end pt-4 border-t border-gray-100">
-            <button onClick={() => setStep(2)} disabled={!canContinueFromStep1} className="px-6 py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+            <button onClick={() => setStep(2)} disabled={!canContinueFromStep1} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
           </div>
         </div>
       )}
@@ -410,8 +410,8 @@ const AdminMarketingWizard = () => {
               const active = audienceMode === (m.id as AudienceMode)
               return (
                 <button key={m.id} type="button" onClick={() => setAudienceMode(m.id as AudienceMode)}
-                  className={`text-left p-3 rounded-lg border-2 transition-colors ${active ? 'border-pink-500 bg-pink-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <Icon className={`w-5 h-5 mb-1 ${active ? 'text-pink-600' : 'text-gray-500'}`} />
+                  className={`text-left p-3 rounded-lg border-2 transition-colors ${active ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <Icon className={`w-5 h-5 mb-1 ${active ? 'text-primary-600' : 'text-gray-500'}`} />
                   <div className="font-semibold text-sm text-gray-900">{m.label}</div>
                   <div className="text-xs text-gray-500 mt-0.5">{m.desc}</div>
                 </button>
@@ -423,8 +423,8 @@ const AdminMarketingWizard = () => {
           {audienceMode === 'preset' && (
             <div className="space-y-2">
               {AUDIENCE_PRESETS.map((p) => (
-                <label key={p.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${presetId === p.id ? 'border-pink-500 bg-pink-50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
-                  <input type="radio" name="preset" value={p.id} checked={presetId === p.id} onChange={() => setPresetId(p.id)} className="mt-1 text-pink-600" />
+                <label key={p.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${presetId === p.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
+                  <input type="radio" name="preset" value={p.id} checked={presetId === p.id} onChange={() => setPresetId(p.id)} className="mt-1 text-primary-600" />
                   <div>
                     <div className="font-semibold text-sm text-gray-900">{p.label}</div>
                     <div className="text-xs text-gray-500">{p.description}</div>
@@ -437,7 +437,7 @@ const AdminMarketingWizard = () => {
           {/* Existing chooser */}
           {audienceMode === 'existing' && (
             existingSegments.length > 0 ? (
-              <select value={selectedSegmentId} onChange={(e) => setSelectedSegmentId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500">
+              <select value={selectedSegmentId} onChange={(e) => setSelectedSegmentId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
                 <option value="">— pick a saved audience —</option>
                 {existingSegments.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.cached_count ?? '?'} recipients</option>)}
               </select>
@@ -482,7 +482,7 @@ const AdminMarketingWizard = () => {
                   <button type="button" onClick={() => removeCustomRule(idx)} className="text-red-500 hover:text-red-700 p-1"><X className="w-4 h-4" /></button>
                 </div>
               ))}
-              <button type="button" onClick={addCustomRule} className="text-sm text-pink-700 hover:text-pink-900">+ Add rule</button>
+              <button type="button" onClick={addCustomRule} className="text-sm text-primary-700 hover:text-primary-900">+ Add rule</button>
             </div>
           )}
 
@@ -491,26 +491,26 @@ const AdminMarketingWizard = () => {
             <div className="border-t border-gray-100 pt-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Save this audience as <span className="text-gray-400 text-xs">(optional)</span></label>
               <input value={saveAudienceAsName} onChange={(e) => setSaveAudienceAsName(e.target.value)} placeholder="e.g. Newsletter subscribers"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm" />
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
               <p className="text-xs text-gray-500 mt-1">Leave blank and we'll auto-name it so you can find it later.</p>
             </div>
           )}
 
           {/* Recipient count preview */}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase text-emerald-800 tracking-wide">Recipients this campaign will reach</p>
+              <p className="text-xs font-semibold uppercase text-primary-800 tracking-wide">Recipients this campaign will reach</p>
               {audienceCountLoading
-                ? <p className="text-2xl font-bold text-emerald-700 mt-0.5"><Loader2 className="w-6 h-6 inline animate-spin" /></p>
-                : <p className="text-3xl font-bold text-emerald-700 mt-0.5">{audienceCount === null ? '—' : audienceCount.toLocaleString()}</p>}
-              <p className="text-xs text-emerald-800 mt-1">Automatically excludes anyone on the suppression list or who hasn't consented to email.</p>
+                ? <p className="text-2xl font-bold text-primary-700 mt-0.5"><Loader2 className="w-6 h-6 inline animate-spin" /></p>
+                : <p className="text-3xl font-bold text-primary-700 mt-0.5">{audienceCount === null ? '—' : audienceCount.toLocaleString()}</p>}
+              <p className="text-xs text-primary-800 mt-1">Automatically excludes anyone on the suppression list or who hasn't consented to email.</p>
             </div>
-            <Users className="w-10 h-10 text-emerald-300" />
+            <Users className="w-10 h-10 text-primary-300" />
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-gray-100">
             <button onClick={() => setStep(1)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
-            <button onClick={() => setStep(3)} disabled={!canContinueFromStep2} className="px-6 py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+            <button onClick={() => setStep(3)} disabled={!canContinueFromStep2} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
           </div>
         </div>
       )}
@@ -533,8 +533,8 @@ const AdminMarketingWizard = () => {
                 const active = contentMode === (m.id as ContentMode)
                 return (
                   <button key={m.id} type="button" onClick={() => setContentMode(m.id as ContentMode)}
-                    className={`text-left p-3 rounded-lg border-2 ${active ? 'border-pink-500 bg-pink-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <Icon className={`w-5 h-5 mb-1 ${active ? 'text-pink-600' : 'text-gray-500'}`} />
+                    className={`text-left p-3 rounded-lg border-2 ${active ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <Icon className={`w-5 h-5 mb-1 ${active ? 'text-primary-600' : 'text-gray-500'}`} />
                     <div className="font-semibold text-sm text-gray-900">{m.label}</div>
                   </button>
                 )
@@ -543,7 +543,7 @@ const AdminMarketingWizard = () => {
 
             {contentMode === 'existing' && (
               existingTemplates.length > 0 ? (
-                <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500">
+                <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
                   <option value="">— pick a template —</option>
                   {existingTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.subject.slice(0, 60)}</option>)}
                 </select>
@@ -556,20 +556,20 @@ const AdminMarketingWizard = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject line *</label>
-                  <input required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Ramadan 2026 — a moment to give" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500" />
+                  <input required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Ramadan 2026 — a moment to give" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" />
                   <p className="text-xs text-gray-500 mt-1">Tip: use <code>{'{{ first_name }}'}</code> to personalize.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Preheader <span className="text-gray-400 text-xs">(inbox preview text)</span></label>
-                  <input value={preheader} onChange={(e) => setPreheader(e.target.value)} placeholder="A short tagline shown in the inbox list" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm" />
+                  <input value={preheader} onChange={(e) => setPreheader(e.target.value)} placeholder="A short tagline shown in the inbox list" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">HTML body *</label>
-                  <textarea required rows={12} value={bodyHtml} onChange={(e) => setBodyHtml(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 font-mono text-xs" />
+                  <textarea required rows={12} value={bodyHtml} onChange={(e) => setBodyHtml(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-xs" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Save as reusable template <span className="text-gray-400 text-xs">(optional)</span></label>
-                  <input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g. Ramadan launch template" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm" />
+                  <input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g. Ramadan launch template" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
                   <p className="text-xs text-gray-500 mt-1">Give it a name and we'll save it so you can re-use it later.</p>
                 </div>
               </div>
@@ -589,15 +589,15 @@ const AdminMarketingWizard = () => {
                 </ul>
               )}
               <div className="flex gap-2">
-                <input type="url" value={attachmentInput} onChange={(e) => setAttachmentInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAttachment(attachmentInput) } }} placeholder="Paste S3 URL of a PDF, image, etc." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-pink-500" />
+                <input type="url" value={attachmentInput} onChange={(e) => setAttachmentInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAttachment(attachmentInput) } }} placeholder="Paste S3 URL of a PDF, image, etc." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
                 <button type="button" onClick={() => addAttachment(attachmentInput)} disabled={!attachmentInput.trim()} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-sm font-medium">Add</button>
-                <button type="button" onClick={() => setAttachmentPickerOpen(true)} className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1"><ImagePlus className="w-4 h-4" /> Browse</button>
+                <button type="button" onClick={() => setAttachmentPickerOpen(true)} className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1"><ImagePlus className="w-4 h-4" /> Browse</button>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
               <button onClick={() => setStep(2)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
-              <button onClick={() => setStep(4)} disabled={!canContinueFromStep3} className="px-6 py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+              <button onClick={() => setStep(4)} disabled={!canContinueFromStep3} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
             </div>
           </div>
 
@@ -605,7 +605,7 @@ const AdminMarketingWizard = () => {
           <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Live preview</span>
-              <button onClick={renderPreview} className="text-xs text-pink-700 hover:text-pink-900 inline-flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Refresh</button>
+              <button onClick={renderPreview} className="text-xs text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Refresh</button>
             </div>
             <div className="flex-1 min-h-[420px] border border-gray-200 rounded overflow-hidden bg-gray-50">
               {previewLoading
@@ -640,7 +640,7 @@ const AdminMarketingWizard = () => {
                     : audienceMode === 'preset'
                       ? AUDIENCE_PRESETS.find((p) => p.id === presetId)?.label
                       : `${customRules.length} custom rule${customRules.length === 1 ? '' : 's'}`}
-                  <span className="ml-2 text-emerald-700 font-semibold">{audienceCount?.toLocaleString() || '—'} recipients</span>
+                  <span className="ml-2 text-primary-700 font-semibold">{audienceCount?.toLocaleString() || '—'} recipients</span>
                 </dd>
               </div>
               <div className="flex justify-between gap-4 py-3 border-b border-gray-100">
@@ -674,7 +674,7 @@ const AdminMarketingWizard = () => {
 
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
               <button onClick={() => setStep(3)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
-              <button onClick={handleSendNow} disabled={!canSend || sending} className="px-8 py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
+              <button onClick={handleSendNow} disabled={!canSend || sending} className="px-8 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
                 {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <><Rocket className="w-4 h-4" /> Send campaign</>}
               </button>
             </div>

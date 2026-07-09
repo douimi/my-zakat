@@ -155,11 +155,11 @@ const AdminSegments = () => {
     <div className="space-y-6 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Filter className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-emerald-600" />
+          <Filter className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
           Audiences
           <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
         </h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium">
+        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium">
           <Plus className="w-4 h-4" /> New segment
         </button>
       </div>
@@ -169,7 +169,7 @@ const AdminSegments = () => {
       </p>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"/></div>
       ) : items.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg shadow-sm">
           <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -181,7 +181,7 @@ const AdminSegments = () => {
             <div key={s.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col">
               <div className="flex items-start justify-between mb-2 gap-2">
                 <h3 className="font-semibold text-gray-900 truncate flex-1">{s.name}</h3>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{s.cached_count ?? '—'} recipients</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-50 text-primary-700">{s.cached_count ?? '—'} recipients</span>
               </div>
               {s.description && <p className="text-sm text-gray-500 mb-2 line-clamp-2">{s.description}</p>}
               <p className="text-xs text-gray-400 mb-3">{s.definition?.length || 0} rules</p>
@@ -205,18 +205,18 @@ const AdminSegments = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                  <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500" placeholder="Major donors (≥ $500)" />
+                  <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Major donors (≥ $500)" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500" />
+                  <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">Rules (joined with AND)</label>
-                  <button type="button" onClick={addRule} className="text-sm text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1"><Plus className="w-4 h-4" /> Add rule</button>
+                  <button type="button" onClick={addRule} className="text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Plus className="w-4 h-4" /> Add rule</button>
                 </div>
                 <div className="space-y-2">
                   {form.definition.length === 0 && <p className="text-sm text-gray-500 italic">No rules — segment will include everyone with email consent.</p>}
@@ -257,17 +257,17 @@ const AdminSegments = () => {
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-emerald-900">Preview</span>
-                  <button type="button" onClick={runPreview} disabled={previewLoading} className="text-sm inline-flex items-center gap-1 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-700 px-3 py-1 rounded"><Eye className="w-4 h-4" />{previewLoading ? 'Running…' : 'Run preview'}</button>
+                  <span className="text-sm font-medium text-primary-900">Preview</span>
+                  <button type="button" onClick={runPreview} disabled={previewLoading} className="text-sm inline-flex items-center gap-1 bg-white border border-primary-300 hover:bg-primary-100 text-primary-700 px-3 py-1 rounded"><Eye className="w-4 h-4" />{previewLoading ? 'Running…' : 'Run preview'}</button>
                 </div>
                 {previewCount !== null && (
                   <div>
-                    <p className="text-2xl font-bold text-emerald-700">{previewCount.toLocaleString()} <span className="text-sm font-normal text-emerald-900">recipients match</span></p>
+                    <p className="text-2xl font-bold text-primary-700">{previewCount.toLocaleString()} <span className="text-sm font-normal text-primary-900">recipients match</span></p>
                     {previewSample.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide mb-1">Sample</p>
+                        <p className="text-xs font-semibold text-primary-900 uppercase tracking-wide mb-1">Sample</p>
                         <ul className="text-xs text-gray-700 space-y-1">
                           {previewSample.map((r, i) => (
                             <li key={i} className="truncate">
@@ -284,7 +284,7 @@ const AdminSegments = () => {
 
               <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
                 <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create segment'}</button>
+                <button type="submit" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create segment'}</button>
               </div>
             </form>
           </div>

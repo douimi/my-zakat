@@ -177,11 +177,11 @@ const AdminMarketingCampaigns = () => {
     <div className="space-y-6 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Rocket className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-pink-600" />
+          <Rocket className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
           Marketing Campaigns
           <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
         </h1>
-        <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg font-medium">
+        <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium">
           <Plus className="w-4 h-4" /> New campaign
         </Link>
       </div>
@@ -192,13 +192,13 @@ const AdminMarketingCampaigns = () => {
       </p>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"/></div>
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"/></div>
       ) : items.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg shadow-sm">
           <Rocket className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900">No campaigns yet</h3>
           <p className="text-gray-500 mt-1 mb-4">The guided wizard walks you through picking an audience, writing the email, and sending — all in one flow.</p>
-          <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg font-medium">
+          <Link to="/admin/marketing-campaigns/new" className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-lg font-medium">
             <Plus className="w-4 h-4" /> Start your first campaign
           </Link>
         </div>
@@ -233,7 +233,7 @@ const AdminMarketingCampaigns = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         {(c.status === 'sent' || c.status === 'sending') && (
-                          <Link to={`/admin/marketing-campaigns/${c.id}/analytics`} className="text-pink-600 hover:text-pink-800 p-1.5 rounded hover:bg-pink-50" title="View analytics"><BarChart3 className="w-4 h-4" /></Link>
+                          <Link to={`/admin/marketing-campaigns/${c.id}/analytics`} className="text-primary-600 hover:text-primary-800 p-1.5 rounded hover:bg-primary-50" title="View analytics"><BarChart3 className="w-4 h-4" /></Link>
                         )}
                         {(c.status === 'draft' || c.status === 'scheduled') && (
                           <button onClick={() => setSending(c)} className="text-green-700 hover:text-green-900 p-1.5 rounded hover:bg-green-50" title="Send now"><Send className="w-4 h-4" /></button>
@@ -264,19 +264,19 @@ const AdminMarketingCampaigns = () => {
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Campaign name *</label>
-                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500" placeholder="July 2026 Ramadan reminder" />
+                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="July 2026 Ramadan reminder" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Template *</label>
-                  <select required value={form.template_id} onChange={(e) => setForm({ ...form, template_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500">
+                  <select required value={form.template_id} onChange={(e) => setForm({ ...form, template_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
                     <option value="">— pick a template —</option>
                     {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Audience segment *</label>
-                  <select required value={form.segment_id} onChange={(e) => setForm({ ...form, segment_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500">
+                  <select required value={form.segment_id} onChange={(e) => setForm({ ...form, segment_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
                     <option value="">— pick a segment —</option>
                     {segments.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.cached_count ?? '?'} recipients)</option>)}
                   </select>
@@ -284,11 +284,11 @@ const AdminMarketingCampaigns = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject override <span className="text-gray-400">(optional)</span></label>
-                <input value={form.subject_override} onChange={(e) => setForm({ ...form, subject_override: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500" placeholder="Leave blank to use template's subject" />
+                <input value={form.subject_override} onChange={(e) => setForm({ ...form, subject_override: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Leave blank to use template's subject" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">HTML body override <span className="text-gray-400">(optional)</span></label>
-                <textarea rows={8} value={form.body_html_override} onChange={(e) => setForm({ ...form, body_html_override: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 font-mono text-sm" placeholder="Leave blank to use template's body" />
+                <textarea rows={8} value={form.body_html_override} onChange={(e) => setForm({ ...form, body_html_override: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm" placeholder="Leave blank to use template's body" />
               </div>
 
               {/* Attachments */}
@@ -319,10 +319,10 @@ const AdminMarketingCampaigns = () => {
                     onChange={(e) => setAttachmentInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAttachmentUrl(attachmentInput) } }}
                     placeholder="https://myzakat.org/api/uploads/media/images/flyer.pdf"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
                   />
                   <button type="button" onClick={() => addAttachmentUrl(attachmentInput)} disabled={!attachmentInput.trim()} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-sm font-medium">Add</button>
-                  <button type="button" onClick={() => setAttachmentPickerOpen(true)} className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1" title="Browse S3">
+                  <button type="button" onClick={() => setAttachmentPickerOpen(true)} className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1" title="Browse S3">
                     <ImageIcon className="w-4 h-4" /> Browse
                   </button>
                 </div>
@@ -334,7 +334,7 @@ const AdminMarketingCampaigns = () => {
 
               <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
                 <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium">{editing ? 'Save draft' : 'Create draft'}</button>
+                <button type="submit" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{editing ? 'Save draft' : 'Create draft'}</button>
               </div>
             </form>
           </div>
@@ -345,12 +345,12 @@ const AdminMarketingCampaigns = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center mr-3"><Send className="w-5 h-5 text-pink-600" /></div>
+              <div className="flex-shrink-0 w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center mr-3"><Send className="w-5 h-5 text-primary-600" /></div>
               <div><h3 className="text-lg font-bold text-gray-900">Send "{sending.name}" now?</h3><p className="text-sm text-gray-500 mt-1">This will queue an email for every recipient in the segment. Suppressed and non-opted-in addresses are skipped automatically.</p></div>
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => setSending(null)} className="px-4 py-2 text-gray-600">Cancel</button>
-              <button onClick={confirmSend} className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium">Send campaign</button>
+              <button onClick={confirmSend} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">Send campaign</button>
             </div>
           </div>
         </div>

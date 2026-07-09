@@ -86,7 +86,7 @@ const AdminEmailLog = () => {
     <div className="space-y-6 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Mail className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-blue-600" />
+          <Mail className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
           Email Log
           <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{total}</span>
         </h1>
@@ -95,7 +95,7 @@ const AdminEmailLog = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
           >
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -155,7 +155,7 @@ const AdminEmailLog = () => {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => openDetail(r.id)}
-                      className="text-blue-600 hover:text-blue-800 p-1.5 rounded hover:bg-blue-50"
+                      className="text-primary-600 hover:text-primary-800 p-1.5 rounded hover:bg-primary-50"
                       title="Inspect rendered email"
                     >
                       <Eye className="w-4 h-4" />
