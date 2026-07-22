@@ -581,3 +581,62 @@ class FundraisingProject(Base):
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Project proposals — digital replacement for the paper funding request
+# ─────────────────────────────────────────────────────────────────────
+
+class ProjectProposal(Base):
+    """One row per funding-request submission.
+
+    Every field mirrors the four-section paper form applicants used to send in.
+    Public submitters create rows; admins / managers review, change status,
+    add notes, and download the reconstructed PDF.
+    """
+    __tablename__ = "project_proposals"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Section 1: Personal
+    full_name = Column(String(200), nullable=False)
+    national_id = Column(String(50), nullable=False)
+    date_of_birth_year = Column(Integer, nullable=False)
+    place_of_residence = Column(String(300), nullable=False)
+    mobile_number = Column(String(50), nullable=False)
+    email = Column(String(200), nullable=False, index=True)
+    educational_level = Column(String(200), nullable=False)
+
+    # Section 2: Project
+    project_name = Column(String(300), nullable=False)
+    project_description = Column(Text, nullable=False)
+    problem_solved = Column(Text, nullable=False)
+    target_beneficiaries = Column(Text, nullable=False)
+    community_impact = Column(Text, nullable=False)
+    expected_impact = Column(Text, nullable=False)
+
+    # Section 3: Plan
+    implementation_steps = Column(Text, nullable=False)
+    implementation_location = Column(Text, nullable=False)
+    required_materials = Column(Text, nullable=False)
+    expected_duration = Column(String(300), nullable=False)
+    continuity_plan = Column(Text, nullable=False)
+    feasibility = Column(Text, nullable=False)
+    expected_challenges = Column(Text, nullable=False)
+
+    # Section 4: Budget
+    number_of_beneficiaries = Column(Integer, nullable=False)
+    cost_per_unit_usd = Column(Float, nullable=False)
+    unit_type = Column(String(50), nullable=False)
+    additional_expenses_usd = Column(Float, nullable=False, default=0)
+    additional_expenses_description = Column(Text, nullable=True)
+    total_amount_usd = Column(Float, nullable=False)
+
+    # Metadata
+    status = Column(String(20), nullable=False, default="submitted", index=True)
+    admin_notes = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    submitted_ip = Column(String(45), nullable=True)
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

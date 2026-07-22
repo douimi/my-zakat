@@ -65,6 +65,8 @@ const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
+const SubmitProposal = lazy(() => import('./pages/SubmitProposal'))
+const AdminProjectProposals = lazy(() => import('./pages/admin/AdminProjectProposals'))
 const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
 const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
 const AdminEmailTemplates = lazy(() => import('./pages/admin/AdminEmailTemplates'))
@@ -144,6 +146,7 @@ function App() {
                 <Route path="terms-of-service" element={<TermsOfService />} />
                 <Route path="sms-opt-in" element={<SmsOptIn />} />
                 <Route path="unsubscribe" element={<Unsubscribe />} />
+                <Route path="submit-proposal" element={<SubmitProposal />} />
               </Route>
 
               {/* User authentication routes */}
@@ -177,6 +180,7 @@ function App() {
                 <Route path="audiences" element={<AdminSegments />} />
                 <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
                 <Route path="marketing-campaigns/new" element={<AdminMarketingWizard />} />
+                <Route path="project-proposals" element={<AdminProjectProposals />} />
                 <Route path="fundraising-projects" element={<AdminFundraisingProjects />} />
                 <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
                 <Route path="cleanup" element={<AdminCleanup />} />

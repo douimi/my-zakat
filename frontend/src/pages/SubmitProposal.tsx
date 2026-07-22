@@ -1,0 +1,410 @@
+/**
+ * Public project-proposal submission wizard.
+ *
+ * Guided 4-step form that mirrors the paper funding request applicants used
+ * to fax / email. Each step maps to a section of the PDF:
+ *   1. Personal information
+ *   2. Project information
+ *   3. Project plan
+ *   4. Budget & review
+ *
+ * The wizard state lives entirely in local component state. Only after the
+ * final submit does anything hit the backend.
+ */
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  ArrowLeft, ArrowRight, Check, User as UserIcon, ClipboardList, ListChecks,
+  DollarSign, Loader2, CheckCircle2, Info, Send, AlertCircle,
+} from 'lucide-react'
+import SEOHead from '../components/SEOHead'
+
+type StepIndex = 1 | 2 | 3 | 4
+
+interface Form {
+  // Section 1
+  full_name: string
+  national_id: string
+  date_of_birth_year: string
+  place_of_residence: string
+  mobile_number: string
+  email: string
+  educational_level: string
+  // Section 2
+  project_name: string
+  project_description: string
+  problem_solved: string
+  target_beneficiaries: string
+  community_impact: string
+  expected_impact: string
+  // Section 3
+  implementation_steps: string
+  implementation_location: string
+  required_materials: string
+  expected_duration: string
+  continuity_plan: string
+  feasibility: string
+  expected_challenges: string
+  // Section 4
+  number_of_beneficiaries: string
+  cost_per_unit_usd: string
+  unit_type: string
+  additional_expenses_usd: string
+  additional_expenses_description: string
+}
+
+const EMPTY: Form = {
+  full_name: '', national_id: '', date_of_birth_year: '', place_of_residence: '',
+  mobile_number: '', email: '', educational_level: '',
+  project_name: '', project_description: '', problem_solved: '', target_beneficiaries: '',
+  community_impact: '', expected_impact: '',
+  implementation_steps: '', implementation_location: '', required_materials: '',
+  expected_duration: '', continuity_plan: '', feasibility: '', expected_challenges: '',
+  number_of_beneficiaries: '', cost_per_unit_usd: '', unit_type: 'family',
+  additional_expenses_usd: '0', additional_expenses_description: '',
+}
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const CURRENT_YEAR = new Date().getFullYear()
+
+const Field = ({ label, required, children, hint }: { label: string; required?: boolean; children: React.ReactNode; hint?: string }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label}{required && <span className="text-red-500 ml-1">*</span>}
+    </label>
+    {children}
+    {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
+  </div>
+)
+
+const SubmitProposal = () => {
+  const navigate = useNavigate()
+  const [step, setStep] = useState<StepIndex>(1)
+  const [form, setForm] = useState<Form>(EMPTY)
+  const [submitting, setSubmitting] = useState(false)
+  const [submittedId, setSubmittedId] = useState<number | null>(null)
+  const [error, setError] = useState<string>('')
+
+  const set = <K extends keyof Form>(key: K) => (v: string) => setForm((f) => ({ ...f, [key]: v }))
+
+  const subtotal = useMemo(() => {
+    const n = parseFloat(form.number_of_beneficiaries || '0')
+    const c = parseFloat(form.cost_per_unit_usd || '0')
+    return isNaN(n) || isNaN(c) ? 0 : n * c
+  }, [form.number_of_beneficiaries, form.cost_per_unit_usd])
+  const additional = useMemo(() => {
+    const a = parseFloat(form.additional_expenses_usd || '0')
+    return isNaN(a) ? 0 : a
+  }, [form.additional_expenses_usd])
+  const total = subtotal + additional
+
+  const canContinue1 = form.full_name && form.national_id && form.date_of_birth_year && form.place_of_residence && form.mobile_number && form.email && form.educational_level
+  const canContinue2 = form.project_name && form.project_description && form.problem_solved && form.target_beneficiaries && form.community_impact && form.expected_impact
+  const canContinue3 = form.implementation_steps && form.implementation_location && form.required_materials && form.expected_duration && form.continuity_plan && form.feasibility && form.expected_challenges
+  const canSubmit = canContinue1 && canContinue2 && canContinue3 && form.number_of_beneficiaries && form.cost_per_unit_usd && form.unit_type && total > 0
+
+  const handleSubmit = async () => {
+    setSubmitting(true); setError('')
+    try {
+      const payload = {
+        full_name: form.full_name.trim(),
+        national_id: form.national_id.trim(),
+        date_of_birth_year: parseInt(form.date_of_birth_year),
+        place_of_residence: form.place_of_residence.trim(),
+        mobile_number: form.mobile_number.trim(),
+        email: form.email.trim(),
+        educational_level: form.educational_level.trim(),
+        project_name: form.project_name.trim(),
+        project_description: form.project_description.trim(),
+        problem_solved: form.problem_solved.trim(),
+        target_beneficiaries: form.target_beneficiaries.trim(),
+        community_impact: form.community_impact.trim(),
+        expected_impact: form.expected_impact.trim(),
+        implementation_steps: form.implementation_steps.trim(),
+        implementation_location: form.implementation_location.trim(),
+        required_materials: form.required_materials.trim(),
+        expected_duration: form.expected_duration.trim(),
+        continuity_plan: form.continuity_plan.trim(),
+        feasibility: form.feasibility.trim(),
+        expected_challenges: form.expected_challenges.trim(),
+        number_of_beneficiaries: parseInt(form.number_of_beneficiaries),
+        cost_per_unit_usd: parseFloat(form.cost_per_unit_usd),
+        unit_type: form.unit_type.trim(),
+        additional_expenses_usd: parseFloat(form.additional_expenses_usd || '0'),
+        additional_expenses_description: form.additional_expenses_description.trim() || null,
+        total_amount_usd: total,
+      }
+      const resp = await fetch(`${API_URL}/api/project-proposals/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: 'Submission failed' }))
+        const detail = typeof err.detail === 'string' ? err.detail
+          : Array.isArray(err.detail) ? err.detail.map((e: any) => e.msg).join(', ')
+          : 'Please check your entries and try again.'
+        throw new Error(detail)
+      }
+      const data = await resp.json()
+      setSubmittedId(data.id)
+    } catch (exc: any) {
+      setError(exc?.message || 'Something went wrong.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ── Success state ─────────────────────────────────────────
+  if (submittedId !== null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50 py-16">
+        <SEOHead title="Proposal Submitted" description="Your project proposal has been received." canonicalPath="/submit-proposal" />
+        <div className="section-container">
+          <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-lg p-8 sm:p-10 text-center">
+            <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-9 h-9 text-green-600" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-3">Proposal received</h1>
+            <p className="text-gray-600 leading-relaxed mb-6">
+              Thank you for submitting your project proposal. Our review team will study your
+              request and get back to you at <strong>{form.email}</strong>.
+            </p>
+            <p className="text-sm text-gray-500 mb-8">
+              Reference number: <strong>#{submittedId}</strong>
+            </p>
+            <button onClick={() => navigate('/')} className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors">
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const steps: { n: StepIndex; label: string; icon: any }[] = [
+    { n: 1, label: 'Personal',  icon: UserIcon },
+    { n: 2, label: 'Project',   icon: ClipboardList },
+    { n: 3, label: 'Plan',      icon: ListChecks },
+    { n: 4, label: 'Budget',    icon: DollarSign },
+  ]
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8 sm:py-12">
+      <SEOHead
+        title="Submit a Project Proposal"
+        description="Apply for funding support from the Zakat Distribution Foundation. Fill in the four-section form to describe your project, its beneficiaries, plan, and budget."
+        canonicalPath="/submit-proposal"
+      />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 space-y-6">
+
+        {/* Header */}
+        <div className="text-center">
+          <Link to="/" className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-4"><ArrowLeft className="w-4 h-4" /> Back to Home</Link>
+          <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">Submit a Project Proposal</h1>
+          <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
+            Apply for funding support from the <strong>Zakat Distribution Foundation</strong>. Four short sections —
+            we'll email you a copy and follow up after review.
+          </p>
+        </div>
+
+        {/* Step indicator */}
+        <ol className="grid grid-cols-4 gap-2 text-xs sm:text-sm">
+          {steps.map(({ n, label, icon: Icon }) => {
+            const active = step === n
+            const done = step > n
+            return (
+              <li key={n} className={`flex items-center gap-2 rounded-lg p-3 border ${
+                active ? 'border-primary-500 bg-primary-50 text-primary-800'
+                : done ? 'border-green-300 bg-green-50 text-green-800'
+                : 'border-gray-200 bg-white text-gray-500'
+              }`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center font-semibold ${
+                  active ? 'bg-primary-600 text-white' : done ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>{done ? <Check className="w-4 h-4" /> : n}</span>
+                <span className="flex flex-col leading-tight">
+                  <span className="font-semibold flex items-center gap-1"><Icon className="w-3.5 h-3.5" /> Step {n}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+
+        {/* ── STEP 1 — Personal ────────────────────────────── */}
+        {step === 1 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Personal information</h2>
+              <p className="text-sm text-gray-500 mt-1">Tell us about you — the applicant responsible for this project.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Full name" required>
+                <input required value={form.full_name} onChange={(e) => set('full_name')(e.target.value)} className="input-field" />
+              </Field>
+              <Field label="National ID number" required>
+                <input required value={form.national_id} onChange={(e) => set('national_id')(e.target.value)} className="input-field" />
+              </Field>
+              <Field label="Date of birth (year)" required>
+                <input required type="number" min={1900} max={CURRENT_YEAR - 5} value={form.date_of_birth_year} onChange={(e) => set('date_of_birth_year')(e.target.value)} className="input-field" placeholder="e.g. 1992" />
+              </Field>
+              <Field label="Place of residence" required>
+                <input required value={form.place_of_residence} onChange={(e) => set('place_of_residence')(e.target.value)} className="input-field" placeholder="City / Governorate" />
+              </Field>
+              <Field label="Mobile number" required>
+                <input required value={form.mobile_number} onChange={(e) => set('mobile_number')(e.target.value)} className="input-field" placeholder="With country code" />
+              </Field>
+              <Field label="Email" required>
+                <input required type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} className="input-field" />
+              </Field>
+              <Field label="Educational level" required>
+                <input required value={form.educational_level} onChange={(e) => set('educational_level')(e.target.value)} className="input-field" placeholder="e.g. Bachelor of Business Administration" />
+              </Field>
+            </div>
+            <div className="flex justify-end pt-4 border-t border-gray-100">
+              <button onClick={() => setStep(2)} disabled={!canContinue1} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2 — Project ─────────────────────────────── */}
+        {step === 2 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Project information</h2>
+              <p className="text-sm text-gray-500 mt-1">Describe what the project does and who it helps.</p>
+            </div>
+            <Field label="Project name" required>
+              <input required value={form.project_name} onChange={(e) => set('project_name')(e.target.value)} className="input-field" placeholder="e.g. Fresh Chicken Food Parcels Project" />
+            </Field>
+            <Field label="Project idea description" required hint="A short paragraph summarizing what the project does.">
+              <textarea required rows={4} value={form.project_description} onChange={(e) => set('project_description')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="What problem does the project solve?" required>
+              <textarea required rows={3} value={form.problem_solved} onChange={(e) => set('problem_solved')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="Target beneficiaries" required hint="Include number and description of who benefits (e.g. 250 displaced families).">
+              <textarea required rows={3} value={form.target_beneficiaries} onChange={(e) => set('target_beneficiaries')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="How will the project serve the community?" required>
+              <textarea required rows={3} value={form.community_impact} onChange={(e) => set('community_impact')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="Expected economic or social impact" required>
+              <textarea required rows={3} value={form.expected_impact} onChange={(e) => set('expected_impact')(e.target.value)} className="input-field" />
+            </Field>
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <button onClick={() => setStep(1)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
+              <button onClick={() => setStep(3)} disabled={!canContinue2} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3 — Plan ────────────────────────────────── */}
+        {step === 3 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Project plan</h2>
+              <p className="text-sm text-gray-500 mt-1">How you'll actually run it. For bullet lists, put each item on its own line — we'll format it in the PDF.</p>
+            </div>
+            <Field label="Implementation steps" required hint="One step per line. The PDF will render these as a bulleted list.">
+              <textarea required rows={5} value={form.implementation_steps} onChange={(e) => set('implementation_steps')(e.target.value)} className="input-field" placeholder={"Planning and identifying target families\nPurchasing supplies\nDistributing parcels\nDocumenting the project"} />
+            </Field>
+            <Field label="Where will the project be implemented?" required>
+              <textarea required rows={2} value={form.implementation_location} onChange={(e) => set('implementation_location')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="Required materials or equipment" required hint="One item per line.">
+              <textarea required rows={4} value={form.required_materials} onChange={(e) => set('required_materials')(e.target.value)} className="input-field" placeholder={"Fresh chicken\nPackaging bags\nTransportation\nAdministrative materials"} />
+            </Field>
+            <Field label="Expected duration to start implementation" required>
+              <input required value={form.expected_duration} onChange={(e) => set('expected_duration')(e.target.value)} className="input-field" placeholder="e.g. Within one day after procurement is complete" />
+            </Field>
+            <Field label="How will the project continue after funding?" required>
+              <textarea required rows={3} value={form.continuity_plan} onChange={(e) => set('continuity_plan')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="Why is it feasible under current conditions?" required>
+              <textarea required rows={3} value={form.feasibility} onChange={(e) => set('feasibility')(e.target.value)} className="input-field" />
+            </Field>
+            <Field label="Expected challenges and how to address them" required hint="One challenge per line, with your mitigation for each.">
+              <textarea required rows={4} value={form.expected_challenges} onChange={(e) => set('expected_challenges')(e.target.value)} className="input-field" placeholder={"Difficulty reaching families: coordinate with local committees\nCrowding at distribution: allocate time slots"} />
+            </Field>
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <button onClick={() => setStep(2)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
+              <button onClick={() => setStep(4)} disabled={!canContinue3} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 4 — Budget + review ─────────────────────── */}
+        {step === 4 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Required budget</h2>
+              <p className="text-sm text-gray-500 mt-1">We'll calculate the total for you as you fill in the breakdown.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field label="Beneficiaries (count)" required>
+                <input required type="number" min={1} value={form.number_of_beneficiaries} onChange={(e) => set('number_of_beneficiaries')(e.target.value)} className="input-field" placeholder="200" />
+              </Field>
+              <Field label="Cost per unit (USD)" required>
+                <input required type="number" min={0.01} step="0.01" value={form.cost_per_unit_usd} onChange={(e) => set('cost_per_unit_usd')(e.target.value)} className="input-field" placeholder="20" />
+              </Field>
+              <Field label="Unit type" required hint="What you're counting: family, parcel, person, etc.">
+                <input required value={form.unit_type} onChange={(e) => set('unit_type')(e.target.value)} className="input-field" placeholder="family" />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Additional expenses (USD)" hint="Transportation, packaging, admin costs, etc.">
+                <input type="number" min={0} step="0.01" value={form.additional_expenses_usd} onChange={(e) => set('additional_expenses_usd')(e.target.value)} className="input-field" placeholder="0" />
+              </Field>
+              <Field label="What are those additional expenses?">
+                <input value={form.additional_expenses_description} onChange={(e) => set('additional_expenses_description')(e.target.value)} className="input-field" placeholder="e.g. Transportation & packaging" />
+              </Field>
+            </div>
+
+            {/* Live total */}
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-primary-800">
+                  {form.number_of_beneficiaries || 0} {form.unit_type || 'unit'}s × ${parseFloat(form.cost_per_unit_usd || '0').toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </span>
+                <span className="font-semibold text-primary-800">${subtotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+              {additional > 0 && (
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-primary-800">Additional expenses</span>
+                  <span className="font-semibold text-primary-800">${additional.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="border-t border-primary-300 my-2" />
+              <div className="flex items-center justify-between">
+                <span className="text-primary-900 font-semibold">Total required amount</span>
+                <span className="text-2xl font-bold text-primary-900">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">USD</span></span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 flex items-start gap-2">
+              <Info className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" />
+              <span>By submitting you confirm the information is accurate. Our team will review your proposal and reach out via <strong>{form.email || 'the email above'}</strong>.</span>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <button onClick={() => setStep(3)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
+              <button onClick={handleSubmit} disabled={!canSubmit || submitting} className="px-8 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
+                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</> : <><Send className="w-4 h-4" /> Submit proposal</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default SubmitProposal

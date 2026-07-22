@@ -31,6 +31,7 @@ import {
   Filter,
   Rocket,
   HeartHandshake,
+  FolderKanban,
   ExternalLink,
   type LucideIcon,
 } from 'lucide-react'
@@ -83,6 +84,7 @@ const NAV: NavEntry[] = [
       { kind: 'link', name: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
       { kind: 'link', name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
       { kind: 'link', name: 'Testimonials', href: '/admin/testimonials', icon: Star },
+      { kind: 'link', name: 'Project Proposals', href: '/admin/project-proposals', icon: FolderKanban },
     ],
   },
 
@@ -146,6 +148,7 @@ const MANAGER_ALLOWED = new Set([
   '/admin/contacts',
   '/admin/volunteers',
   '/admin/stories',
+  '/admin/project-proposals',
 ])
 
 const STORAGE_KEY = 'myzakat_admin_nav_expanded'
