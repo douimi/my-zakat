@@ -67,6 +67,68 @@ const EMPTY: Form = {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const CURRENT_YEAR = new Date().getFullYear()
 
+// Minimum-character rules match the backend Pydantic Field(min_length=...) on
+// routers/project_proposals.py. Keeping the map in one place makes it trivial
+// to keep both sides in sync and to render field-specific "X of Y characters"
+// hints under each textarea.
+const MIN_LEN: Partial<Record<keyof Form, number>> = {
+  project_description: 10,
+  problem_solved: 10,
+  target_beneficiaries: 5,
+  community_impact: 10,
+  expected_impact: 10,
+  implementation_steps: 5,
+  implementation_location: 5,
+  required_materials: 5,
+  continuity_plan: 10,
+  feasibility: 10,
+  expected_challenges: 10,
+}
+
+// Human labels + which step each field lives on. Used to turn opaque Pydantic
+// errors (which name fields by their snake_case key) into a friendly
+// "Step 2 · Project description: needs at least 10 characters" list.
+const FIELD_INFO: Record<string, { label: string; step: 1 | 2 | 3 | 4 }> = {
+  full_name:              { label: 'Full name',              step: 1 },
+  national_id:            { label: 'National ID',            step: 1 },
+  date_of_birth_year:     { label: 'Date of birth',          step: 1 },
+  place_of_residence:     { label: 'Place of residence',     step: 1 },
+  mobile_number:          { label: 'Mobile number',          step: 1 },
+  email:                  { label: 'Email',                  step: 1 },
+  educational_level:      { label: 'Educational level',      step: 1 },
+  project_name:           { label: 'Project name',           step: 2 },
+  project_description:    { label: 'Project description',    step: 2 },
+  problem_solved:         { label: 'Problem the project solves', step: 2 },
+  target_beneficiaries:   { label: 'Target beneficiaries',   step: 2 },
+  community_impact:       { label: 'Community impact',       step: 2 },
+  expected_impact:        { label: 'Expected impact',        step: 2 },
+  implementation_steps:   { label: 'Implementation steps',   step: 3 },
+  implementation_location:{ label: 'Location',               step: 3 },
+  required_materials:     { label: 'Required materials',     step: 3 },
+  expected_duration:      { label: 'Expected duration',      step: 3 },
+  continuity_plan:        { label: 'Continuity plan',        step: 3 },
+  feasibility:            { label: 'Feasibility',            step: 3 },
+  expected_challenges:    { label: 'Expected challenges',    step: 3 },
+  number_of_beneficiaries:{ label: 'Beneficiaries count',    step: 4 },
+  cost_per_unit_usd:      { label: 'Cost per unit',          step: 4 },
+  unit_type:              { label: 'Unit type',              step: 4 },
+  total_amount_usd:       { label: 'Total amount',           step: 4 },
+}
+
+function humanizePydanticError(msg: string): string {
+  // Common patterns → plain English.
+  const shortMatch = msg.match(/at least (\d+) character/i)
+  if (shortMatch) return `needs at least ${shortMatch[1]} characters`
+  const longMatch = msg.match(/at most (\d+) character/i)
+  if (longMatch) return `too long (max ${longMatch[1]} characters)`
+  if (/valid email/i.test(msg)) return 'not a valid email address'
+  if (/greater than 0/i.test(msg)) return 'must be greater than zero'
+  if (/greater than or equal to/i.test(msg)) return msg.replace(/^.*?(greater than.+)$/i, '$1')
+  return msg.replace(/^(Value error, )/, '')
+}
+
+interface FieldError { field: string; label: string; step: 1 | 2 | 3 | 4; msg: string }
+
 const Field = ({ label, required, children, hint }: { label: string; required?: boolean; children: React.ReactNode; hint?: string }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -77,13 +139,38 @@ const Field = ({ label, required, children, hint }: { label: string; required?: 
   </div>
 )
 
+/**
+ * Live character-count helper shown under a textarea that has a minimum.
+ * Turns green once the minimum is reached so people can see they're safe.
+ */
+const CharCount = ({ current, min }: { current: number; min: number | undefined }) => {
+  if (!min) return null
+  const ok = current >= min
+  return (
+    <p className={`text-xs mt-1 ${ok ? 'text-green-700' : 'text-amber-700'}`}>
+      {ok
+        ? `✓ ${current} characters`
+        : `${current} of ${min} characters — needs ${min - current} more`}
+    </p>
+  )
+}
+
 const SubmitProposal = () => {
   const navigate = useNavigate()
   const [step, setStep] = useState<StepIndex>(1)
   const [form, setForm] = useState<Form>(EMPTY)
   const [submitting, setSubmitting] = useState(false)
   const [submittedId, setSubmittedId] = useState<number | null>(null)
-  const [error, setError] = useState<string>('')
+  const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
+  const [genericError, setGenericError] = useState<string>('')
+
+  // Helper: is `key` filled AND at least the required min length?
+  const meets = (key: keyof Form): boolean => {
+    const value = (form[key] || '').trim()
+    if (!value) return false
+    const min = MIN_LEN[key] || 0
+    return value.length >= min
+  }
 
   const set = <K extends keyof Form>(key: K) => (v: string) => setForm((f) => ({ ...f, [key]: v }))
 
@@ -98,13 +185,13 @@ const SubmitProposal = () => {
   }, [form.additional_expenses_usd])
   const total = subtotal + additional
 
-  const canContinue1 = form.full_name && form.national_id && form.date_of_birth_year && form.place_of_residence && form.mobile_number && form.email && form.educational_level
-  const canContinue2 = form.project_name && form.project_description && form.problem_solved && form.target_beneficiaries && form.community_impact && form.expected_impact
-  const canContinue3 = form.implementation_steps && form.implementation_location && form.required_materials && form.expected_duration && form.continuity_plan && form.feasibility && form.expected_challenges
-  const canSubmit = canContinue1 && canContinue2 && canContinue3 && form.number_of_beneficiaries && form.cost_per_unit_usd && form.unit_type && total > 0
+  const canContinue1 = meets('full_name') && meets('national_id') && meets('date_of_birth_year') && meets('place_of_residence') && meets('mobile_number') && meets('email') && meets('educational_level')
+  const canContinue2 = meets('project_name') && meets('project_description') && meets('problem_solved') && meets('target_beneficiaries') && meets('community_impact') && meets('expected_impact')
+  const canContinue3 = meets('implementation_steps') && meets('implementation_location') && meets('required_materials') && meets('expected_duration') && meets('continuity_plan') && meets('feasibility') && meets('expected_challenges')
+  const canSubmit = canContinue1 && canContinue2 && canContinue3 && meets('number_of_beneficiaries') && meets('cost_per_unit_usd') && meets('unit_type') && total > 0
 
   const handleSubmit = async () => {
-    setSubmitting(true); setError('')
+    setSubmitting(true); setGenericError(''); setFieldErrors([])
     try {
       const payload = {
         full_name: form.full_name.trim(),
@@ -141,15 +228,31 @@ const SubmitProposal = () => {
       })
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ detail: 'Submission failed' }))
-        const detail = typeof err.detail === 'string' ? err.detail
-          : Array.isArray(err.detail) ? err.detail.map((e: any) => e.msg).join(', ')
-          : 'Please check your entries and try again.'
-        throw new Error(detail)
+        if (Array.isArray(err.detail)) {
+          // FastAPI validation payload — turn every error into a field-scoped row.
+          const parsed: FieldError[] = err.detail.map((e: any) => {
+            const key = (e.loc?.[e.loc.length - 1] || 'field') as keyof Form
+            const info = FIELD_INFO[key] || { label: String(key), step: 1 as const }
+            return {
+              field: String(key),
+              label: info.label,
+              step: info.step,
+              msg: humanizePydanticError(e.msg || 'Invalid value'),
+            }
+          })
+          setFieldErrors(parsed)
+          // Jump to the first offending step so the user immediately sees the fields to fix.
+          const firstBrokenStep = Math.min(...parsed.map((p) => p.step)) as 1 | 2 | 3 | 4
+          if (firstBrokenStep >= 1 && firstBrokenStep <= 4) setStep(firstBrokenStep)
+          return  // keep submitting=false via finally
+        }
+        setGenericError(typeof err.detail === 'string' ? err.detail : 'Please check your entries and try again.')
+        return
       }
       const data = await resp.json()
       setSubmittedId(data.id)
     } catch (exc: any) {
-      setError(exc?.message || 'Something went wrong.')
+      setGenericError(exc?.message || 'Network error. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -279,18 +382,23 @@ const SubmitProposal = () => {
             </Field>
             <Field label="Project idea description" required hint="A short paragraph summarizing what the project does.">
               <textarea required rows={4} value={form.project_description} onChange={(e) => set('project_description')(e.target.value)} className="input-field" />
+              <CharCount current={form.project_description.trim().length} min={MIN_LEN.project_description} />
             </Field>
             <Field label="What problem does the project solve?" required>
               <textarea required rows={3} value={form.problem_solved} onChange={(e) => set('problem_solved')(e.target.value)} className="input-field" />
+              <CharCount current={form.problem_solved.trim().length} min={MIN_LEN.problem_solved} />
             </Field>
             <Field label="Target beneficiaries" required hint="Include number and description of who benefits (e.g. 250 displaced families).">
               <textarea required rows={3} value={form.target_beneficiaries} onChange={(e) => set('target_beneficiaries')(e.target.value)} className="input-field" />
+              <CharCount current={form.target_beneficiaries.trim().length} min={MIN_LEN.target_beneficiaries} />
             </Field>
             <Field label="How will the project serve the community?" required>
               <textarea required rows={3} value={form.community_impact} onChange={(e) => set('community_impact')(e.target.value)} className="input-field" />
+              <CharCount current={form.community_impact.trim().length} min={MIN_LEN.community_impact} />
             </Field>
             <Field label="Expected economic or social impact" required>
               <textarea required rows={3} value={form.expected_impact} onChange={(e) => set('expected_impact')(e.target.value)} className="input-field" />
+              <CharCount current={form.expected_impact.trim().length} min={MIN_LEN.expected_impact} />
             </Field>
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
               <button onClick={() => setStep(1)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
@@ -308,24 +416,30 @@ const SubmitProposal = () => {
             </div>
             <Field label="Implementation steps" required hint="One step per line. The PDF will render these as a bulleted list.">
               <textarea required rows={5} value={form.implementation_steps} onChange={(e) => set('implementation_steps')(e.target.value)} className="input-field" placeholder={"Planning and identifying target families\nPurchasing supplies\nDistributing parcels\nDocumenting the project"} />
+              <CharCount current={form.implementation_steps.trim().length} min={MIN_LEN.implementation_steps} />
             </Field>
             <Field label="Where will the project be implemented?" required>
               <textarea required rows={2} value={form.implementation_location} onChange={(e) => set('implementation_location')(e.target.value)} className="input-field" />
+              <CharCount current={form.implementation_location.trim().length} min={MIN_LEN.implementation_location} />
             </Field>
             <Field label="Required materials or equipment" required hint="One item per line.">
               <textarea required rows={4} value={form.required_materials} onChange={(e) => set('required_materials')(e.target.value)} className="input-field" placeholder={"Fresh chicken\nPackaging bags\nTransportation\nAdministrative materials"} />
+              <CharCount current={form.required_materials.trim().length} min={MIN_LEN.required_materials} />
             </Field>
             <Field label="Expected duration to start implementation" required>
               <input required value={form.expected_duration} onChange={(e) => set('expected_duration')(e.target.value)} className="input-field" placeholder="e.g. Within one day after procurement is complete" />
             </Field>
             <Field label="How will the project continue after funding?" required>
               <textarea required rows={3} value={form.continuity_plan} onChange={(e) => set('continuity_plan')(e.target.value)} className="input-field" />
+              <CharCount current={form.continuity_plan.trim().length} min={MIN_LEN.continuity_plan} />
             </Field>
             <Field label="Why is it feasible under current conditions?" required>
               <textarea required rows={3} value={form.feasibility} onChange={(e) => set('feasibility')(e.target.value)} className="input-field" />
+              <CharCount current={form.feasibility.trim().length} min={MIN_LEN.feasibility} />
             </Field>
             <Field label="Expected challenges and how to address them" required hint="One challenge per line, with your mitigation for each.">
               <textarea required rows={4} value={form.expected_challenges} onChange={(e) => set('expected_challenges')(e.target.value)} className="input-field" placeholder={"Difficulty reaching families: coordinate with local committees\nCrowding at distribution: allocate time slots"} />
+              <CharCount current={form.expected_challenges.trim().length} min={MIN_LEN.expected_challenges} />
             </Field>
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
               <button onClick={() => setStep(2)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
@@ -382,10 +496,31 @@ const SubmitProposal = () => {
               </div>
             </div>
 
-            {error && (
+            {fieldErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm space-y-2">
+                <div className="font-semibold text-red-900 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Please fix {fieldErrors.length === 1 ? 'this item' : `these ${fieldErrors.length} items`} before submitting:
+                </div>
+                <ul className="text-red-800 space-y-1 pl-6">
+                  {fieldErrors.map((e, i) => (
+                    <li key={i} className="list-disc">
+                      <button
+                        type="button"
+                        onClick={() => setStep(e.step)}
+                        className="text-left underline hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
+                      >
+                        <strong>Step {e.step} · {e.label}:</strong> {e.msg}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {genericError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>{error}</span>
+                <span>{genericError}</span>
               </div>
             )}
 
