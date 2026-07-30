@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2 } from 'lucide-react'
+import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2, FileText } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
@@ -126,6 +126,7 @@ const Header = () => {
            location.pathname.startsWith('/book-of-duas') ||
            location.pathname.startsWith('/charity-in-islam') ||
            location.pathname.startsWith('/umrah-guidelines') ||
+           location.pathname.startsWith('/submit-proposal') ||
            location.pathname.startsWith('/quick-links')
   }
 
@@ -468,6 +469,19 @@ const Header = () => {
                           <Info className="w-4 h-4 flex-shrink-0" />
                           <span>Umrah Guidelines</span>
                         </Link>
+                        <Link
+                          to="/submit-proposal"
+                          onClick={() => setIsQuickLinksDropdownOpen(false)}
+                          className={clsx(
+                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
+                            location.pathname === '/submit-proposal'
+                              ? 'text-primary-600 bg-primary-50 font-semibold'
+                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                          )}
+                        >
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span>Submit a Proposal</span>
+                        </Link>
                       </div>
                     </div>
                   </div>
@@ -797,6 +811,19 @@ const Header = () => {
                     >
                       <Info className="w-4 h-4 flex-shrink-0" />
                       <span>Umrah Guidelines</span>
+                    </Link>
+                    <Link
+                      to="/submit-proposal"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={clsx(
+                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                        location.pathname === '/submit-proposal'
+                          ? 'text-primary-600 bg-white shadow-sm'
+                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
+                      )}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span>Submit a Proposal</span>
                     </Link>
                   </div>
                 </div>

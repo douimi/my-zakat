@@ -123,6 +123,7 @@ const Donate = () => {
     'General Donation',
     'Zakat',
     'Emergency Relief',
+    'Support a Family',
     'Orphan Care',
     'Food & Water Aid',
     'Education',
