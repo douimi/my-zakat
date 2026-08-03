@@ -6,7 +6,7 @@
  *   - Category chip + urgency badge (urgent when < 25% remaining OR deadline soon)
  *   - Title + short description
  *   - Animated progress bar with milestone marks (25/50/75%)
- *   - Three stat pills: Goal · Spent · Remaining
+ *   - Three stat pills: Goal · Raised · Remaining
  *   - Optional deadline countdown
  *   - Donate CTA that pre-fills the Donate form with amount + purpose
  *
@@ -183,7 +183,7 @@ const ProjectCard = ({ project }: { project: Project }) => {
           <div className="text-center bg-emerald-50 border border-emerald-100 rounded-lg py-2.5 px-2">
             <div className="flex items-center justify-center gap-1 text-emerald-800 mb-0.5">
               <Wallet className="w-3.5 h-3.5" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider">Spent</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider">Raised</p>
             </div>
             <p className="text-sm font-bold text-emerald-900 leading-tight">{formatMoney(project.spent_amount, project.currency)}</p>
           </div>
@@ -258,8 +258,8 @@ const FundraisingProjectsSection = () => {
             See exactly where your donation goes
           </h2>
           <p className="text-base sm:text-lg text-gray-600">
-            Each project shows the goal, what's already been spent, and what's still needed to help
-            us complete the mission. Full transparency, immediate impact.
+            Each project shows the goal, how much has been raised so far, and what's still needed
+            to help us complete the mission. Full transparency, immediate impact.
           </p>
         </div>
 

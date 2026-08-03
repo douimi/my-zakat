@@ -181,7 +181,7 @@ const AdminFundraisingProjects = () => {
         body: JSON.stringify({ delta_amount: delta }),
       })
       if (resp.ok) {
-        showSuccess('Updated', `Added ${new Intl.NumberFormat('en-US', { style: 'currency', currency: project.currency, maximumFractionDigits: 0 }).format(delta)} to spent`)
+        showSuccess('Updated', `Added ${new Intl.NumberFormat('en-US', { style: 'currency', currency: project.currency, maximumFractionDigits: 0 }).format(delta)} to raised`)
         setQuickAmount((s) => ({ ...s, [project.id]: '' }))
         fetchItems()
       } else showError('Error', 'Failed to adjust')
@@ -269,7 +269,7 @@ const AdminFundraisingProjects = () => {
                     <p className="text-blue-900 font-bold text-sm">{fm(p.goal_amount, p.currency)}</p>
                   </div>
                   <div className="text-center bg-emerald-50 border border-emerald-100 rounded p-1.5">
-                    <p className="text-emerald-900 font-semibold uppercase text-[10px] flex items-center justify-center gap-0.5"><Wallet className="w-3 h-3" /> Spent</p>
+                    <p className="text-emerald-900 font-semibold uppercase text-[10px] flex items-center justify-center gap-0.5"><Wallet className="w-3 h-3" /> Raised</p>
                     <p className="text-emerald-900 font-bold text-sm">{fm(p.spent_amount, p.currency)}</p>
                   </div>
                   <div className={`text-center border rounded p-1.5 ${isCompleted ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-100'}`}>
@@ -280,7 +280,7 @@ const AdminFundraisingProjects = () => {
 
                 {/* Quick + $ */}
                 <div className="flex items-center gap-2 mb-3 bg-emerald-50 border border-emerald-200 rounded-lg p-2">
-                  <span className="text-emerald-800 font-semibold text-xs whitespace-nowrap">Quick add spent:</span>
+                  <span className="text-emerald-800 font-semibold text-xs whitespace-nowrap">Quick add raised:</span>
                   <span className="text-emerald-800 font-bold">+ $</span>
                   <input
                     type="number" min="1" step="1"
@@ -350,7 +350,7 @@ const AdminFundraisingProjects = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Already spent</label>
+                    <label className="block text-xs text-gray-600 mb-1">Already raised</label>
                     <div className="flex">
                       <span className="inline-flex items-center px-2.5 bg-white border border-r-0 border-gray-300 rounded-l text-sm text-gray-500">$</span>
                       <input type="number" min="0" step="1" value={form.spent_amount} onChange={(e) => setForm({ ...form, spent_amount: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded-r focus:ring-2 focus:ring-primary-500" placeholder="20" />
