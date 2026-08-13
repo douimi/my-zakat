@@ -168,7 +168,7 @@ async def create_donation(donation: DonationCreate, db: Session = Depends(get_db
 @router.get("/", response_model=List[DonationResponse])
 async def get_donations(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 100000,
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin)
 ):

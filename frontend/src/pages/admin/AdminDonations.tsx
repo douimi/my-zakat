@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle } from 'lucide-react'
+import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
@@ -26,6 +26,11 @@ const AdminDonations = () => {
   const [sortField, setSortField] = useState<SortField>('donated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [syncing, setSyncing] = useState(false)
+  // Pagination — client-side over the already-filtered set so search, sort
+  // and CSV export keep operating on every matching row, not just the
+  // currently visible page.
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   // Manual donation modal
   const [showManualModal, setShowManualModal] = useState(false)
   const [manualForm, setManualForm] = useState({
@@ -154,6 +159,19 @@ const AdminDonations = () => {
         return sortDir === 'asc' ? cmp : -cmp
       })
   }, [donations, searchTerm, frequencyFilter, statusFilter, sortField, sortDir])
+
+  // Snap back to page 1 whenever the underlying filter shrinks the result set
+  // so the admin doesn't stare at an empty "page 7 of 3".
+  useEffect(() => {
+    setPage(1)
+  }, [searchTerm, frequencyFilter, statusFilter, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(filteredDonations.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = (currentPage - 1) * pageSize
+  const pagedDonations = filteredDonations.slice(pageStart, pageStart + pageSize)
+  const rangeFrom = filteredDonations.length === 0 ? 0 : pageStart + 1
+  const rangeTo = Math.min(pageStart + pageSize, filteredDonations.length)
 
   const handleSyncStripeData = async () => {
     setSyncing(true)
@@ -560,7 +578,7 @@ const AdminDonations = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredDonations.map((donation: Donation) => {
+              {pagedDonations.map((donation: Donation) => {
                 const { status, label, color } = getStatusInfo(donation.frequency)
                 const isValid = status === 'confirmed' || status === 'manual'
                 return (
@@ -630,6 +648,80 @@ const AdminDonations = () => {
             <Heart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No donations found</h3>
             <p className="text-gray-500">No donations match your current filters.</p>
+          </div>
+        )}
+
+        {/* Pagination controls */}
+        {filteredDonations.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <span>
+                Showing <span className="font-semibold text-gray-900">{rangeFrom}</span>
+                {' – '}
+                <span className="font-semibold text-gray-900">{rangeTo}</span>
+                {' of '}
+                <span className="font-semibold text-gray-900">{filteredDonations.length}</span>
+              </span>
+              <div className="hidden sm:flex items-center gap-2">
+                <label htmlFor="page-size" className="text-gray-500">Per page:</label>
+                <select
+                  id="page-size"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                  className="border border-gray-300 rounded-md text-sm py-1 px-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                title="First page"
+                aria-label="First page"
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                title="Previous page"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-3 text-sm text-gray-700 whitespace-nowrap">
+                Page <span className="font-semibold text-gray-900">{currentPage}</span> of <span className="font-semibold text-gray-900">{totalPages}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="p-1.5 rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                title="Next page"
+                aria-label="Next page"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={currentPage >= totalPages}
+                className="p-1.5 rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                title="Last page"
+                aria-label="Last page"
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>
