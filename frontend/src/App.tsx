@@ -66,6 +66,7 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
 const SubmitProposal = lazy(() => import('./pages/SubmitProposal'))
+const AllProjects = lazy(() => import('./pages/AllProjects'))
 const AdminProjectProposals = lazy(() => import('./pages/admin/AdminProjectProposals'))
 const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
 const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
@@ -147,6 +148,7 @@ function App() {
                 <Route path="sms-opt-in" element={<SmsOptIn />} />
                 <Route path="unsubscribe" element={<Unsubscribe />} />
                 <Route path="submit-proposal" element={<SubmitProposal />} />
+                <Route path="projects" element={<AllProjects />} />
               </Route>
 
               {/* User authentication routes */}

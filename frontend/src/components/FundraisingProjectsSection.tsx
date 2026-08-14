@@ -17,9 +17,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Target, Wallet, ArrowUpRight, Clock, Sparkles, HeartHandshake, TrendingUp, CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react'
 
-interface Project {
+export interface Project {
   id: number
   title: string
   slug: string
@@ -84,7 +85,7 @@ const ProgressBar = ({ percent, animate }: { percent: number; animate: boolean }
 }
 
 // ── Single project card ─────────────────────────────────────────────
-const ProjectCard = ({ project }: { project: Project }) => {
+export const ProjectCard = ({ project }: { project: Project }) => {
   const [animate, setAnimate] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -225,6 +226,31 @@ const ProjectCard = ({ project }: { project: Project }) => {
   )
 }
 
+// ── 100% donation-integrity callout ─────────────────────────────────
+//
+// Used both on the homepage section and on the full /projects page.
+// The message reassures donors that operating costs are funded
+// separately, so their entire contribution reaches the cause.
+export const DonationIntegrityCallout = () => (
+  <div className="max-w-3xl mx-auto mb-10 sm:mb-12">
+    <div className="bg-gradient-to-r from-emerald-50 via-white to-primary-50 border border-emerald-200 rounded-2xl px-5 sm:px-6 py-4 sm:py-5 flex items-start gap-3 sm:gap-4 shadow-sm">
+      <div className="flex-shrink-0 w-11 h-11 rounded-full bg-white shadow-sm border border-emerald-100 flex items-center justify-center">
+        <ShieldCheck className="w-6 h-6 text-emerald-600" />
+      </div>
+      <div>
+        <p className="text-sm sm:text-base font-semibold text-gray-900 mb-1">
+          100% of your donation reaches the cause.
+        </p>
+        <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+          MyZakat covers its administrative and operating costs from separate funding —
+          not a cent of donor contributions is used for overhead. Every dollar you give is
+          delivered in full to the project you choose.
+        </p>
+      </div>
+    </div>
+  </div>
+)
+
 // ── Section wrapper ─────────────────────────────────────────────────
 const FundraisingProjectsSection = () => {
   const [projects, setProjects] = useState<Project[]>([])
@@ -244,6 +270,14 @@ const FundraisingProjectsSection = () => {
     return () => { cancelled = true }
   }, [])
 
+  // Homepage shows only the projects the admin has explicitly marked as
+  // featured. If none are featured (fresh install, or admin cleared the
+  // flags), fall back to the first six active projects so the section
+  // never renders empty.
+  const featured = projects.filter((p) => p.is_featured)
+  const homepageProjects = (featured.length > 0 ? featured : projects).slice(0, 6)
+  const hasMore = projects.length > homepageProjects.length
+
   // Nothing to render if no active projects — the admin hasn't set any up yet.
   if (!loading && projects.length === 0) return null
 
@@ -258,19 +292,38 @@ const FundraisingProjectsSection = () => {
             See exactly where your donation goes
           </h2>
           <p className="text-base sm:text-lg text-gray-600">
-            Each project shows the goal, how much has been raised so far, and what's still needed
-            to help us complete the mission. Full transparency, immediate impact.
+            A hand-picked look at what we're raising for right now. Each project shows the goal,
+            how much has been raised so far, and what's still needed to complete the mission —
+            full transparency, immediate impact.
           </p>
         </div>
+
+        <DonationIntegrityCallout />
 
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
+            </div>
+
+            {/* See-all CTA — visible whenever there are more projects than what
+                fits in the featured lineup, so donors can browse the full list. */}
+            {hasMore && (
+              <div className="mt-10 sm:mt-12 text-center">
+                <Link
+                  to="/projects"
+                  className="inline-flex items-center gap-2 bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 hover:border-primary-300 font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
+                >
+                  See all projects
+                  <ArrowUpRight className="w-4 h-4" />
+                </Link>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
