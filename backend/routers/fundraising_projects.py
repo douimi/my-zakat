@@ -113,14 +113,26 @@ class SpentAdjust(BaseModel):
 # ── Public endpoints ────────────────────────────────────────────────
 
 @router.get("/")
-async def list_public(db: Session = Depends(get_db)):
-    """Homepage feed — only active projects, ordered by display_order, then id."""
-    rows = (
-        db.query(FundraisingProject)
-        .filter(FundraisingProject.is_active == True)  # noqa: E712
-        .order_by(FundraisingProject.is_featured.desc(), FundraisingProject.display_order.asc(), FundraisingProject.id.asc())
-        .all()
-    )
+async def list_public(
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Homepage feed — active projects by default.
+
+    When `include_inactive=true` the public /projects catalog also receives
+    archived / hidden projects so donors can see the foundation's full track
+    record. Active projects are always returned first (featured, then by
+    display order), followed by inactive ones ordered by newest updates.
+    """
+    q = db.query(FundraisingProject)
+    if not include_inactive:
+        q = q.filter(FundraisingProject.is_active == True)  # noqa: E712
+    rows = q.order_by(
+        FundraisingProject.is_active.desc(),
+        FundraisingProject.is_featured.desc(),
+        FundraisingProject.display_order.asc(),
+        FundraisingProject.id.asc(),
+    ).all()
     return [_serialize(p) for p in rows]
 
 

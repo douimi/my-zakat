@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Target, Wallet, ArrowUpRight, Clock, Sparkles, HeartHandshake, TrendingUp, CheckCircle2,
-  ShieldCheck,
+  ShieldCheck, Archive,
 } from 'lucide-react'
 
 export interface Project {
@@ -34,6 +34,7 @@ export interface Project {
   suggested_donation: number | null
   deadline: string | null
   status: string
+  is_active: boolean
   is_featured: boolean
   category: string | null
 }
@@ -103,9 +104,12 @@ export const ProjectCard = ({ project }: { project: Project }) => {
   }, [])
 
   const days = daysUntil(project.deadline)
-  const isUrgent = (project.progress_percent >= 75 && project.progress_percent < 100)
-    || (days !== null && days >= 0 && days <= 14)
+  const isArchived = project.is_active === false
   const isCompleted = project.progress_percent >= 100 || project.status === 'completed'
+  const isUrgent = !isArchived && !isCompleted && (
+    (project.progress_percent >= 75 && project.progress_percent < 100)
+    || (days !== null && days >= 0 && days <= 14)
+  )
 
   // Build the Donate link — pre-fill amount + purpose so the form is one click away.
   const donationAmount = project.suggested_donation
@@ -143,9 +147,13 @@ export const ProjectCard = ({ project }: { project: Project }) => {
             </span>
           )}
         </div>
-        {(isUrgent || isCompleted) && (
+        {(isUrgent || isCompleted || isArchived) && (
           <div className="absolute top-3 right-3">
-            {isCompleted ? (
+            {isArchived ? (
+              <span className="bg-gray-700 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md inline-flex items-center gap-1">
+                <Archive className="w-3 h-3" /> Archived
+              </span>
+            ) : isCompleted ? (
               <span className="bg-green-500 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md inline-flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Fully funded
               </span>
@@ -207,7 +215,11 @@ export const ProjectCard = ({ project }: { project: Project }) => {
 
         {/* CTA — grows to bottom */}
         <div className="mt-auto">
-          {isCompleted ? (
+          {isArchived ? (
+            <div className="w-full text-center bg-gray-50 border border-gray-200 text-gray-600 rounded-lg py-3 px-4 font-semibold text-sm inline-flex items-center justify-center gap-2">
+              <Archive className="w-4 h-4" /> Past project
+            </div>
+          ) : isCompleted ? (
             <div className="w-full text-center bg-green-50 border border-green-200 text-green-800 rounded-lg py-3 px-4 font-semibold text-sm inline-flex items-center justify-center gap-2">
               <CheckCircle2 className="w-4 h-4" /> Fully funded — thank you!
             </div>
@@ -276,7 +288,6 @@ const FundraisingProjectsSection = () => {
   // never renders empty.
   const featured = projects.filter((p) => p.is_featured)
   const homepageProjects = (featured.length > 0 ? featured : projects).slice(0, 6)
-  const hasMore = projects.length > homepageProjects.length
 
   // Nothing to render if no active projects — the admin hasn't set any up yet.
   if (!loading && projects.length === 0) return null
@@ -310,19 +321,17 @@ const FundraisingProjectsSection = () => {
               {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
             </div>
 
-            {/* See-all CTA — visible whenever there are more projects than what
-                fits in the featured lineup, so donors can browse the full list. */}
-            {hasMore && (
-              <div className="mt-10 sm:mt-12 text-center">
-                <Link
-                  to="/projects"
-                  className="inline-flex items-center gap-2 bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 hover:border-primary-300 font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
-                >
-                  See all projects
-                  <ArrowUpRight className="w-4 h-4" />
-                </Link>
-              </div>
-            )}
+            {/* See-all CTA — always shown so donors can reach the full catalog
+                (current, past, and archived) from the homepage in one click. */}
+            <div className="mt-10 sm:mt-12 text-center">
+              <Link
+                to="/projects"
+                className="inline-flex items-center gap-2 bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 hover:border-primary-300 font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
+              >
+                View all projects
+                <ArrowUpRight className="w-4 h-4" />
+              </Link>
+            </div>
           </>
         )}
       </div>

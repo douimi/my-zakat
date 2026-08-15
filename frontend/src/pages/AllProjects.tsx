@@ -8,7 +8,7 @@
  * first-time visitors landing here directly also get the reassurance.
  */
 import { useEffect, useState } from 'react'
-import { HeartHandshake, Sparkles, Loader2 } from 'lucide-react'
+import { HeartHandshake, Sparkles, Loader2, Archive } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
 import {
   ProjectCard,
@@ -26,7 +26,10 @@ const AllProjects = () => {
     let cancelled = false
     ;(async () => {
       try {
-        const resp = await fetch(`${API_URL}/api/fundraising-projects/`)
+        // include_inactive brings in archived / past projects so donors can
+        // browse the foundation's full track record, not just what's active
+        // right now.
+        const resp = await fetch(`${API_URL}/api/fundraising-projects/?include_inactive=true`)
         if (!resp.ok) return
         const data = await resp.json()
         if (!cancelled) setProjects(Array.isArray(data) ? data : [])
@@ -36,11 +39,12 @@ const AllProjects = () => {
     return () => { cancelled = true }
   }, [])
 
-  // Show featured projects at the top (they already come sorted that way from
-  // the API), but split them visually so donors see both the priority lineup
-  // and the full catalog.
-  const featured = projects.filter((p) => p.is_featured)
-  const others = projects.filter((p) => !p.is_featured)
+  // Split projects into three bands so donors always know what they're
+  // looking at: the current push, other open projects, and the archive.
+  const featured = projects.filter((p) => p.is_active && p.is_featured)
+  const others = projects.filter((p) => p.is_active && !p.is_featured)
+  const archived = projects.filter((p) => !p.is_active)
+  const hasAnyActive = featured.length + others.length > 0
 
   return (
     <>
@@ -101,7 +105,7 @@ const AllProjects = () => {
               )}
 
               {others.length > 0 && (
-                <div>
+                <div className={archived.length > 0 ? 'mb-12' : ''}>
                   {featured.length > 0 && (
                     <div className="mb-5">
                       <h2 className="text-xl sm:text-2xl font-heading font-bold text-gray-900">More projects</h2>
@@ -109,6 +113,22 @@ const AllProjects = () => {
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
                     {others.map((p) => <ProjectCard key={p.id} project={p} />)}
+                  </div>
+                </div>
+              )}
+
+              {archived.length > 0 && (
+                <div className={hasAnyActive ? 'pt-8 border-t border-gray-200' : ''}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Archive className="w-5 h-5 text-gray-500" />
+                    <h2 className="text-xl sm:text-2xl font-heading font-bold text-gray-900">Past projects</h2>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-5 max-w-2xl">
+                    Projects we've previously run. They're no longer accepting donations, but we
+                    keep them here so you can see the full story of what your community has funded.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                    {archived.map((p) => <ProjectCard key={p.id} project={p} />)}
                   </div>
                 </div>
               )}
