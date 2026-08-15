@@ -50,7 +50,7 @@ const AllProjects = () => {
     <>
       <SEOHead
         title="Support a Project"
-        description="Browse every active fundraising project at MyZakat. See goals, progress, and where your donation goes — 100% of your contribution reaches the cause."
+        description="Browse every fundraising project at MyZakat. See goals, progress, and where your donation goes. 100% of your contribution reaches the cause."
         canonicalPath="/projects"
       />
 
@@ -62,11 +62,11 @@ const AllProjects = () => {
               <HeartHandshake className="w-3.5 h-3.5" /> Support a project
             </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-3">
-              All active fundraising projects
+              Our fundraising projects
             </h1>
             <p className="text-base sm:text-lg text-gray-600">
-              Every project below is currently open for donations. Pick one that resonates
-              with you and see exactly where your contribution goes.
+              Everything we're raising for right now, plus a look back at the projects your
+              community has already funded. Pick one and see exactly where your donation goes.
             </p>
           </div>
         </div>
@@ -86,8 +86,8 @@ const AllProjects = () => {
               <HeartHandshake className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h2 className="text-lg font-semibold text-gray-900 mb-2">No active projects right now</h2>
               <p className="text-gray-600">
-                Check back soon — new projects are added regularly. In the meantime, you can still
-                give to any of our general causes.
+                Check back soon. New projects are added regularly, and in the meantime you can
+                still give to any of our general causes.
               </p>
             </div>
           ) : (

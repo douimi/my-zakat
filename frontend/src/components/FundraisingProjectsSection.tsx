@@ -221,7 +221,7 @@ export const ProjectCard = ({ project }: { project: Project }) => {
             </div>
           ) : isCompleted ? (
             <div className="w-full text-center bg-green-50 border border-green-200 text-green-800 rounded-lg py-3 px-4 font-semibold text-sm inline-flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4" /> Fully funded — thank you!
+              <CheckCircle2 className="w-4 h-4" /> Fully funded. Thank you!
             </div>
           ) : (
             <Link
@@ -241,22 +241,22 @@ export const ProjectCard = ({ project }: { project: Project }) => {
 // ── 100% donation-integrity callout ─────────────────────────────────
 //
 // Used both on the homepage section and on the full /projects page.
-// The message reassures donors that operating costs are funded
-// separately, so their entire contribution reaches the cause.
+// Full-width, left-aligned, quiet emerald tint — sits inside the section
+// rhythm as a proper trust statement rather than a decorative pill.
 export const DonationIntegrityCallout = () => (
-  <div className="max-w-3xl mx-auto mb-10 sm:mb-12">
-    <div className="bg-gradient-to-r from-emerald-50 via-white to-primary-50 border border-emerald-200 rounded-2xl px-5 sm:px-6 py-4 sm:py-5 flex items-start gap-3 sm:gap-4 shadow-sm">
-      <div className="flex-shrink-0 w-11 h-11 rounded-full bg-white shadow-sm border border-emerald-100 flex items-center justify-center">
-        <ShieldCheck className="w-6 h-6 text-emerald-600" />
+  <div className="mb-10 sm:mb-12 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-5 sm:px-8 py-5 sm:py-6">
+    <div className="flex items-start gap-4 sm:gap-5">
+      <div className="flex-shrink-0 mt-0.5 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white border border-emerald-200 flex items-center justify-center shadow-sm">
+        <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
       </div>
-      <div>
-        <p className="text-sm sm:text-base font-semibold text-gray-900 mb-1">
-          100% of your donation reaches the cause.
-        </p>
-        <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-          MyZakat covers its administrative and operating costs from separate funding —
-          not a cent of donor contributions is used for overhead. Every dollar you give is
-          delivered in full to the project you choose.
+      <div className="max-w-3xl">
+        <h3 className="text-base sm:text-lg font-heading font-bold text-gray-900 mb-1.5">
+          100% of your donation reaches those in need.
+        </h3>
+        <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
+          Every dollar you give goes directly to the project you choose. We fund our
+          administrative and operating costs from separate sources, so nothing you
+          contribute is spent on overhead.
         </p>
       </div>
     </div>
@@ -303,9 +303,8 @@ const FundraisingProjectsSection = () => {
             See exactly where your donation goes
           </h2>
           <p className="text-base sm:text-lg text-gray-600">
-            A hand-picked look at what we're raising for right now. Each project shows the goal,
-            how much has been raised so far, and what's still needed to complete the mission —
-            full transparency, immediate impact.
+            These are the projects we're raising for right now. Each card shows the goal, how
+            much we've raised so far, and what's still needed to complete it.
           </p>
         </div>
 
