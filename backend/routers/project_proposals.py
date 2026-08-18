@@ -72,6 +72,13 @@ class ProposalSubmit(BaseModel):
     additional_expenses_description: Optional[str] = None
     total_amount_usd: float = Field(gt=0)
 
+    # Optional SMS consent (10DLC / TCR compliance). Consent is NOT required
+    # to submit a proposal — the checkbox on the form is unchecked by default.
+    # When the applicant ticks it, we record the exact wording they agreed to
+    # so we can prove opt-in later.
+    sms_consent: bool = False
+    sms_consent_text: Optional[str] = Field(default=None, max_length=2000)
+
     @field_validator("total_amount_usd")
     @classmethod
     def total_matches_breakdown(cls, v, info):
@@ -140,15 +147,30 @@ async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session
     xff = request.headers.get("x-forwarded-for")
     client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else ""))[:45]
 
+    data = payload.model_dump()
+    # Only stamp the SMS consent timestamp when the box was actually ticked.
+    # If the client sent consent_text without consent=True, ignore the text
+    # so we never record a false consent trail.
+    if not data.get("sms_consent"):
+        data["sms_consent_text"] = None
+        sms_consent_at = None
+    else:
+        sms_consent_at = datetime.utcnow()
+
     p = ProjectProposal(
-        **payload.model_dump(),
+        **data,
         status="submitted",
         submitted_ip=client_ip,
+        sms_consent_at=sms_consent_at,
     )
     db.add(p)
     db.commit()
     db.refresh(p)
-    logger.info("Project proposal #%s submitted by %s (%s)", p.id, p.email, p.project_name[:60])
+    logger.info(
+        "Project proposal #%s submitted by %s (%s)%s",
+        p.id, p.email, p.project_name[:60],
+        " [SMS opt-in]" if p.sms_consent else "",
+    )
     return {
         "id": p.id,
         "message": "Your proposal has been submitted. Our team will review it and get back to you.",

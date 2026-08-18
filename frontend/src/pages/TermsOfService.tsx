@@ -213,7 +213,114 @@ const TermsOfService = () => {
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">17. Contact Us</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">17. SMS / Text Messaging Terms</h2>
+              <div className="text-gray-600 leading-relaxed space-y-4">
+                <p>
+                  These SMS terms apply if you opt in to receive text messages from MyZakat, whether
+                  through our{' '}
+                  <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS opt-in page</a>{' '}
+                  or by checking the SMS consent box on any of our other forms.
+                </p>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.1 SMS Consent Communication</h3>
+                  <p>
+                    The information you provide as part of the SMS consent process, including your
+                    phone number, will not be shared with third parties for marketing purposes.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.2 Types of SMS Communications</h3>
+                  <p>
+                    If you have consented to receive text messages from MyZakat, you may receive
+                    messages related to the following:
+                  </p>
+                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                    <li>Donation receipts and confirmations</li>
+                    <li>Campaign updates and urgent-need appeals</li>
+                    <li>Event reminders</li>
+                    <li>Customer care and support messages</li>
+                    <li>Project proposal follow-ups (for applicants who submit a proposal)</li>
+                  </ul>
+                  <p className="mt-3 italic">
+                    Example: "Hello, this is MyZakat. Thank you for your donation to our Emergency
+                    Relief campaign. Reply STOP to opt out of SMS messaging from MyZakat."
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.3 Message Frequency</h3>
+                  <p>
+                    Message frequency may vary depending on the type of communication. You may
+                    receive up to 4 SMS messages per month related to donations, campaigns, and
+                    urgent-need appeals. Transactional messages (such as donation receipts or
+                    proposal follow-ups) are sent as needed.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.4 Potential Fees for SMS Messaging</h3>
+                  <p>
+                    Standard message and data rates may apply, depending on your carrier's pricing
+                    plan. These fees may vary if the message is sent domestically or internationally.
+                    MyZakat does not charge you for sending or receiving SMS messages.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.5 Opt-In Method</h3>
+                  <p>You may opt in to receive SMS messages from MyZakat in the following ways:</p>
+                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                    <li>By submitting the online form on our <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS opt-in page</a></li>
+                    <li>By checking the SMS consent box on our project proposal form or any other online form that collects a phone number</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.6 Opt-Out Method</h3>
+                  <p>
+                    You can opt out of receiving SMS messages at any time. To do so, simply reply
+                    <strong> STOP</strong> to any SMS message you receive. Alternatively, you can
+                    contact us at{' '}
+                    <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>{' '}
+                    or call <a href="tel:+18336992528" className="text-primary-600 hover:underline">1-833-MYZAKAT</a> to
+                    request removal from our messaging list.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.7 Help</h3>
+                  <p>
+                    If you are experiencing any issues, you can reply with the keyword
+                    <strong> HELP</strong> to any of our messages. You can also reach us directly at{' '}
+                    <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>{' '}
+                    or <a href="tel:+18336992528" className="text-primary-600 hover:underline">1-833-MYZAKAT</a>.
+                  </p>
+                  <p className="mt-2">
+                    If you do not wish to receive SMS messages, you can choose not to check the SMS
+                    consent box on any of our forms.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">17.8 Standard Messaging Disclosures</h3>
+                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                    <li>Message and data rates may apply.</li>
+                    <li>You can opt out at any time by texting <strong>STOP</strong>.</li>
+                    <li>For assistance, text <strong>HELP</strong> or contact us at info@myzakat.org.</li>
+                    <li>Message frequency may vary.</li>
+                    <li>
+                      See our <a href="/privacy-policy" className="text-primary-600 hover:underline">Privacy Policy</a>{' '}
+                      and these Terms of Service for full details.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">18. Contact Us</h2>
               <div className="text-gray-600 leading-relaxed space-y-2">
                 <p>If you have any questions about these Terms, please contact us:</p>
                 <p>

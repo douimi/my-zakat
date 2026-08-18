@@ -67,6 +67,18 @@ const EMPTY: Form = {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const CURRENT_YEAR = new Date().getFullYear()
 
+// TCR / 10DLC-compliant SMS opt-in disclosure. Must be stored verbatim with
+// the row when the applicant ticks the box so we can prove exactly what they
+// agreed to. Keep this wording in sync with what the checkbox actually shows.
+const PROPOSAL_SMS_CONSENT_TEXT = (
+  'By checking this box, I agree to receive SMS messages from MyZakat ' +
+  'about my project proposal (status updates, requests for additional ' +
+  'information, and follow-up communications) at the mobile number ' +
+  'provided above. Message frequency may vary. Message and data rates may ' +
+  'apply. Text HELP to 1-833-699-2528 for assistance. Reply STOP to opt ' +
+  'out of receiving SMS messages.'
+)
+
 // Minimum-character rules match the backend Pydantic Field(min_length=...) on
 // routers/project_proposals.py. Keeping the map in one place makes it trivial
 // to keep both sides in sync and to render field-specific "X of Y characters"
@@ -163,6 +175,9 @@ const SubmitProposal = () => {
   const [submittedId, setSubmittedId] = useState<number | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
   const [genericError, setGenericError] = useState<string>('')
+  // Optional SMS opt-in. Must default to false (never pre-selected) per 10DLC
+  // rules, and must not gate form submission — applicants can submit without it.
+  const [smsConsent, setSmsConsent] = useState(false)
 
   // Helper: is `key` filled AND at least the required min length?
   const meets = (key: keyof Form): boolean => {
@@ -220,6 +235,8 @@ const SubmitProposal = () => {
         additional_expenses_usd: parseFloat(form.additional_expenses_usd || '0'),
         additional_expenses_description: form.additional_expenses_description.trim() || null,
         total_amount_usd: total,
+        sms_consent: smsConsent,
+        sms_consent_text: smsConsent ? PROPOSAL_SMS_CONSENT_TEXT : null,
       }
       const resp = await fetch(`${API_URL}/api/project-proposals/`, {
         method: 'POST',
@@ -357,6 +374,35 @@ const SubmitProposal = () => {
               <Field label="Mobile number" required>
                 <input required value={form.mobile_number} onChange={(e) => set('mobile_number')(e.target.value)} className="input-field" placeholder="With country code" />
               </Field>
+
+              {/* Optional SMS opt-in — 10DLC / TCR compliance. Must be
+                  unchecked by default, must not block form submission, and
+                  the disclosure must be presented alongside the checkbox. */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smsConsent}
+                    onChange={(e) => setSmsConsent(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-primary-600 rounded border-gray-400 focus:ring-2 focus:ring-primary-500 flex-shrink-0"
+                    aria-describedby="proposal-sms-consent"
+                  />
+                  <span id="proposal-sms-consent" className="text-sm text-gray-700 leading-relaxed">
+                    {PROPOSAL_SMS_CONSENT_TEXT} Please review our{' '}
+                    <Link to="/privacy-policy" className="text-primary-700 font-medium hover:underline">
+                      Privacy Policy
+                    </Link>{' '}
+                    and{' '}
+                    <Link to="/terms-of-service" className="text-primary-700 font-medium hover:underline">
+                      Terms of Service
+                    </Link>.
+                  </span>
+                </label>
+                <p className="text-xs text-gray-500 mt-2 ml-7">
+                  Optional. You can submit your proposal without opting in.
+                </p>
+              </div>
+
               <Field label="Email" required>
                 <input required type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} className="input-field" />
               </Field>

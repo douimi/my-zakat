@@ -5,17 +5,16 @@ import SEOHead from '../components/SEOHead'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// IMPORTANT: this exact wording is also stored in the subscriptions table
-// alongside the user's consent so we can prove later exactly what they agreed
-// to. If you change the visible disclosure, copy the new wording here verbatim.
+// TCR / 10DLC-compliant disclosure. This exact wording is stored on the
+// subscription row alongside the timestamp and IP so we can prove later
+// exactly what the subscriber agreed to. If you edit the visible label,
+// update this constant verbatim to keep the audit trail truthful.
 const CONSENT_TEXT = (
-  'By checking this box and submitting this form, I agree to receive recurring ' +
-  'text messages from MyZakat at the mobile number provided, including donation ' +
-  'receipts, campaign updates, urgent-need appeals, and event reminders. Message ' +
-  'frequency varies (typically up to 4 messages per month). Message and data ' +
-  'rates may apply. Reply HELP for help and STOP to opt out at any time. My ' +
-  'consent is not required as a condition of purchasing any goods or services, ' +
-  'or of making a donation.'
+  'By checking this box, I agree to receive SMS messages from MyZakat about ' +
+  'donation receipts, campaign updates, urgent-need appeals, and event ' +
+  'reminders at the phone number provided above. Message frequency may ' +
+  'vary. Message and data rates may apply. Text HELP to 1-833-699-2528 for ' +
+  'assistance. Reply STOP to opt out of receiving SMS messages.'
 )
 
 type Status = 'idle' | 'submitting' | 'success' | 'error'

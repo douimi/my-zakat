@@ -640,3 +640,10 @@ class ProjectProposal(Base):
     submitted_ip = Column(String(45), nullable=True)
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 10DLC / TCR proof-of-consent for the optional SMS opt-in checkbox on
+    # the proposal form. Populated only when the applicant ticks the box;
+    # blank rows here mean they submitted without opting in.
+    sms_consent = Column(Boolean, nullable=False, default=False)
+    sms_consent_at = Column(DateTime, nullable=True)
+    sms_consent_text = Column(Text, nullable=True)
