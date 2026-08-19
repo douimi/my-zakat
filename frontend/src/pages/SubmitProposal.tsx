@@ -67,16 +67,20 @@ const EMPTY: Form = {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const CURRENT_YEAR = new Date().getFullYear()
 
-// TCR / 10DLC-compliant SMS opt-in disclosure. Must be stored verbatim with
-// the row when the applicant ticks the box so we can prove exactly what they
-// agreed to. Keep this wording in sync with what the checkbox actually shows.
+// TCR / 10DLC-compliant SMS opt-in disclosure. The message category must
+// be exactly "Customer care" because that is the campaign use case we
+// registered with the carrier — anything more specific (e.g. naming the
+// proposal review flow) puts messages sent through this line out of scope.
+//
+// Stored verbatim with the proposal row when the applicant ticks the box
+// so we can prove later exactly what they agreed to. Keep this wording
+// in sync with what the checkbox actually shows.
 const PROPOSAL_SMS_CONSENT_TEXT = (
-  'By checking this box, I agree to receive SMS messages from MyZakat ' +
-  'about my project proposal (status updates, requests for additional ' +
-  'information, and follow-up communications) at the mobile number ' +
-  'provided above. Message frequency may vary. Message and data rates may ' +
-  'apply. Text HELP to 1-833-699-2528 for assistance. Reply STOP to opt ' +
-  'out of receiving SMS messages.'
+  'By checking this box, I agree to receive SMS messages about Customer ' +
+  'care from MyZakat at the mobile number provided above. Message ' +
+  'frequency may vary. Message and data rates may apply. Text HELP to ' +
+  '1-833-699-2528 for assistance. Reply STOP to opt out of receiving ' +
+  'SMS messages.'
 )
 
 // Minimum-character rules match the backend Pydantic Field(min_length=...) on

@@ -237,25 +237,19 @@ const TermsOfService = () => {
                     messages related to the following:
                   </p>
                   <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
-                    <li>Donation receipts and confirmations</li>
-                    <li>Campaign updates and urgent-need appeals</li>
-                    <li>Event reminders</li>
-                    <li>Customer care and support messages</li>
-                    <li>Project proposal follow-ups (for applicants who submit a proposal)</li>
+                    <li>Customer care</li>
                   </ul>
                   <p className="mt-3 italic">
-                    Example: "Hello, this is MyZakat. Thank you for your donation to our Emergency
-                    Relief campaign. Reply STOP to opt out of SMS messaging from MyZakat."
+                    Example: "Hello, this is MyZakat. Reply STOP to opt out of SMS messaging
+                    from MyZakat."
                   </p>
                 </div>
 
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">17.3 Message Frequency</h3>
                   <p>
-                    Message frequency may vary depending on the type of communication. You may
-                    receive up to 4 SMS messages per month related to donations, campaigns, and
-                    urgent-need appeals. Transactional messages (such as donation receipts or
-                    proposal follow-ups) are sent as needed.
+                    Message frequency may vary. You may receive up to 4 SMS messages per month
+                    related to customer care.
                   </p>
                 </div>
 

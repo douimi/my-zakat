@@ -5,16 +5,21 @@ import SEOHead from '../components/SEOHead'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// TCR / 10DLC-compliant disclosure. This exact wording is stored on the
-// subscription row alongside the timestamp and IP so we can prove later
-// exactly what the subscriber agreed to. If you edit the visible label,
-// update this constant verbatim to keep the audit trail truthful.
+// TCR / 10DLC-compliant disclosure. Matches the RingCentral TCR template
+// verbatim — the message category must be exactly "Customer care" because
+// that is the campaign use case we registered. Any broader wording puts
+// the campaign out of scope with the carrier.
+//
+// This exact string is stored on the subscription row alongside the
+// timestamp and IP so we can prove later exactly what the subscriber
+// agreed to. If you edit the visible label, update this constant
+// verbatim to keep the audit trail truthful.
 const CONSENT_TEXT = (
-  'By checking this box, I agree to receive SMS messages from MyZakat about ' +
-  'donation receipts, campaign updates, urgent-need appeals, and event ' +
-  'reminders at the phone number provided above. Message frequency may ' +
-  'vary. Message and data rates may apply. Text HELP to 1-833-699-2528 for ' +
-  'assistance. Reply STOP to opt out of receiving SMS messages.'
+  'By checking this box, I agree to receive SMS messages about Customer ' +
+  'care from MyZakat at the phone number provided above. Message ' +
+  'frequency may vary. Message and data rates may apply. Text HELP to ' +
+  '1-833-699-2528 for assistance. Reply STOP to opt out of receiving ' +
+  'SMS messages.'
 )
 
 type Status = 'idle' | 'submitting' | 'success' | 'error'
@@ -114,7 +119,7 @@ const SmsOptIn = () => {
     <div className="min-h-screen bg-gray-50 py-12">
       <SEOHead
         title="Subscribe to SMS Updates"
-        description="Opt in to receive text-message updates from MyZakat: donation receipts, campaign news, urgent-need appeals, and event reminders."
+        description="Opt in to receive customer care text messages from MyZakat. Reply STOP at any time to unsubscribe."
         canonicalPath="/sms-opt-in"
       />
       <div className="section-container">
@@ -129,8 +134,8 @@ const SmsOptIn = () => {
               Get Text Updates from MyZakat
             </h1>
             <p className="text-lg text-gray-600 max-w-xl mx-auto">
-              Receive donation receipts, campaign updates, urgent-need appeals, and event
-              reminders directly to your phone — no app, no spam, opt out any time.
+              Receive customer care text messages from MyZakat directly on your phone.
+              No app, no spam, opt out any time.
             </p>
           </div>
 
@@ -141,8 +146,8 @@ const SmsOptIn = () => {
               What you can expect
             </h2>
             <ul className="text-sm text-gray-700 space-y-2 leading-relaxed">
-              <li>• Up to ~4 messages per month — message frequency varies</li>
-              <li>• Donation receipts, campaign news, and urgent-need appeals</li>
+              <li>• Customer care messages from the MyZakat team</li>
+              <li>• Message frequency may vary</li>
               <li>• Reply <strong>STOP</strong> at any time to unsubscribe</li>
               <li>• Reply <strong>HELP</strong> for support</li>
               <li>• Message &amp; data rates may apply (your carrier's standard rates)</li>
