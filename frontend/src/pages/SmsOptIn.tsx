@@ -216,8 +216,14 @@ const SmsOptIn = () => {
               />
             </div>
 
-            {/* The consent checkbox — must be unchecked by default for compliance */}
+            {/* The consent checkbox — 10DLC / TCR requires it to be optional
+                and unchecked by default. The submit button is never disabled
+                on the checkbox state; runtime validation shows a friendly
+                message if the user submits without opting in. */}
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">
+                SMS consent (optional)
+              </p>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -248,7 +254,7 @@ const SmsOptIn = () => {
 
             <button
               type="submit"
-              disabled={status === 'submitting' || !consent}
+              disabled={status === 'submitting'}
               className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {status === 'submitting' ? (

@@ -379,10 +379,19 @@ const SubmitProposal = () => {
                 <input required value={form.mobile_number} onChange={(e) => set('mobile_number')(e.target.value)} className="input-field" placeholder="With country code" />
               </Field>
 
-              {/* Optional SMS opt-in — 10DLC / TCR compliance. Must be
-                  unchecked by default, must not block form submission, and
-                  the disclosure must be presented alongside the checkbox. */}
+              {/* Optional SMS opt-in — 10DLC / TCR compliance.
+                  Must be unchecked by default, must never block form
+                  submission (see canContinue1 / canSubmit), and the
+                  disclosure must be presented alongside the checkbox. */}
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    SMS consent
+                  </p>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                    Optional
+                  </span>
+                </div>
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -403,7 +412,7 @@ const SubmitProposal = () => {
                   </span>
                 </label>
                 <p className="text-xs text-gray-500 mt-2 ml-7">
-                  Optional. You can submit your proposal without opting in.
+                  You can submit your proposal without opting in.
                 </p>
               </div>
 
