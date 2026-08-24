@@ -22,7 +22,7 @@ const CONSENT_TEXT = (
   'SMS messages.'
 )
 
-type Status = 'idle' | 'submitting' | 'success' | 'error'
+type Status = 'idle' | 'submitting' | 'success' | 'error' | 'info'
 
 const SmsOptIn = () => {
   const [name, setName] = useState('')
@@ -31,19 +31,26 @@ const SmsOptIn = () => {
   const [consent, setConsent] = useState(false)
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [infoMessage, setInfoMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // The SMS consent box is optional per 10DLC / TCR. If the user hits
+    // Subscribe without ticking it, don't treat that as an error — show a
+    // gentle informational nudge instead so nothing on this page reads as
+    // "consent is required to submit". No request is sent to the backend
+    // because there's nothing to opt in to.
     if (!consent) {
-      setErrorMessage('Please check the consent box to confirm you agree to receive text messages.')
-      setStatus('error')
+      setInfoMessage('The SMS consent box above is optional. Check it if you would like to receive text messages from MyZakat, then click Subscribe.')
+      setStatus('info')
       return
     }
 
     setStatus('submitting')
     setErrorMessage('')
+    setInfoMessage('')
 
     try {
       const resp = await fetch(`${API_URL}/api/subscriptions/sms-opt-in`, {
@@ -249,6 +256,13 @@ const SmsOptIn = () => {
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {status === 'info' && infoMessage && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                <MessageCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{infoMessage}</span>
               </div>
             )}
 
