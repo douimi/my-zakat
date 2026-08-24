@@ -218,7 +218,7 @@ const TermsOfService = () => {
                 <p>
                   These SMS terms apply if you opt in to receive text messages from MyZakat, whether
                   through our{' '}
-                  <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS opt-in page</a>{' '}
+                  <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS Subscription page</a>{' '}
                   or by checking the SMS consent box on any of our other forms.
                 </p>
 
@@ -266,7 +266,7 @@ const TermsOfService = () => {
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">17.5 Opt-In Method</h3>
                   <p>You may opt in to receive SMS messages from MyZakat in the following ways:</p>
                   <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
-                    <li>By submitting the online form on our <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS opt-in page</a></li>
+                    <li>By submitting the online form on our <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS Subscription page</a></li>
                     <li>By checking the SMS consent box on our project proposal form or any other online form that collects a phone number</li>
                   </ul>
                 </div>

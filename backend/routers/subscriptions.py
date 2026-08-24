@@ -61,21 +61,39 @@ async def sms_opt_in(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Public SMS opt-in endpoint used by the /sms-opt-in page.
+    """Public SMS Subscription endpoint used by the /sms-opt-in page.
 
-    This is the endpoint a 10DLC reviewer's test signup hits. It enforces:
-      - explicit consent checkbox must be True
-      - phone is in (or coerced into) E.164 format
-      - timestamp, source IP, and exact disclosure text are recorded for
-        proof-of-consent audit trails.
+    Per 10DLC / TCR: the SMS consent checkbox must be optional and the form
+    must submit successfully whether or not the user ticks it. This endpoint
+    honours that:
 
-    Idempotent on the phone number — re-submitting refreshes the consent
-    record rather than erroring out.
+      - consent=True  → creates or refreshes an SMS-enabled subscription
+                        and records the exact disclosure wording, timestamp,
+                        and source IP for proof-of-consent audits.
+      - consent=False → returns success without creating any subscription
+                        and without ever recording a consent trail. The user
+                        gave us information, but they made no opt-in choice
+                        so we do nothing with it.
+
+    Phone is still validated on the consent=True path so we don't store
+    junk. On the no-consent path phone is left untouched.
+
+    Idempotent on the phone number — re-submitting with consent refreshes
+    the consent record rather than erroring out.
     """
+    # No consent → not an opt-in. Return a success response so the form
+    # completes, but do not create or update any subscription. We never
+    # record a consent trail we don't have.
     if not payload.consent:
-        raise HTTPException(
-            status_code=400,
-            detail="Consent is required. Please check the box agreeing to receive SMS messages.",
+        logger.info("SMS Subscription form submitted without consent — no record created")
+        return SmsOptInResponse(
+            success=True,
+            message=(
+                "Thanks for stopping by. You haven't opted in to text messages, so "
+                "you won't receive any SMS from MyZakat. Come back any time if you "
+                "change your mind."
+            ),
+            masked_phone="",
         )
 
     phone_e164 = _normalize_us_phone(payload.phone)

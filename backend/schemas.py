@@ -391,15 +391,21 @@ class SubscriptionCreate(BaseModel):
 
 
 class SmsOptInRequest(BaseModel):
-    """Public SMS opt-in form payload (TCPA / 10DLC compliant)."""
+    """Public SMS Subscription form payload (TCPA / 10DLC compliant).
+
+    Per TCR rules the checkbox is optional: the form must submit whether or
+    not the user ticks it. When consent is False the backend accepts the
+    submission but does not create any subscription — the user provided
+    contact info but did not opt in.
+    """
     name: str = Field(min_length=2, max_length=100)
     phone: str = Field(min_length=7, max_length=30)
     email: Optional[EmailStr] = None
-    consent: bool = Field(description="Must be True — user checked the consent box")
+    consent: bool = Field(description="True when the user ticked the SMS consent box")
     agreed_to_text: str = Field(
         min_length=10,
         max_length=2000,
-        description="Exact disclosure text the user agreed to, stored for proof of consent",
+        description="Exact disclosure text shown next to the checkbox. Recorded only when consent is True.",
     )
 
 

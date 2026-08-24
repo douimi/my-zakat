@@ -122,7 +122,7 @@ const Footer = () => {
               </li>
               <li>
                 <Link to="/sms-opt-in" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Text Updates (SMS Opt-In)
+                  SMS Subscription
                 </Link>
               </li>
             </ul>

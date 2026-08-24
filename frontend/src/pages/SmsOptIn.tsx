@@ -22,7 +22,7 @@ const CONSENT_TEXT = (
   'SMS messages.'
 )
 
-type Status = 'idle' | 'submitting' | 'success' | 'error' | 'info'
+type Status = 'idle' | 'submitting' | 'success' | 'error'
 
 const SmsOptIn = () => {
   const [name, setName] = useState('')
@@ -31,26 +31,20 @@ const SmsOptIn = () => {
   const [consent, setConsent] = useState(false)
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState('')
-  const [infoMessage, setInfoMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  // Remembered from the last submit so the success screen can show either
+  // the "you're subscribed" or the "you didn't opt in" variant.
+  const [submittedWithConsent, setSubmittedWithConsent] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // The SMS consent box is optional per 10DLC / TCR. If the user hits
-    // Subscribe without ticking it, don't treat that as an error — show a
-    // gentle informational nudge instead so nothing on this page reads as
-    // "consent is required to submit". No request is sent to the backend
-    // because there's nothing to opt in to.
-    if (!consent) {
-      setInfoMessage('The SMS consent box above is optional. Check it if you would like to receive text messages from MyZakat, then click Subscribe.')
-      setStatus('info')
-      return
-    }
-
+    // Per 10DLC / TCR the SMS consent box is optional and this form must
+    // submit whether or not it's ticked. The backend accepts consent=false
+    // as a no-op (no subscription created, no consent trail recorded) and
+    // returns a friendly success message the confirmation view repeats.
     setStatus('submitting')
     setErrorMessage('')
-    setInfoMessage('')
 
     try {
       const resp = await fetch(`${API_URL}/api/subscriptions/sms-opt-in`, {
@@ -76,7 +70,8 @@ const SmsOptIn = () => {
       }
 
       const data = await resp.json()
-      setSuccessMessage(data.message || 'You\'re subscribed.')
+      setSuccessMessage(data.message || (consent ? "You're subscribed." : 'Your submission was received.'))
+      setSubmittedWithConsent(consent)
       setStatus('success')
     } catch {
       setErrorMessage('Network error. Please check your connection and try again.')
@@ -85,30 +80,38 @@ const SmsOptIn = () => {
   }
 
   // ── Success view ──────────────────────────────────────────────
+  //
+  // Two shapes: an opted-in confirmation (green check, opt-out instructions)
+  // and a no-opt-in acknowledgement (neutral primary icon, no opt-out
+  // instructions because there's nothing to opt out of).
   if (status === 'success') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50 py-16">
         <SEOHead
-          title="SMS Subscription Confirmed"
-          description="You're subscribed to text-message updates from MyZakat."
+          title={submittedWithConsent ? 'SMS Subscription Confirmed' : 'SMS Subscription'}
+          description="MyZakat SMS Subscription."
           canonicalPath="/sms-opt-in"
         />
         <div className="section-container">
           <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-lg p-8 sm:p-10 text-center">
-            <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle2 className="w-9 h-9 text-green-600" />
+            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-6 ${submittedWithConsent ? 'bg-green-100' : 'bg-primary-100'}`}>
+              {submittedWithConsent
+                ? <CheckCircle2 className="w-9 h-9 text-green-600" />
+                : <MessageCircle className="w-9 h-9 text-primary-600" />}
             </div>
             <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-3">
-              You're subscribed!
+              {submittedWithConsent ? "You're subscribed!" : 'Thanks for stopping by'}
             </h1>
             <p className="text-gray-600 leading-relaxed mb-6">
               {successMessage}
             </p>
-            <p className="text-sm text-gray-500 mb-8">
-              You can opt out at any time by replying <strong>STOP</strong> to any of our
-              messages, emailing <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>,
-              or calling 1-833-MYZAKAT.
-            </p>
+            {submittedWithConsent && (
+              <p className="text-sm text-gray-500 mb-8">
+                You can opt out at any time by replying <strong>STOP</strong> to any of our
+                messages, emailing <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>,
+                or calling 1-833-MYZAKAT.
+              </p>
+            )}
             <Link
               to="/"
               className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
@@ -125,8 +128,8 @@ const SmsOptIn = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <SEOHead
-        title="Subscribe to SMS Updates"
-        description="Opt in to receive customer care text messages from MyZakat. Reply STOP at any time to unsubscribe."
+        title="SMS Subscription"
+        description="Subscribe to customer care text messages from MyZakat. The SMS consent box is optional — you can submit the form without opting in."
         canonicalPath="/sms-opt-in"
       />
       <div className="section-container">
@@ -138,7 +141,7 @@ const SmsOptIn = () => {
               <MessageCircle className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900 mb-3">
-              Get Text Updates from MyZakat
+              SMS Subscription
             </h1>
             <p className="text-lg text-gray-600 max-w-xl mx-auto">
               Receive customer care text messages from MyZakat directly on your phone.
@@ -259,13 +262,6 @@ const SmsOptIn = () => {
               </div>
             )}
 
-            {status === 'info' && infoMessage && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                <MessageCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>{infoMessage}</span>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={status === 'submitting'}
@@ -274,10 +270,10 @@ const SmsOptIn = () => {
               {status === 'submitting' ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Subscribing...
+                  Submitting...
                 </>
               ) : (
-                'Opt In to Text Messages'
+                'Submit'
               )}
             </button>
 
