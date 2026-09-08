@@ -327,7 +327,7 @@ const FundraisingProjectsSection = () => {
                 to="/projects"
                 className="inline-flex items-center gap-2 bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 hover:border-primary-300 font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
               >
-                View all projects
+                See our recent projects
                 <ArrowUpRight className="w-4 h-4" />
               </Link>
             </div>
