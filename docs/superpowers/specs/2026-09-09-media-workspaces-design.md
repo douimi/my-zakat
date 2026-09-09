@@ -139,7 +139,7 @@ Indexes: `owner_id`, `status`, `created_at`, `checksum_sha256`, and
 
 Deleting a user sets `owner_id` to `NULL`, moving their assets into the
 Unassigned workspace rather than cascading the delete. Media outlives the account
-that produced it, and an admin can reassign it afterwards.
+that produced it, and an admin can reassign it afterwards via `/{id}/reassign`.
 
 ### Why `status` is one column
 
@@ -232,6 +232,7 @@ Mounted at `/api/media-library`. (`/api/media` is already taken by `media.py`.)
 | `PATCH` | `/{id}` | owner or admin/manager | title, description, tags |
 | `POST` | `/{id}/submit` | owner | `private → submitted` |
 | `POST` | `/{id}/review` | admin, manager | approve or reject |
+| `POST` | `/{id}/reassign` | admin, manager | move an asset into another workspace |
 | `DELETE` | `/{id}` | owner (private only) or admin/manager | blocked while referenced |
 | `GET` | `/workspaces` | admin, manager | workspaces with counts and total size |
 
