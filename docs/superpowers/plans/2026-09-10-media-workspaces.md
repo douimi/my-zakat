@@ -5797,6 +5797,130 @@ git commit -m "test: end-to-end media workspace upload, review and publish"
 
 ---
 
+### Task 21: Wire the content pickers to the media library
+
+**Files:**
+- Create: `frontend/src/components/media/MediaPickerDialog.tsx`
+- Modify: `frontend/src/pages/admin/AdminGallery.tsx`, `AdminStories.tsx`, `AdminEvents.tsx`
+- Test: `frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx`
+- Test: `backend/tests/test_media_library_api.py` (append one usage test)
+
+**Why this task exists.** Tasks 8 and 9 make an asset `public` and servable at
+`/api/media-library/{id}/file`, but nothing puts that URL into a Story, an Event
+or the Gallery — each of those screens has its own upload flow and has never
+heard of the library. So "promote to site" currently ends one step short of the
+site, and an admin would have to paste a URL by hand.
+
+This also decides whether the in-use guards work at all. `get_media_usage` in
+`routers/s3_media.py` does **exact string equality** against the content tables,
+so a picker that writes anything other than `/api/media-library/{id}/file`
+verbatim leaves the delete and unpublish guards silently reporting zero usage —
+protection that appears to work and does not. That is the single most important
+constraint in this task.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx`:
+
+```tsx
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import MediaPickerDialog from '../MediaPickerDialog'
+import { mediaLibraryApi } from '../../../utils/mediaLibraryApi'
+
+vi.mock('../../../utils/mediaLibraryApi', () => ({
+  mediaLibraryApi: { list: vi.fn(), thumbUrl: (id: number) => `http://api.test/t/${id}` },
+}))
+
+const asset = (id: number, filename: string) => ({
+  id, owner_id: 3, object_key: 'k', filename, media_type: 'image',
+  content_type: 'image/jpeg', size_bytes: 10, width: null, height: null,
+  duration_seconds: null, title: null, description: null, tags: [],
+  status: 'public', review_note: null, reviewed_at: null,
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+  url: `/api/media-library/${id}/file`, thumbnail_url: `/api/media-library/${id}/thumb`,
+})
+
+describe('MediaPickerDialog', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('only ever offers published media', async () => {
+    vi.mocked(mediaLibraryApi.list).mockResolvedValue(
+      { items: [asset(1, 'a.jpg')], total: 1, page: 1, page_size: 48 } as never
+    )
+    render(<MediaPickerDialog open onClose={vi.fn()} onPick={vi.fn()} />)
+    await waitFor(() => expect(mediaLibraryApi.list).toHaveBeenCalled())
+    expect(vi.mocked(mediaLibraryApi.list).mock.calls[0][0]).toMatchObject({ status: 'public' })
+  })
+
+  it('hands back exactly the URL the in-use guards match on', async () => {
+    vi.mocked(mediaLibraryApi.list).mockResolvedValue(
+      { items: [asset(7, 'well.jpg')], total: 1, page: 1, page_size: 48 } as never
+    )
+    const onPick = vi.fn()
+    render(<MediaPickerDialog open onClose={vi.fn()} onPick={onPick} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /well\.jpg/i }))
+    // Exact string: get_media_usage compares by equality, so any other shape
+    // silently disables the delete and unpublish guards.
+    expect(onPick).toHaveBeenCalledWith('/api/media-library/7/file', expect.objectContaining({ id: 7 }))
+  })
+})
+```
+
+- [ ] **Step 2: Run it, expect failure**
+
+Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaPickerDialog.test.tsx`
+
+Expected: FAIL — the module does not exist.
+
+- [ ] **Step 3: Build the dialog**
+
+`MediaPickerDialog` reuses `MediaGrid` and `MediaFilters` from Tasks 12-13. It
+calls `mediaLibraryApi.list({ status: 'public', ... })` — **never anything else**,
+because an unpublished asset placed on a page would 404 for visitors. Selecting a
+tile calls `onPick(asset.url, asset)`, where `asset.url` is the `_serialize`
+output, already `/api/media-library/{id}/file`.
+
+- [ ] **Step 4: Wire it into the three screens**
+
+In each of `AdminGallery.tsx`, `AdminStories.tsx` and `AdminEvents.tsx`, add a
+"Choose from media library" button beside the existing upload control, and set
+the same state field the upload flow sets. Leave the existing upload paths alone
+— this adds a source, it does not replace one.
+
+- [ ] **Step 5: Prove the guard actually fires**
+
+Append to `backend/tests/test_media_library_api.py`:
+
+```python
+def test_a_picked_asset_registers_as_in_use(
+    client, db_session, auth_headers, field_staff_user
+):
+    """The picker's URL shape must be the one get_media_usage matches on."""
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    picked_url = f"/api/media-library/{asset.id}/file"   # what MediaPickerDialog hands back
+    db_session.add(GalleryItem(media_filename=picked_url))
+    db_session.commit()
+
+    body = client.get(f"/api/media-library/{asset.id}", headers=auth_headers).json()
+    assert body["usage_count"] == 1, "the in-use guard cannot see the picked asset"
+```
+
+- [ ] **Step 6: Verify and commit**
+
+Run: `cd frontend && npx tsc --noEmit && npx vitest run`
+Run: `cd backend && python -m pytest tests -q`
+
+```bash
+git add frontend/src/components/media/MediaPickerDialog.tsx frontend/src/pages/admin/AdminGallery.tsx frontend/src/pages/admin/AdminStories.tsx frontend/src/pages/admin/AdminEvents.tsx frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx backend/tests/test_media_library_api.py
+git commit -m "feat: choose published library media from the content screens"
+```
+
+---
+
 ## Follow-up work (not in this plan)
 
 Recorded here so it is not lost; each needs its own spec/plan cycle.
