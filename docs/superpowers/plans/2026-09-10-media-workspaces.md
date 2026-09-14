@@ -804,9 +804,25 @@ TAG_DELIM = "|"
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".ogg", ".avi", ".mov", ".mkv")
 
-# SVG is a script-carrying document format, not a photo. Excluded outright so a
-# declared "image/svg+xml" cannot get one classified as an image.
-REJECTED_CONTENT_TYPES = ("image/svg+xml",)
+# Allow-lists, not a deny-list: anything unlisted is refused by default, so the
+# next script-carrying format nobody has thought of is excluded too. SVG is
+# absent rather than named — a deny-list entry lost to a "; charset=utf-8"
+# parameter, because the deny check matched exactly while the allow check
+# matched by prefix.
+IMAGE_CONTENT_TYPES = frozenset({
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
+})
+VIDEO_CONTENT_TYPES = frozenset({
+    "video/mp4", "video/webm", "video/ogg", "video/x-msvideo",
+    "video/quicktime", "video/x-matroska",
+})
+
+# LIKE metacharacters survive tag normalization, so tag=% would otherwise
+# enumerate every tagged asset. Callers must pass escape=LIKE_ESCAPE.
+LIKE_ESCAPE = "\\"
+
+MAX_TAG_LENGTH = 64
+MAX_TAGS = 25
 
 _SAFE_EXTENSION = re.compile(r"^\.[a-z0-9]{1,8}$")
 
@@ -833,11 +849,18 @@ def build_search_text(
     description: Optional[str],
     tags: Optional[Iterable],
 ) -> str:
-    """Build the lowercased haystack a single ILIKE searches against."""
+    """Build the lowercased haystack a single ILIKE searches against.
+
+    The delimiter is stripped from the free-text fields too, not just the tags:
+    otherwise a title or filename containing "|gaza|" would answer to tag=gaza,
+    which is the same false positive the delimiter exists to prevent. Pipes are
+    ordinary in filenames on Linux and macOS, so this fires by accident as well
+    as on purpose.
+    """
     parts = [
-        (filename or "").lower(),
-        (title or "").lower(),
-        (description or "").lower(),
+        (filename or "").replace(TAG_DELIM, " ").lower(),
+        (title or "").replace(TAG_DELIM, " ").lower(),
+        (description or "").replace(TAG_DELIM, " ").lower(),
     ]
     normalized = normalize_tags(tags)
     if normalized:
@@ -854,13 +877,18 @@ def tag_filter_pattern(tag: Optional[str]) -> Optional[str]:
 
 
 def detect_media_type(filename: Optional[str], content_type: Optional[str]) -> Optional[str]:
-    """Return 'image', 'video', or None for anything we refuse to store."""
-    ct = (content_type or "").lower()
-    if ct in REJECTED_CONTENT_TYPES:
-        return None
-    if ct.startswith("image/"):
+    """Classify a file from its declared type, falling back to its extension.
+
+    Advisory only. `content_type` is an attacker-controlled header, so a caller
+    holding the actual bytes must verify them independently — Task 5's upload
+    endpoint does exactly that before compressing.
+    """
+    # UploadFile.content_type carries parameters ("image/png; charset=utf-8"),
+    # so match on the bare type.
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
+    if ct in IMAGE_CONTENT_TYPES:
         return "image"
-    if ct.startswith("video/"):
+    if ct in VIDEO_CONTENT_TYPES:
         return "video"
 
     name = (filename or "").lower()
@@ -1315,6 +1343,9 @@ from media_library_service import (
     detect_media_type,
     normalize_tags,
     tag_filter_pattern,
+    validate_tags,
+    IMAGE_CONTENT_TYPES,
+    VIDEO_CONTENT_TYPES,
 )
 from media_processing import (
     compress_image,
@@ -1449,7 +1480,13 @@ async def upload_media(
             detail="File content does not match its declared type.",
         )
 
-    content_type = file.content_type or (
+    # Never store the raw header. A file named a.jpg, declared text/html, whose
+    # body is a real GIF passes both the extension fallback and the byte sniff —
+    # and would then be stored and served as text/html, which is stored XSS on
+    # the serving origin. The stored type comes from the allow-list or not at all.
+    declared = (file.content_type or "").split(";", 1)[0].strip().lower()
+    allowed = IMAGE_CONTENT_TYPES if media_type == "image" else VIDEO_CONTENT_TYPES
+    content_type = declared if declared in allowed else (
         "image/jpeg" if media_type == "image" else "video/mp4"
     )
     width = height = None
@@ -1482,6 +1519,12 @@ async def upload_media(
                 "existing": _serialize(duplicate),
             },
         )
+
+    # normalize_tags is lenient because it also runs on the read path; this is
+    # the write-path gate that tells the user instead of silently rewriting.
+    tag_problems = validate_tags((tags or "").split(","))
+    if tag_problems:
+        raise HTTPException(status_code=400, detail={"tags": tag_problems})
 
     parsed_tags = normalize_tags((tags or "").split(","))
     object_key = build_object_key(current_user.id, file.filename)
