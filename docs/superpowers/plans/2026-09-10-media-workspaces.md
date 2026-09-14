@@ -1444,6 +1444,23 @@ def test_upload_creates_a_private_asset_in_the_callers_workspace(
     assert body["object_key"] in fake_s3
 
 
+def test_upload_without_tags_succeeds(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """The common case: a photo uploaded with no tags at all."""
+    response = _upload(client, field_staff_headers)
+    assert response.status_code == 201, response.text
+    assert response.json()["tags"] == []
+
+
+def test_upload_tolerates_a_trailing_comma_in_tags(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    response = _upload(client, field_staff_headers, tags="gaza,water,")
+    assert response.status_code == 201, response.text
+    assert response.json()["tags"] == ["gaza", "water"]
+
+
 def test_upload_rejects_an_unsupported_file_type(
     client, field_staff_headers, fake_s3, no_compression
 ):
@@ -1556,6 +1573,7 @@ from media_library_service import (
     build_thumbnail_key,
     detect_media_type,
     normalize_tags,
+    parse_tag_input,
     search_pattern,
     tag_filter_pattern,
     validate_tags,
@@ -1735,13 +1753,17 @@ async def upload_media(
             },
         )
 
-    # normalize_tags is lenient because it also runs on the read path; this is
-    # the write-path gate that tells the user instead of silently rewriting.
-    tag_problems = validate_tags((tags or "").split(","))
+    # parse_tag_input drops blank entries first: "" and a trailing comma mean
+    # "no tags", not "an empty tag" — without it, an upload with no tags at all
+    # would 400. validate_tags then only sees things the user actually typed,
+    # and is the write-path gate that tells them instead of silently rewriting
+    # (normalize_tags stays lenient because it also runs on the read path).
+    tag_input = parse_tag_input(tags)
+    tag_problems = validate_tags(tag_input)
     if tag_problems:
         raise HTTPException(status_code=400, detail={"tags": tag_problems})
 
-    parsed_tags = normalize_tags((tags or "").split(","))
+    parsed_tags = normalize_tags(tag_input)
     object_key = build_object_key(current_user.id, file.filename)
     thumbnail_key = None
 
@@ -1803,7 +1825,7 @@ Add `media_library` to the `from routers import (...)` block at the top of the f
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 11 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 6: Commit**
 

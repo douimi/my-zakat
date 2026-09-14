@@ -181,7 +181,12 @@ def validate_tags(tags: Optional[Sequence]) -> list[str]:
     string_tags: list[str] = []
     for raw in tags:
         if not isinstance(raw, str):
-            problems.append(f"Tag {_truncate_for_message(raw)} must be text.")
+            # repr(raw) directly, not _truncate_for_message(raw): the latter
+            # does repr(str(raw)), which would render None as 'none' -- the
+            # exact stringification normalize_tags deliberately avoids -- and
+            # makes "Tag '5' must be text." read as if the string "5" (which
+            # *is* text) were the problem, rather than the int 5.
+            problems.append(f"Tag {raw!r} must be text.")
             continue
         string_tags.append(raw)
 
