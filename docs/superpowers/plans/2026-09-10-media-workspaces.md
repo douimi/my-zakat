@@ -1260,7 +1260,7 @@ Expected: FAIL — `ImportError: cannot import name 'MediaAsset' from 'models'`.
 In `backend/models.py`, add `BigInteger` to the first import line:
 
 ```python
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
 ```
 
 Then append to the end of the file:
@@ -1281,31 +1281,52 @@ class MediaAsset(Base):
     __tablename__ = "media_assets"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # migrations/31_add_media_library.sql owns this table's indexes, not this
+    # model. Several of them are composite or partial (owner_id + created_at,
+    # owner_id + checksum_sha256, a WHERE status = 'submitted' partial index)
+    # and cannot be expressed as a bare Column(index=True). create_all() emits
+    # SQLAlchemy's own ix_ names, which don't collide with the migration's
+    # idx_ names, so a Column(index=True) here does not replace the
+    # migration's index for that column — it adds a second, redundant one.
+    # This is why the columns below carry no index=True even though several
+    # of them are filtered or sorted on: the index already exists, created by
+    # the migration. `object_key` is the one exception that keeps a
+    # SQLAlchemy-level constraint (unique=True): the test suite needs that
+    # uniqueness enforced when it builds its schema from this model, and
+    # unique=True already creates its own index, so no separate index=True
+    # is added on top of it.
+
     # NULL owner = the "Unassigned" workspace: legacy media, or media whose
     # owner's account was deleted.
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    object_key = Column(String(500), nullable=False, unique=True, index=True)
+    #
+    # This model has two FKs to users.id (owner_id, reviewed_by_id). There are
+    # no relationship() calls on MediaAsset today; the first one added must
+    # pass foreign_keys= explicitly or SQLAlchemy raises
+    # AmbiguousForeignKeysError.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    object_key = Column(String(500), nullable=False, unique=True)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(10), nullable=False)  # 'image' | 'video'
     content_type = Column(String(100), nullable=False)
-    size_bytes = Column(BigInteger, nullable=False, default=0)
+    size_bytes = Column(BigInteger, nullable=False, default=0, server_default=text("0"))
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     thumbnail_key = Column(String(500), nullable=True)
-    checksum_sha256 = Column(String(64), nullable=True, index=True)
+    checksum_sha256 = Column(String(64), nullable=True)
     title = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
-    tags = Column(JSONType, nullable=False, default=list)
-    search_text = Column(Text, nullable=False, default="")
+    tags = Column(JSONType, nullable=False, default=list, server_default=text("'[]'"))
+    search_text = Column(Text, nullable=False, default="", server_default="")
     # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
     # | 'public' (served to anyone)
-    status = Column(String(20), nullable=False, default="private", index=True)
+    status = Column(String(20), nullable=False, default="private", server_default="private")
     reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -1350,6 +1371,12 @@ CREATE TABLE IF NOT EXISTS media_assets (
     title               VARCHAR(200),
     description         TEXT,
     tags                JSONB          NOT NULL DEFAULT '[]'::jsonb,
+    -- `ILIKE` against this column is a sequential scan by design. A pg_trgm
+    -- GIN index can be added later as a pure-addition migration once the
+    -- table passes roughly 100k rows. It is deliberately not here now,
+    -- partly because `CREATE EXTENSION pg_trgm` needs privileges some
+    -- managed PostgreSQL hosts withhold, and a migration that fails on the
+    -- production host is worse than a seq scan.
     search_text         TEXT           NOT NULL DEFAULT '',
     -- Lifecycle
     status              VARCHAR(20)    NOT NULL DEFAULT 'private', -- private | submitted | public
@@ -1360,10 +1387,19 @@ CREATE TABLE IF NOT EXISTS media_assets (
     updated_at          TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_media_assets_owner ON media_assets(owner_id);
+-- Covers owner-scoped lookups (WHERE owner_id = ? / IS NULL) and the default
+-- workspace listing sort (owner scope + ORDER BY created_at DESC, id DESC
+-- with offset/limit) in one index; a standalone index on owner_id alone
+-- would be pure write cost once this exists.
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner_created
+    ON media_assets(owner_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_media_assets_status ON media_assets(status);
 CREATE INDEX IF NOT EXISTS idx_media_assets_created ON media_assets(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_media_assets_checksum ON media_assets(checksum_sha256);
+-- Not UNIQUE: duplicate detection here is advisory. A unique constraint would
+-- block a legitimate re-upload after a delete, and PostgreSQL treats NULLs as
+-- distinct, so the "Unassigned" workspace (owner_id IS NULL) would slip
+-- through such a constraint anyway.
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner_checksum ON media_assets(owner_id, checksum_sha256);
 CREATE INDEX IF NOT EXISTS idx_media_assets_owner_status ON media_assets(owner_id, status);
 
 -- The review queue is small and read often.
