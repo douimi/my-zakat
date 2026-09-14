@@ -4525,7 +4525,20 @@ replacing the `media/all` placeholder Task 2 added, rather than adding a duplica
                 <Route path="s3-media" element={<AdminMediaLibrary />} />
 ```
 
-In `frontend/src/components/AdminLayout.tsx`, drop the `S3 Browser` entry from the Media group so the nav has one obvious destination:
+In `frontend/src/components/AdminLayout.tsx`, drop the `S3 Browser` entry from the Media group so the nav has one obvious destination.
+
+**While you are in that file, extract the nav data.** Task 2 exported `NAV`,
+`ROLE_ALLOWED` and `filterNavForRole` from `AdminLayout.tsx` for testability, which
+left one file holding four responsibilities: nav data, role policy, a pure filter,
+and a React component — and the first three have nothing to do with React. Move
+those three into a sibling `frontend/src/components/adminNav.ts`, re-point the
+import in `AdminLayout.tsx` and in
+`frontend/src/components/__tests__/AdminLayout.test.tsx`, and type the exports as
+`Partial<Record<Role, ReadonlySet<string>>>` and `readonly NavEntry[]` so importers
+cannot mutate shared module state (`export const` prevents rebinding, not mutation).
+This task is already editing `NAV`, which makes it the natural moment.
+
+The Media group after the edit:
 
 ```typescript
     items: [
@@ -4555,7 +4568,7 @@ Expected: no type errors; all tests PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/pages/admin/AdminMediaLibrary.tsx frontend/src/App.tsx frontend/src/components/AdminLayout.tsx
+git add frontend/src/pages/admin/AdminMediaLibrary.tsx frontend/src/App.tsx frontend/src/components/AdminLayout.tsx frontend/src/components/adminNav.ts frontend/src/components/__tests__/AdminLayout.test.tsx
 git commit -m "feat: All Media page with workspace sidebar and review queue"
 ```
 
