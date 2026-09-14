@@ -635,6 +635,22 @@ Run: `cd frontend && grep -rn "toggle-admin\|toggleAdmin" src/`
 
 Expected: no matches.
 
+- [ ] **Step 7c: Add placeholder routes so the redirect is not dead**
+
+Step 6 redirects field staff to `/admin/media`, and Step 5 adds nav links to
+`/admin/media` and `/admin/media/all` — but those routes do not exist until Tasks
+16 and 17. There is no catch-all route in this app, so in React Router v6 an
+unmatched descendant makes the whole `/admin` branch fail to match and `<Routes>`
+renders `null`: a white screen, with nothing thrown for `ErrorBoundary` to catch.
+
+Add placeholders in `frontend/src/App.tsx` beside the other `/admin` children:
+
+```tsx
+                {/* Placeholders: Tasks 16 and 17 replace these with the real pages. */}
+                <Route path="media" element={<div className="p-8 text-gray-500">Media workspace — coming soon.</div>} />
+                <Route path="media/all" element={<div className="p-8 text-gray-500">All media — coming soon.</div>} />
+```
+
 - [ ] **Step 8: Type-check and run the frontend suite**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
@@ -4291,7 +4307,9 @@ In `frontend/src/App.tsx`, add the lazy import beside the other admin pages:
 const AdminMediaWorkspace = lazy(() => import('./pages/admin/AdminMediaWorkspace'))
 ```
 
-And add the route inside the `/admin` route block, beside `gallery`:
+Then **replace** the `media` placeholder route Task 2 added inside the `/admin`
+route block (it renders "Media workspace — coming soon.") with the real page —
+do not add a second route for the same path:
 
 ```tsx
                 <Route path="media" element={<AdminMediaWorkspace />} />
@@ -4499,7 +4517,8 @@ In `frontend/src/App.tsx`:
 const AdminMediaLibrary = lazy(() => import('./pages/admin/AdminMediaLibrary'))
 ```
 
-Remove the `AdminS3Media` lazy import, then set both routes to the new page:
+Remove the `AdminS3Media` lazy import, then set both routes to the new page —
+replacing the `media/all` placeholder Task 2 added, rather than adding a duplicate:
 
 ```tsx
                 <Route path="media/all" element={<AdminMediaLibrary />} />
