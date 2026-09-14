@@ -1,16 +1,35 @@
 """Unit tests for the pure media-library helpers."""
+import sqlite3
 from datetime import datetime
 
 import pytest
 
 from media_library_service import (
+    LIKE_ESCAPE,
     build_object_key,
     build_search_text,
     build_thumbnail_key,
     detect_media_type,
     normalize_tags,
     tag_filter_pattern,
+    validate_tags,
 )
+
+
+def _like(haystack: str, pattern: str) -> bool:
+    """Evaluate a LIKE match through real SQLite, not Python `in`.
+
+    `pattern.strip("%") in text` exercises str.__contains__, which is
+    structurally incapable of catching wildcard semantics (a stray '%' or '_'
+    in the tag) — that is exactly how the wildcard hole slipped through.
+    """
+    conn = sqlite3.connect(":memory:")
+    try:
+        return bool(conn.execute(
+            "SELECT ? LIKE ? ESCAPE ?", (haystack, pattern, LIKE_ESCAPE)
+        ).fetchone()[0])
+    finally:
+        conn.close()
 
 
 def test_normalize_tags_lowercases_strips_and_dedupes():
@@ -133,3 +152,100 @@ def test_detect_media_type_rejects_svg_by_content_type():
 
 def test_detect_media_type_rejects_svg_by_extension_fallback():
     assert detect_media_type("logo.svg", None) is None
+
+
+# --- Fix A: content-type allow-lists, not a deny-list -----------------------
+
+def test_detect_media_type_rejects_svg_with_a_charset_parameter():
+    assert detect_media_type("logo.svg", "image/svg+xml; charset=utf-8") is None
+
+
+def test_detect_media_type_rejects_svg_with_trailing_whitespace():
+    assert detect_media_type("logo.svg", "image/svg+xml ") is None
+
+
+def test_detect_media_type_matches_a_content_type_with_a_parameter():
+    assert detect_media_type("logo.png", "image/png; charset=utf-8") == "image"
+
+
+def test_detect_media_type_rejects_an_unlisted_image_subtype():
+    assert detect_media_type("icon.ico", "image/x-icon") is None
+
+
+# --- Fix B: LIKE metacharacters are escaped, verified through real LIKE -----
+
+def test_tag_filter_pattern_matches_the_tag_through_real_like():
+    text = build_search_text("a.jpg", None, None, ["gaza"])
+    assert _like(text, tag_filter_pattern("gaza"))
+
+
+def test_tag_filter_pattern_does_not_let_underscore_act_as_a_wildcard():
+    text = build_search_text("a.jpg", None, None, ["gaza"])
+    # 'gaz_' with '_' as a LIKE wildcard would match 'gaza'; escaped, it must not.
+    assert not _like(text, tag_filter_pattern("gaz_"))
+
+
+def test_tag_filter_pattern_does_not_let_percent_enumerate_every_tag():
+    text = build_search_text("a.jpg", None, None, ["gaza"])
+    # '%' as a bare LIKE wildcard would match any tagged text; escaped, it must not.
+    assert not _like(text, tag_filter_pattern("%"))
+
+
+def test_tag_filter_pattern_matches_a_tag_containing_a_literal_percent_only_itself():
+    text_with_percent = build_search_text("a.jpg", None, None, ["50%-off"])
+    text_without = build_search_text("a.jpg", None, None, ["50x-off"])
+    pattern = tag_filter_pattern("50%-off")
+    assert _like(text_with_percent, pattern)
+    assert not _like(text_without, pattern)
+
+
+# --- Fix C: the delimiter is stripped from the free-text fields too --------
+
+def test_build_search_text_strips_the_delimiter_from_filename_title_description():
+    text = build_search_text("a.jpg", "x |gaza| y", None, ["water"])
+    assert not _like(text, tag_filter_pattern("gaza"))
+    assert _like(text, tag_filter_pattern("water"))
+
+
+# --- Fix E: non-string tags are skipped, not coerced -----------------------
+
+def test_normalize_tags_skips_non_string_entries():
+    assert normalize_tags([None, 5, "gaza"]) == ["gaza"]
+
+
+# --- Fix F: validate_tags is the write-path gate ----------------------------
+
+def test_validate_tags_returns_no_problems_for_clean_tags():
+    assert validate_tags(["gaza", "water-well"]) == []
+
+
+def test_validate_tags_returns_none_problems_for_none():
+    assert validate_tags(None) == []
+
+
+def test_validate_tags_rejects_a_tag_containing_the_delimiter():
+    assert validate_tags(["gaza|evil"]) != []
+
+
+def test_validate_tags_rejects_a_tag_containing_percent():
+    assert validate_tags(["50%off"]) != []
+
+
+def test_validate_tags_rejects_a_tag_containing_underscore():
+    assert validate_tags(["gaz_a"]) != []
+
+
+def test_validate_tags_rejects_a_tag_containing_a_backslash():
+    assert validate_tags(["gaza\\"]) != []
+
+
+def test_validate_tags_rejects_a_tag_over_the_length_limit():
+    assert validate_tags(["g" * 65]) != []
+
+
+def test_validate_tags_rejects_too_many_tags():
+    assert validate_tags([f"tag{i}" for i in range(26)]) != []
+
+
+def test_validate_tags_rejects_a_non_string_entry():
+    assert validate_tags([5]) != []
