@@ -927,29 +927,42 @@ VIDEO_CONTENT_TYPES = frozenset(ct for fmt in _VIDEO_FORMATS.values() for ct in 
 
 
 def _sniff_rules(formats: dict) -> tuple:
-    """(matcher, content-type aliases) pairs, one per distinct byte test.
+    """(matcher, canonical content-type, content-type aliases) triples, one
+    per distinct byte test.
 
     Several extensions share one matcher — .jpg/.jpeg both sniff as JPEG,
     .ogg/.ogv both sniff as Ogg, .webm/.mkv both sniff as EBML, and every
     ISO-BMFF extension (.mp4/.mov/.m4v/.3gp) sniffs identically — so this
     groups by the matcher function itself and unions the content-type
     aliases of every extension that shares it, rather than testing the same
-    bytes twice for what is, at the byte level, one format.
+    bytes twice for what is, at the byte level, one format. `canonical` is
+    the first content-type of the first-seen extension in that group (dicts
+    preserve insertion order, so this is deterministic): for the ISO-BMFF
+    group that is ".mp4"'s "video/mp4", not ".3gp"'s or ".mov"'s, because
+    .mp4 is declared first in _VIDEO_FORMATS.
     """
     grouped: dict = {}
     order: list = []
     for fmt in formats.values():
         if fmt.sniff not in grouped:
-            grouped[fmt.sniff] = set()
+            grouped[fmt.sniff] = {"canonical": fmt.content_types[0], "aliases": set()}
             order.append(fmt.sniff)
-        grouped[fmt.sniff].update(fmt.content_types)
-    return tuple((matcher, frozenset(grouped[matcher])) for matcher in order)
+        grouped[fmt.sniff]["aliases"].update(fmt.content_types)
+    return tuple(
+        (matcher, grouped[matcher]["canonical"], frozenset(grouped[matcher]["aliases"]))
+        for matcher in order
+    )
 
 
 # Image rules before video rules purely so a mixed-format false-positive
 # (none known today) would resolve toward "image" first; sniff_content_type
 # returns on the first match either way.
 _SNIFF_RULES = _sniff_rules(_IMAGE_FORMATS) + _sniff_rules(_VIDEO_FORMATS)
+
+# frozenset(aliases) -> canonical, for canonical_content_type(). Built once
+# from the same rules sniff_content_type() matches against, so the two can
+# never drift relative to each other.
+_CANONICAL_BY_ALIASES = {aliases: canonical for _, canonical, aliases in _SNIFF_RULES}
 
 
 def sniff_content_type(content: bytes) -> Optional[frozenset]:
@@ -958,18 +971,66 @@ def sniff_content_type(content: bytes) -> Optional[frozenset]:
 
     This is the byte-level counterpart to detect_media_type(): that function
     trusts a caller-supplied filename/Content-Type, this one trusts nothing
-    but the bytes themselves. Task 5's upload router requires the caller's
-    declared Content-Type to be a *member of the returned set* — not merely
-    of the right broad image/video category — which is what closes a
-    spoofed "declare image/gif over real JPEG bytes" upload: image/gif is a
+    but the bytes themselves. The upload router requires an *allow-listed*
+    declared Content-Type to be a member of the returned set — not merely of
+    the right broad image/video category — which is what closes a spoofed
+    "declare image/gif over real JPEG bytes" upload: image/gif is a
     perfectly valid Content-Type in general, just never a member of the set
     JPEG bytes sniff to, so the mismatch is caught here regardless of what
     should_compress_image() would have done with the (wrong) declared type.
+    A declared type that is *not* allow-listed at all (a generic default
+    like application/octet-stream, or no header) is not this kind of
+    mismatch — see is_allow_listed_content_type() and canonical_content_type().
     """
-    for matcher, content_types in _SNIFF_RULES:
+    for matcher, _canonical, content_types in _SNIFF_RULES:
         if matcher(content):
             return content_types
     return None
+
+
+def canonical_content_type(content_types) -> str:
+    """The single Content-Type to store for a set sniff_content_type()
+    returned.
+
+    A frozenset has no defined order, so picking a member directly
+    (`next(iter(...))`) is not deterministic across interpreters/runs. This
+    looks the exact set back up against the format tables instead, which
+    were built in a fixed, declared order — the same aliases always
+    canonicalise to the same stored Content-Type.
+    """
+    canonical = _CANONICAL_BY_ALIASES.get(frozenset(content_types))
+    if canonical is not None:
+        return canonical
+    # Defensive only: every real caller passes this the exact return value
+    # of sniff_content_type(), which is always a key of the dict above, so
+    # this should be unreachable. Still deterministic if it is ever hit.
+    return sorted(content_types)[0]
+
+
+def is_allow_listed_content_type(value: Optional[str]) -> bool:
+    """Whether `value` is a Content-Type this module lists for some format —
+    image or video.
+
+    Used to tell "the caller declared a real, specific Content-Type that
+    turned out wrong" (evidence of a spoof) apart from "the caller declared
+    nothing meaningful" (a generic default like application/octet-stream —
+    what curl and some mobile webviews send with no OS MIME mapping to
+    consult — or a missing header entirely). Only the former is a claim
+    worth rejecting on mismatch; the latter should fall back to whatever the
+    bytes actually are.
+    """
+    return value in IMAGE_CONTENT_TYPES or value in VIDEO_CONTENT_TYPES
+
+
+def media_type_of(content_types) -> str:
+    """'image' or 'video' for a set of Content-Type aliases such as
+    sniff_content_type() returns.
+
+    IMAGE_CONTENT_TYPES and VIDEO_CONTENT_TYPES are disjoint by
+    construction (every format map entry contributes to exactly one of
+    them), so membership in either is decisive.
+    """
+    return "image" if content_types & IMAGE_CONTENT_TYPES else "video"
 
 # Recognised formats we cannot decode yet. Named so the API can explain itself
 # instead of returning a generic "unsupported file type" for an obvious photo
@@ -1735,34 +1796,34 @@ Create `backend/routers/media_library.py`:
 
 Staff (admin | manager | field_staff):
   POST   /api/media-library                upload into own workspace
-  GET    /api/media-library                list / search / sort / paginate                (Tasks 6-9)
-  GET    /api/media-library/{id}           detail + site-usage cross-reference              (Tasks 6-9)
-  PATCH  /api/media-library/{id}           edit title / description / tags                  (Tasks 6-9)
-  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Tasks 6-9)
-  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Tasks 6-9)
+  GET    /api/media-library                list / search / sort / paginate
+  GET    /api/media-library/{id}           detail + site-usage cross-reference              (Tasks 7-9)
+  PATCH  /api/media-library/{id}           edit title / description / tags                  (Tasks 7-9)
+  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Tasks 7-9)
+  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Tasks 7-9)
 
 Admin or manager only:
-  GET    /api/media-library/workspaces     workspaces with counts and total size             (Tasks 6-9)
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Tasks 6-9)
-  POST   /api/media-library/{id}/reassign  move an asset into another workspace               (Tasks 6-9)
+  GET    /api/media-library/workspaces     workspaces with counts and total size             (Tasks 7-9)
+  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Tasks 7-9)
+  POST   /api/media-library/{id}/reassign  move an asset into another workspace               (Tasks 7-9)
 
-Only the upload endpoint above exists so far; every other line in these two
-lists is a stub for Tasks 6-9. Byte serving lives in media_library_files.py.
+Only upload and listing exist so far; every other line in these two lists is
+a stub for Tasks 7-9. Byte serving lives in media_library_files.py.
 """
 from __future__ import annotations
 
 import hashlib
 import io
 import os
-from datetime import datetime  # noqa: F401 — unused until Tasks 6-9 (listing/sort)
+from datetime import datetime  # noqa: F401 — unused until Tasks 7-9 (detail/edit/review)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-# BaseModel/Field, Query, get_current_manager_or_admin, search_pattern,
-# tag_filter_pattern, _load_asset and _require_can_edit below are all unused
-# by the upload endpoint alone — they exist for Tasks 6-9 (listing, detail,
-# edit, review, reassign) to build on without re-deriving them.
+# BaseModel/Field, get_current_manager_or_admin, _load_asset and
+# _require_can_edit below are still unused by upload and listing alone —
+# they exist for Tasks 7-9 (detail, edit, review, reassign) to build on
+# without re-deriving them.
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -1774,7 +1835,10 @@ from media_library_service import (
     build_object_key,
     build_search_text,
     build_thumbnail_key,
+    canonical_content_type,
     detect_media_type,
+    is_allow_listed_content_type,
+    media_type_of,
     normalize_tags,
     parse_tag_input,
     search_pattern,
@@ -1782,7 +1846,6 @@ from media_library_service import (
     tag_filter_pattern,
     unsupported_hint,
     validate_tags,
-    IMAGE_CONTENT_TYPES,
 )
 from media_processing import (
     compress_image,
@@ -1840,7 +1903,7 @@ def _image_dimensions(data: bytes):
         return (None, None)
 
 
-# Staged for Tasks 6-9 (detail/edit/submit/review/reassign): no route below
+# Staged for Tasks 7-9 (detail/edit/submit/review/reassign): no route below
 # calls these yet.
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
     asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
@@ -1904,30 +1967,40 @@ async def upload_media(
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
         )
 
-    # The declared type and filename extension got us this far; the bytes
-    # have to agree, at the specific-format level, before anything reaches
-    # Pillow or ffmpeg. sniff_content_type() returns every Content-Type alias
-    # the bytes are consistent with; requiring the declared header to be a
-    # *member* of that set — not merely of the right image/video category —
-    # is what stops a caller from declaring image/gif (a format
-    # should_compress_image() always skips, and so never gets re-encoded)
-    # over real JPEG bytes to dodge metadata stripping below. This also
-    # doubles as "never store the raw header": whatever passes here is
-    # already one of the aliases this module allow-lists, never anything
-    # attacker-chosen wholesale — a file named a.jpg, declared text/html,
-    # containing a real GIF is rejected here rather than ever being stored
-    # (and later served) as text/html, which would be stored XSS on the
-    # serving origin.
+    # The bytes have to say what they are before anything reaches Pillow or
+    # ffmpeg — sniff_content_type() returns every Content-Type alias the
+    # bytes are consistent with, or None if they match no format this module
+    # recognises at all (a forged/corrupt/unsupported upload).
     declared = (file.content_type or "").split(";", 1)[0].strip().lower()
     sniffed_content_types = sniff_content_type(content)
-    if sniffed_content_types is None or declared not in sniffed_content_types:
+    if sniffed_content_types is None:
         raise HTTPException(
             status_code=400,
             detail="File content does not match its declared type.",
         )
 
-    media_type = "image" if sniffed_content_types & IMAGE_CONTENT_TYPES else "video"
-    content_type = declared
+    # A declared type that IS allow-listed but ISN'T consistent with the
+    # sniffed bytes is the spoof this endpoint exists to catch (image/gif —
+    # a format should_compress_image() always skips, and so never gets
+    # re-encoded — declared over real JPEG bytes, to dodge the metadata
+    # stripping below). A declared type that is missing, or a generic
+    # default like application/octet-stream (what curl -F and some mobile
+    # webviews send with no OS MIME mapping to consult), is not a claim at
+    # all, so there is nothing to contradict — that used to reach here as a
+    # 400 too, which is the regression a re-review caught: nothing declared
+    # is not the same thing as something declared wrongly.
+    if is_allow_listed_content_type(declared) and declared not in sniffed_content_types:
+        raise HTTPException(
+            status_code=400,
+            detail="File content does not match its declared type.",
+        )
+
+    # Never store the raw header regardless of which branch above was
+    # taken: an accepted-but-generic declaration (or an accepted, correct
+    # one) is stored as-is; anything else falls back to the format's own
+    # canonical type, derived from the bytes rather than the caller.
+    media_type = media_type_of(sniffed_content_types)
+    content_type = declared if declared in sniffed_content_types else canonical_content_type(sniffed_content_types)
     width = height = None
     thumbnail_bytes = None
 
@@ -2023,9 +2096,9 @@ async def upload_media(
         # whatever the uploading client sent) and it's display-only, so a
         # 400 here would only make them retry the same 100 MB upload for
         # something that isn't their fault. filename is VARCHAR(255); title
-        # gets the same treatment via Form(..., max_length=200) above
-        # instead, because a title the user *did* type deserves an honest
-        # 400 rather than a silent truncation.
+        # gets the opposite treatment (an explicit 400, checked near the top
+        # of this function) instead, because a title the user *did* type
+        # deserves an honest rejection rather than a silent truncation.
         filename=(file.filename or "upload")[:255],
         media_type=media_type,
         content_type=content_type,
@@ -2061,6 +2134,111 @@ async def upload_media(
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
     return _serialize(asset)
+
+
+# ── Listing ──────────────────────────────────────────────────────────
+
+SORT_FIELDS = {
+    "created_at": MediaAsset.created_at,
+    "filename": MediaAsset.filename,
+    "title": MediaAsset.title,
+    "size": MediaAsset.size_bytes,
+    "type": MediaAsset.media_type,
+}
+
+MEDIA_TYPES = ("image", "video")
+STATUSES = ("private", "submitted", "public")
+
+
+@router.get("")
+async def list_media(
+    q: Optional[str] = Query(None, description="Match filename, title, description or tags"),
+    type: Optional[str] = Query(None, description="image | video"),
+    status: Optional[str] = Query(None, description="private | submitted | public"),
+    tag: Optional[str] = Query(None, description="Exact tag match"),
+    owner_id: Optional[str] = Query(None, description="Admin/manager only; accepts 'unassigned'"),
+    sort: str = Query("created_at"),
+    order: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(48, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """List the caller's workspace, or every workspace for admins and managers."""
+    if sort not in SORT_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown sort field. Use one of: {', '.join(sorted(SORT_FIELDS))}",
+        )
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="order must be 'asc' or 'desc'")
+
+    query = db.query(MediaAsset)
+
+    # Scope first, and structurally: a field-staff query can never widen.
+    role = role_of(current_user)
+    if role not in ("admin", "manager"):
+        query = query.filter(MediaAsset.owner_id == current_user.id)
+    elif owner_id:
+        if owner_id == "unassigned":
+            query = query.filter(MediaAsset.owner_id.is_(None))
+        else:
+            try:
+                owner_id_int = int(owner_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            # int() has no size limit, so an absurdly long digit string
+            # parses fine here and the error only surfaces once the query
+            # actually executes below -- OverflowError on SQLite, a driver
+            # range error on PostgreSQL, either way an unhandled 500 where
+            # this sibling (non-numeric) path gives a clean 400. owner_id is
+            # a 32-bit Integer column; bounding against that range catches
+            # it here instead of waiting for a specific driver to reject it
+            # in a specific way.
+            if not (-2_147_483_648 <= owner_id_int <= 2_147_483_647):
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            query = query.filter(MediaAsset.owner_id == owner_id_int)
+
+    # Both helpers escape LIKE metacharacters and hand back the escape character
+    # with the pattern — without it, q="%" or tag="%" matches every row, and a
+    # trailing backslash behaves differently on PostgreSQL than on SQLite.
+    if q:
+        found = search_pattern(q)
+        if found is not None:
+            pattern, escape = found
+            query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if tag:
+        found = tag_filter_pattern(tag)
+        if found is None:
+            raise HTTPException(status_code=400, detail="tag must not be empty")
+        pattern, escape = found
+        query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if type:
+        if type not in MEDIA_TYPES:
+            raise HTTPException(status_code=400, detail="type must be 'image' or 'video'")
+        query = query.filter(MediaAsset.media_type == type)
+    if status:
+        if status not in STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(STATUSES)}")
+        query = query.filter(MediaAsset.status == status)
+
+    total = query.count()
+
+    column = SORT_FIELDS[sort]
+    query = query.order_by(column.asc() if order == "asc" else column.desc())
+    # Stable tiebreak so pagination cannot repeat or drop a row.
+    query = query.order_by(None).order_by(
+        column.asc() if order == "asc" else column.desc(), MediaAsset.id.asc()
+    )
+
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return {
+        "items": [_serialize(asset) for asset in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 ```
 
 - [ ] **Step 4: Register the router**
