@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
@@ -651,3 +651,45 @@ class ProjectProposal(Base):
     sms_consent = Column(Boolean, nullable=False, default=False)
     sms_consent_at = Column(DateTime, nullable=True)
     sms_consent_text = Column(Text, nullable=True)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Media library — per-user workspaces on top of S3
+# ─────────────────────────────────────────────────────────────────────
+
+class MediaAsset(Base):
+    """A single photo or video in a staff member's media workspace.
+
+    Privacy is a column, not a location: the object lands once at `object_key`
+    and never moves, and `status` alone decides who may read the bytes.
+    `search_text` is denormalized on every write so search is one ILIKE that
+    behaves identically on PostgreSQL and on the SQLite used in tests.
+    """
+    __tablename__ = "media_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # NULL owner = the "Unassigned" workspace: legacy media, or media whose
+    # owner's account was deleted.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    object_key = Column(String(500), nullable=False, unique=True, index=True)
+    filename = Column(String(255), nullable=False)
+    media_type = Column(String(10), nullable=False)  # 'image' | 'video'
+    content_type = Column(String(100), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False, default=0)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    thumbnail_key = Column(String(500), nullable=True)
+    checksum_sha256 = Column(String(64), nullable=True, index=True)
+    title = Column(String(200), nullable=True)
+    description = Column(Text, nullable=True)
+    tags = Column(JSONType, nullable=False, default=list)
+    search_text = Column(Text, nullable=False, default="")
+    # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
+    # | 'public' (served to anyone)
+    status = Column(String(20), nullable=False, default="private", index=True)
+    reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
