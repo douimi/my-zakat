@@ -192,14 +192,20 @@ def mock_stripe(monkeypatch):
     monkeypatch.setattr("stripe.Subscription.cancel", mock_subscription_delete)
 
 
-def _make_staff_user(db_session, email, role):
+TEST_PASSWORD = "testpass"
+
+
+def _make_user(db_session, email, role):
     user = User(
         email=email,
-        password=get_password_hash("testpass"),
+        password=get_password_hash(TEST_PASSWORD),
         name=email.split("@")[0],
         is_active=True,
         is_admin=(role == "admin"),
         role=role,
+        # routers/auth.py rejects a login from any non-admin whose email is
+        # unverified, so without this every *_headers fixture below errors.
+        email_verified=True,
     )
     db_session.add(user)
     db_session.commit()
@@ -209,7 +215,7 @@ def _make_staff_user(db_session, email, role):
 
 def _headers_for(client, email):
     response = client.post(
-        "/api/auth/login", json={"email": email, "password": "testpass"}
+        "/api/auth/login", json={"email": email, "password": TEST_PASSWORD}
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
@@ -217,22 +223,22 @@ def _headers_for(client, email):
 
 @pytest.fixture(scope="function")
 def manager_user(db_session):
-    return _make_staff_user(db_session, "manager@example.com", "manager")
+    return _make_user(db_session, "manager@example.com", "manager")
 
 
 @pytest.fixture(scope="function")
 def field_staff_user(db_session):
-    return _make_staff_user(db_session, "field@example.com", "field_staff")
+    return _make_user(db_session, "field@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def other_field_staff_user(db_session):
-    return _make_staff_user(db_session, "field2@example.com", "field_staff")
+    return _make_user(db_session, "field2@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def donor_user(db_session):
-    return _make_staff_user(db_session, "donor@example.com", "user")
+    return _make_user(db_session, "donor@example.com", "user")
 
 
 @pytest.fixture(scope="function")
@@ -253,4 +259,3 @@ def other_field_staff_headers(client, other_field_staff_user):
 @pytest.fixture(scope="function")
 def donor_headers(client, donor_user):
     return _headers_for(client, donor_user.email)
-

@@ -29,6 +29,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1008
 
 security = HTTPBearer()
 
+VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
+STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
+MANAGER_ROLES = frozenset({"admin", "manager"})
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
@@ -98,7 +102,12 @@ def get_current_user(
 def get_current_admin(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user and verify they have admin privileges"""
+    """Get current user and verify they have admin privileges.
+
+    Deliberately checks `is_admin` directly rather than going through
+    `role_of` — admin is the one role every legacy row can already assert
+    correctly, so this gate predates (and doesn't need) the helper.
+    """
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -108,11 +117,7 @@ def get_current_admin(
     return current_user
 
 
-VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
-STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
-
-
-def _role_of(user: User) -> str:
+def role_of(user: User) -> str:
     """Effective role for a user row.
 
     Prefers the `role` column, falling back to the legacy `is_admin` flag for
@@ -126,9 +131,9 @@ def _role_of(user: User) -> str:
 
 def get_current_staff(
     current_user: User = Depends(get_current_user)
-):
+) -> User:
     """Anyone who owns a media workspace: admin, manager or field staff."""
-    if _role_of(current_user) not in STAFF_ROLES:
+    if role_of(current_user) not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Staff access required."
@@ -138,9 +143,9 @@ def get_current_staff(
 
 def get_current_manager_or_admin(
     current_user: User = Depends(get_current_user)
-):
+) -> User:
     """Allow either admins or managers — used for endpoints that managers can access."""
-    if _role_of(current_user) not in ("admin", "manager"):
+    if role_of(current_user) not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Manager or admin access required."

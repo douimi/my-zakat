@@ -10,7 +10,7 @@ from media_processing import compress_image, compress_video, generate_video_thum
 from database import get_db
 from models import ContactSubmission, Donation, Event, Volunteer, Story, Testimonial, Subscription, Setting, User
 from schemas import UserResponse, PasswordChange, AdminUserCreate, AdminUserUpdate, AdminPasswordReset
-from auth_utils import get_current_admin, verify_password, get_password_hash
+from auth_utils import get_current_admin, verify_password, get_password_hash, VALID_ROLES, role_of
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -194,9 +194,6 @@ async def upload_media(
 
 
 # User Management Endpoints
-VALID_ROLES = {"admin", "manager", "field_staff", "user"}
-
-
 def _resolve_role(payload_role, fallback_is_admin: bool) -> str:
     """Pick the role from the payload, falling back to legacy is_admin for callers
     that haven't been updated to send `role` yet."""
@@ -214,7 +211,7 @@ def _user_to_dict(user: User) -> dict:
         "name": user.name,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
-        "role": getattr(user, "role", None) or ("admin" if user.is_admin else "user"),
+        "role": role_of(user),
         "created_at": user.created_at,
     }
 
@@ -366,7 +363,7 @@ async def get_user_details(
             "name": user.name,
             "is_active": user.is_active,
             "is_admin": user.is_admin,
-            "role": getattr(user, "role", None) or ("admin" if user.is_admin else "user"),
+            "role": role_of(user),
             "created_at": user.created_at
         },
         "donations": [{
