@@ -1477,7 +1477,16 @@ def no_compression(monkeypatch):
     monkeypatch.setattr("routers.media_library._image_dimensions", lambda data: (800, 600))
 
 
-def _upload(client, headers, filename="photo.jpg", content=b"fake-image-bytes",
+# A real JPEG header. The bytes must be genuine: the endpoint sniffs magic bytes
+# and rejects anything contradicting the declared type, so a placeholder string
+# would 400 and take most of these tests with it.
+JPEG_BYTES = (
+    b"ÿØÿà JFIF      "
+    + b" " * 64
+)
+
+
+def _upload(client, headers, filename="photo.jpg", content=JPEG_BYTES,
             content_type="image/jpeg", **form):
     return client.post(
         "/api/media-library",
@@ -1532,6 +1541,17 @@ def test_upload_rejects_an_unsupported_file_type(
     assert response.status_code == 400
 
 
+def test_upload_rejects_bytes_that_contradict_the_declared_type(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """A spoofed Content-Type must not get a non-image classified as an image."""
+    response = _upload(client, field_staff_headers, filename="payload.jpg",
+                       content=b"<html><script>alert(1)</script></html>",
+                       content_type="image/jpeg")
+    assert response.status_code == 400
+    assert fake_s3 == {}, "nothing may reach S3 when the bytes are rejected"
+
+
 def test_upload_rejects_an_empty_file(client, field_staff_headers, fake_s3, no_compression):
     response = _upload(client, field_staff_headers, content=b"")
     assert response.status_code == 400
@@ -1569,8 +1589,13 @@ def test_a_failed_insert_leaves_no_orphan_object(
     def boom(self):
         raise RuntimeError("database is on fire")
 
-    monkeypatch.setattr(Session, "commit", boom)
-    response = _upload(client, field_staff_headers)
+    # MonkeyPatch.context(), not the monkeypatch fixture: this patches Session
+    # class-wide, and the fixture's teardown runs AFTER db_session's cleanup
+    # commit — so the patch would still be live and break unrelated teardown.
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(Session, "commit", boom)
+        response = _upload(client, field_staff_headers)
+
     assert response.status_code == 500
     assert fake_s3 == {}
 
@@ -1624,6 +1649,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -1811,7 +1837,11 @@ async def upload_media(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "This file is already in your workspace.",
-                "existing": _serialize(duplicate),
+                # jsonable_encoder, not the bare dict: FastAPI's exception
+                # handler json.dumps() `detail` directly, without the encoder a
+                # 2xx body goes through. _serialize carries raw datetimes, so
+                # the un-encoded form raises TypeError and this 409 becomes a 500.
+                "existing": jsonable_encoder(_serialize(duplicate)),
             },
         )
 
@@ -1887,7 +1917,7 @@ Add `media_library` to the `from routers import (...)` block at the top of the f
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 13 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -2684,7 +2714,11 @@ def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": f"Cannot {action}: this media is still used on the site.",
-                "usage": referenced,
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps() `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
             },
         )
 
