@@ -3527,6 +3527,10 @@ async def delete_media(
             detail="Once media has been submitted or published, an admin must remove it.",
         )
 
+    # Every status, not just public. A legacy asset backfilled by Task 18 can be
+    # referenced by live site content while sitting at any status, because the
+    # /api/uploads/media/... URL the content tables hold is served straight from
+    # S3 and never consults this row.
     _refuse_if_in_use(asset, db, "delete")
 
     object_key = asset.object_key
@@ -6266,6 +6270,13 @@ The tasks are ordered so `main` stays deployable, but the production rollout has
    in the library.
 4. Run `python -m scripts.audit_direct_s3_urls` until it reports clean.
 5. Only then deploy the `s3_service.py` change from Task 19 that drops the public-read policy.
+
+**Before running the backfill, know this:** the in-use guard matches content-table
+URLs by exact string equality, and legacy media is referenced by the proxy form
+`get_file_url()` produces (`/api/uploads/media/<type>/<filename>`), not by the
+id-addressed form new uploads get. `usage_for_asset` asks for both spellings for
+exactly this reason. If that ever regresses, deleting a backfilled asset removes
+an object the live site is still serving, and the guard reports nothing wrong.
 
 Steps 4 and 5 are separable and independently revertible on purpose — that is the one change that can take the public site's images down.
 
