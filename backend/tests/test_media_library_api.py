@@ -525,3 +525,139 @@ def test_pagination_reports_totals_and_slices(
 
 def test_a_donor_cannot_list(client, donor_headers):
     assert client.get("/api/media-library", headers=donor_headers).status_code == 403
+
+
+# ── Detail, metadata, workspaces ─────────────────────────────────────
+
+def test_detail_returns_the_asset_and_its_site_usage(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    body = client.get(f"/api/media-library/{asset.id}", headers=field_staff_headers).json()
+    assert body["id"] == asset.id
+    assert body["usage_count"] == 0
+    assert "usage" in body
+
+
+def test_detail_hides_another_members_asset_behind_a_404(
+    client, db_session, field_staff_headers, other_field_staff_user
+):
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+    response = client.get(f"/api/media-library/{asset.id}", headers=field_staff_headers)
+    assert response.status_code == 404
+
+
+def test_patch_updates_metadata_and_rebuilds_search_text(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"title": "Well Opening", "description": "Rafah", "tags": ["Gaza", "gaza", " "]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["tags"] == ["gaza"]
+
+    found = client.get("/api/media-library?q=rafah", headers=field_staff_headers).json()
+    assert found["total"] == 1
+
+
+def test_patch_cannot_change_status(client, db_session, field_staff_headers, field_staff_user):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"title": "x", "status": "public"},
+    )
+    db_session.refresh(asset)
+    assert asset.status == "private"
+
+
+def test_patch_on_another_members_asset_is_a_404(
+    client, db_session, field_staff_headers, other_field_staff_user
+):
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+    response = client.patch(
+        f"/api/media-library/{asset.id}", headers=field_staff_headers, json={"title": "mine now"}
+    )
+    assert response.status_code == 404
+
+
+def test_an_admin_can_edit_any_members_asset(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.patch(
+        f"/api/media-library/{asset.id}", headers=auth_headers, json={"title": "Reviewed"}
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Reviewed"
+
+
+def test_an_admin_reassigns_an_unassigned_asset_to_a_member(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["owner_id"] == field_staff_user.id
+
+
+def test_reassigning_to_a_nonexistent_user_is_rejected(
+    client, db_session, auth_headers
+):
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign", headers=auth_headers, json={"owner_id": 999999}
+    )
+    assert response.status_code == 404
+
+
+def test_field_staff_cannot_reassign(client, db_session, field_staff_headers, field_staff_user):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=field_staff_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 403
+
+
+def test_workspaces_summarises_every_member(
+    client, db_session, auth_headers, field_staff_user, other_field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", size=100)
+    _make_asset(db_session, field_staff_user.id, filename="b.jpg", size=50, status="submitted")
+    _make_asset(db_session, other_field_staff_user.id, filename="c.jpg", size=7)
+    _make_asset(db_session, None, filename="legacy.jpg", size=3, status="public")
+
+    body = client.get("/api/media-library/workspaces", headers=auth_headers).json()
+    by_id = {w["owner_id"]: w for w in body["workspaces"]}
+
+    assert by_id[field_staff_user.id]["asset_count"] == 2
+    assert by_id[field_staff_user.id]["total_bytes"] == 150
+    assert by_id[field_staff_user.id]["submitted_count"] == 1
+    assert by_id[field_staff_user.id]["owner_email"] == field_staff_user.email
+    assert by_id[None]["owner_name"] == "Unassigned"
+
+
+def test_workspaces_includes_staff_who_have_uploaded_nothing(
+    client, db_session, auth_headers, field_staff_user
+):
+    """An empty workspace must still be selectable when reassigning legacy media."""
+    body = client.get("/api/media-library/workspaces", headers=auth_headers).json()
+    by_id = {w["owner_id"]: w for w in body["workspaces"]}
+
+    assert field_staff_user.id in by_id
+    assert by_id[field_staff_user.id]["asset_count"] == 0
+    assert None not in by_id, "Unassigned should not appear while it holds nothing"
+
+
+def test_field_staff_cannot_read_the_workspaces_summary(client, field_staff_headers):
+    response = client.get("/api/media-library/workspaces", headers=field_staff_headers)
+    assert response.status_code == 403

@@ -445,3 +445,159 @@ async def list_media(
         "page": page,
         "page_size": page_size,
     }
+
+
+# ── Workspaces summary (declare before /{asset_id}) ──────────────────
+
+@router.get("/workspaces")
+async def list_workspaces(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Every staff member's workspace, plus Unassigned if it holds anything.
+
+    Every staff account gets a row even when it holds nothing yet — a workspace
+    exists because the person does, and an empty one still has to be selectable
+    when a reviewer reassigns legacy media.
+    """
+    from sqlalchemy import func
+
+    totals = {
+        row.owner_id: row
+        for row in db.query(
+            MediaAsset.owner_id,
+            func.count(MediaAsset.id).label("asset_count"),
+            func.coalesce(func.sum(MediaAsset.size_bytes), 0).label("total_bytes"),
+        ).group_by(MediaAsset.owner_id).all()
+    }
+
+    submitted = dict(
+        db.query(MediaAsset.owner_id, func.count(MediaAsset.id))
+        .filter(MediaAsset.status == "submitted")
+        .group_by(MediaAsset.owner_id)
+        .all()
+    )
+
+    staff = (
+        db.query(User)
+        .filter(User.role.in_(("admin", "manager", "field_staff")))
+        .all()
+    )
+
+    def _row(owner_id, name, email):
+        total = totals.get(owner_id)
+        return {
+            "owner_id": owner_id,
+            "owner_name": name,
+            "owner_email": email,
+            "asset_count": int(total.asset_count) if total else 0,
+            "total_bytes": int(total.total_bytes) if total else 0,
+            "submitted_count": int(submitted.get(owner_id, 0)),
+        }
+
+    workspaces = [_row(user.id, user.name or user.email, user.email) for user in staff]
+
+    # Owners who are no longer staff, plus the owner-less legacy pool.
+    known = {user.id for user in staff}
+    for owner_id in totals:
+        if owner_id is None:
+            workspaces.append(_row(None, "Unassigned", None))
+        elif owner_id not in known:
+            owner = db.query(User).filter(User.id == owner_id).first()
+            workspaces.append(_row(
+                owner_id,
+                (owner.name or owner.email) if owner else f"User {owner_id}",
+                owner.email if owner else None,
+            ))
+
+    workspaces.sort(key=lambda w: (w["owner_id"] is None, -w["asset_count"], w["owner_name"]))
+    return {"workspaces": workspaces}
+
+
+# ── Detail and metadata ──────────────────────────────────────────────
+
+class MediaAssetUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = None
+    tags: Optional[list] = None
+
+
+@router.get("/{asset_id}")
+async def get_media_detail(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """One asset, plus where it is used across the public site."""
+    from routers.s3_media import get_media_usage
+
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    usage = get_media_usage(f"/api/media-library/{asset.id}/file", db)
+    payload = _serialize(asset)
+    payload["usage"] = usage
+    payload["usage_count"] = sum(len(v) for v in usage.values())
+    return payload
+
+
+@router.patch("/{asset_id}")
+async def update_media_metadata(
+    asset_id: int,
+    payload: MediaAssetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Edit title, description and tags. Status is deliberately not editable here."""
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    fields = payload.dict(exclude_unset=True)
+    if "title" in fields:
+        asset.title = fields["title"] or None
+    if "description" in fields:
+        asset.description = fields["description"] or None
+    if "tags" in fields:
+        asset.tags = normalize_tags(fields["tags"])
+
+    asset.search_text = build_search_text(
+        asset.filename, asset.title, asset.description, asset.tags
+    )
+    db.commit()
+    db.refresh(asset)
+    return _serialize(asset)
+
+
+class ReassignRequest(BaseModel):
+    owner_id: Optional[int] = None
+
+
+@router.post("/{asset_id}/reassign")
+async def reassign_media(
+    asset_id: int,
+    payload: ReassignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Move an asset into another member's workspace.
+
+    Chiefly for backfilled legacy media, which arrives owner-less. A null
+    owner_id sends the asset back to the Unassigned workspace. Ownership is
+    deliberately not part of PATCH: it is a privileged action, and keeping it on
+    its own route keeps the privilege check out of the metadata path.
+    """
+    asset = _load_asset(db, asset_id)
+
+    if payload.owner_id is not None:
+        owner = db.query(User).filter(User.id == payload.owner_id).first()
+        if owner is None:
+            raise HTTPException(status_code=404, detail="No such user")
+        if role_of(owner) not in ("admin", "manager", "field_staff"):
+            raise HTTPException(
+                status_code=400, detail="Only staff accounts can own media."
+            )
+
+    asset.owner_id = payload.owner_id
+    db.commit()
+    db.refresh(asset)
+    return _serialize(asset)
