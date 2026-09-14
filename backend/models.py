@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
@@ -670,26 +670,38 @@ class MediaAsset(Base):
     id = Column(Integer, primary_key=True, index=True)
     # NULL owner = the "Unassigned" workspace: legacy media, or media whose
     # owner's account was deleted.
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    #
+    # This model has two FKs to users.id (owner_id, reviewed_by_id). There are
+    # no relationship() calls on MediaAsset today; the first one added must
+    # pass foreign_keys= explicitly or SQLAlchemy raises
+    # AmbiguousForeignKeysError.
+    # Not individually indexed: idx_media_assets_owner_created (owner_id,
+    # created_at DESC, id DESC) in the migration covers owner-scoped lookups
+    # and the default listing sort, so a standalone index here would be pure
+    # write cost with no query it alone would serve.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     object_key = Column(String(500), nullable=False, unique=True, index=True)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(10), nullable=False)  # 'image' | 'video'
     content_type = Column(String(100), nullable=False)
-    size_bytes = Column(BigInteger, nullable=False, default=0)
+    size_bytes = Column(BigInteger, nullable=False, default=0, server_default=text("0"))
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     thumbnail_key = Column(String(500), nullable=True)
-    checksum_sha256 = Column(String(64), nullable=True, index=True)
+    # Not individually indexed: idx_media_assets_owner_checksum (owner_id,
+    # checksum_sha256) in the migration covers the per-workspace duplicate
+    # check this is used for.
+    checksum_sha256 = Column(String(64), nullable=True)
     title = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
-    tags = Column(JSONType, nullable=False, default=list)
-    search_text = Column(Text, nullable=False, default="")
+    tags = Column(JSONType, nullable=False, default=list, server_default=text("'[]'"))
+    search_text = Column(Text, nullable=False, default="", server_default="")
     # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
     # | 'public' (served to anyone)
-    status = Column(String(20), nullable=False, default="private", index=True)
+    status = Column(String(20), nullable=False, default="private", server_default="private", index=True)
     reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now(), index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
