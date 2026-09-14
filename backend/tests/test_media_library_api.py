@@ -1,4 +1,5 @@
 """Media library API tests: model, upload, listing, metadata, transitions."""
+import io
 from datetime import datetime
 
 import pytest
@@ -189,11 +190,17 @@ def test_a_failed_insert_leaves_no_orphan_object(
     rather than the function-scoped `monkeypatch` fixture undoes the patch
     the moment this block exits, before any other fixture teardown runs, so
     it cannot leak into unrelated teardown and fail it.
+
+    Raises SQLAlchemyError specifically, not a bare RuntimeError: the router
+    now narrows its `except` around the insert to SQLAlchemyError, on
+    purpose, so a bug elsewhere in the handler surfaces as an unhandled 500
+    instead of being misreported as "Could not save the uploaded file."
     """
+    from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
     def boom(self):
-        raise RuntimeError("database is on fire")
+        raise SQLAlchemyError("database is on fire")
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(Session, "commit", boom)
@@ -213,3 +220,112 @@ def test_an_anonymous_caller_cannot_upload(client, fake_s3, no_compression):
         files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
     )
     assert response.status_code in (401, 403)
+
+
+# ── Upload — review round 2 fixes ───────────────────────────────────────
+
+def test_a_3gp_upload_is_relabeled_video_mp4_after_transcoding(
+    client, field_staff_headers, fake_s3, monkeypatch
+):
+    """compress_video() always transcodes into H.264/MP4 regardless of the
+    source container. 3GP is what low-end Android phones produce -- exactly
+    the field-worker population this format was widened for -- so storing
+    the transcoded bytes under the original video/3gpp label would produce
+    a file nothing plays."""
+    monkeypatch.setattr("routers.media_library.should_compress_video", lambda ct: True)
+    monkeypatch.setattr("routers.media_library.compress_video", lambda data: b"transcoded-h264-mp4-bytes")
+    monkeypatch.setattr("routers.media_library.generate_video_thumbnail", lambda data: None)
+
+    # ISO-BMFF 'ftyp' box at offset 4 -- what the byte sniffer requires for
+    # any of mp4/mov/m4v/3gp.
+    content = b"\x00\x00\x00\x18ftyp3gp4" + b"\x00" * 32
+    response = _upload(client, field_staff_headers, filename="clip.3gp",
+                        content=content, content_type="video/3gpp")
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["media_type"] == "video"
+    assert body["content_type"] == "video/mp4"
+    assert fake_s3[body["object_key"]][1] == "video/mp4"
+
+
+def test_avi_and_ogv_uploads_are_accepted(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """AVI (RIFF + 'AVI ' at offset 8) and Ogg (OggS) are both in the
+    Content-Type allow-list; the sniffer previously recognised neither, so a
+    legitimate upload of either was told its content was a forgery."""
+    avi_content = b"RIFF" + b"\x00\x00\x00\x00" + b"AVI " + b"\x00" * 32
+    response = _upload(client, field_staff_headers, filename="clip.avi",
+                        content=avi_content, content_type="video/x-msvideo")
+    assert response.status_code == 201, response.text
+
+    ogv_content = b"OggS" + b"\x00" * 32
+    response = _upload(client, field_staff_headers, filename="clip.ogv",
+                        content=ogv_content, content_type="video/ogg")
+    assert response.status_code == 201, response.text
+
+
+def test_upload_rejects_a_declared_gif_over_real_jpeg_bytes(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """should_compress_image() always skips GIF (to protect animation), so
+    a caller declaring image/gif over real JPEG bytes used to sail through
+    with the compression pass -- and the metadata stripping that rode along
+    with it as a side effect -- skipped entirely. The format-level sniff
+    check must reject this outright, structurally, regardless of what the
+    compression path would or would not have done."""
+    response = _upload(client, field_staff_headers, filename="photo.gif",
+                        content=JPEG_BYTES, content_type="image/gif")
+    assert response.status_code == 400
+    assert fake_s3 == {}
+
+
+def test_upload_strips_gps_exif_from_the_stored_bytes(client, field_staff_headers, fake_s3):
+    """End-to-end confirmation that the router actually calls
+    strip_image_metadata() (unit-tested directly in test_media_processing.py)
+    on every image, not just that the function works in isolation."""
+    from PIL import Image
+    from PIL.TiffImagePlugin import IFDRational
+
+    img = Image.new("RGB", (40, 20), color=(200, 50, 50))
+    exif = Image.Exif()
+    exif[0x8825] = {
+        1: "N",
+        2: (IFDRational(37, 1), IFDRational(46, 1), IFDRational(0, 1)),
+        3: "E",
+        4: (IFDRational(122, 1), IFDRational(25, 1), IFDRational(0, 1)),
+    }
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif.tobytes())
+    gps_jpeg = buf.getvalue()
+
+    response = _upload(client, field_staff_headers, content=gps_jpeg)
+    assert response.status_code == 201, response.text
+
+    stored_bytes, _ = fake_s3[response.json()["object_key"]]
+    result = Image.open(io.BytesIO(stored_bytes))
+    assert result.getexif().get_ifd(0x8825) == {}
+
+
+def test_upload_rejects_a_title_over_two_hundred_characters(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """title is VARCHAR(200); SQLite (this suite's engine) does not enforce
+    that, so without an explicit check this would only ever surface as a
+    PostgreSQL DataError in production -- caught by the broad except and
+    reported as a generic 500, sending the user to retry the same upload."""
+    response = _upload(client, field_staff_headers, title="x" * 201)
+    assert response.status_code == 400
+    assert fake_s3 == {}
+
+
+def test_upload_gives_a_specific_hint_for_heic(client, field_staff_headers, fake_s3):
+    """unsupported_hint() was built by Task 3 specifically for this
+    endpoint and the router never called it -- an iPhone user uploading a
+    default-camera-format HEIC photo got a generic "unsupported file type"
+    with no explanation."""
+    response = _upload(client, field_staff_headers, filename="photo.heic",
+                        content=b"whatever", content_type="image/heic")
+    assert response.status_code == 400
+    assert "HEIC" in response.json()["detail"]

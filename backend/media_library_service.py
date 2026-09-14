@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Sequence
+from typing import Callable, NamedTuple, Optional, Sequence
 
 # Tags are stored inside `search_text` wrapped in this delimiter so an exact-tag
 # filter is a plain ILIKE ('%|gaza|%') that behaves the same on PostgreSQL and
@@ -31,37 +31,99 @@ LIKE_ESCAPE = "\\"
 MAX_TAG_LENGTH = 64
 MAX_TAGS = 25
 
-# Extension -> accepted Content-Type aliases for it. This is the single source
-# of truth: IMAGE_EXTENSIONS / VIDEO_EXTENSIONS / IMAGE_CONTENT_TYPES /
-# VIDEO_CONTENT_TYPES are all derived from these two maps below, so adding a
-# format means touching one place instead of remembering to keep four
-# collections in sync.
+# Leading-bytes tests for the formats we accept. Each takes the *whole*
+# uploaded buffer (not just a fixed-size prefix) because a couple of them
+# need to look past the first four bytes — ISO-BMFF's 'ftyp' box sits at
+# offset 4, RIFF's sub-type tag sits at offset 8 — and slicing a short
+# `bytes` out of range in Python just yields a short (possibly empty)
+# result rather than raising, so these stay safe on tiny/truncated input.
+def _is_jpeg(content: bytes) -> bool:
+    return content.startswith(b"\xff\xd8\xff")
+
+
+def _is_png(content: bytes) -> bool:
+    return content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _is_gif(content: bytes) -> bool:
+    return content.startswith((b"GIF87a", b"GIF89a"))
+
+
+def _is_bmp(content: bytes) -> bool:
+    return content.startswith(b"BM")
+
+
+def _is_webp(content: bytes) -> bool:
+    return content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+
+
+def _is_avi(content: bytes) -> bool:
+    return content[:4] == b"RIFF" and content[8:12] == b"AVI "
+
+
+def _is_ogg(content: bytes) -> bool:
+    return content.startswith(b"OggS")
+
+
+def _is_isobmff(content: bytes) -> bool:
+    # ISO base media (mp4/mov/m4v/3gp) puts an 'ftyp' box at offset 4. This
+    # cannot tell those apart from each other by brand, nor from HEIC/HEIF
+    # (which use the same box) — a caller needing that distinction has to
+    # inspect the brand itself. detect_media_type() keeps HEIC out of the
+    # image allow-list entirely (see UNSUPPORTED_HINTS), so it never reaches
+    # this sniffer with a video-shaped Content-Type to slip past.
+    return content[4:8] == b"ftyp"
+
+
+def _is_ebml(content: bytes) -> bool:
+    # WebM is formally a Matroska profile, so the same EBML signature at
+    # offset 0 covers both .webm and .mkv.
+    return content[:4] == b"\x1a\x45\xdf\xa3"
+
+
+class _Format(NamedTuple):
+    content_types: tuple
+    sniff: Callable[[bytes], bool]
+
+
+# Extension -> (accepted Content-Type aliases, byte-signature test). This is
+# the single source of truth: IMAGE_EXTENSIONS / VIDEO_EXTENSIONS /
+# IMAGE_CONTENT_TYPES / VIDEO_CONTENT_TYPES / sniff_content_type() are all
+# derived from these two maps below, so adding a format means touching one
+# place instead of remembering to keep several collections in sync. This
+# used to be true of only the first four; a `_MAGIC` table of leading bytes
+# lived separately in the upload router and had already drifted from this
+# allow-list by the first commit that had both — AVI and Ogg were accepted
+# Content-Types the router's sniffer could not recognise, so a legitimate
+# upload of either was told its content was a forgery. Folding the magic
+# bytes in here as a third derived collection closes that by construction:
+# a format cannot be in the allow-list without also being sniffable.
 #
 # .ogg is conventionally Ogg *audio*, and .ogv is Ogg *video* — .ogg is kept
 # mapped to video here for backward compatibility with existing data/callers.
 # .jpg -> "image/jpg" is a non-standard alias some Android/older clients
 # really send; .bmp -> "image/x-ms-bmp" is the same story for BMP.
 _IMAGE_FORMATS: dict = {
-    ".jpg": ("image/jpeg", "image/jpg"),
-    ".jpeg": ("image/jpeg",),
-    ".png": ("image/png",),
-    ".gif": ("image/gif",),
-    ".webp": ("image/webp",),
-    ".bmp": ("image/bmp", "image/x-ms-bmp"),
+    ".jpg": _Format(("image/jpeg", "image/jpg"), _is_jpeg),
+    ".jpeg": _Format(("image/jpeg",), _is_jpeg),
+    ".png": _Format(("image/png",), _is_png),
+    ".gif": _Format(("image/gif",), _is_gif),
+    ".webp": _Format(("image/webp",), _is_webp),
+    ".bmp": _Format(("image/bmp", "image/x-ms-bmp"), _is_bmp),
 }
 _VIDEO_FORMATS: dict = {
-    ".mp4": ("video/mp4",),
-    ".webm": ("video/webm",),
-    ".ogg": ("video/ogg",),
-    ".ogv": ("video/ogg",),
-    ".avi": ("video/x-msvideo",),
-    ".mov": ("video/quicktime",),
-    ".mkv": ("video/x-matroska",),
+    ".mp4": _Format(("video/mp4",), _is_isobmff),
+    ".webm": _Format(("video/webm",), _is_ebml),
+    ".ogg": _Format(("video/ogg",), _is_ogg),
+    ".ogv": _Format(("video/ogg",), _is_ogg),
+    ".avi": _Format(("video/x-msvideo",), _is_avi),
+    ".mov": _Format(("video/quicktime",), _is_isobmff),
+    ".mkv": _Format(("video/x-matroska",), _is_ebml),
     # 3GP is what low-end Android phones produce — squarely our field-worker
     # population. It is ISO-BMFF, so Task 5's ftyp sniff already classifies it
     # as video and ffmpeg reads it.
-    ".3gp": ("video/3gpp", "video/3gpp2"),
-    ".m4v": ("video/x-m4v",),
+    ".3gp": _Format(("video/3gpp", "video/3gpp2"), _is_isobmff),
+    ".m4v": _Format(("video/x-m4v",), _is_isobmff),
 }
 
 # str.endswith() requires a tuple, not a set/frozenset — keep these as tuples.
@@ -76,8 +138,54 @@ _ALLOWED_EXTENSIONS = frozenset(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS)
 # an allow-list refuses anything unlisted by construction — including the next
 # script-carrying format nobody has thought of yet. Task 5's upload router
 # needs these too.
-IMAGE_CONTENT_TYPES = frozenset(ct for cts in _IMAGE_FORMATS.values() for ct in cts)
-VIDEO_CONTENT_TYPES = frozenset(ct for cts in _VIDEO_FORMATS.values() for ct in cts)
+IMAGE_CONTENT_TYPES = frozenset(ct for fmt in _IMAGE_FORMATS.values() for ct in fmt.content_types)
+VIDEO_CONTENT_TYPES = frozenset(ct for fmt in _VIDEO_FORMATS.values() for ct in fmt.content_types)
+
+
+def _sniff_rules(formats: dict) -> tuple:
+    """(matcher, content-type aliases) pairs, one per distinct byte test.
+
+    Several extensions share one matcher — .jpg/.jpeg both sniff as JPEG,
+    .ogg/.ogv both sniff as Ogg, .webm/.mkv both sniff as EBML, and every
+    ISO-BMFF extension (.mp4/.mov/.m4v/.3gp) sniffs identically — so this
+    groups by the matcher function itself and unions the content-type
+    aliases of every extension that shares it, rather than testing the same
+    bytes twice for what is, at the byte level, one format.
+    """
+    grouped: dict = {}
+    order: list = []
+    for fmt in formats.values():
+        if fmt.sniff not in grouped:
+            grouped[fmt.sniff] = set()
+            order.append(fmt.sniff)
+        grouped[fmt.sniff].update(fmt.content_types)
+    return tuple((matcher, frozenset(grouped[matcher])) for matcher in order)
+
+
+# Image rules before video rules purely so a mixed-format false-positive
+# (none known today) would resolve toward "image" first; sniff_content_type
+# returns on the first match either way.
+_SNIFF_RULES = _sniff_rules(_IMAGE_FORMATS) + _sniff_rules(_VIDEO_FORMATS)
+
+
+def sniff_content_type(content: bytes) -> Optional[frozenset]:
+    """The Content-Type aliases the file's own leading bytes are consistent
+    with, or None if they match no format this module recognises.
+
+    This is the byte-level counterpart to detect_media_type(): that function
+    trusts a caller-supplied filename/Content-Type, this one trusts nothing
+    but the bytes themselves. Task 5's upload router requires the caller's
+    declared Content-Type to be a *member of the returned set* — not merely
+    of the right broad image/video category — which is what closes a
+    spoofed "declare image/gif over real JPEG bytes" upload: image/gif is a
+    perfectly valid Content-Type in general, just never a member of the set
+    JPEG bytes sniff to, so the mismatch is caught here regardless of what
+    should_compress_image() would have done with the (wrong) declared type.
+    """
+    for matcher, content_types in _SNIFF_RULES:
+        if matcher(content):
+            return content_types
+    return None
 
 # Recognised formats we cannot decode yet. Named so the API can explain itself
 # instead of returning a generic "unsupported file type" for an obvious photo

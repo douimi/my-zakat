@@ -5,9 +5,11 @@ from datetime import datetime
 import pytest
 
 from media_library_service import (
+    IMAGE_CONTENT_TYPES,
     IMAGE_EXTENSIONS,
     LIKE_ESCAPE,
     MAX_TAG_LENGTH,
+    VIDEO_CONTENT_TYPES,
     VIDEO_EXTENSIONS,
     _UNSUPPORTED_EXTENSIONS,
     build_object_key,
@@ -17,10 +19,22 @@ from media_library_service import (
     normalize_tags,
     parse_tag_input,
     search_pattern,
+    sniff_content_type,
     tag_filter_pattern,
     unsupported_hint,
     validate_tags,
 )
+
+JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + b"\x00" * 32
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+GIF_BYTES = b"GIF89a" + b"\x00" * 32
+BMP_BYTES = b"BM" + b"\x00" * 32
+WEBP_BYTES = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"\x00" * 32
+MP4_BYTES = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32
+WEBM_BYTES = b"\x1a\x45\xdf\xa3" + b"\x00" * 32
+MKV_BYTES = b"\x1a\x45\xdf\xa3" + b"\x00" * 32
+AVI_BYTES = b"RIFF" + b"\x00\x00\x00\x00" + b"AVI " + b"\x00" * 32
+OGG_BYTES = b"OggS" + b"\x00" * 32
 
 
 def _like(haystack: str, result) -> bool:
@@ -431,6 +445,59 @@ def test_a_tagless_upload_passes_validation():
     # validate_tags([""]) used to reject a photo uploaded with no tags at
     # all -- the common case, and the primary flow of the whole feature.
     assert validate_tags(parse_tag_input("")) == []
+
+
+# ── sniff_content_type ──────────────────────────────────────────────────
+# Task 5 review round 2: this used to be a router-local `_sniffed_type` over
+# a hand-maintained `_MAGIC` table that had already drifted from this
+# module's own allow-list (AVI and Ogg were accepted Content-Types the old
+# sniffer could not recognise). Moved here and derived from _IMAGE_FORMATS /
+# _VIDEO_FORMATS directly so that cannot happen again, and so it is
+# unit-testable without a TestClient or the fake_s3 fixture.
+
+def test_sniff_content_type_recognises_every_still_image_format():
+    assert sniff_content_type(JPEG_BYTES) == {"image/jpeg", "image/jpg"}
+    assert sniff_content_type(PNG_BYTES) == {"image/png"}
+    assert sniff_content_type(GIF_BYTES) == {"image/gif"}
+    assert sniff_content_type(BMP_BYTES) == {"image/bmp", "image/x-ms-bmp"}
+    assert sniff_content_type(WEBP_BYTES) == {"image/webp"}
+
+
+def test_sniff_content_type_recognises_every_video_container():
+    assert sniff_content_type(MP4_BYTES) == {
+        "video/mp4", "video/quicktime", "video/x-m4v", "video/3gpp", "video/3gpp2",
+    }
+    assert sniff_content_type(WEBM_BYTES) == {"video/webm", "video/x-matroska"}
+    assert sniff_content_type(MKV_BYTES) == {"video/webm", "video/x-matroska"}
+    assert sniff_content_type(AVI_BYTES) == {"video/x-msvideo"}
+    assert sniff_content_type(OGG_BYTES) == {"video/ogg"}
+
+
+def test_sniff_content_type_rejects_bytes_matching_no_known_format():
+    assert sniff_content_type(b"<html><script>alert(1)</script></html>") is None
+    assert sniff_content_type(b"") is None
+
+
+def test_sniff_content_type_result_is_always_a_member_of_the_matching_allow_list():
+    """Every format's sniff result must round-trip into IMAGE_CONTENT_TYPES
+    or VIDEO_CONTENT_TYPES -- a format the sniffer recognises but the
+    allow-list does not (or vice versa) is exactly the drift this module
+    exists to make structurally impossible."""
+    for content in (JPEG_BYTES, PNG_BYTES, GIF_BYTES, BMP_BYTES, WEBP_BYTES):
+        result = sniff_content_type(content)
+        assert result <= IMAGE_CONTENT_TYPES
+    for content in (MP4_BYTES, WEBM_BYTES, AVI_BYTES, OGG_BYTES):
+        result = sniff_content_type(content)
+        assert result <= VIDEO_CONTENT_TYPES
+
+
+def test_sniff_content_type_does_not_let_a_declared_gif_pass_over_jpeg_bytes():
+    """The bypass this exists to close: should_compress_image() skips GIF,
+    so a caller declaring image/gif over real JPEG bytes previously reached
+    storage with metadata (including GPS) intact. image/gif must not be a
+    member of what JPEG bytes sniff to."""
+    result = sniff_content_type(JPEG_BYTES)
+    assert "image/gif" not in result
 
 
 def test_a_trailing_comma_does_not_fail_validation():
