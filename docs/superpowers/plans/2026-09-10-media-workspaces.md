@@ -5418,6 +5418,20 @@ field staff to donors). The endpoint itself was deliberately left in place and
 unchanged — removing a route is a separate decision from removing its UI — but it
 is now unreachable from the app and still untested.
 
+**`run_all_migrations.sql` has been stale since migration 07.** It runs 8 files
+while 33 exist, so migrations 08 through 31 — including this feature's — are
+unregistered. Anyone bootstrapping a fresh database from that file gets a schema
+24 migrations behind, with no error to say so. Migration 31 deliberately follows
+the existing convention (unregistered, applied directly) rather than being the
+one file that breaks it, but the convention is the problem. Predates this work.
+
+**`main.py:26` runs `Base.metadata.create_all` on every non-test boot**, so for a
+*new* table whichever happens first — the app booting or the migration running —
+wins the `CREATE TABLE`, and the migration's `IF NOT EXISTS` then no-ops. Task 4
+handles this for `media_assets` by giving the model `server_default`s that match
+the migration's `DEFAULT` clauses, so both paths produce the same table. Any
+future table needs the same care, or its migration is decorative.
+
 **The backend suite is not order-independent.** Two independent measurements of
 the same base commit disagreed on the failure count (19 versus 31 of the same 167
 tests), which points at shared state between tests rather than at any change here.
