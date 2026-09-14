@@ -843,3 +843,202 @@ def test_workspaces_includes_an_owner_who_is_no_longer_staff(
     assert by_id[field_staff_user.id]["asset_count"] == 1
     assert by_id[field_staff_user.id]["total_bytes"] == 42
     assert by_id[field_staff_user.id]["owner_email"] == field_staff_user.email
+
+
+# ── Submit and review ────────────────────────────────────────────────
+
+def test_owner_submits_a_private_asset_for_review(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "submitted"
+
+
+def test_submitting_an_already_submitted_asset_is_rejected(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert response.status_code == 400
+
+
+def test_field_staff_cannot_review(client, db_session, field_staff_headers, field_staff_user):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=field_staff_headers,
+        json={"decision": "approve"},
+    )
+    assert response.status_code == 403
+
+
+def test_a_manager_approves_a_submitted_asset(
+    client, db_session, manager_headers, manager_user, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "approve"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "public"
+    assert body["reviewed_at"] is not None
+
+    db_session.refresh(asset)
+    assert asset.reviewed_by_id == manager_user.id
+
+
+def test_rejection_returns_the_asset_to_private_with_a_note(
+    client, db_session, manager_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "reject", "note": "Beneficiary faces are visible"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "private"
+    assert body["review_note"] == "Beneficiary faces are visible"
+
+
+def test_an_admin_can_promote_a_private_asset_directly(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="private")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "approve"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "public"
+
+
+def test_unpublishing_a_public_asset_returns_it_to_private(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "unpublish"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "private"
+
+
+def test_unpublishing_is_refused_while_the_site_uses_the_asset(
+    client, db_session, auth_headers, field_staff_user
+):
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    db_session.add(GalleryItem(media_filename=f"/api/media-library/{asset.id}/file"))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "unpublish"}
+    )
+    assert response.status_code == 409
+    assert "gallery_items" in str(response.json()["detail"])
+
+    db_session.refresh(asset)
+    assert asset.status == "public"
+
+
+def test_an_unknown_decision_is_rejected(client, db_session, auth_headers, field_staff_user):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "shred"}
+    )
+    assert response.status_code == 422
+
+
+def test_approving_an_already_public_asset_is_rejected(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "approve"}
+    )
+    assert response.status_code == 400
+
+
+def test_field_staff_cannot_submit_someone_elses_asset(
+    client, db_session, field_staff_headers, other_field_staff_user
+):
+    """The table names 'owner' only for private -> submitted. A field-staff
+    member reaching into someone else's workspace must not be able to
+    trigger it, and must not learn the asset exists at all."""
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="a.jpg")
+    response = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert response.status_code == 404
+
+    db_session.refresh(asset)
+    assert asset.status == "private"
+
+
+def test_direct_promote_sets_reviewer_and_timestamp(
+    client, db_session, auth_headers, admin_user, field_staff_user
+):
+    """private -> public has no queue, but it is still a review decision --
+    reviewed_by_id/reviewed_at must be stamped exactly as they are for an
+    approve out of 'submitted'."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="private")
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "approve"}
+    )
+    assert response.status_code == 200
+    assert response.json()["reviewed_at"] is not None
+
+    db_session.refresh(asset)
+    assert asset.reviewed_by_id == admin_user.id
+    assert asset.reviewed_at is not None
+
+
+def test_rejection_preserves_tags_checksum_and_thumbnail(
+    client, db_session, manager_headers, field_staff_user
+):
+    """Rejecting sends media back to private for the owner to fix and
+    resubmit -- it must not wipe the very metadata the owner would need to
+    look at, or force a needless re-upload."""
+    asset = _make_asset(
+        db_session, field_staff_user.id, filename="a.jpg", tags=["gaza", "water"], status="submitted"
+    )
+    asset.checksum_sha256 = "deadbeef" * 8
+    asset.thumbnail_key = f"workspaces/{field_staff_user.id}/thumbs/a.jpg"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "reject", "note": "needs a crop"},
+    )
+    assert response.status_code == 200
+    assert response.json()["tags"] == ["gaza", "water"]
+
+    db_session.refresh(asset)
+    assert asset.tags == ["gaza", "water"]
+    assert asset.checksum_sha256 == "deadbeef" * 8
+    assert asset.thumbnail_key == f"workspaces/{field_staff_user.id}/thumbs/a.jpg"
+
+
+def test_unpublish_guard_matches_the_real_asset_url_shape(
+    client, db_session, auth_headers, field_staff_user
+):
+    """Pin the in-use guard to the actual URL contract (asset_file_url), not
+    a hand-typed spelling that could silently drift from it."""
+    from media_library_service import asset_file_url
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    assert asset_file_url(asset.id) == f"/api/media-library/{asset.id}/file"
+    db_session.add(GalleryItem(media_filename=asset_file_url(asset.id)))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "unpublish"}
+    )
+    assert response.status_code == 409

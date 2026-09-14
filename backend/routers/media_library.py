@@ -5,29 +5,29 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library                list / search / sort / paginate
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
-  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Task 8)
+  POST   /api/media-library/{id}/submit    owner: private -> submitted
   DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Task 9)
 
 Admin or manager only:
   GET    /api/media-library/workspaces     workspaces with counts and total size
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Task 8)
+  POST   /api/media-library/{id}/review    approve -> public, reject/unpublish -> private
   POST   /api/media-library/{id}/reassign  move an asset into another workspace
 
-Upload, listing, detail, metadata editing, reassignment and the workspaces
-summary shipped in Tasks 5-7. Submit/review/delete are still stubs for
-Tasks 8-9. Byte serving lives in media_library_files.py.
+Upload, listing, detail, metadata editing, reassignment, the workspaces
+summary and submit/review shipped in Tasks 5-8. Delete is still a stub for
+Task 9. Byte serving lives in media_library_files.py.
 """
 from __future__ import annotations
 
 import hashlib
 import io
 import os
-from datetime import datetime  # noqa: F401 — unused until Task 8 (review sets reviewed_at)
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -655,5 +655,92 @@ async def reassign_media(
     logger.info(
         "Media %s reassigned from owner_id=%s to owner_id=%s by %s",
         asset.id, previous_owner_id, payload.owner_id, current_user.email,
+    )
+    return serialize_asset(asset)
+
+
+# ── Lifecycle ────────────────────────────────────────────────────────
+
+class ReviewDecision(BaseModel):
+    decision: str = Field(..., pattern="^(approve|reject|unpublish)$")
+    note: Optional[str] = None
+
+
+def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
+    """Block an action that would break the public site, naming what points here."""
+    usage = usage_for_asset(asset.id, db)
+    referenced = {key: value for key, value in usage.items() if value}
+    if referenced:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Cannot {action}: this media is still used on the site.",
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps()s `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
+            },
+        )
+
+
+@router.post("/{asset_id}/submit")
+async def submit_for_review(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner asks for the asset to be reviewed. It stays private until approved."""
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    if asset.status != "private":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only private media can be submitted (this is '{asset.status}').",
+        )
+
+    asset.status = "submitted"
+    asset.review_note = None
+    db.commit()
+    db.refresh(asset)
+    logger.info("Media %s submitted for review by %s", asset.id, current_user.email)
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/review")
+async def review_media(
+    asset_id: int,
+    payload: ReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Approve (-> public), reject (-> private + note), or unpublish (-> private)."""
+    asset = _load_asset(db, asset_id)
+
+    if payload.decision == "approve":
+        if asset.status not in ("private", "submitted"):
+            raise HTTPException(status_code=400, detail="This media is already public.")
+        asset.status = "public"
+        asset.review_note = None
+    elif payload.decision == "reject":
+        if asset.status != "submitted":
+            raise HTTPException(status_code=400, detail="Only submitted media can be rejected.")
+        asset.status = "private"
+        asset.review_note = payload.note
+    else:  # unpublish
+        if asset.status != "public":
+            raise HTTPException(status_code=400, detail="Only public media can be unpublished.")
+        _refuse_if_in_use(asset, db, "unpublish")
+        asset.status = "private"
+        asset.review_note = payload.note
+
+    asset.reviewed_by_id = current_user.id
+    asset.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s reviewed (%s) by %s (role=%s)",
+        asset.id, payload.decision, current_user.email, role_of(current_user),
     )
     return serialize_asset(asset)
