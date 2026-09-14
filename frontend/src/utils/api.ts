@@ -582,10 +582,6 @@ export const adminAPI = {
     const response = await api.patch(`/api/admin/users/${userId}/toggle-active`)
     return response.data
   },
-  toggleUserAdmin: async (userId: number) => {
-    const response = await api.patch(`/api/admin/users/${userId}/toggle-admin`)
-    return response.data
-  },
   deleteUser: async (userId: number) => {
     const response = await api.delete(`/api/admin/users/${userId}`)
     return response.data

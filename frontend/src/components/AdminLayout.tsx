@@ -120,6 +120,8 @@ const NAV: NavEntry[] = [
     label: 'Media',
     icon: Film,
     items: [
+      { kind: 'link', name: 'My Workspace', href: '/admin/media', icon: FolderOpen },
+      { kind: 'link', name: 'All Media', href: '/admin/media/all', icon: Layers },
       { kind: 'link', name: 'Gallery', href: '/admin/gallery', icon: Film },
       { kind: 'link', name: 'S3 Browser', href: '/admin/s3-media', icon: FolderOpen },
       { kind: 'link', name: 'Cleanup', href: '/admin/cleanup', icon: Trash2 },
@@ -143,13 +145,19 @@ const NAV: NavEntry[] = [
   { kind: 'link', name: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
-// Items managers are allowed to access.
-const MANAGER_ALLOWED = new Set([
-  '/admin/contacts',
-  '/admin/volunteers',
-  '/admin/stories',
-  '/admin/project-proposals',
-])
+// Items each non-admin role is allowed to access. Admins see everything.
+const ROLE_ALLOWED: Record<string, Set<string>> = {
+  manager: new Set([
+    '/admin/contacts',
+    '/admin/volunteers',
+    '/admin/stories',
+    '/admin/project-proposals',
+    '/admin/media',
+    '/admin/media/all',
+  ]),
+  field_staff: new Set(['/admin/media']),
+  user: new Set<string>(),
+}
 
 const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 
@@ -157,14 +165,15 @@ const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function filterNavForRole(nav: NavEntry[], isAdmin: boolean): NavEntry[] {
-  if (isAdmin) return nav
+function filterNavForRole(nav: NavEntry[], role: string): NavEntry[] {
+  if (role === 'admin') return nav
+  const allowed = ROLE_ALLOWED[role] ?? new Set<string>()
   return nav
     .map((entry) => {
       if (entry.kind === 'link') {
-        return MANAGER_ALLOWED.has(entry.href) ? entry : null
+        return allowed.has(entry.href) ? entry : null
       }
-      const items = entry.items.filter((i) => MANAGER_ALLOWED.has(i.href))
+      const items = entry.items.filter((i) => allowed.has(i.href))
       return items.length > 0 ? { ...entry, items } : null
     })
     .filter((e): e is NavEntry => e !== null)
@@ -226,9 +235,9 @@ const AdminLayout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const location = useLocation()
-  const { logout, user, isAdmin, role } = useAuthStore()
+  const { logout, user, role } = useAuthStore()
 
-  const nav = useMemo(() => filterNavForRole(NAV, isAdmin), [isAdmin])
+  const nav = useMemo(() => filterNavForRole(NAV, role), [role])
   const activeGroupId = useMemo(
     () => findActiveGroupId(nav, location.pathname),
     [nav, location.pathname],
@@ -337,10 +346,15 @@ const AdminLayout = () => {
   // ── Account section ─────────────────────────────────────────────
 
   const userInitial = (user?.name || user?.email || '?').charAt(0).toUpperCase()
-  const roleLabel = role === 'admin' ? 'Admin' : role === 'manager' ? 'Manager' : 'User'
+  const roleLabel =
+    role === 'admin' ? 'Admin'
+      : role === 'manager' ? 'Manager'
+      : role === 'field_staff' ? 'Field Staff'
+      : 'User'
   const roleBadgeClass =
     role === 'admin' ? 'bg-purple-100 text-purple-800'
       : role === 'manager' ? 'bg-amber-100 text-amber-800'
+      : role === 'field_staff' ? 'bg-teal-100 text-teal-800'
       : 'bg-gray-100 text-gray-700'
 
   // ── Render ──────────────────────────────────────────────────────

@@ -195,8 +195,50 @@ describe('AuthStore', () => {
       }, 'token')
       
       expect(subscriber).toHaveBeenCalled()
-      
+
       unsubscribe()
     })
+  })
+})
+
+describe('authStore roles', () => {
+  const baseUser: User = {
+    id: 1,
+    email: 'field@example.com',
+    is_active: true,
+    is_admin: false,
+    created_at: '2026-01-01T00:00:00Z',
+  }
+
+  beforeEach(() => {
+    useAuthStore.getState().logout()
+  })
+
+  it('treats field_staff as staff but not admin or manager', () => {
+    useAuthStore.getState().login({ ...baseUser, role: 'field_staff' }, 'token')
+    const state = useAuthStore.getState()
+    expect(state.role).toBe('field_staff')
+    expect(state.isFieldStaff).toBe(true)
+    expect(state.isStaff).toBe(true)
+    expect(state.isAdmin).toBe(false)
+    expect(state.isManager).toBe(false)
+  })
+
+  it('leaves donors out of staff', () => {
+    useAuthStore.getState().login({ ...baseUser, role: 'user' }, 'token')
+    const state = useAuthStore.getState()
+    expect(state.isStaff).toBe(false)
+    expect(state.isFieldStaff).toBe(false)
+  })
+
+  it('still derives admin from the legacy is_admin flag', () => {
+    useAuthStore.getState().login({ ...baseUser, is_admin: true, role: undefined }, 'token')
+    expect(useAuthStore.getState().isAdmin).toBe(true)
+  })
+
+  it('clears isFieldStaff on logout', () => {
+    useAuthStore.getState().login({ ...baseUser, role: 'field_staff' }, 'token')
+    useAuthStore.getState().logout()
+    expect(useAuthStore.getState().isFieldStaff).toBe(false)
   })
 })

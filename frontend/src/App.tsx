@@ -80,10 +80,12 @@ const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAna
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
 
-// Managers don't have access to the admin dashboard — send them to their
-// landing page (stories) instead of the admin metrics view.
+// Managers and field staff don't have access to the admin dashboard — send
+// them to their landing page (stories, media workspace) instead of the
+// admin metrics view.
 const AdminIndex = () => {
-  const isManager = useAuthStore((s) => s.isManager)
+  const { isManager, isFieldStaff } = useAuthStore()
+  if (isFieldStaff) return <Navigate to="/admin/media" replace />
   if (isManager) return <Navigate to="/admin/stories" replace />
   return <AdminDashboard />
 }
