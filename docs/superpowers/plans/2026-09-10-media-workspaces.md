@@ -1134,6 +1134,8 @@ git commit -m "feat: add media_assets table and model"
 
 **Context you need:** `media_processing.py` already provides `compress_image`, `compress_video`, `generate_video_thumbnail`, `should_compress_image` and `should_compress_video` — reuse them unchanged. `s3_service.upload_file(content, object_key, content_type=...)` returns a URL we ignore, because our URLs are id-addressed. `delete_file()` defaults to `cleanup_db=True`, which spawns a background thread; always pass `cleanup_db=False` from this router.
 
+**Verify the bytes, not the header.** `detect_media_type` deliberately trusts the caller-supplied `content_type`, which on an upload is just the multipart header and is trivially spoofed — `payload.exe` declared as `image/png` classifies as an image. This endpoint is the boundary where that must be checked against actual file content, because it is the first place the bytes exist. Sniff before compressing, so a hostile file never reaches Pillow or ffmpeg.
+
 **Ordering rule:** write to S3 first, insert the row second. If the insert fails, delete the object. The reverse order would leave a row pointing at nothing, which is worse than an orphan object — `cleanup.py` already sweeps orphan objects.
 
 - [ ] **Step 1: Write the failing test**
@@ -1359,6 +1361,33 @@ def _serialize(asset: MediaAsset) -> dict:
     }
 
 
+# Leading bytes for the formats we accept. The declared Content-Type is attacker
+# controlled; this is not.
+_MAGIC = (
+    (b"ÿØÿ", "image"),               # jpeg
+    (b"PNG
+
+", "image"),         # png
+    (b"GIF87a", "image"), (b"GIF89a", "image"),
+    (b"BM", "image"),                           # bmp
+)
+
+
+def _sniffed_type(content: bytes) -> Optional[str]:
+    """Media type implied by the file's own leading bytes, or None."""
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image"
+    # ISO base media (mp4/mov/m4v) puts an 'ftyp' box at offset 4.
+    if content[4:8] == b"ftyp":
+        return "video"
+    if content[:4] == b"Eß£":     # matroska / webm
+        return "video"
+    for prefix, kind in _MAGIC:
+        if content.startswith(prefix):
+            return kind
+    return None
+
+
 def _image_dimensions(data: bytes):
     """(width, height) for image bytes, or (None, None) if unreadable."""
     try:
@@ -1410,6 +1439,14 @@ async def upload_media(
         raise HTTPException(
             status_code=413,
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
+        )
+
+    # The declared type got us this far; the bytes have to agree before we hand
+    # them to Pillow or ffmpeg.
+    if _sniffed_type(content) != media_type:
+        raise HTTPException(
+            status_code=400,
+            detail="File content does not match its declared type.",
         )
 
     content_type = file.content_type or (
@@ -4730,6 +4767,9 @@ def backfill(db: Session) -> int:
 
             media_type = detect_media_type(filename, None)
             if media_type is None:
+                # Includes any .svg already in the bucket: SVG was dropped from the
+                # allowed types as a script-carrying document format. Read whatever
+                # this logs before treating the backfill as complete.
                 logger.info("Skipping unsupported object %s", object_key)
                 continue
 
@@ -5030,7 +5070,9 @@ The tasks are ordered so `main` stays deployable, but the production rollout has
 
 1. Apply `migrations/31_add_media_library.sql`.
 2. Deploy backend and frontend.
-3. Run `python -m scripts.backfill_media_library`.
+3. Run `python -m scripts.backfill_media_library`, then read its "Skipping unsupported
+   object" lines — any `.svg` in the bucket is skipped by design and will not appear
+   in the library.
 4. Run `python -m scripts.audit_direct_s3_urls` until it reports clean.
 5. Only then deploy the `s3_service.py` change from Task 19 that drops the public-read policy.
 
