@@ -50,7 +50,7 @@
 | Path | Change |
 |---|---|
 | `backend/models.py` | Add `MediaAsset`; add `BigInteger` import; update the role comment. |
-| `backend/auth_utils.py` | Add `_role_of`, `STAFF_ROLES`, `get_current_staff`, `get_optional_user`; make `get_current_manager_or_admin` use `_role_of`. |
+| `backend/auth_utils.py` | Add `role_of`, `STAFF_ROLES`, `get_current_staff`, `get_optional_user`; make `get_current_manager_or_admin` use `role_of`. |
 | `backend/routers/admin.py` | Add `field_staff` to `VALID_ROLES`. |
 | `backend/schemas.py` | Update the role comment on `AdminUserCreate`. |
 | `backend/routers/static_files.py` | Extract `stream_s3_object()`; point `serve_video` at it. |
@@ -79,9 +79,9 @@
 - Modify: `backend/conftest.py:76-96`
 - Test: `backend/tests/test_field_staff_role.py`
 
-**Context you need:** `users.role` is already `VARCHAR(20)` holding `admin | manager | user`, so adding a fourth value needs **no schema change**. `get_current_manager_or_admin` already derives an effective role inline; we are lifting that into a shared `_role_of` helper and adding a staff-level gate beside it.
+**Context you need:** `users.role` is already `VARCHAR(20)` holding `admin | manager | user`, so adding a fourth value needs **no schema change**. `get_current_manager_or_admin` already derives an effective role inline; we are lifting that into a shared `role_of` helper and adding a staff-level gate beside it.
 
-**Note on the conftest change:** the existing `admin_user` fixture sets `is_admin=True` but leaves `role` at its column default of `user`. Because `_role_of` prefers a non-empty `role` column, that fixture would be treated as a donor by every role-aware dependency. Production rows were backfilled by migration 21, so this is a stale fixture rather than a live bug — but it must be fixed for these tests to mean anything.
+**Note on the conftest change:** the existing `admin_user` fixture sets `is_admin=True` but leaves `role` at its column default of `user`. Because `role_of` prefers a non-empty `role` column, that fixture would be treated as a donor by every role-aware dependency. Production rows were backfilled by migration 21, so this is a stale fixture rather than a live bug — but it must be fixed for these tests to mean anything.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -92,7 +92,7 @@ Create `backend/tests/test_field_staff_role.py`:
 import pytest
 from fastapi import HTTPException
 
-from auth_utils import _role_of, get_current_staff, get_current_manager_or_admin
+from auth_utils import role_of, get_current_staff, get_current_manager_or_admin
 from models import User
 
 
@@ -100,18 +100,18 @@ def _user(role, is_admin=False):
     return User(id=1, email="x@example.com", password="x", role=role, is_admin=is_admin)
 
 
-def test_role_of_prefers_the_role_column():
-    assert _role_of(_user("field_staff")) == "field_staff"
-    assert _role_of(_user("manager")) == "manager"
+def testrole_of_prefers_the_role_column():
+    assert role_of(_user("field_staff")) == "field_staff"
+    assert role_of(_user("manager")) == "manager"
 
 
-def test_role_of_falls_back_to_is_admin_when_role_is_missing():
-    assert _role_of(_user(None, is_admin=True)) == "admin"
-    assert _role_of(_user(None, is_admin=False)) == "user"
+def testrole_of_falls_back_to_is_admin_when_role_is_missing():
+    assert role_of(_user(None, is_admin=True)) == "admin"
+    assert role_of(_user(None, is_admin=False)) == "user"
 
 
-def test_role_of_rejects_an_unknown_role_value():
-    assert _role_of(_user("wizard", is_admin=False)) == "user"
+def testrole_of_rejects_an_unknown_role_value():
+    assert role_of(_user("wizard", is_admin=False)) == "user"
 
 
 @pytest.mark.parametrize("role", ["admin", "manager", "field_staff"])
@@ -160,7 +160,7 @@ def test_admin_cannot_assign_an_unknown_role(client, auth_headers):
 
 Run: `cd backend && python -m pytest tests/test_field_staff_role.py -v`
 
-Expected: FAIL — `ImportError: cannot import name '_role_of' from 'auth_utils'`.
+Expected: FAIL — `ImportError: cannot import name 'role_of' from 'auth_utils'`.
 
 - [ ] **Step 3: Add the helper and the dependency**
 
@@ -169,9 +169,10 @@ In `backend/auth_utils.py`, add after `get_current_admin`:
 ```python
 VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
 STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
+MANAGER_ROLES = frozenset({"admin", "manager"})
 
 
-def _role_of(user: User) -> str:
+def role_of(user: User) -> str:
     """Effective role for a user row.
 
     Prefers the `role` column, falling back to the legacy `is_admin` flag for
@@ -187,7 +188,7 @@ def get_current_staff(
     current_user: User = Depends(get_current_user)
 ):
     """Anyone who owns a media workspace: admin, manager or field staff."""
-    if _role_of(current_user) not in STAFF_ROLES:
+    if role_of(current_user) not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Staff access required."
@@ -202,7 +203,7 @@ def get_current_manager_or_admin(
     current_user: User = Depends(get_current_user)
 ):
     """Allow either admins or managers — used for endpoints that managers can access."""
-    if _role_of(current_user) not in ("admin", "manager"):
+    if role_of(current_user) not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Manager or admin access required."
@@ -213,11 +214,20 @@ def get_current_manager_or_admin(
 
 - [ ] **Step 4: Widen the role allowlist and the comments**
 
-In `backend/routers/admin.py`, change line 197:
+In `backend/routers/admin.py`, delete the local `VALID_ROLES` on line 197 and import
+the one in `auth_utils` instead, so the set of legal role strings is defined once.
+If the two ever drift, an admin could create a user with a role the auth gates do
+not recognise, and that user would be silently treated as a donor:
 
 ```python
-VALID_ROLES = {"admin", "manager", "field_staff", "user"}
+from auth_utils import VALID_ROLES, role_of
 ```
+
+Then replace the three surviving copies of the old inline derivation
+(`getattr(user, "role", None) or ("admin" if user.is_admin else "user")` at roughly
+lines 217, 369 and 435) with `role_of(user)`. Those copies lack the `VALID_ROLES`
+check, so a row with a bad role reads as that bad role in the admin UI while every
+auth gate treats the user as a donor.
 
 In `backend/models.py`, change the comment on line 68 and add a property beside `is_manager`:
 
@@ -263,6 +273,9 @@ def _make_staff_user(db_session, email, role):
         is_active=True,
         is_admin=(role == "admin"),
         role=role,
+        # routers/auth.py rejects a login from any non-admin whose email is
+        # unverified, so without this every *_headers fixture below errors.
+        email_verified=True,
     )
     db_session.add(user)
     db_session.commit()
@@ -328,7 +341,7 @@ Expected: PASS, 10 tests (the parametrized case counts as 3).
 
 Run: `cd backend && python -m pytest tests -v`
 
-Expected: PASS. The `role="admin"` fixture change and the `_role_of` refactor must not break existing tests.
+Expected: PASS. The `role="admin"` fixture change and the `role_of` refactor must not break existing tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1219,7 +1232,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from auth_utils import _role_of, get_current_manager_or_admin, get_current_staff
+from auth_utils import role_of, get_current_manager_or_admin, get_current_staff
 from database import get_db
 from logging_config import get_logger
 from media_library_service import (
@@ -1294,7 +1307,7 @@ def _load_asset(db: Session, asset_id: int) -> MediaAsset:
 
 def _require_can_edit(asset: MediaAsset, user: User) -> None:
     """Owner, admin or manager. 404 rather than 403: a 403 confirms it exists."""
-    if _role_of(user) in ("admin", "manager"):
+    if role_of(user) in ("admin", "manager"):
         return
     if asset.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -1639,7 +1652,7 @@ async def list_media(
     query = db.query(MediaAsset)
 
     # Scope first, and structurally: a field-staff query can never widen.
-    role = _role_of(current_user)
+    role = role_of(current_user)
     if role not in ("admin", "manager"):
         query = query.filter(MediaAsset.owner_id == current_user.id)
     elif owner_id:
@@ -2008,7 +2021,7 @@ async def reassign_media(
         owner = db.query(User).filter(User.id == payload.owner_id).first()
         if owner is None:
             raise HTTPException(status_code=404, detail="No such user")
-        if _role_of(owner) not in ("admin", "manager", "field_staff"):
+        if role_of(owner) not in ("admin", "manager", "field_staff"):
             raise HTTPException(
                 status_code=400, detail="Only staff accounts can own media."
             )
@@ -2379,7 +2392,7 @@ async def delete_media(
     asset = _load_asset(db, asset_id)
     _require_can_edit(asset, current_user)
 
-    is_privileged = _role_of(current_user) in ("admin", "manager")
+    is_privileged = role_of(current_user) in ("admin", "manager")
     if not is_privileged and asset.status != "private":
         raise HTTPException(
             status_code=403,
@@ -2739,7 +2752,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from auth_utils import _role_of, get_optional_user
+from auth_utils import role_of, get_optional_user
 from database import get_db
 from logging_config import get_logger
 from models import MediaAsset, User
@@ -2767,7 +2780,7 @@ def _visible_asset(db: Session, asset_id: int, user: Optional[User]) -> MediaAss
         return asset
     if user is None:
         raise HTTPException(status_code=404, detail="Media not found")
-    if _role_of(user) in ("admin", "manager"):
+    if role_of(user) in ("admin", "manager"):
         return asset
     if asset.owner_id == user.id:
         return asset
