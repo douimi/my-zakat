@@ -1691,12 +1691,11 @@ def _serialize(asset: MediaAsset) -> dict:
 # Leading bytes for the formats we accept. The declared Content-Type is attacker
 # controlled; this is not.
 _MAGIC = (
-    (b"ÿØÿ", "image"),               # jpeg
-    (b"PNG
-
-", "image"),         # png
-    (b"GIF87a", "image"), (b"GIF89a", "image"),
-    (b"BM", "image"),                           # bmp
+    (b"\xff\xd8\xff", "image"),                 # jpeg
+    (b"\x89PNG\r\n\x1a\n", "image"),       # png
+    (b"GIF87a", "image"),
+    (b"GIF89a", "image"),
+    (b"BM", "image"),                              # bmp
 )
 
 
@@ -1704,10 +1703,10 @@ def _sniffed_type(content: bytes) -> Optional[str]:
     """Media type implied by the file's own leading bytes, or None."""
     if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
         return "image"
-    # ISO base media (mp4/mov/m4v) puts an 'ftyp' box at offset 4.
+    # ISO base media (mp4/mov/m4v/3gp) puts an 'ftyp' box at offset 4.
     if content[4:8] == b"ftyp":
         return "video"
-    if content[:4] == b"Eß£":     # matroska / webm
+    if content[:4] == b"\x1a\x45\xdf\xa3":    # matroska / webm
         return "video"
     for prefix, kind in _MAGIC:
         if content.startswith(prefix):
