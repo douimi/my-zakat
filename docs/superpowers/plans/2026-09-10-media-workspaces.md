@@ -604,6 +604,37 @@ And to the edit dropdown (after line 898):
                     <option value="field_staff">Field Staff</option>
 ```
 
+- [ ] **Step 7b: Remove the toggle-admin button**
+
+`toggle_user_admin` (`backend/routers/admin.py`, `PATCH /api/admin/users/{id}/toggle-admin`)
+recomputes `role` from the `is_admin` boolean:
+
+```python
+    user.is_admin = not user.is_admin
+    user.role = "admin" if user.is_admin else "user"
+```
+
+So toggling admin off on a `manager` or `field_staff` account silently rewrites
+their role to plain `user`. The role dropdown on the same screen already does this
+correctly via `PUT /api/admin/users/{id}`, which sets `role` and `is_admin` together.
+One control on the page respects roles; the other erases them. The endpoint has no
+test coverage. Once workspaces exist, an accidental click locks a member out of
+their own uploaded media.
+
+Remove the button and its handler from `frontend/src/pages/admin/AdminUsers.tsx`
+(the `fetch` to `/toggle-admin` around line 203, its calling button, and any
+now-unused state), and delete the `toggleAdmin` helper in
+`frontend/src/utils/api.ts` around line 586.
+
+Leave the backend endpoint in place and unchanged — nothing else calls it, and
+removing a route is a separate decision from removing the UI that drove it.
+
+Verify nothing still references it:
+
+Run: `cd frontend && grep -rn "toggle-admin\|toggleAdmin" src/`
+
+Expected: no matches.
+
 - [ ] **Step 8: Type-check and run the frontend suite**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
@@ -613,7 +644,7 @@ Expected: no type errors; all tests PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/src/store/authStore.ts frontend/src/components/AdminLayout.tsx frontend/src/pages/admin/AdminUsers.tsx frontend/src/App.tsx frontend/src/store/__tests__/authStore.test.ts
+git add frontend/src/store/authStore.ts frontend/src/components/AdminLayout.tsx frontend/src/pages/admin/AdminUsers.tsx frontend/src/utils/api.ts frontend/src/App.tsx frontend/src/store/__tests__/authStore.test.ts
 git commit -m "feat: surface the field_staff role in the admin UI"
 ```
 
