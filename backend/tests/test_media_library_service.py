@@ -5,13 +5,17 @@ from datetime import datetime
 import pytest
 
 from media_library_service import (
+    IMAGE_EXTENSIONS,
     LIKE_ESCAPE,
     MAX_TAG_LENGTH,
+    VIDEO_EXTENSIONS,
+    _UNSUPPORTED_EXTENSIONS,
     build_object_key,
     build_search_text,
     build_thumbnail_key,
     detect_media_type,
     normalize_tags,
+    parse_tag_input,
     search_pattern,
     tag_filter_pattern,
     unsupported_hint,
@@ -262,6 +266,18 @@ def test_validate_tags_rejects_a_non_string_entry():
     assert validate_tags([5]) != []
 
 
+def test_validate_tags_non_string_message_quotes_the_real_value_not_a_stringification():
+    # repr(raw), not repr(str(raw)): None must read as None, not the
+    # stringified word "none" that normalize_tags deliberately avoids.
+    assert validate_tags([None])[0] == "Tag None must be text."
+
+
+def test_validate_tags_non_string_message_does_not_imply_the_value_is_text():
+    # "Tag '5' must be text." would misleadingly suggest the *string* "5" is
+    # the problem; the int 5 should read unquoted, as the int it is.
+    assert validate_tags([5])[0] == "Tag 5 must be text."
+
+
 # --- validate_tags validates the normalized form ----------------------------
 
 def test_validate_tags_accepts_a_tag_that_normalizes_under_the_length_limit():
@@ -366,3 +382,56 @@ def test_unsupported_hint_returns_none_for_a_wholly_unrecognised_format():
 def test_detect_media_type_still_returns_none_for_heic():
     # unsupported_hint explains *why*; detect_media_type still refuses it.
     assert detect_media_type("IMG_0001.HEIC", "image/heic") is None
+
+
+def test_unsupported_hint_cannot_raise_on_a_missing_hint_entry(monkeypatch):
+    # _UNSUPPORTED_EXTENSIONS and UNSUPPORTED_HINTS are hand-maintained in
+    # parallel; simulate the drift by pointing an extension at a content type
+    # with no hint text and confirm this degrades to None, not a KeyError.
+    monkeypatch.setitem(_UNSUPPORTED_EXTENSIONS, ".xyz", "image/does-not-exist")
+    assert unsupported_hint("weird.xyz", None) is None
+
+
+def test_supported_and_unsupported_extensions_stay_disjoint():
+    # When HEIC gets real support, ".heic" has to leave
+    # _UNSUPPORTED_EXTENSIONS as it enters IMAGE_EXTENSIONS -- this is what
+    # catches the drift if that move is forgotten.
+    supported = set(IMAGE_EXTENSIONS) | set(VIDEO_EXTENSIONS)
+    unsupported = set(_UNSUPPORTED_EXTENSIONS)
+    assert supported & unsupported == set()
+
+
+# --- parse_tag_input: the naive-split fix -----------------------------------
+
+def test_parse_tag_input_returns_empty_list_for_empty_string():
+    assert parse_tag_input("") == []
+
+
+def test_parse_tag_input_returns_empty_list_for_none():
+    assert parse_tag_input(None) == []
+
+
+def test_parse_tag_input_drops_a_trailing_comma():
+    assert parse_tag_input("gaza,water,") == ["gaza", "water"]
+
+
+def test_parse_tag_input_keeps_both_entries_around_spaces():
+    result = parse_tag_input("  gaza , water ")
+    assert len(result) == 2
+    assert result[0].strip() == "gaza"
+    assert result[1].strip() == "water"
+
+
+def test_parse_tag_input_returns_empty_list_for_only_commas():
+    assert parse_tag_input(",,,") == []
+
+
+def test_a_tagless_upload_passes_validation():
+    # This is the bug this round fixes: "".split(",") is [""], and
+    # validate_tags([""]) used to reject a photo uploaded with no tags at
+    # all -- the common case, and the primary flow of the whole feature.
+    assert validate_tags(parse_tag_input("")) == []
+
+
+def test_a_trailing_comma_does_not_fail_validation():
+    assert validate_tags(parse_tag_input("gaza,water,")) == []
