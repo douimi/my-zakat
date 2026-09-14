@@ -65,7 +65,7 @@ class User(Base):
     password = Column(String(200), nullable=False)
     name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
-    # role: 'admin' | 'manager' | 'user'. `is_admin` is kept in sync for legacy code.
+    # role: 'admin' | 'manager' | 'field_staff' | 'user'. `is_admin` is kept in sync for legacy code.
     role = Column(String(20), nullable=False, default="user", server_default="user", index=True)
     is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
@@ -77,6 +77,10 @@ class User(Base):
     @property
     def is_manager(self) -> bool:
         return self.role == "manager"
+
+    @property
+    def is_field_staff(self) -> bool:
+        return self.role == "field_staff"
 
 
 class Event(Base):

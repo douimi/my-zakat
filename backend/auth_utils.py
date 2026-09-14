@@ -108,12 +108,39 @@ def get_current_admin(
     return current_user
 
 
+VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
+STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
+
+
+def _role_of(user: User) -> str:
+    """Effective role for a user row.
+
+    Prefers the `role` column, falling back to the legacy `is_admin` flag for
+    rows created before migration 21 added the column.
+    """
+    role = getattr(user, "role", None)
+    if role in VALID_ROLES:
+        return role
+    return "admin" if getattr(user, "is_admin", False) else "user"
+
+
+def get_current_staff(
+    current_user: User = Depends(get_current_user)
+):
+    """Anyone who owns a media workspace: admin, manager or field staff."""
+    if _role_of(current_user) not in STAFF_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Staff access required."
+        )
+    return current_user
+
+
 def get_current_manager_or_admin(
     current_user: User = Depends(get_current_user)
 ):
     """Allow either admins or managers — used for endpoints that managers can access."""
-    role = getattr(current_user, "role", None) or ("admin" if current_user.is_admin else "user")
-    if role not in ("admin", "manager"):
+    if _role_of(current_user) not in ("admin", "manager"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Manager or admin access required."

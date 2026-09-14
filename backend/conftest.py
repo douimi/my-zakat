@@ -87,7 +87,8 @@ def admin_user(db_session):
         password=get_password_hash(test_password),
         name="Test Admin",
         is_active=True,
-        is_admin=True
+        is_admin=True,
+        role="admin",
     )
     db_session.add(admin)
     db_session.commit()
@@ -189,4 +190,67 @@ def mock_stripe(monkeypatch):
     monkeypatch.setattr("stripe.Subscription.retrieve", mock_subscription_retrieve)
     monkeypatch.setattr("stripe.Subscription.delete", mock_subscription_delete)
     monkeypatch.setattr("stripe.Subscription.cancel", mock_subscription_delete)
+
+
+def _make_staff_user(db_session, email, role):
+    user = User(
+        email=email,
+        password=get_password_hash("testpass"),
+        name=email.split("@")[0],
+        is_active=True,
+        is_admin=(role == "admin"),
+        role=role,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+def _headers_for(client, email):
+    response = client.post(
+        "/api/auth/login", json={"email": email, "password": "testpass"}
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture(scope="function")
+def manager_user(db_session):
+    return _make_staff_user(db_session, "manager@example.com", "manager")
+
+
+@pytest.fixture(scope="function")
+def field_staff_user(db_session):
+    return _make_staff_user(db_session, "field@example.com", "field_staff")
+
+
+@pytest.fixture(scope="function")
+def other_field_staff_user(db_session):
+    return _make_staff_user(db_session, "field2@example.com", "field_staff")
+
+
+@pytest.fixture(scope="function")
+def donor_user(db_session):
+    return _make_staff_user(db_session, "donor@example.com", "user")
+
+
+@pytest.fixture(scope="function")
+def manager_headers(client, manager_user):
+    return _headers_for(client, manager_user.email)
+
+
+@pytest.fixture(scope="function")
+def field_staff_headers(client, field_staff_user):
+    return _headers_for(client, field_staff_user.email)
+
+
+@pytest.fixture(scope="function")
+def other_field_staff_headers(client, other_field_staff_user):
+    return _headers_for(client, other_field_staff_user.email)
+
+
+@pytest.fixture(scope="function")
+def donor_headers(client, donor_user):
+    return _headers_for(client, donor_user.email)
 

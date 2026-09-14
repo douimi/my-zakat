@@ -194,7 +194,7 @@ async def upload_media(
 
 
 # User Management Endpoints
-VALID_ROLES = {"admin", "manager", "user"}
+VALID_ROLES = {"admin", "manager", "field_staff", "user"}
 
 
 def _resolve_role(payload_role, fallback_is_admin: bool) -> str:
