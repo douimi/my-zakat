@@ -148,6 +148,33 @@ def test_upload_rejects_bytes_that_contradict_the_declared_type(
     assert fake_s3 == {}, "nothing may reach S3 when the bytes are rejected"
 
 
+def test_upload_accepts_an_octet_stream_declaration(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """curl -F "file=@photo.jpg" (and some mobile webviews, and any client
+    with no OS MIME mapping) declares application/octet-stream by default.
+    That is not a claim about the file's type -- there is nothing to
+    contradict -- so a real JPEG declared this way must be accepted and
+    stored under the type its own bytes sniff to, not rejected as a spoof.
+
+    This is the regression a second review round caught: the membership
+    check that closes the image/gif-over-JPEG bypass must not also catch
+    "declared nothing meaningful" in the same net as "declared wrongly"."""
+    response = _upload(client, field_staff_headers, content_type="application/octet-stream")
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["content_type"] == "image/jpeg"
+    assert body["media_type"] == "image"
+
+
+def test_upload_accepts_a_missing_content_type_declaration(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    response = _upload(client, field_staff_headers, content_type="")
+    assert response.status_code == 201, response.text
+    assert response.json()["content_type"] == "image/jpeg"
+
+
 def test_upload_rejects_an_empty_file(client, field_staff_headers, fake_s3, no_compression):
     response = _upload(client, field_staff_headers, content=b"")
     assert response.status_code == 400
@@ -396,6 +423,23 @@ def test_an_admin_can_filter_to_the_unassigned_workspace(
 
     body = client.get("/api/media-library?owner_id=unassigned", headers=auth_headers).json()
     assert [item["filename"] for item in body["items"]] == ["legacy.jpg"]
+
+
+def test_a_non_numeric_owner_id_is_a_clean_400(client, auth_headers):
+    response = client.get("/api/media-library?owner_id=not-a-number", headers=auth_headers)
+    assert response.status_code == 400
+
+
+def test_a_huge_owner_id_is_a_400_not_a_500(client, auth_headers):
+    """int() has no size limit, so this parses fine in Python and would
+    otherwise only fail once the query executes -- OverflowError on SQLite,
+    a driver range error on PostgreSQL -- landing an authenticated admin on
+    an unhandled 500 where the sibling non-numeric case above gives a clean
+    400."""
+    response = client.get(
+        "/api/media-library?owner_id=99999999999999999999", headers=auth_headers
+    )
+    assert response.status_code == 400
 
 
 def test_search_matches_filename_title_description_and_tags(

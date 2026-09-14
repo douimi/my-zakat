@@ -41,7 +41,10 @@ from media_library_service import (
     build_object_key,
     build_search_text,
     build_thumbnail_key,
+    canonical_content_type,
     detect_media_type,
+    is_allow_listed_content_type,
+    media_type_of,
     normalize_tags,
     parse_tag_input,
     search_pattern,
@@ -49,7 +52,6 @@ from media_library_service import (
     tag_filter_pattern,
     unsupported_hint,
     validate_tags,
-    IMAGE_CONTENT_TYPES,
 )
 from media_processing import (
     compress_image,
@@ -171,30 +173,40 @@ async def upload_media(
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
         )
 
-    # The declared type and filename extension got us this far; the bytes
-    # have to agree, at the specific-format level, before anything reaches
-    # Pillow or ffmpeg. sniff_content_type() returns every Content-Type alias
-    # the bytes are consistent with; requiring the declared header to be a
-    # *member* of that set — not merely of the right image/video category —
-    # is what stops a caller from declaring image/gif (a format
-    # should_compress_image() always skips, and so never gets re-encoded)
-    # over real JPEG bytes to dodge metadata stripping below. This also
-    # doubles as "never store the raw header": whatever passes here is
-    # already one of the aliases this module allow-lists, never anything
-    # attacker-chosen wholesale — a file named a.jpg, declared text/html,
-    # containing a real GIF is rejected here rather than ever being stored
-    # (and later served) as text/html, which would be stored XSS on the
-    # serving origin.
+    # The bytes have to say what they are before anything reaches Pillow or
+    # ffmpeg — sniff_content_type() returns every Content-Type alias the
+    # bytes are consistent with, or None if they match no format this module
+    # recognises at all (a forged/corrupt/unsupported upload).
     declared = (file.content_type or "").split(";", 1)[0].strip().lower()
     sniffed_content_types = sniff_content_type(content)
-    if sniffed_content_types is None or declared not in sniffed_content_types:
+    if sniffed_content_types is None:
         raise HTTPException(
             status_code=400,
             detail="File content does not match its declared type.",
         )
 
-    media_type = "image" if sniffed_content_types & IMAGE_CONTENT_TYPES else "video"
-    content_type = declared
+    # A declared type that IS allow-listed but ISN'T consistent with the
+    # sniffed bytes is the spoof this endpoint exists to catch (image/gif —
+    # a format should_compress_image() always skips, and so never gets
+    # re-encoded — declared over real JPEG bytes, to dodge the metadata
+    # stripping below). A declared type that is missing, or a generic
+    # default like application/octet-stream (what curl -F and some mobile
+    # webviews send with no OS MIME mapping to consult), is not a claim at
+    # all, so there is nothing to contradict — that used to reach here as a
+    # 400 too, which is the regression a re-review caught: nothing declared
+    # is not the same thing as something declared wrongly.
+    if is_allow_listed_content_type(declared) and declared not in sniffed_content_types:
+        raise HTTPException(
+            status_code=400,
+            detail="File content does not match its declared type.",
+        )
+
+    # Never store the raw header regardless of which branch above was
+    # taken: an accepted-but-generic declaration (or an accepted, correct
+    # one) is stored as-is; anything else falls back to the format's own
+    # canonical type, derived from the bytes rather than the caller.
+    media_type = media_type_of(sniffed_content_types)
+    content_type = declared if declared in sniffed_content_types else canonical_content_type(sniffed_content_types)
     width = height = None
     thumbnail_bytes = None
 
@@ -290,9 +302,9 @@ async def upload_media(
         # whatever the uploading client sent) and it's display-only, so a
         # 400 here would only make them retry the same 100 MB upload for
         # something that isn't their fault. filename is VARCHAR(255); title
-        # gets the same treatment via Form(..., max_length=200) above
-        # instead, because a title the user *did* type deserves an honest
-        # 400 rather than a silent truncation.
+        # gets the opposite treatment (an explicit 400, checked near the top
+        # of this function) instead, because a title the user *did* type
+        # deserves an honest rejection rather than a silent truncation.
         filename=(file.filename or "upload")[:255],
         media_type=media_type,
         content_type=content_type,
@@ -378,9 +390,20 @@ async def list_media(
             query = query.filter(MediaAsset.owner_id.is_(None))
         else:
             try:
-                query = query.filter(MediaAsset.owner_id == int(owner_id))
+                owner_id_int = int(owner_id)
             except ValueError:
                 raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            # int() has no size limit, so an absurdly long digit string
+            # parses fine here and the error only surfaces once the query
+            # actually executes below -- OverflowError on SQLite, a driver
+            # range error on PostgreSQL, either way an unhandled 500 where
+            # this sibling (non-numeric) path gives a clean 400. owner_id is
+            # a 32-bit Integer column; bounding against that range catches
+            # it here instead of waiting for a specific driver to reject it
+            # in a specific way.
+            if not (-2_147_483_648 <= owner_id_int <= 2_147_483_647):
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            query = query.filter(MediaAsset.owner_id == owner_id_int)
 
     # Both helpers escape LIKE metacharacters and hand back the escape character
     # with the pattern — without it, q="%" or tag="%" matches every row, and a

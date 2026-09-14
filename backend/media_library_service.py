@@ -143,29 +143,42 @@ VIDEO_CONTENT_TYPES = frozenset(ct for fmt in _VIDEO_FORMATS.values() for ct in 
 
 
 def _sniff_rules(formats: dict) -> tuple:
-    """(matcher, content-type aliases) pairs, one per distinct byte test.
+    """(matcher, canonical content-type, content-type aliases) triples, one
+    per distinct byte test.
 
     Several extensions share one matcher — .jpg/.jpeg both sniff as JPEG,
     .ogg/.ogv both sniff as Ogg, .webm/.mkv both sniff as EBML, and every
     ISO-BMFF extension (.mp4/.mov/.m4v/.3gp) sniffs identically — so this
     groups by the matcher function itself and unions the content-type
     aliases of every extension that shares it, rather than testing the same
-    bytes twice for what is, at the byte level, one format.
+    bytes twice for what is, at the byte level, one format. `canonical` is
+    the first content-type of the first-seen extension in that group (dicts
+    preserve insertion order, so this is deterministic): for the ISO-BMFF
+    group that is ".mp4"'s "video/mp4", not ".3gp"'s or ".mov"'s, because
+    .mp4 is declared first in _VIDEO_FORMATS.
     """
     grouped: dict = {}
     order: list = []
     for fmt in formats.values():
         if fmt.sniff not in grouped:
-            grouped[fmt.sniff] = set()
+            grouped[fmt.sniff] = {"canonical": fmt.content_types[0], "aliases": set()}
             order.append(fmt.sniff)
-        grouped[fmt.sniff].update(fmt.content_types)
-    return tuple((matcher, frozenset(grouped[matcher])) for matcher in order)
+        grouped[fmt.sniff]["aliases"].update(fmt.content_types)
+    return tuple(
+        (matcher, grouped[matcher]["canonical"], frozenset(grouped[matcher]["aliases"]))
+        for matcher in order
+    )
 
 
 # Image rules before video rules purely so a mixed-format false-positive
 # (none known today) would resolve toward "image" first; sniff_content_type
 # returns on the first match either way.
 _SNIFF_RULES = _sniff_rules(_IMAGE_FORMATS) + _sniff_rules(_VIDEO_FORMATS)
+
+# frozenset(aliases) -> canonical, for canonical_content_type(). Built once
+# from the same rules sniff_content_type() matches against, so the two can
+# never drift relative to each other.
+_CANONICAL_BY_ALIASES = {aliases: canonical for _, canonical, aliases in _SNIFF_RULES}
 
 
 def sniff_content_type(content: bytes) -> Optional[frozenset]:
@@ -174,18 +187,66 @@ def sniff_content_type(content: bytes) -> Optional[frozenset]:
 
     This is the byte-level counterpart to detect_media_type(): that function
     trusts a caller-supplied filename/Content-Type, this one trusts nothing
-    but the bytes themselves. Task 5's upload router requires the caller's
-    declared Content-Type to be a *member of the returned set* — not merely
-    of the right broad image/video category — which is what closes a
-    spoofed "declare image/gif over real JPEG bytes" upload: image/gif is a
+    but the bytes themselves. The upload router requires an *allow-listed*
+    declared Content-Type to be a member of the returned set — not merely of
+    the right broad image/video category — which is what closes a spoofed
+    "declare image/gif over real JPEG bytes" upload: image/gif is a
     perfectly valid Content-Type in general, just never a member of the set
     JPEG bytes sniff to, so the mismatch is caught here regardless of what
     should_compress_image() would have done with the (wrong) declared type.
+    A declared type that is *not* allow-listed at all (a generic default
+    like application/octet-stream, or no header) is not this kind of
+    mismatch — see is_allow_listed_content_type() and canonical_content_type().
     """
-    for matcher, content_types in _SNIFF_RULES:
+    for matcher, _canonical, content_types in _SNIFF_RULES:
         if matcher(content):
             return content_types
     return None
+
+
+def canonical_content_type(content_types) -> str:
+    """The single Content-Type to store for a set sniff_content_type()
+    returned.
+
+    A frozenset has no defined order, so picking a member directly
+    (`next(iter(...))`) is not deterministic across interpreters/runs. This
+    looks the exact set back up against the format tables instead, which
+    were built in a fixed, declared order — the same aliases always
+    canonicalise to the same stored Content-Type.
+    """
+    canonical = _CANONICAL_BY_ALIASES.get(frozenset(content_types))
+    if canonical is not None:
+        return canonical
+    # Defensive only: every real caller passes this the exact return value
+    # of sniff_content_type(), which is always a key of the dict above, so
+    # this should be unreachable. Still deterministic if it is ever hit.
+    return sorted(content_types)[0]
+
+
+def is_allow_listed_content_type(value: Optional[str]) -> bool:
+    """Whether `value` is a Content-Type this module lists for some format —
+    image or video.
+
+    Used to tell "the caller declared a real, specific Content-Type that
+    turned out wrong" (evidence of a spoof) apart from "the caller declared
+    nothing meaningful" (a generic default like application/octet-stream —
+    what curl and some mobile webviews send with no OS MIME mapping to
+    consult — or a missing header entirely). Only the former is a claim
+    worth rejecting on mismatch; the latter should fall back to whatever the
+    bytes actually are.
+    """
+    return value in IMAGE_CONTENT_TYPES or value in VIDEO_CONTENT_TYPES
+
+
+def media_type_of(content_types) -> str:
+    """'image' or 'video' for a set of Content-Type aliases such as
+    sniff_content_type() returns.
+
+    IMAGE_CONTENT_TYPES and VIDEO_CONTENT_TYPES are disjoint by
+    construction (every format map entry contributes to exactly one of
+    them), so membership in either is decisive.
+    """
+    return "image" if content_types & IMAGE_CONTENT_TYPES else "video"
 
 # Recognised formats we cannot decode yet. Named so the API can explain itself
 # instead of returning a generic "unsupported file type" for an obvious photo
