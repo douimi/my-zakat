@@ -86,3 +86,50 @@ def test_build_thumbnail_key_sits_beside_the_object():
 
 def test_build_thumbnail_key_handles_a_key_without_an_extension():
     assert build_thumbnail_key("workspaces/7/2026/03/abc123") == "workspaces/7/2026/03/abc123_thumb.jpg"
+
+
+def test_build_object_key_rejects_a_traversal_owner_id():
+    with pytest.raises(ValueError):
+        build_object_key("7/../../other-owner", "x.jpg", now=datetime(2026, 3, 14))
+
+
+def test_build_object_key_rejects_a_negative_owner_id():
+    with pytest.raises(ValueError):
+        build_object_key(-1, "x.jpg", now=datetime(2026, 3, 14))
+
+
+def test_build_object_key_rejects_a_zero_owner_id():
+    with pytest.raises(ValueError):
+        build_object_key(0, "x.jpg", now=datetime(2026, 3, 14))
+
+
+def test_build_object_key_rejects_a_bool_owner_id():
+    with pytest.raises(ValueError):
+        build_object_key(True, "x.jpg", now=datetime(2026, 3, 14))
+
+
+def test_build_object_key_accepts_a_normal_positive_owner_id():
+    key = build_object_key(7, "x.jpg", now=datetime(2026, 3, 14))
+    assert key.startswith("workspaces/7/2026/03/")
+
+
+def test_normalize_tags_strips_the_delimiter_so_it_cannot_answer_two_filters():
+    text = build_search_text("a.jpg", None, None, ["gaza|evil"])
+    assert tag_filter_pattern("gaza").strip("%") not in text
+    assert tag_filter_pattern("evil").strip("%") not in text
+
+
+def test_normalize_tags_drops_a_tag_that_is_only_the_delimiter():
+    assert normalize_tags(["|", "gaza"]) == ["gaza"]
+
+
+def test_normalize_tags_still_dedupes_after_stripping_the_delimiter():
+    assert normalize_tags(["gaza|evil", "gaza evil"]) == ["gaza evil"]
+
+
+def test_detect_media_type_rejects_svg_by_content_type():
+    assert detect_media_type("logo.svg", "image/svg+xml") is None
+
+
+def test_detect_media_type_rejects_svg_by_extension_fallback():
+    assert detect_media_type("logo.svg", None) is None

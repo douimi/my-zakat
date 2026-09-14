@@ -17,17 +17,26 @@ from typing import Iterable, Optional
 # on the SQLite used by the test suite.
 TAG_DELIM = "|"
 
-IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".ogg", ".avi", ".mov", ".mkv")
+
+# SVG is a script-carrying document format, not a photo. Excluded outright so a
+# declared "image/svg+xml" cannot get one classified as an image.
+REJECTED_CONTENT_TYPES = ("image/svg+xml",)
 
 _SAFE_EXTENSION = re.compile(r"^\.[a-z0-9]{1,8}$")
 
 
 def normalize_tags(tags: Optional[Iterable]) -> list:
-    """Lowercase, strip and dedupe tags, preserving first-seen order."""
+    """Lowercase, strip and dedupe tags, preserving first-seen order.
+
+    The delimiter is removed rather than escaped: tags are user-supplied labels,
+    and a tag containing TAG_DELIM would otherwise match several exact-tag
+    filters at once (["gaza|evil"] would answer to both tag=gaza and tag=evil).
+    """
     result: list = []
     for raw in tags or []:
-        tag = str(raw).strip().lower()
+        tag = str(raw).replace(TAG_DELIM, " ").strip().lower()
         if tag and tag not in result:
             result.append(tag)
     return result
@@ -62,6 +71,8 @@ def tag_filter_pattern(tag: Optional[str]) -> Optional[str]:
 def detect_media_type(filename: Optional[str], content_type: Optional[str]) -> Optional[str]:
     """Return 'image', 'video', or None for anything we refuse to store."""
     ct = (content_type or "").lower()
+    if ct in REJECTED_CONTENT_TYPES:
+        return None
     if ct.startswith("image/"):
         return "image"
     if ct.startswith("video/"):
@@ -88,6 +99,11 @@ def build_object_key(owner_id: int, filename: Optional[str], now: Optional[datet
     removes both collisions and path traversal. The original name is kept in the
     `filename` column, where it stays searchable.
     """
+    # Interpolated straight into the key, so a non-integer owner could escape its
+    # own namespace ("7/../../other-owner"). Callers pass an authenticated user's
+    # id; this makes that a guarantee rather than an assumption.
+    if isinstance(owner_id, bool) or not isinstance(owner_id, int) or owner_id <= 0:
+        raise ValueError(f"owner_id must be a positive integer, got {owner_id!r}")
     moment = now or datetime.utcnow()
     return (
         f"workspaces/{owner_id}/{moment:%Y}/{moment:%m}/"
