@@ -1481,8 +1481,8 @@ def no_compression(monkeypatch):
 # and rejects anything contradicting the declared type, so a placeholder string
 # would 400 and take most of these tests with it.
 JPEG_BYTES = (
-    b"ÿØÿà JFIF      "
-    + b" " * 64
+    b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+    + b"\x00" * 64
 )
 
 
