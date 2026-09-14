@@ -2657,6 +2657,23 @@ def test_reassigning_to_a_nonexistent_user_is_rejected(
     assert response.status_code == 404
 
 
+def test_reassigning_to_a_deactivated_account_is_rejected(
+    client, db_session, auth_headers, field_staff_user
+):
+    """A deactivated owner can never log in, so their workspace is a dead end."""
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    field_staff_user.is_active = False
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 400
+    assert "deactivated" in str(response.json()["detail"]).lower()
+
+
 def test_field_staff_cannot_reassign(client, db_session, field_staff_headers, field_staff_user):
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
     response = client.post(
@@ -2861,6 +2878,15 @@ async def reassign_media(
         if role_of(owner) not in ("admin", "manager", "field_staff"):
             raise HTTPException(
                 status_code=400, detail="Only staff accounts can own media."
+            )
+        # A deactivated account can never log in (get_current_user rejects it),
+        # so media parked there is a silent dead end: not in the Unassigned pool,
+        # and invisible to the one person nominally responsible for it.
+        if not owner.is_active:
+            raise HTTPException(
+                status_code=400,
+                detail="That account is deactivated. Reassign to an active member, "
+                       "or leave the media unassigned.",
             )
 
     asset.owner_id = payload.owner_id
