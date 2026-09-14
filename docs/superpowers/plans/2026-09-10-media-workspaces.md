@@ -100,17 +100,17 @@ def _user(role, is_admin=False):
     return User(id=1, email="x@example.com", password="x", role=role, is_admin=is_admin)
 
 
-def testrole_of_prefers_the_role_column():
+def test_role_of_prefers_the_role_column():
     assert role_of(_user("field_staff")) == "field_staff"
     assert role_of(_user("manager")) == "manager"
 
 
-def testrole_of_falls_back_to_is_admin_when_role_is_missing():
+def test_role_of_falls_back_to_is_admin_when_role_is_missing():
     assert role_of(_user(None, is_admin=True)) == "admin"
     assert role_of(_user(None, is_admin=False)) == "user"
 
 
-def testrole_of_rejects_an_unknown_role_value():
+def test_role_of_rejects_an_unknown_role_value():
     assert role_of(_user("wizard", is_admin=False)) == "user"
 
 
@@ -223,11 +223,15 @@ not recognise, and that user would be silently treated as a donor:
 from auth_utils import VALID_ROLES, role_of
 ```
 
-Then replace the three surviving copies of the old inline derivation
+Then replace the two surviving copies of the old inline derivation
 (`getattr(user, "role", None) or ("admin" if user.is_admin else "user")` at roughly
-lines 217, 369 and 435) with `role_of(user)`. Those copies lack the `VALID_ROLES`
+lines 217 and 369) with `role_of(user)`. Those copies lack the `VALID_ROLES`
 check, so a row with a bad role reads as that bad role in the admin UI while every
 auth gate treats the user as a donor.
+
+Leave `user.role = "admin" if user.is_admin else "user"` in `toggle_user_admin`
+(around line 435) alone — that is a write deriving the column from the just-toggled
+flag, not a read of an effective role. `role_of()` does not apply there.
 
 In `backend/models.py`, change the comment on line 68 and add a property beside `is_manager`:
 
@@ -265,10 +269,13 @@ In `backend/conftest.py`, add `role="admin"` to the existing `admin_user` fixtur
 Then append these fixtures to the end of the file:
 
 ```python
-def _make_staff_user(db_session, email, role):
+TEST_PASSWORD = "testpass"
+
+
+def _make_user(db_session, email, role):
     user = User(
         email=email,
-        password=get_password_hash("testpass"),
+        password=get_password_hash(TEST_PASSWORD),
         name=email.split("@")[0],
         is_active=True,
         is_admin=(role == "admin"),
@@ -285,7 +292,7 @@ def _make_staff_user(db_session, email, role):
 
 def _headers_for(client, email):
     response = client.post(
-        "/api/auth/login", json={"email": email, "password": "testpass"}
+        "/api/auth/login", json={"email": email, "password": TEST_PASSWORD}
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
@@ -293,22 +300,22 @@ def _headers_for(client, email):
 
 @pytest.fixture(scope="function")
 def manager_user(db_session):
-    return _make_staff_user(db_session, "manager@example.com", "manager")
+    return _make_user(db_session, "manager@example.com", "manager")
 
 
 @pytest.fixture(scope="function")
 def field_staff_user(db_session):
-    return _make_staff_user(db_session, "field@example.com", "field_staff")
+    return _make_user(db_session, "field@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def other_field_staff_user(db_session):
-    return _make_staff_user(db_session, "field2@example.com", "field_staff")
+    return _make_user(db_session, "field2@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def donor_user(db_session):
-    return _make_staff_user(db_session, "donor@example.com", "user")
+    return _make_user(db_session, "donor@example.com", "user")
 
 
 @pytest.fixture(scope="function")
