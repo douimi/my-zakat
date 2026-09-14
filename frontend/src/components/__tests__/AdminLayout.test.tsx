@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { NAV, ROLE_ALLOWED, filterNavForRole } from '../AdminLayout'
 import type { Role } from '../../store/authStore'
 
+// Flatten a nav tree (top-level links + group items) down to hrefs.
+const hrefsOf = (nav: typeof NAV) =>
+  nav.flatMap((e) => (e.kind === 'link' ? [e.href] : e.items.map((i) => i.href)))
+
 describe('filterNavForRole', () => {
   it('gives admins the full NAV back unchanged', () => {
     expect(filterNavForRole(NAV, 'admin')).toBe(NAV)
@@ -9,8 +13,12 @@ describe('filterNavForRole', () => {
 
   it('gives field_staff exactly one link', () => {
     const nav = filterNavForRole(NAV, 'field_staff')
-    const hrefs = nav.flatMap((e) => (e.kind === 'link' ? [e.href] : e.items.map((i) => i.href)))
-    expect(hrefs).toEqual(['/admin/media'])
+    expect(hrefsOf(nav)).toEqual(['/admin/media'])
+  })
+
+  it('gives managers their four sections plus both media links', () => {
+    const hrefs = hrefsOf(filterNavForRole(NAV, 'manager'))
+    expect(hrefs.sort()).toEqual([...ROLE_ALLOWED.manager!].sort())
   })
 
   it('gives an unknown role nothing', () => {
@@ -35,9 +43,7 @@ describe('filterNavForRole', () => {
   })
 
   it('keeps every ROLE_ALLOWED entry consistent with an href that actually exists in NAV', () => {
-    const NAV_HREFS = new Set(
-      NAV.flatMap((e) => (e.kind === 'link' ? [e.href] : e.items.map((i) => i.href))),
-    )
+    const NAV_HREFS = new Set(hrefsOf(NAV))
     for (const [role, allowed] of Object.entries(ROLE_ALLOWED)) {
       for (const href of allowed ?? []) {
         expect(NAV_HREFS, `${role} allows ${href}`).toContain(href)
