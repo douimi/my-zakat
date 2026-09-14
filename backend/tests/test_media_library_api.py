@@ -1042,3 +1042,115 @@ def test_unpublish_guard_matches_the_real_asset_url_shape(
         f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "unpublish"}
     )
     assert response.status_code == 409
+
+
+def test_unpublish_guard_also_catches_a_legacy_assets_proxy_url(
+    client, db_session, auth_headers, monkeypatch
+):
+    """Task 18 backfills pre-existing S3 objects as media_assets rows whose
+    object_key predates the workspaces/ convention. Those are referenced in
+    content tables by get_file_url()'s proxy URL, not by asset_file_url() --
+    get_media_usage matches by exact string equality, so the guard has to
+    ask about both spellings or it is blind to exactly the population most
+    likely to already be live on the public site. FRONTEND_URL is read by
+    get_file_url() at call time from s3_service's module namespace, so it is
+    set explicitly here rather than trusted to the ambient environment.
+    """
+    import s3_service
+    from models import GalleryItem
+
+    monkeypatch.setattr(s3_service, "FRONTEND_URL", "https://myzakat.org")
+
+    asset = _make_asset(db_session, None, filename="hero.jpg", status="public")
+    asset.object_key = "images/hero.jpg"  # legacy shape: no workspaces/ prefix
+    db_session.commit()
+
+    legacy_url = s3_service.get_file_url(asset.object_key)
+    assert legacy_url == "https://myzakat.org/api/uploads/media/images/hero.jpg"
+    db_session.add(GalleryItem(media_filename=legacy_url))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/review", headers=auth_headers, json={"decision": "unpublish"}
+    )
+    assert response.status_code == 409
+    assert "gallery_items" in str(response.json()["detail"])
+
+    db_session.refresh(asset)
+    assert asset.status == "public"
+
+
+def test_admin_cannot_submit_someone_elses_asset_but_the_owner_can(
+    client, db_session, auth_headers, field_staff_headers, field_staff_user
+):
+    """private -> submitted is granted to 'owner' only. An admin who wants
+    the asset public can call /review with approve directly -- submitting
+    on someone else's behalf is not a capability any workflow needs, and it
+    can park an Unassigned asset in 'submitted' with nobody to act on a
+    rejection."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="private")
+
+    admin_response = client.post(f"/api/media-library/{asset.id}/submit", headers=auth_headers)
+    assert admin_response.status_code == 404
+
+    db_session.refresh(asset)
+    assert asset.status == "private"
+
+    owner_response = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert owner_response.status_code == 200, owner_response.text
+    assert owner_response.json()["status"] == "submitted"
+
+
+def test_rejection_without_a_note_is_refused(
+    client, db_session, manager_headers, field_staff_user
+):
+    """A rejection with no note leaves the field-staff member who took the
+    photo with no way to know what to fix before resubmitting."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+
+    blank = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "reject", "note": "   "},
+    )
+    assert blank.status_code == 422
+
+    missing = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "reject"},
+    )
+    assert missing.status_code == 422
+
+    db_session.refresh(asset)
+    assert asset.status == "submitted"
+
+
+def test_resubmitting_after_a_rejection_clears_the_stale_reviewer_stamp(
+    client, db_session, manager_headers, field_staff_headers, field_staff_user
+):
+    """After reject -> fix -> resubmit, the row is 'submitted' again but
+    must not still carry reviewed_at/reviewed_by_id from the rejection --
+    a review-queue UI reading reviewed_at as 'already decided' would get it
+    wrong, and migration 31's partial index on status='submitted' says such
+    a queue is coming."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    reject = client.post(
+        f"/api/media-library/{asset.id}/review",
+        headers=manager_headers,
+        json={"decision": "reject", "note": "crop out the background"},
+    )
+    assert reject.status_code == 200
+    db_session.refresh(asset)
+    assert asset.reviewed_at is not None
+    assert asset.reviewed_by_id is not None
+
+    resubmit = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert resubmit.status_code == 200
+    assert resubmit.json()["reviewed_at"] is None
+
+    db_session.refresh(asset)
+    assert asset.status == "submitted"
+    assert asset.reviewed_at is None
+    assert asset.reviewed_by_id is None
+    assert asset.review_note is None

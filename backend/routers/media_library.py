@@ -23,11 +23,11 @@ import hashlib
 import io
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -63,7 +63,7 @@ from media_processing import (
 )
 from models import MediaAsset, User
 from routers.s3_media import get_media_usage
-from s3_service import delete_file, upload_file
+from s3_service import delete_file, get_file_url, upload_file
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -84,15 +84,29 @@ def _image_dimensions(data: bytes):
         return (None, None)
 
 
-def usage_for_asset(asset_id: int, db: Session) -> dict:
+def usage_for_asset(asset: MediaAsset, db: Session) -> dict:
     """Where an asset is used across the public site.
 
     Thin wrapper over routers.s3_media.get_media_usage so every caller goes
     through asset_file_url() for the string it matches on, rather than each
     retyping it — see that function's docstring for why a second spelling
     would be a silent failure, not a loud one.
+
+    A backfilled (Task 18) legacy asset is referenced in content tables by
+    the proxy URL get_file_url() produces, not by the id-addressed one this
+    module writes for everything uploaded through it — get_media_usage
+    matches by exact string equality, so a legacy asset needs both
+    spellings asked for or this reports zero usage for exactly the
+    population most likely to already be live on the public site. Object
+    keys built by build_object_key() always start with "workspaces/"; a key
+    that doesn't is from before this module existed.
     """
-    return get_media_usage(asset_file_url(asset_id), db)
+    usage = get_media_usage(asset_file_url(asset.id), db)
+    if not asset.object_key.startswith("workspaces/"):
+        legacy = get_media_usage(get_file_url(asset.object_key), db)
+        for key, rows in legacy.items():
+            usage[key] = usage[key] + rows
+    return usage
 
 
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
@@ -136,6 +150,23 @@ def _require_can_edit(asset: MediaAsset, user: User) -> None:
         )
 
 
+def _require_is_owner(asset: MediaAsset, user: User) -> None:
+    """Strictly the owner — unlike every other predicate here, a reviewer is
+    not waved through.
+
+    private -> submitted is the one transition the table grants to "owner"
+    and nobody else: an admin/manager wanting an asset public can already
+    call /review with decision="approve" directly, so letting them submit
+    someone else's asset on their behalf grants nothing a workflow needs and
+    can queue media with no owner (an Unassigned asset has no one to act on
+    a rejection). Same existence-hiding 404 as _require_can_view rather than
+    a 403 — a reviewer probing someone else's private asset should not learn
+    it exists any more than a stranger would.
+    """
+    if asset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+
 # Staged for Task 9 (delete): no route below calls this yet.
 def _require_can_delete(asset: MediaAsset, user: User) -> None:
     """Owner may delete only while private; admin/manager always."""
@@ -146,6 +177,24 @@ def _require_can_delete(asset: MediaAsset, user: User) -> None:
         raise HTTPException(
             status_code=403,
             detail="Only a private asset may be deleted by its owner.",
+        )
+
+
+def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
+    """Block an action that would break the public site, naming what points here."""
+    usage = usage_for_asset(asset, db)
+    referenced = {key: value for key, value in usage.items() if value}
+    if referenced:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Cannot {action}: this media is still used on the site.",
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps()s `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
+            },
         )
 
 
@@ -557,7 +606,7 @@ async def get_media_detail(
     asset = _load_asset(db, asset_id)
     _require_can_view(asset, current_user)
 
-    usage = usage_for_asset(asset.id, db)
+    usage = usage_for_asset(asset, db)
     payload = serialize_asset(asset)
     payload["usage"] = usage
     payload["usage_count"] = sum(len(v) for v in usage.values())
@@ -661,27 +710,32 @@ async def reassign_media(
 
 # ── Lifecycle ────────────────────────────────────────────────────────
 
+# review_note's column is unbounded Text with no DB constraint backing this
+# number (unlike title's VARCHAR(200)) — it exists only because this is a
+# staff-writable string returned in every serialization, same reasoning as
+# title's cap above, minus a column to point at.
+MAX_REVIEW_NOTE_LENGTH = 1000
+
+
 class ReviewDecision(BaseModel):
-    decision: str = Field(..., pattern="^(approve|reject|unpublish)$")
+    # Literal, not Field(pattern=...): a value outside the three legal
+    # decisions 422s at the schema either way, but a regex fails open — a
+    # fourth decision added to the pattern later would silently fall into
+    # the `else: # unpublish` branch below with no error, and that branch is
+    # the one guarding the public/private boundary. Literal fails closed.
+    decision: Literal["approve", "reject", "unpublish"]
     note: Optional[str] = None
 
-
-def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
-    """Block an action that would break the public site, naming what points here."""
-    usage = usage_for_asset(asset.id, db)
-    referenced = {key: value for key, value in usage.items() if value}
-    if referenced:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": f"Cannot {action}: this media is still used on the site.",
-                # Safe today — get_media_usage returns only ids and strings — but
-                # FastAPI json.dumps()s `detail` without jsonable_encoder, so the
-                # day someone adds a date to that payload this 409 silently
-                # becomes a 500. One call is cheaper than that surprise.
-                "usage": jsonable_encoder(referenced),
-            },
-        )
+    @model_validator(mode="after")
+    def _reject_must_explain_itself(self):
+        # A field-staff member whose photo is bounced with review_note=None
+        # has no way to know what to fix before resubmitting. Enforced here,
+        # not in the route body, so it fails as a 422 at the schema — the
+        # same shape as an unknown `decision` — rather than a 400 after
+        # _load_asset has already run.
+        if self.decision == "reject" and not (self.note and self.note.strip()):
+            raise ValueError("A rejection must include a note explaining why.")
+        return self
 
 
 @router.post("/{asset_id}/submit")
@@ -692,7 +746,7 @@ async def submit_for_review(
 ):
     """Owner asks for the asset to be reviewed. It stays private until approved."""
     asset = _load_asset(db, asset_id)
-    _require_can_edit(asset, current_user)
+    _require_is_owner(asset, current_user)
 
     if asset.status != "private":
         raise HTTPException(
@@ -701,10 +755,20 @@ async def submit_for_review(
         )
 
     asset.status = "submitted"
+    # Clear every trace of a previous decision, not just the note: a
+    # reject -> fix -> resubmit cycle must not leave reviewed_at/
+    # reviewed_by_id from the rejection behind on a `submitted` row for a
+    # review-queue UI to misread as "already decided". Migration 31's
+    # partial index on status = 'submitted' says such a queue is coming.
     asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
     db.commit()
     db.refresh(asset)
-    logger.info("Media %s submitted for review by %s", asset.id, current_user.email)
+    logger.info(
+        "Media %s submitted for review by %s (role=%s)",
+        asset.id, current_user.email, role_of(current_user),
+    )
     return serialize_asset(asset)
 
 
@@ -717,6 +781,18 @@ async def review_media(
 ):
     """Approve (-> public), reject (-> private + note), or unpublish (-> private)."""
     asset = _load_asset(db, asset_id)
+
+    # Not Field(max_length=...) on the model: see the identical note on
+    # upload's title check above -- a Pydantic max_length violation 422s in
+    # FastAPI's own error shape, not the 400 every other input problem here
+    # uses. The reject-needs-a-reason rule above is deliberately the
+    # exception (it belongs at the schema, alongside the unknown-decision
+    # 422); a length cap is an ordinary input problem, checked by hand.
+    if payload.note is not None and len(payload.note) > MAX_REVIEW_NOTE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Note is longer than {MAX_REVIEW_NOTE_LENGTH} characters.",
+        )
 
     if payload.decision == "approve":
         if asset.status not in ("private", "submitted"):
@@ -735,6 +811,12 @@ async def review_media(
         asset.status = "private"
         asset.review_note = payload.note
 
+    # No row locking: two simultaneous review calls on the same asset both
+    # read the pre-decision status, both pass their checks, and the second
+    # commit wins for reviewed_by_id/reviewed_at -- lossy attribution, not a
+    # privacy hole. Nothing here turns an asset public without a reviewer
+    # explicitly calling this endpoint with decision="approve"; accepted,
+    # not a gap to close before Task 9.
     asset.reviewed_by_id = current_user.id
     asset.reviewed_at = datetime.utcnow()
     db.commit()

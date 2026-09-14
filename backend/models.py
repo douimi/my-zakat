@@ -711,6 +711,9 @@ class MediaAsset(Base):
     status = Column(String(20), nullable=False, default="private", server_default="private")
     reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
+    # Set by a rejection (submitted -> private) *or* an unpublish
+    # (public -> private) -- don't assume it only ever means "why your
+    # submission came back".
     review_note = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
