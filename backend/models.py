@@ -668,6 +668,22 @@ class MediaAsset(Base):
     __tablename__ = "media_assets"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # migrations/31_add_media_library.sql owns this table's indexes, not this
+    # model. Several of them are composite or partial (owner_id + created_at,
+    # owner_id + checksum_sha256, a WHERE status = 'submitted' partial index)
+    # and cannot be expressed as a bare Column(index=True). create_all() emits
+    # SQLAlchemy's own ix_ names, which don't collide with the migration's
+    # idx_ names, so a Column(index=True) here does not replace the
+    # migration's index for that column — it adds a second, redundant one.
+    # This is why the columns below carry no index=True even though several
+    # of them are filtered or sorted on: the index already exists, created by
+    # the migration. `object_key` is the one exception that keeps a
+    # SQLAlchemy-level constraint (unique=True): the test suite needs that
+    # uniqueness enforced when it builds its schema from this model, and
+    # unique=True already creates its own index, so no separate index=True
+    # is added on top of it.
+
     # NULL owner = the "Unassigned" workspace: legacy media, or media whose
     # owner's account was deleted.
     #
@@ -675,12 +691,8 @@ class MediaAsset(Base):
     # no relationship() calls on MediaAsset today; the first one added must
     # pass foreign_keys= explicitly or SQLAlchemy raises
     # AmbiguousForeignKeysError.
-    # Not individually indexed: idx_media_assets_owner_created (owner_id,
-    # created_at DESC, id DESC) in the migration covers owner-scoped lookups
-    # and the default listing sort, so a standalone index here would be pure
-    # write cost with no query it alone would serve.
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    object_key = Column(String(500), nullable=False, unique=True, index=True)
+    object_key = Column(String(500), nullable=False, unique=True)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(10), nullable=False)  # 'image' | 'video'
     content_type = Column(String(100), nullable=False)
@@ -689,9 +701,6 @@ class MediaAsset(Base):
     height = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     thumbnail_key = Column(String(500), nullable=True)
-    # Not individually indexed: idx_media_assets_owner_checksum (owner_id,
-    # checksum_sha256) in the migration covers the per-workspace duplicate
-    # check this is used for.
     checksum_sha256 = Column(String(64), nullable=True)
     title = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
@@ -699,9 +708,9 @@ class MediaAsset(Base):
     search_text = Column(Text, nullable=False, default="", server_default="")
     # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
     # | 'public' (served to anyone)
-    status = Column(String(20), nullable=False, default="private", server_default="private", index=True)
+    status = Column(String(20), nullable=False, default="private", server_default="private")
     reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now(), index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
