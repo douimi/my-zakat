@@ -15,7 +15,12 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Callable, NamedTuple, Optional, Sequence
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional, Sequence
+
+if TYPE_CHECKING:
+    # Only for the type hint on serialize_asset() below — this module stays
+    # database-free at runtime, per the module docstring.
+    from models import MediaAsset
 
 # Tags are stored inside `search_text` wrapped in this delimiter so an exact-tag
 # filter is a plain ILIKE ('%|gaza|%') that behaves the same on PostgreSQL and
@@ -555,3 +560,47 @@ def build_thumbnail_key(object_key: str) -> str:
     stem = basename.rsplit(".", 1)[0] if "." in basename else basename
     prefix = f"{directory}/" if directory else ""
     return f"{prefix}{stem}_thumb.jpg"
+
+
+def asset_file_url(asset_id: int) -> str:
+    """The public path an asset's bytes are served from.
+
+    The one place this string is written. routers/s3_media.py's
+    get_media_usage() matches a published asset's presence in Gallery/Story/
+    etc. columns by exact string equality against this value — a second,
+    independently-typed spelling anywhere else would silently make that
+    in-use check (and the delete/unpublish guards built on it) report zero
+    usage for a genuinely-in-use asset, with nothing raising to say so.
+    """
+    return f"/api/media-library/{asset_id}/file"
+
+
+def serialize_asset(asset: "MediaAsset") -> dict:
+    """MediaAsset row -> the plain dict every media-library endpoint returns.
+
+    Pure in the same sense as the rest of this module: reads attributes off
+    an already-loaded ORM instance, issues no query and touches no Session.
+    """
+    has_thumbnail = bool(asset.thumbnail_key) or asset.media_type == "image"
+    return {
+        "id": asset.id,
+        "owner_id": asset.owner_id,
+        "object_key": asset.object_key,
+        "filename": asset.filename,
+        "media_type": asset.media_type,
+        "content_type": asset.content_type,
+        "size_bytes": asset.size_bytes,
+        "width": asset.width,
+        "height": asset.height,
+        "duration_seconds": asset.duration_seconds,
+        "title": asset.title,
+        "description": asset.description,
+        "tags": asset.tags or [],
+        "status": asset.status,
+        "review_note": asset.review_note,
+        "reviewed_at": asset.reviewed_at,
+        "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
+        "url": asset_file_url(asset.id),
+        "thumbnail_url": f"/api/media-library/{asset.id}/thumb" if has_thumbnail else None,
+    }

@@ -532,11 +532,24 @@ def test_a_donor_cannot_list(client, donor_headers):
 def test_detail_returns_the_asset_and_its_site_usage(
     client, db_session, field_staff_headers, field_staff_user
 ):
+    """usage_count must reflect a real cross-reference, not just default to
+    zero. Insert a GalleryItem pointing at this asset's own served URL —
+    exactly what asset_file_url()/get_media_usage() match on — and assert
+    the count actually moves. This is the lock on Task 21's contract: if a
+    future publish step writes a differently-shaped URL into Gallery/Story/
+    etc., this test is what catches it, not a passing-by-default assertion.
+    """
+    from models import GalleryItem
+    from media_library_service import asset_file_url
+
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    db_session.add(GalleryItem(media_filename=asset_file_url(asset.id)))
+    db_session.commit()
+
     body = client.get(f"/api/media-library/{asset.id}", headers=field_staff_headers).json()
     assert body["id"] == asset.id
-    assert body["usage_count"] == 0
-    assert "usage" in body
+    assert body["usage_count"] == 1
+    assert len(body["usage"]["gallery_items"]) == 1
 
 
 def test_detail_hides_another_members_asset_behind_a_404(
@@ -550,11 +563,18 @@ def test_detail_hides_another_members_asset_behind_a_404(
 def test_patch_updates_metadata_and_rebuilds_search_text(
     client, db_session, field_staff_headers, field_staff_user
 ):
+    # No blank/whitespace-only entry here (the plan's original fixture had
+    # one): PATCH now runs validate_tags(), same as upload, and a
+    # whitespace-only tag is exactly what that rejects with a 400 rather
+    # than silently dropping -- see test_patch_rejects_a_tag_containing_the_
+    # delimiter and test_patch_rejects_more_than_max_tags below for that
+    # path. This test's job is the case-insensitive dedup and the
+    # search_text rebuild, which "Gaza"/"gaza" alone still exercises.
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
     response = client.patch(
         f"/api/media-library/{asset.id}",
         headers=field_staff_headers,
-        json={"title": "Well Opening", "description": "Rafah", "tags": ["Gaza", "gaza", " "]},
+        json={"title": "Well Opening", "description": "Rafah", "tags": ["Gaza", "gaza"]},
     )
     assert response.status_code == 200, response.text
     assert response.json()["tags"] == ["gaza"]
@@ -661,3 +681,165 @@ def test_workspaces_includes_staff_who_have_uploaded_nothing(
 def test_field_staff_cannot_read_the_workspaces_summary(client, field_staff_headers):
     response = client.get("/api/media-library/workspaces", headers=field_staff_headers)
     assert response.status_code == 403
+
+
+# ── Task 7 — review round 2 fixes ────────────────────────────────────
+
+def test_patch_rejects_a_tag_containing_the_delimiter(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Upload runs parse_tag_input -> validate_tags -> 400 -> normalize_tags.
+    PATCH used to run only normalize_tags, so a tag carrying TAG_DELIM was
+    silently rewritten instead of rejected -- exactly what validate_tags'
+    own docstring says that split exists to prevent."""
+    from media_library_service import TAG_DELIM
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"tags": [f"gaza{TAG_DELIM}evil"]},
+    )
+    assert response.status_code == 400, response.text
+    db_session.refresh(asset)
+    assert asset.tags == []
+
+
+def test_patch_rejects_more_than_max_tags(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    from media_library_service import MAX_TAGS
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    too_many = [f"tag{i}" for i in range(MAX_TAGS + 1)]
+    response = client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"tags": too_many},
+    )
+    assert response.status_code == 400, response.text
+    db_session.refresh(asset)
+    assert asset.tags == []
+
+
+def test_patch_rejects_a_title_over_two_hundred_characters(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Symmetric with upload's title check: a PATCH validation problem on
+    this resource must also come back as a plain 400, not FastAPI's default
+    422 for a Pydantic max_length violation -- two endpoints on one resource
+    must not disagree about how to report the same kind of mistake."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"title": "x" * 201},
+    )
+    assert response.status_code == 400, response.text
+
+
+def test_owner_cannot_edit_a_public_asset(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Reassignment (or a future publish step) can hand a field-staff member
+    ownership of an asset that is already live on the public site. Changing
+    its title/description/tags once it's public is a reviewer action, not an
+    owner action."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.patch(
+        f"/api/media-library/{asset.id}",
+        headers=field_staff_headers,
+        json={"title": "sneaky edit"},
+    )
+    assert response.status_code == 403
+    db_session.refresh(asset)
+    assert asset.title is None
+
+
+def test_an_admin_can_still_edit_a_public_asset(
+    client, db_session, auth_headers, field_staff_user
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.patch(
+        f"/api/media-library/{asset.id}", headers=auth_headers, json={"title": "Reviewed"}
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_reassigning_to_a_non_staff_user_is_rejected(client, db_session, auth_headers, donor_user):
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": donor_user.id},
+    )
+    assert response.status_code == 400
+
+
+def test_reassigning_to_a_deactivated_account_is_rejected(
+    client, db_session, auth_headers, field_staff_user
+):
+    """A deactivated account can never log in (get_current_user rejects it),
+    so media parked there would be a silent dead end: not in the Unassigned
+    pool, and invisible to the one person nominally responsible for it."""
+    field_staff_user.is_active = False
+    db_session.commit()
+
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 400
+    db_session.refresh(asset)
+    assert asset.owner_id is None
+
+
+def test_reassigning_with_a_null_owner_id_returns_to_unassigned(
+    client, db_session, auth_headers, field_staff_user
+):
+    """The documented purpose of the nullable field: send an asset back to
+    the Unassigned workspace."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": None},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["owner_id"] is None
+
+
+def test_reassignment_preserves_public_status(
+    client, db_session, auth_headers, field_staff_user
+):
+    """The plan deliberately leaves status untouched on reassign -- nothing
+    else guarantees that, so pin it down here."""
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "public"
+
+
+def test_workspaces_includes_an_owner_who_is_no_longer_staff(
+    client, db_session, auth_headers, field_staff_user
+):
+    """A user's role can change after they've uploaded media (e.g. demoted
+    to a plain donor account). Their old assets must not vanish from the
+    summary -- they surface through the 'owner no longer on staff' branch,
+    not the per-role staff query."""
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", size=42)
+    field_staff_user.role = "user"
+    db_session.commit()
+
+    body = client.get("/api/media-library/workspaces", headers=auth_headers).json()
+    by_id = {w["owner_id"]: w for w in body["workspaces"]}
+
+    assert by_id[field_staff_user.id]["asset_count"] == 1
+    assert by_id[field_staff_user.id]["total_bytes"] == 42
+    assert by_id[field_staff_user.id]["owner_email"] == field_staff_user.email
