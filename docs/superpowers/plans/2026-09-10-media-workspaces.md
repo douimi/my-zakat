@@ -799,7 +799,12 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Callable, NamedTuple, Optional, Sequence
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional, Sequence
+
+if TYPE_CHECKING:
+    # Only for the type hint on serialize_asset() below — this module stays
+    # database-free at runtime, per the module docstring.
+    from models import MediaAsset
 
 # Tags are stored inside `search_text` wrapped in this delimiter so an exact-tag
 # filter is a plain ILIKE ('%|gaza|%') that behaves the same on PostgreSQL and
@@ -1339,6 +1344,50 @@ def build_thumbnail_key(object_key: str) -> str:
     stem = basename.rsplit(".", 1)[0] if "." in basename else basename
     prefix = f"{directory}/" if directory else ""
     return f"{prefix}{stem}_thumb.jpg"
+
+
+def asset_file_url(asset_id: int) -> str:
+    """The public path an asset's bytes are served from.
+
+    The one place this string is written. routers/s3_media.py's
+    get_media_usage() matches a published asset's presence in Gallery/Story/
+    etc. columns by exact string equality against this value — a second,
+    independently-typed spelling anywhere else would silently make that
+    in-use check (and the delete/unpublish guards built on it) report zero
+    usage for a genuinely-in-use asset, with nothing raising to say so.
+    """
+    return f"/api/media-library/{asset_id}/file"
+
+
+def serialize_asset(asset: "MediaAsset") -> dict:
+    """MediaAsset row -> the plain dict every media-library endpoint returns.
+
+    Pure in the same sense as the rest of this module: reads attributes off
+    an already-loaded ORM instance, issues no query and touches no Session.
+    """
+    has_thumbnail = bool(asset.thumbnail_key) or asset.media_type == "image"
+    return {
+        "id": asset.id,
+        "owner_id": asset.owner_id,
+        "object_key": asset.object_key,
+        "filename": asset.filename,
+        "media_type": asset.media_type,
+        "content_type": asset.content_type,
+        "size_bytes": asset.size_bytes,
+        "width": asset.width,
+        "height": asset.height,
+        "duration_seconds": asset.duration_seconds,
+        "title": asset.title,
+        "description": asset.description,
+        "tags": asset.tags or [],
+        "status": asset.status,
+        "review_note": asset.review_note,
+        "reviewed_at": asset.reviewed_at,
+        "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
+        "url": asset_file_url(asset.id),
+        "thumbnail_url": f"/api/media-library/{asset.id}/thumb" if has_thumbnail else None,
+    }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -1797,41 +1846,40 @@ Create `backend/routers/media_library.py`:
 Staff (admin | manager | field_staff):
   POST   /api/media-library                upload into own workspace
   GET    /api/media-library                list / search / sort / paginate
-  GET    /api/media-library/{id}           detail + site-usage cross-reference              (Tasks 7-9)
-  PATCH  /api/media-library/{id}           edit title / description / tags                  (Tasks 7-9)
-  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Tasks 7-9)
-  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Tasks 7-9)
+  GET    /api/media-library/{id}           detail + site-usage cross-reference
+  PATCH  /api/media-library/{id}           edit title / description / tags
+  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Task 8)
+  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Task 9)
 
 Admin or manager only:
-  GET    /api/media-library/workspaces     workspaces with counts and total size             (Tasks 7-9)
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Tasks 7-9)
-  POST   /api/media-library/{id}/reassign  move an asset into another workspace               (Tasks 7-9)
+  GET    /api/media-library/workspaces     workspaces with counts and total size
+  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Task 8)
+  POST   /api/media-library/{id}/reassign  move an asset into another workspace
 
-Only upload and listing exist so far; every other line in these two lists is
-a stub for Tasks 7-9. Byte serving lives in media_library_files.py.
+Upload, listing, detail, metadata editing, reassignment and the workspaces
+summary shipped in Tasks 5-7. Submit/review/delete are still stubs for
+Tasks 8-9. Byte serving lives in media_library_files.py.
 """
 from __future__ import annotations
 
 import hashlib
 import io
 import os
-from datetime import datetime  # noqa: F401 — unused until Tasks 7-9 (detail/edit/review)
+from datetime import datetime  # noqa: F401 — unused until Task 8 (review sets reviewed_at)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-# BaseModel/Field, get_current_manager_or_admin, _load_asset and
-# _require_can_edit below are still unused by upload and listing alone —
-# they exist for Tasks 7-9 (detail, edit, review, reassign) to build on
-# without re-deriving them.
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth_utils import role_of, get_current_manager_or_admin, get_current_staff
+from auth_utils import MANAGER_ROLES, STAFF_ROLES, role_of, get_current_manager_or_admin, get_current_staff
 from database import get_db
 from logging_config import get_logger
 from media_library_service import (
+    asset_file_url,
     build_object_key,
     build_search_text,
     build_thumbnail_key,
@@ -1842,6 +1890,7 @@ from media_library_service import (
     normalize_tags,
     parse_tag_input,
     search_pattern,
+    serialize_asset,
     sniff_content_type,
     tag_filter_pattern,
     unsupported_hint,
@@ -1856,6 +1905,7 @@ from media_processing import (
     strip_image_metadata,
 )
 from models import MediaAsset, User
+from routers.s3_media import get_media_usage
 from s3_service import delete_file, upload_file
 
 logger = get_logger(__name__)
@@ -1867,32 +1917,6 @@ MAX_UPLOAD_BYTES = MAX_MEDIA_UPLOAD_MB * 1024 * 1024
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _serialize(asset: MediaAsset) -> dict:
-    has_thumbnail = bool(asset.thumbnail_key) or asset.media_type == "image"
-    return {
-        "id": asset.id,
-        "owner_id": asset.owner_id,
-        "object_key": asset.object_key,
-        "filename": asset.filename,
-        "media_type": asset.media_type,
-        "content_type": asset.content_type,
-        "size_bytes": asset.size_bytes,
-        "width": asset.width,
-        "height": asset.height,
-        "duration_seconds": asset.duration_seconds,
-        "title": asset.title,
-        "description": asset.description,
-        "tags": asset.tags or [],
-        "status": asset.status,
-        "review_note": asset.review_note,
-        "reviewed_at": asset.reviewed_at,
-        "created_at": asset.created_at,
-        "updated_at": asset.updated_at,
-        "url": f"/api/media-library/{asset.id}/file",
-        "thumbnail_url": f"/api/media-library/{asset.id}/thumb" if has_thumbnail else None,
-    }
-
-
 def _image_dimensions(data: bytes):
     """(width, height) for image bytes, or (None, None) if unreadable."""
     try:
@@ -1903,8 +1927,17 @@ def _image_dimensions(data: bytes):
         return (None, None)
 
 
-# Staged for Tasks 7-9 (detail/edit/submit/review/reassign): no route below
-# calls these yet.
+def usage_for_asset(asset_id: int, db: Session) -> dict:
+    """Where an asset is used across the public site.
+
+    Thin wrapper over routers.s3_media.get_media_usage so every caller goes
+    through asset_file_url() for the string it matches on, rather than each
+    retyping it — see that function's docstring for why a second spelling
+    would be a silent failure, not a loud one.
+    """
+    return get_media_usage(asset_file_url(asset_id), db)
+
+
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
     asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
     if asset is None:
@@ -1912,12 +1945,51 @@ def _load_asset(db: Session, asset_id: int) -> MediaAsset:
     return asset
 
 
-def _require_can_edit(asset: MediaAsset, user: User) -> None:
+def _is_reviewer(user: User) -> bool:
+    """Admin or manager: the two roles that see and moderate every workspace."""
+    return role_of(user) in MANAGER_ROLES
+
+
+def _require_can_view(asset: MediaAsset, user: User) -> None:
     """Owner, admin or manager. 404 rather than 403: a 403 confirms it exists."""
-    if role_of(user) in ("admin", "manager"):
+    if _is_reviewer(user):
         return
     if asset.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Media not found")
+
+
+def _require_can_edit(asset: MediaAsset, user: User) -> None:
+    """Owner, admin or manager — except a non-admin owner may not edit a
+    public asset.
+
+    Reassignment can hand a field-staff member ownership of an asset that is
+    already live on the public site; once it is public, changing its title,
+    description or tags is a reviewer action, not an owner action. This is a
+    real 403, not the existence-hiding 404 above: the owner already knows
+    the asset exists (it's in their own workspace) and is being told about a
+    genuine permission, not probing for one.
+    """
+    _require_can_view(asset, user)
+    if _is_reviewer(user):
+        return
+    if asset.status == "public":
+        raise HTTPException(
+            status_code=403,
+            detail="This media is public. Only a reviewer can edit it now.",
+        )
+
+
+# Staged for Task 9 (delete): no route below calls this yet.
+def _require_can_delete(asset: MediaAsset, user: User) -> None:
+    """Owner may delete only while private; admin/manager always."""
+    _require_can_view(asset, user)
+    if _is_reviewer(user):
+        return
+    if asset.status != "private":
+        raise HTTPException(
+            status_code=403,
+            detail="Only a private asset may be deleted by its owner.",
+        )
 
 
 # ── Upload ───────────────────────────────────────────────────────────
@@ -2053,14 +2125,14 @@ async def upload_media(
         # Starlette's default HTTPException handler json.dumps()s `detail`
         # directly rather than routing it through FastAPI's response
         # pipeline, so it never sees jsonable_encoder — a raw datetime in
-        # _serialize(duplicate) would otherwise turn this 409 into an
+        # serialize_asset(duplicate) would otherwise turn this 409 into an
         # unhandled 500 at encode time. Encode here so callers reliably see
         # a 409 with the existing asset attached, not a 500.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "This file is already in your workspace.",
-                "existing": jsonable_encoder(_serialize(duplicate)),
+                "existing": jsonable_encoder(serialize_asset(duplicate)),
             },
         )
 
@@ -2133,7 +2205,7 @@ async def upload_media(
         logger.error("Could not index uploaded media %s: %s", object_key, exc)
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
-    return _serialize(asset)
+    return serialize_asset(asset)
 
 
 # ── Listing ──────────────────────────────────────────────────────────
@@ -2177,7 +2249,7 @@ async def list_media(
 
     # Scope first, and structurally: a field-staff query can never widen.
     role = role_of(current_user)
-    if role not in ("admin", "manager"):
+    if role not in MANAGER_ROLES:
         query = query.filter(MediaAsset.owner_id == current_user.id)
     elif owner_id:
         if owner_id == "unassigned":
@@ -2234,11 +2306,200 @@ async def list_media(
     items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return {
-        "items": [_serialize(asset) for asset in items],
+        "items": [serialize_asset(asset) for asset in items],
         "total": total,
         "page": page,
         "page_size": page_size,
     }
+
+
+# ── Workspaces summary (declare before /{asset_id}) ──────────────────
+
+@router.get("/workspaces")
+async def list_workspaces(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Every staff member's workspace, plus Unassigned if it holds anything.
+
+    Every staff account gets a row even when it holds nothing yet — a workspace
+    exists because the person does, and an empty one still has to be selectable
+    when a reviewer reassigns legacy media.
+    """
+    totals = {
+        row.owner_id: row
+        for row in db.query(
+            MediaAsset.owner_id,
+            func.count(MediaAsset.id).label("asset_count"),
+            func.coalesce(func.sum(MediaAsset.size_bytes), 0).label("total_bytes"),
+        ).group_by(MediaAsset.owner_id).all()
+    }
+
+    submitted = dict(
+        db.query(MediaAsset.owner_id, func.count(MediaAsset.id))
+        .filter(MediaAsset.status == "submitted")
+        .group_by(MediaAsset.owner_id)
+        .all()
+    )
+
+    staff = (
+        db.query(User)
+        .filter(User.role.in_(STAFF_ROLES))
+        .all()
+    )
+
+    def _row(owner_id, name, email):
+        total = totals.get(owner_id)
+        return {
+            "owner_id": owner_id,
+            "owner_name": name,
+            "owner_email": email,
+            "asset_count": int(total.asset_count) if total else 0,
+            "total_bytes": int(total.total_bytes) if total else 0,
+            "submitted_count": int(submitted.get(owner_id, 0)),
+        }
+
+    workspaces = [_row(user.id, user.name or user.email, user.email) for user in staff]
+
+    # Owners who are no longer staff, plus the owner-less legacy pool.
+    known = {user.id for user in staff}
+    for owner_id in totals:
+        if owner_id is None:
+            workspaces.append(_row(None, "Unassigned", None))
+        elif owner_id not in known:
+            owner = db.query(User).filter(User.id == owner_id).first()
+            workspaces.append(_row(
+                owner_id,
+                (owner.name or owner.email) if owner else f"User {owner_id}",
+                owner.email if owner else None,
+            ))
+
+    workspaces.sort(key=lambda w: (w["owner_id"] is None, -w["asset_count"], w["owner_name"]))
+    return {"workspaces": workspaces}
+
+
+# ── Detail and metadata ──────────────────────────────────────────────
+
+class MediaAssetUpdate(BaseModel):
+    # Not Field(None, max_length=200): see the identical note on upload's
+    # manual title-length check above — a Pydantic max_length violation
+    # 422s in FastAPI's own error shape, not the plain 400 every other
+    # validation problem on this resource uses. Checked by hand below.
+    title: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[list] = None
+
+
+@router.get("/{asset_id}")
+async def get_media_detail(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """One asset, plus where it is used across the public site."""
+    asset = _load_asset(db, asset_id)
+    _require_can_view(asset, current_user)
+
+    usage = usage_for_asset(asset.id, db)
+    payload = serialize_asset(asset)
+    payload["usage"] = usage
+    payload["usage_count"] = sum(len(v) for v in usage.values())
+    return payload
+
+
+@router.patch("/{asset_id}")
+async def update_media_metadata(
+    asset_id: int,
+    payload: MediaAssetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Edit title, description and tags. Status is deliberately not editable here."""
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    if payload.title is not None and len(payload.title) > 200:
+        raise HTTPException(status_code=400, detail="Title is longer than 200 characters.")
+
+    fields = payload.model_dump(exclude_unset=True)
+    if "title" in fields:
+        asset.title = fields["title"] or None
+    if "description" in fields:
+        asset.description = fields["description"] or None
+    if "tags" in fields:
+        # Same write-path gate as upload: without validate_tags() here, PATCH
+        # was the one path into this table that let a >MAX_TAGS list or a
+        # tag containing TAG_DELIM through, silently rewritten (not
+        # rejected) by normalize_tags — exactly what validate_tags' own
+        # docstring says that split exists to prevent.
+        problems = validate_tags(fields["tags"])
+        if problems:
+            raise HTTPException(status_code=400, detail={"tags": problems})
+        asset.tags = normalize_tags(fields["tags"])
+
+    asset.search_text = build_search_text(
+        asset.filename, asset.title, asset.description, asset.tags
+    )
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s metadata updated by %s (role=%s)",
+        asset.id, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+class ReassignRequest(BaseModel):
+    owner_id: Optional[int] = None
+
+
+@router.post("/{asset_id}/reassign")
+async def reassign_media(
+    asset_id: int,
+    payload: ReassignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Move an asset into another member's workspace.
+
+    Chiefly for backfilled legacy media, which arrives owner-less. A null
+    owner_id sends the asset back to the Unassigned workspace. Ownership is
+    deliberately not part of PATCH: it is a privileged action, and keeping it on
+    its own route keeps the privilege check out of the metadata path.
+
+    Deliberately does not touch `status`: reassigning a public asset leaves
+    it public. Reassignment moves who is responsible for an asset, not
+    whether reviewers have already approved it for the site.
+    """
+    asset = _load_asset(db, asset_id)
+    previous_owner_id = asset.owner_id
+
+    if payload.owner_id is not None:
+        owner = db.query(User).filter(User.id == payload.owner_id).first()
+        if owner is None:
+            raise HTTPException(status_code=404, detail="No such user")
+        if role_of(owner) not in STAFF_ROLES:
+            raise HTTPException(
+                status_code=400, detail="Only staff accounts can own media."
+            )
+        # A deactivated account can never log in (get_current_user rejects it),
+        # so media parked there is a silent dead end: not in the Unassigned pool,
+        # and invisible to the one person nominally responsible for it.
+        if not owner.is_active:
+            raise HTTPException(
+                status_code=400,
+                detail="That account is deactivated. Reassign to an active member, "
+                       "or leave the media unassigned.",
+            )
+
+    asset.owner_id = payload.owner_id
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s reassigned from owner_id=%s to owner_id=%s by %s",
+        asset.id, previous_owner_id, payload.owner_id, current_user.email,
+    )
+    return serialize_asset(asset)
 ```
 
 - [ ] **Step 4: Register the router**
@@ -2901,7 +3162,7 @@ Because `MediaAssetUpdate` has no `status` field, Pydantic drops an attempted `"
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 35 tests.
+Expected: PASS, 59 tests in this file (it accumulates across Tasks 4-7).
 
 - [ ] **Step 5: Commit**
 
