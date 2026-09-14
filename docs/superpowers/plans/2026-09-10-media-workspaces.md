@@ -1342,6 +1342,7 @@ from media_library_service import (
     build_thumbnail_key,
     detect_media_type,
     normalize_tags,
+    search_pattern,
     tag_filter_pattern,
     validate_tags,
     IMAGE_CONTENT_TYPES,
@@ -1727,6 +1728,18 @@ def test_sorting_by_size_in_both_directions(
     assert [i["filename"] for i in desc["items"]] == ["big.jpg", "small.jpg"]
 
 
+def test_wildcards_in_search_and_tag_are_literal_not_patterns(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Fails if a caller ever drops escape= from the ilike() call."""
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", tags=["gaza"])
+    _make_asset(db_session, field_staff_user.id, filename="b.jpg", tags=["water"])
+
+    # "%" is a LIKE wildcard; as a query it must match nothing, not everything.
+    assert client.get("/api/media-library?q=%25", headers=field_staff_headers).json()["total"] == 0
+    assert client.get("/api/media-library?tag=%25", headers=field_staff_headers).json()["total"] == 0
+
+
 def test_an_unknown_sort_field_is_rejected(client, field_staff_headers):
     response = client.get("/api/media-library?sort=password", headers=field_staff_headers)
     assert response.status_code == 400
@@ -1815,13 +1828,20 @@ async def list_media(
             except ValueError:
                 raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
 
+    # Both helpers escape LIKE metacharacters and hand back the escape character
+    # with the pattern — without it, q="%" or tag="%" matches every row, and a
+    # trailing backslash behaves differently on PostgreSQL than on SQLite.
     if q:
-        query = query.filter(MediaAsset.search_text.ilike(f"%{q.strip().lower()}%"))
+        found = search_pattern(q)
+        if found is not None:
+            pattern, escape = found
+            query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
     if tag:
-        pattern = tag_filter_pattern(tag)
-        if pattern is None:
+        found = tag_filter_pattern(tag)
+        if found is None:
             raise HTTPException(status_code=400, detail="tag must not be empty")
-        query = query.filter(MediaAsset.search_text.ilike(pattern))
+        pattern, escape = found
+        query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
     if type:
         if type not in MEDIA_TYPES:
             raise HTTPException(status_code=400, detail="type must be 'image' or 'video'")
@@ -1854,7 +1874,7 @@ async def list_media(
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 23 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -5106,6 +5126,39 @@ git commit -m "test: end-to-end media workspace upload, review and publish"
 ```
 
 ---
+
+## Follow-up work (not in this plan)
+
+Recorded here so it is not lost; each needs its own spec/plan cycle.
+
+**HEIC/HEIF support.** iPhones shoot HEIC by default, and a photo uploaded from
+Files or a share sheet (rather than through Safari, which auto-transcodes) arrives
+as `image/heic`. Task 3 gives it a named error telling the user how to switch to
+"Most Compatible", which is the honest short-term answer, but the real fix is
+support. It needs three things together, and doing any one alone makes things
+worse: an allow-list entry, **brand-aware sniffing** (HEIC is ISO-BMFF, so the
+`ftyp`-at-offset-4 check classifies it as *video* — the major brand has to be read
+to tell `heic`/`mif1` from `isom`/`mp4`), and `pillow-heif` to transcode to JPEG,
+since browsers cannot display HEIC natively. Note the native dependency has to
+build in the backend Docker image.
+
+**`safe_download_filename()` before any Content-Disposition use.** `filename` is
+stored raw, and `backend/routers/project_proposals.py:266` already builds
+`f'attachment; filename="{filename}"'` unescaped. A name containing a quote or a
+CR/LF is filename spoofing or header injection. Task 10 does not currently set
+that header, but the local precedent makes it likely a future reader copies it.
+The helper belongs in `media_library_service.py`, same shape as `_safe_extension`.
+
+**`toggle_user_admin` has no test coverage.** Task 2 removed the UI that drove it
+(it clobbered `role` from the `is_admin` boolean, silently demoting managers and
+field staff to donors). The endpoint itself was deliberately left in place and
+unchanged — removing a route is a separate decision from removing its UI — but it
+is now unreachable from the app and still untested.
+
+**The backend suite is not order-independent.** Two independent measurements of
+the same base commit disagreed on the failure count (19 versus 31 of the same 167
+tests), which points at shared state between tests rather than at any change here.
+Worth knowing before the suite grows much further.
 
 ## Deployment order
 
