@@ -934,6 +934,22 @@ def normalize_tags(tags: Optional[Sequence]) -> list[str]:
     return result
 
 
+def parse_tag_input(raw: Optional[str]) -> list[str]:
+    """Split a comma-separated tag string into entries worth validating.
+
+    Blank entries are dropped here rather than rejected downstream: "" and a
+    trailing comma mean "no tags", not "an empty tag" -- a naive
+    "".split(",") is [""], and a tagless upload (the common case) must not
+    fail validate_tags' whitespace-only check. Entries are returned
+    unmodified otherwise (not stripped or lowercased) -- validation and
+    normalization stay separate steps -- so validate_tags then only ever
+    sees things the user actually typed.
+    """
+    if not raw:
+        return []
+    return [part for part in raw.split(",") if part.strip()]
+
+
 def validate_tags(tags: Optional[Sequence]) -> list[str]:
     """Return human-readable problems with caller-supplied tags, or [].
 
@@ -965,7 +981,12 @@ def validate_tags(tags: Optional[Sequence]) -> list[str]:
     string_tags: list[str] = []
     for raw in tags:
         if not isinstance(raw, str):
-            problems.append(f"Tag {_truncate_for_message(raw)} must be text.")
+            # repr(raw) directly, not _truncate_for_message(raw): the latter
+            # does repr(str(raw)), which would render None as 'none' -- the
+            # exact stringification normalize_tags deliberately avoids -- and
+            # makes "Tag '5' must be text." read as if the string "5" (which
+            # *is* text) were the problem, rather than the int 5.
+            problems.append(f"Tag {raw!r} must be text.")
             continue
         string_tags.append(raw)
 
@@ -1095,15 +1116,21 @@ def unsupported_hint(filename: Optional[str], content_type: Optional[str]) -> Op
     API to surface, telling an iPhone user why their HEIC photo bounced
     instead of leaving them with a generic "unsupported file type" for what
     is obviously a photo.
+
+    _UNSUPPORTED_EXTENSIONS and UNSUPPORTED_HINTS are hand-maintained in
+    parallel with nothing enforcing the link between them, so both lookups
+    use .get() rather than indexing: a future extension entry added without
+    its hint text degrades to "no hint" instead of a 500 on the upload path.
     """
     ct = (content_type or "").split(";", 1)[0].strip().lower()
-    if ct in UNSUPPORTED_HINTS:
-        return UNSUPPORTED_HINTS[ct]
+    hint = UNSUPPORTED_HINTS.get(ct)
+    if hint is not None:
+        return hint
 
     name = (filename or "").lower()
     for ext, mapped_ct in _UNSUPPORTED_EXTENSIONS.items():
         if name.endswith(ext):
-            return UNSUPPORTED_HINTS[mapped_ct]
+            return UNSUPPORTED_HINTS.get(mapped_ct)
     return None
 
 
@@ -1149,8 +1176,8 @@ def build_thumbnail_key(object_key: str) -> str:
 
 Run: `cd backend && python -m pytest tests/test_media_library_service.py -v`
 
-Expected: PASS, 66 tests (the 14 originally specified plus the hardening and
-validation tests added across three review rounds).
+Expected: PASS, 77 tests (the 14 originally specified plus the hardening and
+validation tests added across four review rounds).
 
 - [ ] **Step 5: Commit**
 
