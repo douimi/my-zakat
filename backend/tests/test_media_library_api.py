@@ -329,3 +329,155 @@ def test_upload_gives_a_specific_hint_for_heic(client, field_staff_headers, fake
                         content=b"whatever", content_type="image/heic")
     assert response.status_code == 400
     assert "HEIC" in response.json()["detail"]
+
+
+# ── Listing ──────────────────────────────────────────────────────────
+
+def _make_asset(db_session, owner_id, filename="a.jpg", title=None, description=None,
+                tags=None, status="private", size=100, media_type="image"):
+    from media_library_service import build_search_text
+    asset = MediaAsset(
+        owner_id=owner_id,
+        object_key=f"workspaces/{owner_id}/2026/03/{filename}-{size}-{status}",
+        filename=filename,
+        media_type=media_type,
+        content_type="image/jpeg" if media_type == "image" else "video/mp4",
+        size_bytes=size,
+        title=title,
+        description=description,
+        tags=tags or [],
+        search_text=build_search_text(filename, title, description, tags),
+        status=status,
+    )
+    db_session.add(asset)
+    db_session.commit()
+    db_session.refresh(asset)
+    return asset
+
+
+def test_field_staff_only_sees_their_own_workspace(
+    client, db_session, field_staff_headers, field_staff_user, other_field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="mine.jpg")
+    _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+
+    body = client.get("/api/media-library", headers=field_staff_headers).json()
+    assert [item["filename"] for item in body["items"]] == ["mine.jpg"]
+    assert body["total"] == 1
+
+
+def test_field_staff_cannot_widen_scope_with_owner_id(
+    client, db_session, field_staff_headers, field_staff_user, other_field_staff_user
+):
+    _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+    body = client.get(
+        f"/api/media-library?owner_id={other_field_staff_user.id}",
+        headers=field_staff_headers,
+    ).json()
+    assert body["items"] == []
+
+
+def test_an_admin_sees_every_workspace(
+    client, db_session, auth_headers, field_staff_user, other_field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="mine.jpg")
+    _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+    _make_asset(db_session, None, filename="legacy.jpg", status="public")
+
+    body = client.get("/api/media-library", headers=auth_headers).json()
+    assert body["total"] == 3
+
+
+def test_an_admin_can_filter_to_the_unassigned_workspace(
+    client, db_session, auth_headers, field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="mine.jpg")
+    _make_asset(db_session, None, filename="legacy.jpg", status="public")
+
+    body = client.get("/api/media-library?owner_id=unassigned", headers=auth_headers).json()
+    assert [item["filename"] for item in body["items"]] == ["legacy.jpg"]
+
+
+def test_search_matches_filename_title_description_and_tags(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="IMG_4821.jpg",
+                title="Well opening", description="Ceremony in Rafah", tags=["gaza"])
+    _make_asset(db_session, field_staff_user.id, filename="other.jpg", title="Nothing")
+
+    for query in ("img_4821", "well", "rafah", "gaza"):
+        body = client.get(f"/api/media-library?q={query}", headers=field_staff_headers).json()
+        assert body["total"] == 1, f"query {query!r} matched {body['total']} rows"
+
+
+def test_search_is_case_insensitive(client, db_session, field_staff_headers, field_staff_user):
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", title="Well Opening")
+    body = client.get("/api/media-library?q=WELL", headers=field_staff_headers).json()
+    assert body["total"] == 1
+
+
+def test_the_tag_filter_matches_whole_tags_only(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", tags=["gaza", "water-well"])
+    assert client.get("/api/media-library?tag=gaza", headers=field_staff_headers).json()["total"] == 1
+    assert client.get("/api/media-library?tag=gaz", headers=field_staff_headers).json()["total"] == 0
+
+
+def test_filter_by_type_and_status(client, db_session, field_staff_headers, field_staff_user):
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", media_type="image")
+    _make_asset(db_session, field_staff_user.id, filename="b.mp4", media_type="video",
+                status="submitted")
+
+    assert client.get("/api/media-library?type=video", headers=field_staff_headers).json()["total"] == 1
+    assert client.get("/api/media-library?status=submitted", headers=field_staff_headers).json()["total"] == 1
+
+
+def test_sorting_by_size_in_both_directions(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    _make_asset(db_session, field_staff_user.id, filename="small.jpg", size=10)
+    _make_asset(db_session, field_staff_user.id, filename="big.jpg", size=999)
+
+    asc = client.get("/api/media-library?sort=size&order=asc", headers=field_staff_headers).json()
+    assert [i["filename"] for i in asc["items"]] == ["small.jpg", "big.jpg"]
+
+    desc = client.get("/api/media-library?sort=size&order=desc", headers=field_staff_headers).json()
+    assert [i["filename"] for i in desc["items"]] == ["big.jpg", "small.jpg"]
+
+
+def test_wildcards_in_search_and_tag_are_literal_not_patterns(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Fails if a caller ever drops escape= from the ilike() call."""
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", tags=["gaza"])
+    _make_asset(db_session, field_staff_user.id, filename="b.jpg", tags=["water"])
+
+    # "%" is a LIKE wildcard; as a query it must match nothing, not everything.
+    assert client.get("/api/media-library?q=%25", headers=field_staff_headers).json()["total"] == 0
+    assert client.get("/api/media-library?tag=%25", headers=field_staff_headers).json()["total"] == 0
+
+
+def test_an_unknown_sort_field_is_rejected(client, field_staff_headers):
+    response = client.get("/api/media-library?sort=password", headers=field_staff_headers)
+    assert response.status_code == 400
+
+
+def test_pagination_reports_totals_and_slices(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    for index in range(5):
+        _make_asset(db_session, field_staff_user.id, filename=f"f{index}.jpg", size=index)
+
+    body = client.get(
+        "/api/media-library?page=2&page_size=2&sort=size&order=asc",
+        headers=field_staff_headers,
+    ).json()
+    assert body["total"] == 5
+    assert body["page"] == 2
+    assert body["page_size"] == 2
+    assert [i["filename"] for i in body["items"]] == ["f2.jpg", "f3.jpg"]
+
+
+def test_a_donor_cannot_list(client, donor_headers):
+    assert client.get("/api/media-library", headers=donor_headers).status_code == 403

@@ -2,34 +2,34 @@
 
 Staff (admin | manager | field_staff):
   POST   /api/media-library                upload into own workspace
-  GET    /api/media-library                list / search / sort / paginate                (Tasks 6-9)
-  GET    /api/media-library/{id}           detail + site-usage cross-reference              (Tasks 6-9)
-  PATCH  /api/media-library/{id}           edit title / description / tags                  (Tasks 6-9)
-  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Tasks 6-9)
-  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Tasks 6-9)
+  GET    /api/media-library                list / search / sort / paginate
+  GET    /api/media-library/{id}           detail + site-usage cross-reference              (Tasks 7-9)
+  PATCH  /api/media-library/{id}           edit title / description / tags                  (Tasks 7-9)
+  POST   /api/media-library/{id}/submit    owner: private -> submitted                      (Tasks 7-9)
+  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Tasks 7-9)
 
 Admin or manager only:
-  GET    /api/media-library/workspaces     workspaces with counts and total size             (Tasks 6-9)
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Tasks 6-9)
-  POST   /api/media-library/{id}/reassign  move an asset into another workspace               (Tasks 6-9)
+  GET    /api/media-library/workspaces     workspaces with counts and total size             (Tasks 7-9)
+  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Tasks 7-9)
+  POST   /api/media-library/{id}/reassign  move an asset into another workspace               (Tasks 7-9)
 
-Only the upload endpoint above exists so far; every other line in these two
-lists is a stub for Tasks 6-9. Byte serving lives in media_library_files.py.
+Only upload and listing exist so far; every other line in these two lists is
+a stub for Tasks 7-9. Byte serving lives in media_library_files.py.
 """
 from __future__ import annotations
 
 import hashlib
 import io
 import os
-from datetime import datetime  # noqa: F401 — unused until Tasks 6-9 (listing/sort)
+from datetime import datetime  # noqa: F401 — unused until Tasks 7-9 (detail/edit/review)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-# BaseModel/Field, Query, get_current_manager_or_admin, search_pattern,
-# tag_filter_pattern, _load_asset and _require_can_edit below are all unused
-# by the upload endpoint alone — they exist for Tasks 6-9 (listing, detail,
-# edit, review, reassign) to build on without re-deriving them.
+# BaseModel/Field, get_current_manager_or_admin, _load_asset and
+# _require_can_edit below are still unused by upload and listing alone —
+# they exist for Tasks 7-9 (detail, edit, review, reassign) to build on
+# without re-deriving them.
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -107,7 +107,7 @@ def _image_dimensions(data: bytes):
         return (None, None)
 
 
-# Staged for Tasks 6-9 (detail/edit/submit/review/reassign): no route below
+# Staged for Tasks 7-9 (detail/edit/submit/review/reassign): no route below
 # calls these yet.
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
     asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
@@ -328,3 +328,97 @@ async def upload_media(
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
     return _serialize(asset)
+
+
+# ── Listing ──────────────────────────────────────────────────────────
+
+SORT_FIELDS = {
+    "created_at": MediaAsset.created_at,
+    "filename": MediaAsset.filename,
+    "title": MediaAsset.title,
+    "size": MediaAsset.size_bytes,
+    "type": MediaAsset.media_type,
+}
+
+MEDIA_TYPES = ("image", "video")
+STATUSES = ("private", "submitted", "public")
+
+
+@router.get("")
+async def list_media(
+    q: Optional[str] = Query(None, description="Match filename, title, description or tags"),
+    type: Optional[str] = Query(None, description="image | video"),
+    status: Optional[str] = Query(None, description="private | submitted | public"),
+    tag: Optional[str] = Query(None, description="Exact tag match"),
+    owner_id: Optional[str] = Query(None, description="Admin/manager only; accepts 'unassigned'"),
+    sort: str = Query("created_at"),
+    order: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(48, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """List the caller's workspace, or every workspace for admins and managers."""
+    if sort not in SORT_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown sort field. Use one of: {', '.join(sorted(SORT_FIELDS))}",
+        )
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="order must be 'asc' or 'desc'")
+
+    query = db.query(MediaAsset)
+
+    # Scope first, and structurally: a field-staff query can never widen.
+    role = role_of(current_user)
+    if role not in ("admin", "manager"):
+        query = query.filter(MediaAsset.owner_id == current_user.id)
+    elif owner_id:
+        if owner_id == "unassigned":
+            query = query.filter(MediaAsset.owner_id.is_(None))
+        else:
+            try:
+                query = query.filter(MediaAsset.owner_id == int(owner_id))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+
+    # Both helpers escape LIKE metacharacters and hand back the escape character
+    # with the pattern — without it, q="%" or tag="%" matches every row, and a
+    # trailing backslash behaves differently on PostgreSQL than on SQLite.
+    if q:
+        found = search_pattern(q)
+        if found is not None:
+            pattern, escape = found
+            query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if tag:
+        found = tag_filter_pattern(tag)
+        if found is None:
+            raise HTTPException(status_code=400, detail="tag must not be empty")
+        pattern, escape = found
+        query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if type:
+        if type not in MEDIA_TYPES:
+            raise HTTPException(status_code=400, detail="type must be 'image' or 'video'")
+        query = query.filter(MediaAsset.media_type == type)
+    if status:
+        if status not in STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(STATUSES)}")
+        query = query.filter(MediaAsset.status == status)
+
+    total = query.count()
+
+    column = SORT_FIELDS[sort]
+    query = query.order_by(column.asc() if order == "asc" else column.desc())
+    # Stable tiebreak so pagination cannot repeat or drop a row.
+    query = query.order_by(None).order_by(
+        column.asc() if order == "asc" else column.desc(), MediaAsset.id.asc()
+    )
+
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return {
+        "items": [_serialize(asset) for asset in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
