@@ -84,7 +84,8 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 
 // them to their landing page (stories, media workspace) instead of the
 // admin metrics view.
 const AdminIndex = () => {
-  const { isManager, isFieldStaff } = useAuthStore()
+  const isManager = useAuthStore((s) => s.isManager)
+  const isFieldStaff = useAuthStore((s) => s.isFieldStaff)
   if (isFieldStaff) return <Navigate to="/admin/media" replace />
   if (isManager) return <Navigate to="/admin/stories" replace />
   return <AdminDashboard />
@@ -174,6 +175,9 @@ function App() {
                 <Route path="subscriptions" element={<AdminSubscriptions />} />
                 <Route path="program-categories" element={<AdminProgramCategories />} />
                 <Route path="programs" element={<AdminPrograms />} />
+                {/* Placeholders: Tasks 16 and 17 replace these with the real pages. */}
+                <Route path="media" element={<div className="p-8 text-gray-500">Media workspace — coming soon.</div>} />
+                <Route path="media/all" element={<div className="p-8 text-gray-500">All media — coming soon.</div>} />
                 <Route path="gallery" element={<AdminGallery />} />
                 <Route path="slideshow" element={<AdminSlideshow />} />
                 <Route path="urgent-needs" element={<AdminUrgentNeeds />} />

@@ -25,14 +25,10 @@ Object.defineProperty(window, 'localStorage', {
 
 describe('AuthStore', () => {
   beforeEach(() => {
-    // Reset store state
-    useAuthStore.setState({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isAdmin: false
-    })
-    
+    // Reset store state (via the store's own reset, so every derived field
+    // — including ones added after this test was written — stays in sync)
+    useAuthStore.getState().logout()
+
     // Clear localStorage
     localStorageMock.clear()
   })

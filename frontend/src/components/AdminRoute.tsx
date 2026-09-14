@@ -13,8 +13,8 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
     return <Navigate to="/login" replace />
   }
 
-  // Both admins and managers can access /admin/*; route-level gating in the
-  // layout / individual pages enforces per-section permissions.
+  // Admins, managers, and field staff can all access /admin/*; route-level
+  // gating in the layout / individual pages enforces per-section permissions.
   if (!isStaff) {
     return <Navigate to="/" replace />
   }

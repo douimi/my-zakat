@@ -63,7 +63,6 @@ const AdminUsers = () => {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'delete'
     userId: number
     userName: string
     action: string
@@ -190,7 +189,6 @@ const AdminUsers = () => {
     
     // Show confirmation modal instead of browser confirm
     setConfirmAction({
-      type: 'delete',
       userId,
       userName: user?.name || user?.email || 'this user',
       action: 'delete'

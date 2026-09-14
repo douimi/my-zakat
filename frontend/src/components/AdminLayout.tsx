@@ -36,7 +36,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore, type Role } from '../store/authStore'
 import { clsx } from 'clsx'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ type NavGroup = {
 
 type NavEntry = NavLink | NavGroup
 
-const NAV: NavEntry[] = [
+export const NAV: NavEntry[] = [
   { kind: 'link', name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
 
   {
@@ -145,8 +145,12 @@ const NAV: NavEntry[] = [
   { kind: 'link', name: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
-// Items each non-admin role is allowed to access. Admins see everything.
-const ROLE_ALLOWED: Record<string, Set<string>> = {
+// Items each non-admin role is allowed to access. Admins see everything, so
+// they have no entry here (the early return in filterNavForRole makes one
+// dead). `user` is listed explicitly, even though the `?? new Set()`
+// fallback would cover it too, to document that donors deliberately get no
+// admin nav items.
+export const ROLE_ALLOWED: Partial<Record<Role, Set<string>>> = {
   manager: new Set([
     '/admin/contacts',
     '/admin/volunteers',
@@ -165,7 +169,7 @@ const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function filterNavForRole(nav: NavEntry[], role: string): NavEntry[] {
+export function filterNavForRole(nav: NavEntry[], role: Role): NavEntry[] {
   if (role === 'admin') return nav
   const allowed = ROLE_ALLOWED[role] ?? new Set<string>()
   return nav
