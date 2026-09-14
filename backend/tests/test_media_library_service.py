@@ -6,27 +6,33 @@ import pytest
 
 from media_library_service import (
     LIKE_ESCAPE,
+    MAX_TAG_LENGTH,
     build_object_key,
     build_search_text,
     build_thumbnail_key,
     detect_media_type,
     normalize_tags,
+    search_pattern,
     tag_filter_pattern,
+    unsupported_hint,
     validate_tags,
 )
 
 
-def _like(haystack: str, pattern: str) -> bool:
+def _like(haystack: str, result) -> bool:
     """Evaluate a LIKE match through real SQLite, not Python `in`.
 
     `pattern.strip("%") in text` exercises str.__contains__, which is
     structurally incapable of catching wildcard semantics (a stray '%' or '_'
     in the tag) — that is exactly how the wildcard hole slipped through.
+    `result` is the (pattern, escape) pair tag_filter_pattern/search_pattern
+    return.
     """
+    pattern, escape = result
     conn = sqlite3.connect(":memory:")
     try:
         return bool(conn.execute(
-            "SELECT ? LIKE ? ESCAPE ?", (haystack, pattern, LIKE_ESCAPE)
+            "SELECT ? LIKE ? ESCAPE ?", (haystack, pattern, escape)
         ).fetchone()[0])
     finally:
         conn.close()
@@ -58,13 +64,18 @@ def test_build_search_text_tolerates_empty_input():
 
 def test_tag_filter_pattern_matches_only_the_whole_tag():
     text = build_search_text("a.jpg", None, None, ["gaza", "water-well"])
-    assert tag_filter_pattern("gaza").strip("%") in text
+    assert _like(text, tag_filter_pattern("gaza"))
     # 'gaz' is a prefix of 'gaza' but is not itself a tag
-    assert tag_filter_pattern("gaz").strip("%") not in text
+    assert not _like(text, tag_filter_pattern("gaz"))
 
 
 def test_tag_filter_pattern_returns_none_for_an_empty_tag():
     assert tag_filter_pattern("   ") is None
+
+
+def test_tag_filter_pattern_returns_the_required_escape_char():
+    pattern, escape = tag_filter_pattern("gaza")
+    assert escape == LIKE_ESCAPE
 
 
 def test_detect_media_type_prefers_the_content_type():
@@ -134,8 +145,8 @@ def test_build_object_key_accepts_a_normal_positive_owner_id():
 
 def test_normalize_tags_strips_the_delimiter_so_it_cannot_answer_two_filters():
     text = build_search_text("a.jpg", None, None, ["gaza|evil"])
-    assert tag_filter_pattern("gaza").strip("%") not in text
-    assert tag_filter_pattern("evil").strip("%") not in text
+    assert not _like(text, tag_filter_pattern("gaza"))
+    assert not _like(text, tag_filter_pattern("evil"))
 
 
 def test_normalize_tags_drops_a_tag_that_is_only_the_delimiter():
@@ -154,7 +165,7 @@ def test_detect_media_type_rejects_svg_by_extension_fallback():
     assert detect_media_type("logo.svg", None) is None
 
 
-# --- Fix A: content-type allow-lists, not a deny-list -----------------------
+# --- content-type allow-lists, not a deny-list ------------------------------
 
 def test_detect_media_type_rejects_svg_with_a_charset_parameter():
     assert detect_media_type("logo.svg", "image/svg+xml; charset=utf-8") is None
@@ -172,7 +183,7 @@ def test_detect_media_type_rejects_an_unlisted_image_subtype():
     assert detect_media_type("icon.ico", "image/x-icon") is None
 
 
-# --- Fix B: LIKE metacharacters are escaped, verified through real LIKE -----
+# --- LIKE metacharacters are escaped, verified through real LIKE -----------
 
 def test_tag_filter_pattern_matches_the_tag_through_real_like():
     text = build_search_text("a.jpg", None, None, ["gaza"])
@@ -199,7 +210,7 @@ def test_tag_filter_pattern_matches_a_tag_containing_a_literal_percent_only_itse
     assert not _like(text_without, pattern)
 
 
-# --- Fix C: the delimiter is stripped from the free-text fields too --------
+# --- the delimiter is stripped from the free-text fields too ---------------
 
 def test_build_search_text_strips_the_delimiter_from_filename_title_description():
     text = build_search_text("a.jpg", "x |gaza| y", None, ["water"])
@@ -207,19 +218,31 @@ def test_build_search_text_strips_the_delimiter_from_filename_title_description(
     assert _like(text, tag_filter_pattern("water"))
 
 
-# --- Fix E: non-string tags are skipped, not coerced -----------------------
+# --- non-string tags are skipped, not coerced -------------------------------
 
 def test_normalize_tags_skips_non_string_entries():
     assert normalize_tags([None, 5, "gaza"]) == ["gaza"]
 
 
-# --- Fix F: validate_tags is the write-path gate ----------------------------
+# --- validate_tags: %, _, \ are allowed (escaping already neutralises them) -
 
 def test_validate_tags_returns_no_problems_for_clean_tags():
     assert validate_tags(["gaza", "water-well"]) == []
 
 
-def test_validate_tags_returns_none_problems_for_none():
+def test_validate_tags_accepts_a_percent_sign():
+    assert validate_tags(["50%-off"]) == []
+
+
+def test_validate_tags_accepts_an_underscore():
+    assert validate_tags(["water_well"]) == []
+
+
+def test_validate_tags_accepts_a_backslash():
+    assert validate_tags(["gaza\\"]) == []
+
+
+def test_validate_tags_returns_no_problems_for_none():
     assert validate_tags(None) == []
 
 
@@ -227,25 +250,119 @@ def test_validate_tags_rejects_a_tag_containing_the_delimiter():
     assert validate_tags(["gaza|evil"]) != []
 
 
-def test_validate_tags_rejects_a_tag_containing_percent():
-    assert validate_tags(["50%off"]) != []
-
-
-def test_validate_tags_rejects_a_tag_containing_underscore():
-    assert validate_tags(["gaz_a"]) != []
-
-
-def test_validate_tags_rejects_a_tag_containing_a_backslash():
-    assert validate_tags(["gaza\\"]) != []
-
-
 def test_validate_tags_rejects_a_tag_over_the_length_limit():
     assert validate_tags(["g" * 65]) != []
 
 
-def test_validate_tags_rejects_too_many_tags():
+def test_validate_tags_rejects_too_many_distinct_tags():
     assert validate_tags([f"tag{i}" for i in range(26)]) != []
 
 
 def test_validate_tags_rejects_a_non_string_entry():
     assert validate_tags([5]) != []
+
+
+# --- validate_tags validates the normalized form ----------------------------
+
+def test_validate_tags_accepts_a_tag_that_normalizes_under_the_length_limit():
+    # 62 real characters once the surrounding whitespace is stripped.
+    assert validate_tags(["   " + "g" * 62 + "   "]) == []
+
+
+def test_validate_tags_accepts_tags_that_dedupe_under_the_max():
+    assert validate_tags(["gaza"] * 26) == []
+
+
+def test_validate_tags_rejects_a_whitespace_only_tag():
+    # normalize_tags would silently drop this; validate_tags must not let it
+    # through quietly.
+    assert validate_tags(["   "]) != []
+
+
+def test_validate_tags_truncates_a_very_long_echoed_tag():
+    problems = validate_tags(["g" * 100_000])
+    assert problems != []
+    assert len(problems[0]) < MAX_TAG_LENGTH + 100
+
+
+# --- search_pattern: the same safe primitive for free-text search ----------
+
+def test_search_pattern_returns_none_for_empty_input():
+    assert search_pattern(None) is None
+    assert search_pattern("") is None
+    assert search_pattern("   ") is None
+
+
+def test_search_pattern_lowercases_the_query():
+    assert _like("well opening in rafah", search_pattern("RAFAH"))
+
+
+def test_search_pattern_does_not_let_percent_match_everything():
+    assert not _like("well opening", search_pattern("%"))
+
+
+def test_search_pattern_does_not_let_underscore_act_as_a_wildcard():
+    assert not _like("abc", search_pattern("a_c"))
+
+
+def test_search_pattern_finds_a_literal_percent_in_the_haystack():
+    assert _like("50% off today", search_pattern("%"))
+
+
+# --- free-win camera formats -------------------------------------------------
+
+def test_detect_media_type_accepts_3gp_by_content_type():
+    assert detect_media_type("clip.3gp", "video/3gpp") == "video"
+    assert detect_media_type("clip.3gp", "video/3gpp2") == "video"
+
+
+def test_detect_media_type_accepts_3gp_by_extension_fallback():
+    assert detect_media_type("clip.3GP", "application/octet-stream") == "video"
+
+
+def test_detect_media_type_accepts_m4v():
+    assert detect_media_type("clip.m4v", "video/x-m4v") == "video"
+
+
+def test_detect_media_type_accepts_the_image_jpg_alias():
+    assert detect_media_type("whatever.bin", "image/jpg") == "image"
+
+
+def test_detect_media_type_accepts_the_bmp_alias():
+    assert detect_media_type("whatever.bin", "image/x-ms-bmp") == "image"
+
+
+def test_detect_media_type_accepts_ogv_by_extension_fallback():
+    assert detect_media_type("clip.ogv", "application/octet-stream") == "video"
+
+
+def test_build_object_key_keeps_the_3gp_extension():
+    key = build_object_key(7, "clip.3gp", now=datetime(2026, 3, 14))
+    assert key.endswith(".3gp")
+
+
+# --- recognised-but-unsupported formats get a specific message -------------
+
+def test_unsupported_hint_names_heic_by_content_type():
+    assert "HEIC" in unsupported_hint("IMG_0001.HEIC", "image/heic")
+
+
+def test_unsupported_hint_names_heic_by_extension_fallback():
+    assert "HEIC" in unsupported_hint("IMG_0001.heic", None)
+
+
+def test_unsupported_hint_names_avif():
+    assert "AVIF" in unsupported_hint("photo.avif", "image/avif")
+
+
+def test_unsupported_hint_returns_none_for_a_supported_format():
+    assert unsupported_hint("photo.jpg", "image/jpeg") is None
+
+
+def test_unsupported_hint_returns_none_for_a_wholly_unrecognised_format():
+    assert unsupported_hint("notes.pdf", "application/pdf") is None
+
+
+def test_detect_media_type_still_returns_none_for_heic():
+    # unsupported_hint explains *why*; detect_media_type still refuses it.
+    assert detect_media_type("IMG_0001.HEIC", "image/heic") is None
