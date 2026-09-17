@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 import secrets
@@ -6,7 +6,16 @@ import secrets
 from database import get_db
 from models import User
 from schemas import UserRegister, UserLogin, UserResponse, Token, ResendVerificationRequest
-from auth_utils import verify_password, create_access_token, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
+from auth_utils import (
+    verify_password,
+    create_access_token,
+    get_password_hash,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    get_current_user,
+    is_production,
+    MEDIA_SESSION_COOKIE,
+    MEDIA_SESSION_COOKIE_PATH,
+)
 from email_service import send_verification_email
 
 router = APIRouter()
@@ -59,7 +68,7 @@ async def register_user(user: UserRegister, db: Session = Depends(get_db)):
 
 # User Login (works for both regular users and admins)
 @router.post("/login", response_model=Token)
-async def login(user_login: UserLogin, db: Session = Depends(get_db)):
+async def login(user_login: UserLogin, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_login.email).first()
     
     if not user or not verify_password(user_login.password, user.password):
@@ -86,7 +95,21 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
-    
+
+    # Mirror the same JWT into an HttpOnly cookie scoped to the media-library
+    # routes, so private media renders in plain <img>/<video> tags — see the
+    # comment on MEDIA_SESSION_COOKIE in auth_utils.py. Same token, same
+    # expiry as the bearer token above; this is not a second credential.
+    response.set_cookie(
+        key=MEDIA_SESSION_COOKIE,
+        value=access_token,
+        max_age=int(access_token_expires.total_seconds()),
+        path=MEDIA_SESSION_COOKIE_PATH,
+        httponly=True,
+        secure=is_production(),
+        samesite="strict",
+    )
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -94,6 +117,25 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+# Log out: clear the media-session cookie set on login.
+#
+# There is no server-side session to invalidate (the JWT itself keeps working
+# until it expires — that's unchanged), but the cookie must not silently
+# outlive the frontend's own logout, so this gives the frontend something to
+# call that expires it. Doesn't require authentication: logging out an
+# already-expired or already-logged-out session must still succeed.
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(
+        key=MEDIA_SESSION_COOKIE,
+        path=MEDIA_SESSION_COOKIE_PATH,
+        httponly=True,
+        secure=is_production(),
+        samesite="strict",
+    )
+    return {"message": "Logged out"}
 
 
 # Verify email address

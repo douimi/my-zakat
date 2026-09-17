@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { authAPI } from '../utils/api'
 
 export type Role = 'admin' | 'manager' | 'field_staff' | 'user'
 
@@ -77,6 +78,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_data')
+      // Expire the media-session cookie set on login. Fire-and-forget: logout
+      // must not be blocked by (or fail because of) this network call.
+      authAPI.logout().catch(() => {})
     }
     set({
       user: null,

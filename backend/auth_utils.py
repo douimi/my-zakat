@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
@@ -29,6 +29,23 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1008
 
 security = HTTPBearer()
 optional_security = HTTPBearer(auto_error=False)
+
+# HttpOnly session cookie for byte-serving media routes.
+#
+# `<img>`/`<video>` tags can't attach an Authorization header, so private media
+# would 404 for every signed-in browser session even though the API call that
+# fetches the asset's metadata (which *does* go through axios with the header)
+# succeeds. Login mirrors the JWT into this cookie, scoped to the media routes
+# only, so the browser sends it automatically on those subresource requests.
+# It is read by `get_optional_user` only — `get_current_user` and every other
+# dependency keep requiring the Authorization header exactly as before.
+MEDIA_SESSION_COOKIE = "media_session"
+MEDIA_SESSION_COOKIE_PATH = "/api/media-library"
+
+
+def is_production() -> bool:
+    return os.getenv("ENVIRONMENT", "development") == "production"
+
 
 VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
 STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
@@ -101,17 +118,22 @@ def get_current_user(
 
 
 def get_optional_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: Session = Depends(get_db)
 ):
     """Current user if a valid token is present, otherwise None.
 
     Used by routes that serve public content to anonymous callers but must still
-    recognise a signed-in owner.
+    recognise a signed-in owner. The token can come from either the
+    `Authorization: Bearer` header (used by the axios API client) or the
+    `media_session` HttpOnly cookie (used by plain `<img>`/`<video>` requests,
+    which cannot carry a custom header). The header wins when both are present.
     """
-    if credentials is None:
+    token = credentials.credentials if credentials is not None else request.cookies.get(MEDIA_SESSION_COOKIE)
+    if not token:
         return None
-    email = verify_token(credentials.credentials)
+    email = verify_token(token)
     if email is None:
         return None
     user = db.query(User).filter(User.email == email).first()

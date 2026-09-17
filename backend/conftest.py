@@ -61,6 +61,22 @@ def client(test_app):
         yield test_client
 
 
+@pytest.fixture(autouse=True)
+def _reset_client_cookies(client):
+    """Cookie-jar hygiene for the shared, session-scoped `client`.
+
+    `client` is intentionally one TestClient reused for the whole test
+    session, but that means it also carries one real, persistent cookie jar.
+    Since /api/auth/login now sets an HttpOnly `media_session` cookie, any
+    test that logs in would otherwise leave that cookie sitting on `client`
+    for every test that runs afterwards — in any file — making media-library
+    auth tests order-dependent. Clear it before and after each test.
+    """
+    client.cookies.clear()
+    yield
+    client.cookies.clear()
+
+
 @pytest.fixture(scope="function")
 def db_session():
     """Create a fresh database session for each test"""

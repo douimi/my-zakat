@@ -18,6 +18,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  // Required for the browser to store the HttpOnly media-session cookie set
+  // by /api/auth/login and to send it back on /api/auth/logout. Plain <img>/
+  // <video> requests to /api/media-library/* send cookies automatically
+  // regardless of this flag; it only matters for axios (XHR) calls.
+  withCredentials: true,
 })
 
 // Helper function to get the correct URL for static files (uploads)
@@ -52,6 +57,10 @@ api.interceptors.response.use(
       // Clear invalid token and redirect to login
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_data')
+      // Best-effort: also expire the media-session cookie so it doesn't
+      // outlive the token that just got rejected. Fire-and-forget — a 401
+      // here must never block the redirect below.
+      api.post('/api/auth/logout').catch(() => {})
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -76,6 +85,13 @@ export const authAPI = {
       headers: { 'Authorization': `Bearer ${loginData.access_token}` }
     })
     return { ...loginData, user: userResponse.data }
+  },
+  // Expires the media-session cookie set on login (see auth_utils.py). The
+  // JWT itself is stateless and not revoked by this — it just clears what
+  // lets <img>/<video> tags read private media without it.
+  logout: async () => {
+    const response = await api.post('/api/auth/logout')
+    return response.data
   },
 }
 

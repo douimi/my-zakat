@@ -147,3 +147,95 @@ def test_field_staff_are_refused_on_manager_only_endpoints(
         headers=field_staff_headers,
         json={"decision": "approve"},
     ).status_code == 403
+
+
+# ── Cookie auth (media_session) ─────────────────────────────────────
+#
+# Plain <img>/<video> requests can't carry an Authorization header, so login
+# also sets an HttpOnly `media_session` cookie scoped to these routes. The
+# `client` fixture is one TestClient shared for the whole session, so it has
+# a real cookie jar — logging in through it genuinely leaves the cookie
+# attached for the next request made with no explicit headers, the same way
+# a browser would behave. `_reset_client_cookies` (conftest.py) clears that
+# jar before and after every test so these don't leak into unrelated tests.
+
+LOGIN_PASSWORD = "testpass"  # matches conftest.TEST_PASSWORD / _make_user
+
+
+def test_a_private_asset_is_served_with_only_a_cookie_no_auth_header(
+    client, db_session, field_staff_user, fake_s3_read
+):
+    asset = _asset(db_session, field_staff_user.id, status="private")
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": field_staff_user.email, "password": LOGIN_PASSWORD},
+    )
+    assert login.status_code == 200
+    assert "media_session=" in login.headers.get("set-cookie", "")
+
+    # No `headers=` on either call: whatever the client sends now must come
+    # from the cookie jar alone.
+    file_response = client.get(f"/api/media-library/{asset.id}/file")
+    assert file_response.status_code == 200
+
+    thumb_response = client.get(f"/api/media-library/{asset.id}/thumb")
+    assert thumb_response.status_code == 200
+
+
+def test_a_private_asset_is_a_404_with_neither_cookie_nor_header(
+    client, db_session, field_staff_user, fake_s3_read
+):
+    asset = _asset(db_session, field_staff_user.id, status="private")
+    assert client.get(f"/api/media-library/{asset.id}/file").status_code == 404
+    assert client.get(f"/api/media-library/{asset.id}/thumb").status_code == 404
+
+
+def test_a_cookie_for_a_different_user_is_a_404_not_a_403(
+    client, db_session, field_staff_user, other_field_staff_user, fake_s3_read
+):
+    asset = _asset(db_session, field_staff_user.id, status="private")
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": other_field_staff_user.email, "password": LOGIN_PASSWORD},
+    )
+    assert login.status_code == 200
+
+    response = client.get(f"/api/media-library/{asset.id}/file")
+    assert response.status_code == 404, "a 403 here would confirm the asset exists"
+
+
+def test_the_media_session_cookie_is_scoped_to_media_library_routes(
+    client, field_staff_user
+):
+    """The cookie must carry `path=/api/media-library` — not every API call,
+    and not a bare `/`, which would send it to every route on the site."""
+    login = client.post(
+        "/api/auth/login",
+        json={"email": field_staff_user.email, "password": LOGIN_PASSWORD},
+    )
+    assert login.status_code == 200
+    set_cookie = login.headers.get("set-cookie", "")
+    assert "media_session=" in set_cookie
+    assert "path=/api/media-library" in set_cookie.lower()
+
+
+def test_logout_clears_the_media_session_cookie(
+    client, db_session, field_staff_user, fake_s3_read
+):
+    asset = _asset(db_session, field_staff_user.id, status="private")
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": field_staff_user.email, "password": LOGIN_PASSWORD},
+    )
+    assert login.status_code == 200
+    assert client.get(f"/api/media-library/{asset.id}/file").status_code == 200
+
+    logout = client.post("/api/auth/logout")
+    assert logout.status_code == 200
+
+    # The cookie jar no longer has a usable media_session cookie, so the
+    # asset is unreachable again exactly as if the caller were anonymous.
+    assert client.get(f"/api/media-library/{asset.id}/file").status_code == 404
