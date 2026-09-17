@@ -1634,7 +1634,7 @@ Run: `cd migrations && grep -c "CREATE INDEX" 31_add_media_library.sql`
 Expected: `6`.
 
 If a local PostgreSQL is reachable, apply it for real instead:
-`docker compose exec -T db psql -U postgres -d myzakat -f /migrations/31_add_media_library.sql`
+`docker compose -f docker-compose.traefik.yml --env-file env.production exec -T db psql -U myzakat_user -d myzakat < migrations/31_add_media_library.sql`
 Expected: `Migration 31 completed successfully!`
 
 - [x] **Step 7: Commit**
@@ -5994,7 +5994,7 @@ An admin can reassign an asset to a member afterwards.
 
 Idempotent: keyed on object_key, so re-running only adds what is missing.
 
-    docker compose exec backend python -m scripts.backfill_media_library
+    docker compose -f docker-compose.traefik.yml --env-file env.production exec backend python -m scripts.backfill_media_library
 """
 from __future__ import annotations
 
@@ -6110,7 +6110,7 @@ Create `backend/scripts/audit_direct_s3_urls.py`:
 Every such row would 404 the moment the bucket stops being publicly readable, so
 this must report nothing before the public-read policy is removed.
 
-    docker compose exec backend python -m scripts.audit_direct_s3_urls
+    docker compose -f docker-compose.traefik.yml --env-file env.production exec backend python -m scripts.audit_direct_s3_urls
 """
 from __future__ import annotations
 
@@ -6184,7 +6184,7 @@ if __name__ == "__main__":
 
 - [x] **Step 2: Run the audit against production data**
 
-Run: `docker compose exec backend python -m scripts.audit_direct_s3_urls`
+Run: `docker compose -f docker-compose.traefik.yml --env-file env.production exec backend python -m scripts.audit_direct_s3_urls`
 
 Expected: `Clean: no direct S3 URLs found.`
 
@@ -6508,6 +6508,11 @@ Worth knowing before the suite grows much further.
 
 ## Deployment order
 
+**Every command needs `--env-file env.production`** — without it compose silently
+substitutes blank strings for every secret, and the DB user is `myzakat_user`,
+not `postgres`. Getting either wrong produces `role "postgres" does not exist`,
+which reads like a missing database rather than a missing flag.
+
 The tasks are ordered so `main` stays deployable, but the production rollout has its own sequence:
 
 1. Apply `migrations/31_add_media_library.sql`.
@@ -6516,7 +6521,15 @@ The tasks are ordered so `main` stays deployable, but the production rollout has
    object" lines — any `.svg` in the bucket is skipped by design and will not appear
    in the library.
 4. Run `python -m scripts.audit_direct_s3_urls` until it reports clean.
-5. Only then deploy the `s3_service.py` change from Task 19 that drops the public-read policy.
+5. Only then remove the bucket policy itself. Deploying Task 19's `s3_service.py`
+   change stops the app *setting* the policy; it does not remove one already on the
+   bucket. MinIO's embedded console was removed from the community edition, so use
+   `mc`:
+
+   ```bash
+   docker run --rm --network <project>_internal quay.io/minio/mc      alias set mz http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+   docker run --rm --network <project>_internal quay.io/minio/mc      anonymous set none mz/myzakat-media
+   ```
 
 **Before running the backfill, know this:** the in-use guard matches content-table
 URLs by exact string equality, and legacy media is referenced by the proxy form
