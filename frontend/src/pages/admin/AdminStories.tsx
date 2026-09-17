@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star, CheckCircle2, Clock } from 'lucide-react'
+import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star, CheckCircle2, Clock, LibraryBig } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/authStore'
 import type { Story } from '../../types'
 import axios from 'axios'
 import MediaInput from '../../components/MediaInput'
+import MediaPickerDialog from '../../components/media/MediaPickerDialog'
 
 interface StoryFormData {
   title: string
@@ -24,6 +25,8 @@ interface StoryFormData {
 const AdminStories = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingStory, setEditingStory] = useState<Story | null>(null)
+  // Which form field a "Choose from media library" click is filling in.
+  const [mediaLibraryTarget, setMediaLibraryTarget] = useState<'image' | 'video' | null>(null)
   const { confirm, ConfirmationDialog } = useConfirmation()
   const [formData, setFormData] = useState<StoryFormData>({
     title: '',
@@ -223,6 +226,17 @@ const AdminStories = () => {
     }
   }
 
+  // Sets the same field the upload/paste flow sets (image_url or video_url),
+  // with the URL passed through untouched from MediaPickerDialog.
+  const handleMediaLibraryPick = (url: string) => {
+    if (mediaLibraryTarget === 'image') {
+      setFormData(prev => ({ ...prev, image_url: url }))
+    } else if (mediaLibraryTarget === 'video') {
+      setFormData(prev => ({ ...prev, video_url: url, video_file: null, remove_video: false }))
+    }
+    setMediaLibraryTarget(null)
+  }
+
   const isValidImageUrl = (url: string) => {
     if (!url) return true // Empty URL is valid
     try {
@@ -325,13 +339,23 @@ const AdminStories = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <MediaInput
-                  value={formData.image_url}
-                  onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
-                  type="images"
-                  label="Story Photo URL"
-                  placeholder="Enter image URL or select from library"
-                />
+                <div>
+                  <MediaInput
+                    value={formData.image_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+                    type="images"
+                    label="Story Photo URL"
+                    placeholder="Enter image URL or select from library"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMediaLibraryTarget('image')}
+                    className="mt-2 btn-outline flex items-center text-sm"
+                  >
+                    <LibraryBig className="w-4 h-4 mr-2" />
+                    Choose from media library
+                  </button>
+                </div>
 
                 <div>
                   <MediaInput
@@ -341,6 +365,14 @@ const AdminStories = () => {
                     label="Video URL (optional)"
                     placeholder="Enter video URL or select from library"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setMediaLibraryTarget('video')}
+                    className="mt-2 btn-outline flex items-center text-sm"
+                  >
+                    <LibraryBig className="w-4 h-4 mr-2" />
+                    Choose from media library
+                  </button>
                   <div className="mt-3">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Or Upload Video File
@@ -597,6 +629,12 @@ const AdminStories = () => {
           </div>
         )}
       </div>
+
+      <MediaPickerDialog
+        open={mediaLibraryTarget !== null}
+        onClose={() => setMediaLibraryTarget(null)}
+        onPick={handleMediaLibraryPick}
+      />
 
       <ConfirmationDialog />
     </div>

@@ -1319,3 +1319,18 @@ def test_delete_survives_an_s3_failure_with_the_row_already_removed(
         "orphan object" in record.message and object_key in record.message
         for record in caplog.records
     )
+
+
+def test_a_picked_asset_registers_as_in_use(
+    client, db_session, auth_headers, field_staff_user
+):
+    """The picker's URL shape must be the one get_media_usage matches on."""
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    picked_url = f"/api/media-library/{asset.id}/file"   # what MediaPickerDialog hands back
+    db_session.add(GalleryItem(media_filename=picked_url))
+    db_session.commit()
+
+    body = client.get(f"/api/media-library/{asset.id}", headers=auth_headers).json()
+    assert body["usage_count"] == 1, "the in-use guard cannot see the picked asset"

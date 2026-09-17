@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Plus, Edit, Trash2, Calendar, MapPin, Image as ImageIcon } from 'lucide-react'
+import { Plus, Edit, Trash2, Calendar, MapPin, Image as ImageIcon, LibraryBig } from 'lucide-react'
 import { eventsAPI, getStaticFileUrl } from '../../utils/api'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import { isValidImageUrl, getImageUrl } from '../../utils/mediaHelpers'
 import type { Event } from '../../types'
 import MediaInput from '../../components/MediaInput'
+import MediaPickerDialog from '../../components/media/MediaPickerDialog'
 
 interface EventFormData {
   title: string
@@ -18,6 +19,7 @@ interface EventFormData {
 const AdminEvents = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [showMediaLibraryPicker, setShowMediaLibraryPicker] = useState(false)
   const { confirm, ConfirmationDialog } = useConfirmation()
   const [formData, setFormData] = useState<EventFormData>({
     title: '',
@@ -228,13 +230,23 @@ const AdminEvents = () => {
                 </div>
               </div>
 
-              <MediaInput
-                value={formData.image_url}
-                onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
-                type="images"
-                label="Event Photo URL"
-                placeholder="Enter image URL or select from library"
-              />
+              <div>
+                <MediaInput
+                  value={formData.image_url}
+                  onChange={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+                  type="images"
+                  label="Event Photo URL"
+                  placeholder="Enter image URL or select from library"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowMediaLibraryPicker(true)}
+                  className="mt-2 btn-outline flex items-center text-sm"
+                >
+                  <LibraryBig className="w-4 h-4 mr-2" />
+                  Choose from media library
+                </button>
+              </div>
 
               <div className="flex justify-end space-x-4 pt-4">
                 <button
@@ -366,6 +378,15 @@ const AdminEvents = () => {
           </div>
         )}
       </div>
+
+      <MediaPickerDialog
+        open={showMediaLibraryPicker}
+        onClose={() => setShowMediaLibraryPicker(false)}
+        onPick={(url) => {
+          setFormData(prev => ({ ...prev, image_url: url }))
+          setShowMediaLibraryPicker(false)
+        }}
+      />
 
       <ConfirmationDialog />
     </div>
