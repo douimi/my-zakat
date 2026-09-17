@@ -3,15 +3,18 @@ endpoint that touches bytes, Pillow, ffmpeg and S3.
 
 Deliberately NOT part of media_library_service.py -- that module is pure by
 design (its own docstring says so: no database, no S3, no Pillow) so its
-string/allow-list handling stays cheap to test. Everything here does real
-I/O (image/video processing, network writes to S3), so it gets its own home
-instead of compromising that module's one invariant.
+string/allow-list handling stays cheap to test. This module does real work
+over the bytes instead: Pillow decode/encode/EXIF handling, ffmpeg
+subprocesses (compress_video/generate_video_thumbnail spawn a process and
+read/write temp files -- not network I/O, but not "pure" either), and S3
+writes. It gets its own home instead of compromising that module's one
+invariant.
 
 The two functions below are meant to be called in sequence, with the
 caller's own duplicate-checksum DB query and row insert sandwiched between
 them -- see routers/media_library.py's upload_media():
 
-    processed = process_upload_bytes(declared_content_type, content)   # no I/O but Pillow/ffmpeg
+    processed = process_upload_bytes(declared_content_type, content)
     ... duplicate-checksum query against processed.checksum ...
     ... object_key = build_object_key(...) ...
     thumbnail_key = store_processed_upload(processed, object_key)      # S3 writes
@@ -24,10 +27,25 @@ rejected duplicate would leave an orphan object with no row ever intended to
 point at it -- the same "recoverable orphan vs. unrecoverable dangling row"
 reasoning that motivates the S3-first-row-second order below.
 
-Every Pillow/ffmpeg/S3 hook below is an injectable keyword parameter,
-defaulting to the real implementation, so a caller can substitute a fake for
-direct testing without any HTTP round trip or monkeypatching -- see
-tests/test_media_library_upload.py.
+A handful of hooks (should_compress_image_fn, compress_image_fn,
+upload_file_fn, delete_file_fn) are injectable keyword parameters, each
+defaulting to None and resolved against this module's own top-level name at
+call time -- not bound to the real function at def time -- specifically so
+both of these keep working:
+  - a direct unit test overriding one explicitly (see
+    tests/test_media_library_upload.py), and
+  - an HTTP-level test in tests/test_media_library_api.py monkeypatching
+    the module-level name (e.g. `media_library_upload.upload_file`) while
+    the router calls these functions with no override at all.
+A default that snapshotted the real function at def time would silently
+stop honouring the second kind of patch the first time this module is
+imported. Every other hook this pipeline used to accept (video
+compression, thumbnailing, EXIF stripping, dimensions, the thumbnail key
+builder) had no caller anywhere in the repo passing anything but that
+default, so those aren't parameters at all any more -- just plain calls to
+this module's own top-level functions, patchable the same way for the
+tests that need it (should_compress_video, compress_video,
+generate_video_thumbnail, _default_image_dimensions).
 """
 from __future__ import annotations
 
@@ -68,8 +86,14 @@ class ContentTypeMismatch(Exception):
     """
 
 
-def _default_image_dimensions(data: bytes) -> tuple:
-    """(width, height) for image bytes, or (None, None) if unreadable."""
+def _default_image_dimensions(data: bytes) -> "tuple[Optional[int], Optional[int]]":
+    """(width, height) for image bytes, or (None, None) if unreadable.
+
+    The (None, None) branch is not a placeholder to tighten later -- it is
+    exactly what a caller should store when dimensions can't be read: the
+    MediaAsset columns are nullable for this reason, and a guessed value
+    would be worse than an honest NULL.
+    """
     try:
         from PIL import Image
         with Image.open(io.BytesIO(data)) as img:
@@ -97,13 +121,8 @@ def process_upload_bytes(
     declared_content_type: Optional[str],
     content: bytes,
     *,
-    should_compress_image_fn: Callable[[str], bool] = should_compress_image,
-    should_compress_video_fn: Callable[[str], bool] = should_compress_video,
-    compress_image_fn: Callable[[bytes], bytes] = compress_image,
-    compress_video_fn: Callable[[bytes], bytes] = compress_video,
-    strip_image_metadata_fn: Callable[[bytes], bytes] = strip_image_metadata,
-    generate_video_thumbnail_fn: Callable[[bytes], Optional[bytes]] = generate_video_thumbnail,
-    image_dimensions_fn: Callable[[bytes], tuple] = _default_image_dimensions,
+    should_compress_image_fn: Optional[Callable[[str], bool]] = None,
+    compress_image_fn: Optional[Callable[[bytes], bytes]] = None,
 ) -> ProcessedUpload:
     """Sniff, compress, strip and checksum one upload's bytes.
 
@@ -112,10 +131,15 @@ def process_upload_bytes(
     treat that as a 400, same message either way ("File content does not
     match its declared type."), same as the pre-extraction router did.
 
-    Does no I/O of its own beyond Pillow/ffmpeg (both pure computation over
-    the bytes already in hand) -- no S3, no database. See the module
-    docstring for why S3 writes are a separate step (store_processed_upload)
-    the caller runs only after its own duplicate-checksum check passes.
+    No database and no S3 here -- see the module docstring for why S3
+    writes are a separate step (store_processed_upload) the caller runs
+    only after its own duplicate-checksum check passes. Pillow runs
+    in-process; a video upload's compression and thumbnailing (ffmpeg
+    subprocesses, temp files) happen after this returns, inside the
+    media_type == "image" / else branches below -- video's ffmpeg calls are
+    not injectable seams (nothing in the repo overrides them), so they're
+    plain calls to this module's should_compress_video / compress_video /
+    generate_video_thumbnail.
 
     Order matters and is fixed by the caller-facing contract this module
     exists to protect:
@@ -130,10 +154,16 @@ def process_upload_bytes(
          spoofed declared type would use to dodge it if stripping depended
          on that gate (image/gif always skips compression, to protect
          animation).
-      4. Orientation is applied (inside strip_image_metadata_fn) before the
+      4. Orientation is applied (inside strip_image_metadata) before the
          EXIF block that encodes it is discarded, or a portrait phone photo
          comes back out sideways.
     """
+    # Resolved here rather than as ordinary default-parameter values: see
+    # the module docstring for why a real function bound at def time would
+    # stop honouring a later monkeypatch of this module's own name.
+    should_compress_image_fn = should_compress_image_fn or should_compress_image
+    compress_image_fn = compress_image_fn or compress_image
+
     # The bytes have to say what they are before anything reaches Pillow or
     # ffmpeg -- sniff_content_type() returns every Content-Type alias the
     # bytes are consistent with, or None if they match no format this module
@@ -174,19 +204,17 @@ def process_upload_bytes(
                 content, content_type = compressed, "image/jpeg"
         # GPS/EXIF must never reach the public site. Unconditional -- not
         # gated on should_compress_image_fn() -- see the docstring above.
-        stripped = strip_image_metadata_fn(content)
-        if stripped is not content:
-            content = stripped
-        width, height = image_dimensions_fn(content)
+        content = strip_image_metadata(content)
+        width, height = _default_image_dimensions(content)
     else:
-        if should_compress_video_fn(content_type):
-            content = compress_video_fn(content)
-            # Symmetric with the image branch above: compress_video_fn()
+        if should_compress_video(content_type):
+            content = compress_video(content)
+            # Symmetric with the image branch above: compress_video()
             # transcodes into H.264/MP4 regardless of the source container,
             # so a 3GP upload stored under its original video/3gpp label
             # would be MP4 bytes wearing a Content-Type nothing plays.
             content_type = "video/mp4"
-        thumbnail_bytes = generate_video_thumbnail_fn(content)
+        thumbnail_bytes = generate_video_thumbnail(content)
 
     checksum = hashlib.sha256(content).hexdigest()
 
@@ -205,8 +233,7 @@ def store_processed_upload(
     processed: ProcessedUpload,
     object_key: str,
     *,
-    upload_file_fn: Callable[..., str] = upload_file,
-    build_thumbnail_key_fn: Callable[[str], str] = build_thumbnail_key,
+    upload_file_fn: Optional[Callable[..., str]] = None,
 ) -> Optional[str]:
     """Write the processed object -- and its thumbnail, if any -- to S3.
 
@@ -220,11 +247,13 @@ def store_processed_upload(
     extracted. Only the thumbnail is best-effort: a failed thumbnail must
     not fail the whole upload, so its exception is logged and swallowed.
     """
+    upload_file_fn = upload_file_fn or upload_file
+
     upload_file_fn(processed.content, object_key, content_type=processed.content_type)
 
     thumbnail_key = None
     if processed.thumbnail_bytes:
-        thumbnail_key = build_thumbnail_key_fn(object_key)
+        thumbnail_key = build_thumbnail_key(object_key)
         try:
             upload_file_fn(processed.thumbnail_bytes, thumbnail_key, content_type="image/jpeg")
         except Exception as exc:
@@ -237,17 +266,43 @@ def cleanup_upload_artifacts(
     object_key: str,
     thumbnail_key: Optional[str],
     *,
-    delete_file_fn: Callable[..., bool] = delete_file,
+    context: str = "Insert failed",
+    delete_file_fn: Optional[Callable[..., bool]] = None,
 ) -> None:
     """Best-effort compensating delete for objects store_processed_upload()
-    wrote, when the row meant to point at them never landed.
+    wrote, when nothing ends up pointing at them.
 
-    delete_file_fn returns False rather than raising on failure, so that has
-    to be checked explicitly -- an unchecked call here would silently leave
-    exactly the orphan this cleanup exists to prevent, recoverable only via
-    cleanup.py's sweep.
+    `context` opens the log line ("<context> and S3 cleanup also failed;
+    ..."); the default matches the upload path's original wording exactly.
+    A future caller with a different reason to remove these objects (Task 9
+    deleting a still-owned asset, say) should pass its own context rather
+    than let an operator reading logs during an incident see "Insert
+    failed" for a delete that succeeded.
+
+    cleanup_db is hard-coded to False for both the upload-failure case and
+    that anticipated delete case, though for different reasons. Here,
+    there never was a row: the insert that would have referenced this
+    object never landed, so there is nothing for the async orphan sweep
+    (s3_service.delete_file's cleanup_db=True path) to find. A delete-path
+    caller reaches a different route to the same answer -- *if* it deletes
+    its own MediaAsset row first and calls this only afterwards (the
+    row-first-S3-second mirror of the create path's S3-first-row-second):
+    by the time this runs, the row is already gone, synchronously, in the
+    same request, so the background sweep would again find nothing this
+    call didn't already handle. That ordering is a precondition on the
+    caller, not something this function can enforce -- a caller that
+    deletes S3 before the row would need cleanup_db=True instead, which is
+    why this stays a parameter rather than being inlined as a bare
+    cleanup_db=False at each call site.
+
+    delete_file_fn returns False rather than raising on failure, so that
+    has to be checked explicitly -- an unchecked call here would silently
+    leave exactly the orphan this cleanup exists to prevent, recoverable
+    only via cleanup.py's sweep.
     """
+    delete_file_fn = delete_file_fn or delete_file
+
     if not delete_file_fn(object_key, cleanup_db=False):
-        logger.error("Insert failed and S3 cleanup also failed; orphan object left at %s", object_key)
+        logger.error("%s and S3 cleanup also failed; orphan object left at %s", context, object_key)
     if thumbnail_key and not delete_file_fn(thumbnail_key, cleanup_db=False):
-        logger.error("Insert failed and S3 cleanup also failed; orphan thumbnail left at %s", thumbnail_key)
+        logger.error("%s and S3 cleanup also failed; orphan thumbnail left at %s", context, thumbnail_key)

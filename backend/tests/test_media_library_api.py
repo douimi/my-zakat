@@ -57,7 +57,14 @@ JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\
 
 @pytest.fixture
 def fake_s3(monkeypatch):
-    """Capture S3 writes instead of performing them."""
+    """Capture S3 writes instead of performing them.
+
+    Patches media_library_upload.* (not routers.media_library.*): the
+    upload endpoint no longer imports upload_file/delete_file itself, it
+    only calls into the pipeline module that does -- these tests exercise
+    the pipeline's S3 writes via the router's HTTP surface, not anything
+    the router does directly.
+    """
     store = {}
 
     def _upload(content, object_key, content_type=None, metadata=None):
@@ -68,18 +75,21 @@ def fake_s3(monkeypatch):
         store.pop(object_key, None)
         return True
 
-    monkeypatch.setattr("routers.media_library.upload_file", _upload)
-    monkeypatch.setattr("routers.media_library.delete_file", _delete)
+    monkeypatch.setattr("media_library_upload.upload_file", _upload)
+    monkeypatch.setattr("media_library_upload.delete_file", _delete)
     return store
 
 
 @pytest.fixture
 def no_compression(monkeypatch):
-    """media_processing needs Pillow/ffmpeg; keep uploads byte-for-byte in tests."""
-    monkeypatch.setattr("routers.media_library.should_compress_image", lambda ct: False)
-    monkeypatch.setattr("routers.media_library.should_compress_video", lambda ct: False)
-    monkeypatch.setattr("routers.media_library.generate_video_thumbnail", lambda data: None)
-    monkeypatch.setattr("routers.media_library._image_dimensions", lambda data: (800, 600))
+    """media_processing needs Pillow/ffmpeg; keep uploads byte-for-byte in tests.
+
+    Patches media_library_upload.* -- see fake_s3's docstring above for why.
+    """
+    monkeypatch.setattr("media_library_upload.should_compress_image", lambda ct: False)
+    monkeypatch.setattr("media_library_upload.should_compress_video", lambda ct: False)
+    monkeypatch.setattr("media_library_upload.generate_video_thumbnail", lambda data: None)
+    monkeypatch.setattr("media_library_upload._default_image_dimensions", lambda data: (800, 600))
 
 
 def _upload(client, headers, filename="photo.jpg", content=JPEG_BYTES,
@@ -259,9 +269,9 @@ def test_a_3gp_upload_is_relabeled_video_mp4_after_transcoding(
     the field-worker population this format was widened for -- so storing
     the transcoded bytes under the original video/3gpp label would produce
     a file nothing plays."""
-    monkeypatch.setattr("routers.media_library.should_compress_video", lambda ct: True)
-    monkeypatch.setattr("routers.media_library.compress_video", lambda data: b"transcoded-h264-mp4-bytes")
-    monkeypatch.setattr("routers.media_library.generate_video_thumbnail", lambda data: None)
+    monkeypatch.setattr("media_library_upload.should_compress_video", lambda ct: True)
+    monkeypatch.setattr("media_library_upload.compress_video", lambda data: b"transcoded-h264-mp4-bytes")
+    monkeypatch.setattr("media_library_upload.generate_video_thumbnail", lambda data: None)
 
     # ISO-BMFF 'ftyp' box at offset 4 -- what the byte sniffer requires for
     # any of mp4/mov/m4v/3gp.

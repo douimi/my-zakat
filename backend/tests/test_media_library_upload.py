@@ -56,6 +56,12 @@ def _open(data: bytes) -> Image.Image:
     return Image.open(io.BytesIO(data))
 
 
+def _png_bytes(size=(10, 10)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=(1, 2, 3)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # A minimal but genuine JPEG -- same bytes test_media_library_api.py uses.
 JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + b"\x00" * 64
 
@@ -152,6 +158,27 @@ def test_a_generic_or_missing_declared_type_is_not_treated_as_a_mismatch():
     assert processed.content_type == "image/jpeg"
 
 
+# ── The relabel guard ────────────────────────────────────────────────────
+
+def test_a_compressor_that_returns_the_original_bytes_does_not_relabel_as_jpeg():
+    """compress_image() returns the original object, unchanged, if Pillow
+    couldn't process it. process_upload_bytes must only relabel content_type
+    to image/jpeg when compression actually produced new bytes -- otherwise
+    a PNG Pillow chokes on would be stored as PNG bytes wearing an
+    image/jpeg Content-Type label, which is exactly the kind of mismatch
+    this whole pipeline exists to prevent. Monkeypatching can't isolate this
+    precisely (there's no real-world input that reliably makes Pillow
+    "give up" on demand); injecting a fake compress_image_fn that echoes its
+    input back, unchanged, is what makes this branch reachable at all."""
+    png = _png_bytes()
+    processed = process_upload_bytes(
+        "image/png", png,
+        should_compress_image_fn=lambda ct: True,
+        compress_image_fn=lambda data: data,  # Pillow gave up; same object back
+    )
+    assert processed.content_type == "image/png"
+
+
 # ── S3 store / cleanup, with fakes injected explicitly ──────────────────
 
 def test_store_processed_upload_writes_the_object_and_a_thumbnail():
@@ -244,3 +271,28 @@ def test_cleanup_upload_artifacts_does_not_raise_when_delete_fails():
         "workspaces/1/2026/03/photo.jpg", "workspaces/1/2026/03/photo_thumb.jpg",
         delete_file_fn=lambda object_key, cleanup_db=True: False,
     )
+
+
+def test_cleanup_upload_artifacts_context_defaults_to_insert_failed(caplog):
+    """The default context reproduces the exact log wording the upload path
+    always used, before `context` existed as a parameter -- a future caller
+    (Task 9's delete, say) is expected to pass its own context rather than
+    rely on this default, which would misreport an unrelated failure as an
+    insert."""
+    with caplog.at_level("ERROR", logger="media_library_upload"):
+        cleanup_upload_artifacts(
+            "workspaces/1/2026/03/photo.jpg", None,
+            delete_file_fn=lambda object_key, cleanup_db=True: False,
+        )
+    assert "Insert failed and S3 cleanup also failed" in caplog.text
+
+
+def test_cleanup_upload_artifacts_honours_a_custom_context(caplog):
+    with caplog.at_level("ERROR", logger="media_library_upload"):
+        cleanup_upload_artifacts(
+            "workspaces/1/2026/03/photo.jpg", None,
+            context="Delete failed",
+            delete_file_fn=lambda object_key, cleanup_db=True: False,
+        )
+    assert "Delete failed and S3 cleanup also failed" in caplog.text
+    assert "Insert failed" not in caplog.text

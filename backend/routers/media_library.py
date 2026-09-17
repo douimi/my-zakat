@@ -22,7 +22,6 @@ permission predicates and the status transitions.
 """
 from __future__ import annotations
 
-import io
 import os
 from datetime import datetime
 from typing import Literal, Optional
@@ -56,17 +55,9 @@ from media_library_upload import (
     process_upload_bytes,
     store_processed_upload,
 )
-from media_processing import (
-    compress_image,
-    compress_video,
-    generate_video_thumbnail,
-    should_compress_image,
-    should_compress_video,
-    strip_image_metadata,
-)
 from models import MediaAsset, User
 from routers.s3_media import get_media_usage
-from s3_service import delete_file, get_file_url, upload_file
+from s3_service import get_file_url
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -76,16 +67,6 @@ MAX_UPLOAD_BYTES = MAX_MEDIA_UPLOAD_MB * 1024 * 1024
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
-
-def _image_dimensions(data: bytes):
-    """(width, height) for image bytes, or (None, None) if unreadable."""
-    try:
-        from PIL import Image
-        with Image.open(io.BytesIO(data)) as img:
-            return img.size
-    except Exception:
-        return (None, None)
-
 
 def usage_for_asset(asset: MediaAsset, db: Session) -> dict:
     """Where an asset is used across the public site.
@@ -201,6 +182,40 @@ def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
         )
 
 
+def _refuse_if_duplicate(db: Session, owner_id: int, checksum: str) -> None:
+    """409 if this exact checksum is already in this owner's workspace.
+
+    Advisory by design, not enforced with a unique constraint — see
+    migration 31's comment on idx_media_assets_owner_checksum: a unique
+    constraint would block a legitimate re-upload after a delete, and
+    PostgreSQL treats NULLs as distinct so the "Unassigned" workspace
+    would slip through it anyway. That also means this check-then-insert
+    is not race-free — two concurrent identical uploads from the same
+    user can both pass this SELECT and both land — which is accepted,
+    not a bug to "fix" by adding a constraint here.
+    """
+    duplicate = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.owner_id == owner_id, MediaAsset.checksum_sha256 == checksum)
+        .first()
+    )
+    if duplicate is None:
+        return
+    # Starlette's default HTTPException handler json.dumps()s `detail`
+    # directly rather than routing it through FastAPI's response
+    # pipeline, so it never sees jsonable_encoder — a raw datetime in
+    # serialize_asset(duplicate) would otherwise turn this 409 into an
+    # unhandled 500 at encode time. Encode here so callers reliably see
+    # a 409 with the existing asset attached, not a 500.
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "message": "This file is already in your workspace.",
+            "existing": jsonable_encoder(serialize_asset(duplicate)),
+        },
+    )
+
+
 # ── Upload ───────────────────────────────────────────────────────────
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -256,51 +271,12 @@ async def upload_media(
     # (sniff before compress, never store the raw header, unconditional
     # EXIF/GPS stripping, orientation applied before it's discarded).
     try:
-        processed = process_upload_bytes(
-            file.content_type,
-            content,
-            should_compress_image_fn=should_compress_image,
-            should_compress_video_fn=should_compress_video,
-            compress_image_fn=compress_image,
-            compress_video_fn=compress_video,
-            strip_image_metadata_fn=strip_image_metadata,
-            generate_video_thumbnail_fn=generate_video_thumbnail,
-            image_dimensions_fn=_image_dimensions,
-        )
+        processed = process_upload_bytes(file.content_type, content)
     except ContentTypeMismatch as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     checksum = processed.checksum
-    # Advisory by design, not enforced with a unique constraint — see
-    # migration 31's comment on idx_media_assets_owner_checksum: a unique
-    # constraint would block a legitimate re-upload after a delete, and
-    # PostgreSQL treats NULLs as distinct so the "Unassigned" workspace
-    # would slip through it anyway. That also means this check-then-insert
-    # is not race-free — two concurrent identical uploads from the same
-    # user can both pass this SELECT and both land — which is accepted,
-    # not a bug to "fix" by adding a constraint here.
-    duplicate = (
-        db.query(MediaAsset)
-        .filter(
-            MediaAsset.owner_id == current_user.id,
-            MediaAsset.checksum_sha256 == checksum,
-        )
-        .first()
-    )
-    if duplicate is not None:
-        # Starlette's default HTTPException handler json.dumps()s `detail`
-        # directly rather than routing it through FastAPI's response
-        # pipeline, so it never sees jsonable_encoder — a raw datetime in
-        # serialize_asset(duplicate) would otherwise turn this 409 into an
-        # unhandled 500 at encode time. Encode here so callers reliably see
-        # a 409 with the existing asset attached, not a 500.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "This file is already in your workspace.",
-                "existing": jsonable_encoder(serialize_asset(duplicate)),
-            },
-        )
+    _refuse_if_duplicate(db, current_user.id, checksum)
 
     # parse_tag_input drops blank entries first: "" and a trailing comma mean
     # "no tags", not "an empty tag" — without it, an upload with no tags at all
@@ -319,10 +295,7 @@ async def upload_media(
     # nothing is not. Writing to S3 only after the duplicate-checksum check
     # above is what keeps a rejected duplicate from leaving an orphan too —
     # see media_library_upload's module docstring.
-    thumbnail_key = store_processed_upload(
-        processed, object_key,
-        upload_file_fn=upload_file,
-    )
+    thumbnail_key = store_processed_upload(processed, object_key)
 
     asset = MediaAsset(
         owner_id=current_user.id,
@@ -357,7 +330,7 @@ async def upload_media(
         db.rollback()
         # S3 first, row second (see the comment above store_processed_upload()):
         # a failed insert must not leave an object with nothing pointing at it.
-        cleanup_upload_artifacts(object_key, thumbnail_key, delete_file_fn=delete_file)
+        cleanup_upload_artifacts(object_key, thumbnail_key)
         logger.error("Could not index uploaded media %s: %s", object_key, exc)
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
