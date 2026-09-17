@@ -28,7 +28,9 @@ describe('buildListParams', () => {
 })
 
 describe('mediaLibraryApi', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it('lists with the built params', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 48 } })
