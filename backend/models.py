@@ -614,7 +614,19 @@ class ProjectProposal(Base):
     # submitted | under_review | changes_requested | approved | rejected
     status = Column(String(20), nullable=False, default="submitted", index=True)
     current_version_id = Column(
-        Integer, ForeignKey("proposal_versions.id", ondelete="SET NULL"), nullable=True
+        Integer,
+        # use_alter breaks the metadata-level cycle with proposal_versions
+        # (which points back at this table). Without it SQLAlchemy cannot sort
+        # the two tables for create/drop and warns on every test run, which
+        # would mask a genuinely new warning later. Production DDL comes from
+        # migrations/, not create_all, so this is purely a metadata concern.
+        ForeignKey(
+            "proposal_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_project_proposals_current_version_id",
+        ),
+        nullable=True,
     )
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
