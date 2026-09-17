@@ -109,7 +109,7 @@ decision modal.
 
 ## Data model
 
-### Migration `32_proposal_versions.sql`
+### Migrations `32_proposal_versioning.sql` and `33_drop_proposal_content_columns.sql`
 
 **`project_proposals` becomes the dossier.** It keeps only what is stable
 across versions:
@@ -165,8 +165,20 @@ Each existing `project_proposals` row produces its version 1: content,
 `internal_note`; `decision` derived from the current status (`approved` /
 `rejected` keep their decision, `submitted` / `under_review` stay `NULL`);
 `decided_at` / `decided_by` from `reviewed_at` / `reviewed_by`. Then
-`current_version_id` is set and the content columns are dropped. A test asserts
-a pre-migration row yields a complete version 1 with a consistent pointer.
+`current_version_id` is set and the content columns are dropped.
+
+The backfill is an `INSERT … SELECT` inside the migration, not a Python script:
+it is then atomic with the DDL that precedes it, and guarded by
+`current_version_id IS NULL` so re-running it changes nothing. The pytest suite
+builds its schema from `Base.metadata.create_all` and never replays the SQL
+migrations, so a unit test of a Python backfill would not exercise what actually
+runs in production; the migration is verified instead against the Postgres
+container with a seeded legacy row.
+
+The column drop is a second migration, applied after the new code is deployed —
+the previous image still writes those columns, and the new one cannot insert a
+dossier while they are still NOT NULL. The first migration therefore also
+relaxes them.
 
 ## Lifecycle
 
@@ -301,7 +313,11 @@ applicant* and *Internal note*, the first required for `rejected` and
 - Cross-email access returns `404`.
 - `internal_note` never appears in a portal response.
 - PDF of an earlier version renders that version's content.
-- Migration: a pre-migration row yields a complete version 1.
+**Migration** — verified against the Postgres container rather than in pytest,
+for the reason given under "Backfilling existing rows": a seeded legacy row must
+yield a complete version 1 with a consistent pointer, the migration must be
+re-runnable without changing anything, and a dossier row must be insertable
+without any content column.
 
 **E2E** — `e2e/proposal-versioning.spec.ts`: submit → admin requests changes →
 portal login with the code read from the database by a fixture → revise →
@@ -311,10 +327,15 @@ resubmit → admin sees two versions and both decisions in the history.
 
 | Path | Change |
 |---|---|
-| `migrations/32_proposal_versions.sql` | new: two tables, backfill, column drops |
+| `migrations/32_proposal_versioning.sql` | new: two tables, pointer, backfill, NOT NULL relaxation |
+| `migrations/33_drop_proposal_content_columns.sql` | new: drops the legacy columns, after the deploy |
 | `backend/models.py` | reshape `ProjectProposal`; add `ProposalVersion`, `ProposalAccessCode` |
 | `backend/auth_utils.py` | `typ` claim check in `verify_token`; new `get_portal_email` |
-| `backend/routers/project_proposals.py` | versioned read/write, decisions, portal routes; PDF renderer reads a version |
+| `backend/proposal_service.py` | new: dossiers, versions, decisions, serializers |
+| `backend/proposal_pdf.py` | new: the reportlab renderer, moved out of the router |
+| `backend/proposal_otp.py` | new: one-time codes and their rate limits |
+| `backend/routers/project_proposals.py` | versioned read/write and decisions; thin over the service |
+| `backend/routers/proposal_portal.py` | new: the submitter-facing endpoints |
 | `backend/email_service.py` | five shims |
 | `backend/email_templates/proposal_*.{html,txt}` | new: five pairs |
 | `frontend/src/components/proposals/ProposalForm.tsx` | new: extracted form |
@@ -323,7 +344,7 @@ resubmit → admin sees two versions and both decisions in the history.
 | `frontend/src/utils/proposalPortalApi.ts` | new: isolated client |
 | `frontend/src/pages/admin/AdminProjectProposals.tsx` | version history, two-field decision modal |
 | `frontend/src/App.tsx`, `components/Footer.tsx` | route and link |
-| `backend/tests/test_project_proposals.py`, `test_proposal_portal.py` | new |
+| `backend/tests/test_project_proposals.py`, `test_proposal_service.py`, `test_proposal_portal.py`, `test_proposal_otp.py`, `test_proposal_emails.py` | new |
 | `e2e/proposal-versioning.spec.ts` | new |
 
 ## Risks
