@@ -1849,29 +1849,30 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
   POST   /api/media-library/{id}/submit    owner: private -> submitted
-  POST   /api/media-library/{id}/withdraw  owner: submitted -> private                      (Task 8)
-  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Task 9)
+  POST   /api/media-library/{id}/withdraw  owner: submitted -> private
+  DELETE /api/media-library/{id}           owner (private only) or admin/manager
 
 Admin or manager only:
   GET    /api/media-library/workspaces     workspaces with counts and total size
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private               (Task 8)
+  POST   /api/media-library/{id}/review    approve -> public, reject/unpublish -> private
   POST   /api/media-library/{id}/reassign  move an asset into another workspace
 
-Upload, listing, detail, metadata editing, reassignment and the workspaces
-summary shipped in Tasks 5-7. Submit/review/delete are still stubs for
-Tasks 8-9. Byte serving lives in media_library_files.py.
+Upload, listing, detail, metadata editing, reassignment, the workspaces
+summary, submit/review and delete shipped in Tasks 5-9. Byte serving lives
+in media_library_files.py. The upload endpoint's
+byte-sniffing/compression/EXIF-stripping/thumbnailing/checksum/S3 pipeline
+lives in media_library_upload.py; this module keeps the routing, the
+permission predicates and the status transitions.
 """
 from __future__ import annotations
 
-import hashlib
-import io
 import os
-from datetime import datetime  # noqa: F401 — unused until Task 8 (review sets reviewed_at)
-from typing import Optional
+from datetime import datetime
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -1883,31 +1884,24 @@ from media_library_service import (
     asset_file_url,
     build_object_key,
     build_search_text,
-    build_thumbnail_key,
-    canonical_content_type,
     detect_media_type,
-    is_allow_listed_content_type,
-    media_type_of,
     normalize_tags,
     parse_tag_input,
     search_pattern,
     serialize_asset,
-    sniff_content_type,
     tag_filter_pattern,
     unsupported_hint,
     validate_tags,
 )
-from media_processing import (
-    compress_image,
-    compress_video,
-    generate_video_thumbnail,
-    should_compress_image,
-    should_compress_video,
-    strip_image_metadata,
+from media_library_upload import (
+    ContentTypeMismatch,
+    cleanup_upload_artifacts,
+    process_upload_bytes,
+    store_processed_upload,
 )
 from models import MediaAsset, User
 from routers.s3_media import get_media_usage
-from s3_service import delete_file, upload_file
+from s3_service import get_file_url
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -1918,25 +1912,29 @@ MAX_UPLOAD_BYTES = MAX_MEDIA_UPLOAD_MB * 1024 * 1024
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _image_dimensions(data: bytes):
-    """(width, height) for image bytes, or (None, None) if unreadable."""
-    try:
-        from PIL import Image
-        with Image.open(io.BytesIO(data)) as img:
-            return img.size
-    except Exception:
-        return (None, None)
-
-
-def usage_for_asset(asset_id: int, db: Session) -> dict:
+def usage_for_asset(asset: MediaAsset, db: Session) -> dict:
     """Where an asset is used across the public site.
 
     Thin wrapper over routers.s3_media.get_media_usage so every caller goes
     through asset_file_url() for the string it matches on, rather than each
     retyping it — see that function's docstring for why a second spelling
     would be a silent failure, not a loud one.
+
+    A backfilled (Task 18) legacy asset is referenced in content tables by
+    the proxy URL get_file_url() produces, not by the id-addressed one this
+    module writes for everything uploaded through it — get_media_usage
+    matches by exact string equality, so a legacy asset needs both
+    spellings asked for or this reports zero usage for exactly the
+    population most likely to already be live on the public site. Object
+    keys built by build_object_key() always start with "workspaces/"; a key
+    that doesn't is from before this module existed.
     """
-    return get_media_usage(asset_file_url(asset_id), db)
+    usage = get_media_usage(asset_file_url(asset.id), db)
+    if not asset.object_key.startswith("workspaces/"):
+        legacy = get_media_usage(get_file_url(asset.object_key), db)
+        for key, rows in legacy.items():
+            usage[key] = usage[key] + rows
+    return usage
 
 
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
@@ -1980,7 +1978,23 @@ def _require_can_edit(asset: MediaAsset, user: User) -> None:
         )
 
 
-# Staged for Task 9 (delete): no route below calls this yet.
+def _require_is_owner(asset: MediaAsset, user: User) -> None:
+    """Strictly the owner — unlike every other predicate here, a reviewer is
+    not waved through.
+
+    private -> submitted is the one transition the table grants to "owner"
+    and nobody else: an admin/manager wanting an asset public can already
+    call /review with decision="approve" directly, so letting them submit
+    someone else's asset on their behalf grants nothing a workflow needs and
+    can queue media with no owner (an Unassigned asset has no one to act on
+    a rejection). Same existence-hiding 404 as _require_can_view rather than
+    a 403 — a reviewer probing someone else's private asset should not learn
+    it exists any more than a stranger would.
+    """
+    if asset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+
 def _require_can_delete(asset: MediaAsset, user: User) -> None:
     """Owner may delete only while private; admin/manager always."""
     _require_can_view(asset, user)
@@ -1989,8 +2003,60 @@ def _require_can_delete(asset: MediaAsset, user: User) -> None:
     if asset.status != "private":
         raise HTTPException(
             status_code=403,
-            detail="Only a private asset may be deleted by its owner.",
+            detail="Once media has been submitted or published, an admin must remove it.",
         )
+
+
+def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
+    """Block an action that would break the public site, naming what points here."""
+    usage = usage_for_asset(asset, db)
+    referenced = {key: value for key, value in usage.items() if value}
+    if referenced:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Cannot {action}: this media is still used on the site.",
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps()s `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
+            },
+        )
+
+
+def _refuse_if_duplicate(db: Session, owner_id: int, checksum: str) -> None:
+    """409 if this exact checksum is already in this owner's workspace.
+
+    Advisory by design, not enforced with a unique constraint — see
+    migration 31's comment on idx_media_assets_owner_checksum: a unique
+    constraint would block a legitimate re-upload after a delete, and
+    PostgreSQL treats NULLs as distinct so the "Unassigned" workspace
+    would slip through it anyway. That also means this check-then-insert
+    is not race-free — two concurrent identical uploads from the same
+    user can both pass this SELECT and both land — which is accepted,
+    not a bug to "fix" by adding a constraint here.
+    """
+    duplicate = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.owner_id == owner_id, MediaAsset.checksum_sha256 == checksum)
+        .first()
+    )
+    if duplicate is None:
+        return
+    # Starlette's default HTTPException handler json.dumps()s `detail`
+    # directly rather than routing it through FastAPI's response
+    # pipeline, so it never sees jsonable_encoder — a raw datetime in
+    # serialize_asset(duplicate) would otherwise turn this 409 into an
+    # unhandled 500 at encode time. Encode here so callers reliably see
+    # a 409 with the existing asset attached, not a 500.
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "message": "This file is already in your workspace.",
+            "existing": jsonable_encoder(serialize_asset(duplicate)),
+        },
+    )
 
 
 # ── Upload ───────────────────────────────────────────────────────────
@@ -2040,102 +2106,20 @@ async def upload_media(
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
         )
 
-    # The bytes have to say what they are before anything reaches Pillow or
-    # ffmpeg — sniff_content_type() returns every Content-Type alias the
-    # bytes are consistent with, or None if they match no format this module
-    # recognises at all (a forged/corrupt/unsupported upload).
-    declared = (file.content_type or "").split(";", 1)[0].strip().lower()
-    sniffed_content_types = sniff_content_type(content)
-    if sniffed_content_types is None:
-        raise HTTPException(
-            status_code=400,
-            detail="File content does not match its declared type.",
-        )
+    # Sniff, compress, strip and checksum the bytes -- the densest and most
+    # security-sensitive part of this endpoint, extracted so it can be
+    # tested directly with real bytes (see test_media_library_upload.py)
+    # instead of only reachable through a full HTTP round trip. See that
+    # module's docstring for the order-of-operations invariants it protects
+    # (sniff before compress, never store the raw header, unconditional
+    # EXIF/GPS stripping, orientation applied before it's discarded).
+    try:
+        processed = process_upload_bytes(file.content_type, content)
+    except ContentTypeMismatch as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # A declared type that IS allow-listed but ISN'T consistent with the
-    # sniffed bytes is the spoof this endpoint exists to catch (image/gif —
-    # a format should_compress_image() always skips, and so never gets
-    # re-encoded — declared over real JPEG bytes, to dodge the metadata
-    # stripping below). A declared type that is missing, or a generic
-    # default like application/octet-stream (what curl -F and some mobile
-    # webviews send with no OS MIME mapping to consult), is not a claim at
-    # all, so there is nothing to contradict — that used to reach here as a
-    # 400 too, which is the regression a re-review caught: nothing declared
-    # is not the same thing as something declared wrongly.
-    if is_allow_listed_content_type(declared) and declared not in sniffed_content_types:
-        raise HTTPException(
-            status_code=400,
-            detail="File content does not match its declared type.",
-        )
-
-    # Never store the raw header regardless of which branch above was
-    # taken: an accepted-but-generic declaration (or an accepted, correct
-    # one) is stored as-is; anything else falls back to the format's own
-    # canonical type, derived from the bytes rather than the caller.
-    media_type = media_type_of(sniffed_content_types)
-    content_type = declared if declared in sniffed_content_types else canonical_content_type(sniffed_content_types)
-    width = height = None
-    thumbnail_bytes = None
-
-    if media_type == "image":
-        if should_compress_image(content_type):
-            compressed = compress_image(content)
-            # compress_image() returns the original object, unchanged, if
-            # Pillow couldn't process it — relabel only when it actually
-            # produced new (JPEG) bytes, or a PNG Pillow chokes on would be
-            # stored as PNG bytes wearing an image/jpeg label.
-            if compressed is not content:
-                content, content_type = compressed, "image/jpeg"
-        # GPS/EXIF must never reach the public site (Task 8 publishes
-        # approved assets there). Unconditional — not gated on
-        # should_compress_image() — because that gate is exactly what a
-        # spoofed-Content-Type upload would use to dodge stripping if this
-        # depended on it; see strip_image_metadata()'s docstring.
-        stripped = strip_image_metadata(content)
-        if stripped is not content:
-            content = stripped
-        width, height = _image_dimensions(content)
-    else:
-        if should_compress_video(content_type):
-            content = compress_video(content)
-            # Symmetric with the image branch above: compress_video()
-            # transcodes into H.264/MP4 regardless of the source container,
-            # so a 3GP upload stored under its original video/3gpp label
-            # would be MP4 bytes wearing a Content-Type nothing plays.
-            content_type = "video/mp4"
-        thumbnail_bytes = generate_video_thumbnail(content)
-
-    checksum = hashlib.sha256(content).hexdigest()
-    # Advisory by design, not enforced with a unique constraint — see
-    # migration 31's comment on idx_media_assets_owner_checksum: a unique
-    # constraint would block a legitimate re-upload after a delete, and
-    # PostgreSQL treats NULLs as distinct so the "Unassigned" workspace
-    # would slip through it anyway. That also means this check-then-insert
-    # is not race-free — two concurrent identical uploads from the same
-    # user can both pass this SELECT and both land — which is accepted,
-    # not a bug to "fix" by adding a constraint here.
-    duplicate = (
-        db.query(MediaAsset)
-        .filter(
-            MediaAsset.owner_id == current_user.id,
-            MediaAsset.checksum_sha256 == checksum,
-        )
-        .first()
-    )
-    if duplicate is not None:
-        # Starlette's default HTTPException handler json.dumps()s `detail`
-        # directly rather than routing it through FastAPI's response
-        # pipeline, so it never sees jsonable_encoder — a raw datetime in
-        # serialize_asset(duplicate) would otherwise turn this 409 into an
-        # unhandled 500 at encode time. Encode here so callers reliably see
-        # a 409 with the existing asset attached, not a 500.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "This file is already in your workspace.",
-                "existing": jsonable_encoder(serialize_asset(duplicate)),
-            },
-        )
+    checksum = processed.checksum
+    _refuse_if_duplicate(db, current_user.id, checksum)
 
     # parse_tag_input drops blank entries first: "" and a trailing comma mean
     # "no tags", not "an empty tag" — without it, an upload with no tags at all
@@ -2149,18 +2133,12 @@ async def upload_media(
 
     parsed_tags = normalize_tags(tag_input)
     object_key = build_object_key(current_user.id, file.filename)
-    thumbnail_key = None
 
     # S3 first, row second: an orphan object is recoverable, a row pointing at
-    # nothing is not.
-    upload_file(content, object_key, content_type=content_type)
-    if thumbnail_bytes:
-        thumbnail_key = build_thumbnail_key(object_key)
-        try:
-            upload_file(thumbnail_bytes, thumbnail_key, content_type="image/jpeg")
-        except Exception as exc:
-            logger.warning("Thumbnail upload failed for %s: %s", object_key, exc)
-            thumbnail_key = None
+    # nothing is not. Writing to S3 only after the duplicate-checksum check
+    # above is what keeps a rejected duplicate from leaving an orphan too —
+    # see media_library_upload's module docstring.
+    thumbnail_key = store_processed_upload(processed, object_key)
 
     asset = MediaAsset(
         owner_id=current_user.id,
@@ -2173,11 +2151,11 @@ async def upload_media(
         # of this function) instead, because a title the user *did* type
         # deserves an honest rejection rather than a silent truncation.
         filename=(file.filename or "upload")[:255],
-        media_type=media_type,
-        content_type=content_type,
-        size_bytes=len(content),
-        width=width,
-        height=height,
+        media_type=processed.media_type,
+        content_type=processed.content_type,
+        size_bytes=len(processed.content),
+        width=processed.width,
+        height=processed.height,
         thumbnail_key=thumbnail_key,
         checksum_sha256=checksum,
         title=(title or None),
@@ -2193,16 +2171,9 @@ async def upload_media(
         db.refresh(asset)
     except SQLAlchemyError as exc:
         db.rollback()
-        # S3 first, row second (see the comment above upload_file()): a
-        # failed insert must not leave an object with nothing pointing at
-        # it. delete_file() returns False rather than raising on failure, so
-        # that has to be checked explicitly — an unchecked call here would
-        # silently leave exactly the orphan this compensating delete exists
-        # to prevent, recoverable only via cleanup.py's sweep.
-        if not delete_file(object_key, cleanup_db=False):
-            logger.error("Insert failed and S3 cleanup also failed; orphan object left at %s", object_key)
-        if thumbnail_key and not delete_file(thumbnail_key, cleanup_db=False):
-            logger.error("Insert failed and S3 cleanup also failed; orphan thumbnail left at %s", thumbnail_key)
+        # S3 first, row second (see the comment above store_processed_upload()):
+        # a failed insert must not leave an object with nothing pointing at it.
+        cleanup_upload_artifacts(object_key, thumbnail_key)
         logger.error("Could not index uploaded media %s: %s", object_key, exc)
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
@@ -2401,7 +2372,7 @@ async def get_media_detail(
     asset = _load_asset(db, asset_id)
     _require_can_view(asset, current_user)
 
-    usage = usage_for_asset(asset.id, db)
+    usage = usage_for_asset(asset, db)
     payload = serialize_asset(asset)
     payload["usage"] = usage
     payload["usage_count"] = sum(len(v) for v in usage.values())
@@ -2501,6 +2472,213 @@ async def reassign_media(
         asset.id, previous_owner_id, payload.owner_id, current_user.email,
     )
     return serialize_asset(asset)
+
+
+# ── Lifecycle ────────────────────────────────────────────────────────
+
+# review_note's column is unbounded Text with no DB constraint backing this
+# number (unlike title's VARCHAR(200)) — it exists only because this is a
+# staff-writable string returned in every serialization, same reasoning as
+# title's cap above, minus a column to point at.
+MAX_REVIEW_NOTE_LENGTH = 1000
+
+
+class ReviewDecision(BaseModel):
+    # Literal, not Field(pattern=...): a value outside the three legal
+    # decisions 422s at the schema either way, but a regex fails open — a
+    # fourth decision added to the pattern later would silently fall into
+    # the `else: # unpublish` branch below with no error, and that branch is
+    # the one guarding the public/private boundary. Literal fails closed.
+    decision: Literal["approve", "reject", "unpublish"]
+    note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _reject_must_explain_itself(self):
+        # A field-staff member whose photo is bounced with review_note=None
+        # has no way to know what to fix before resubmitting. Enforced here,
+        # not in the route body, so it fails as a 422 at the schema — the
+        # same shape as an unknown `decision` — rather than a 400 after
+        # _load_asset has already run.
+        if self.decision == "reject" and not (self.note and self.note.strip()):
+            raise ValueError("A rejection must include a note explaining why.")
+        return self
+
+
+@router.post("/{asset_id}/submit")
+async def submit_for_review(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner asks for the asset to be reviewed. It stays private until approved."""
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "private":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only private media can be submitted (this is '{asset.status}').",
+        )
+
+    asset.status = "submitted"
+    # Clear every trace of a previous decision, not just the note: a
+    # reject -> fix -> resubmit cycle must not leave reviewed_at/
+    # reviewed_by_id from the rejection behind on a `submitted` row for a
+    # review-queue UI to misread as "already decided". Migration 31's
+    # partial index on status = 'submitted' says such a queue is coming.
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s submitted for review by %s (role=%s)",
+        asset.id, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/withdraw")
+async def withdraw_submission(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner pulls a submission back out of the review queue.
+
+    Without this a field worker who uploads something sensitive by mistake and
+    submits it has no exit: delete refuses anything but `private`, and both
+    reject and unpublish are reviewer-only. The photo would sit visible to every
+    admin until someone else acted -- the worst outcome for exactly the content
+    this workflow exists to protect.
+
+    Cannot touch a public asset: pulling live media down stays a reviewer call.
+    """
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "submitted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only submitted media can be withdrawn (this is '{asset.status}').",
+        )
+
+    asset.status = "private"
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info("Media %s withdrawn by %s", asset_id, current_user.email)
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/review")
+async def review_media(
+    asset_id: int,
+    payload: ReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Approve (-> public), reject (-> private + note), or unpublish (-> private)."""
+    asset = _load_asset(db, asset_id)
+
+    # Not Field(max_length=...) on the model: see the identical note on
+    # upload's title check above -- a Pydantic max_length violation 422s in
+    # FastAPI's own error shape, not the 400 every other input problem here
+    # uses. The reject-needs-a-reason rule above is deliberately the
+    # exception (it belongs at the schema, alongside the unknown-decision
+    # 422); a length cap is an ordinary input problem, checked by hand.
+    if payload.note is not None and len(payload.note) > MAX_REVIEW_NOTE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Note is longer than {MAX_REVIEW_NOTE_LENGTH} characters.",
+        )
+
+    if payload.decision == "approve":
+        if asset.status not in ("private", "submitted"):
+            raise HTTPException(status_code=400, detail="This media is already public.")
+        asset.status = "public"
+        asset.review_note = None
+    elif payload.decision == "reject":
+        if asset.status != "submitted":
+            raise HTTPException(status_code=400, detail="Only submitted media can be rejected.")
+        asset.status = "private"
+        asset.review_note = payload.note
+    else:  # unpublish
+        if asset.status != "public":
+            raise HTTPException(status_code=400, detail="Only public media can be unpublished.")
+        _refuse_if_in_use(asset, db, "unpublish")
+        asset.status = "private"
+        asset.review_note = payload.note
+
+    # No row locking: two simultaneous review calls on the same asset both
+    # read the pre-decision status, both pass their checks, and the second
+    # commit wins for reviewed_by_id/reviewed_at -- lossy attribution, not a
+    # privacy hole. Nothing here turns an asset public without a reviewer
+    # explicitly calling this endpoint with decision="approve"; accepted,
+    # not a gap to close before Task 9.
+    asset.reviewed_by_id = current_user.id
+    asset.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s reviewed (%s) by %s (role=%s)",
+        asset.id, payload.decision, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+@router.delete("/{asset_id}")
+async def delete_media(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Remove an asset. Owners may only delete their own still-private media."""
+    asset = _load_asset(db, asset_id)
+    _require_can_delete(asset, current_user)
+
+    # Every status, not just public. A legacy asset backfilled by Task 18 can be
+    # referenced by live site content while sitting at any status, because the
+    # /api/uploads/media/... URL the content tables hold is served straight from
+    # S3 and never consults this row.
+    _refuse_if_in_use(asset, db, "delete")
+
+    object_key = asset.object_key
+    thumbnail_key = asset.thumbnail_key
+    # Captured before the commit below: reading current_user.email afterwards
+    # would find the instance expired and force a needless re-SELECT just for
+    # this log line.
+    actor_email = current_user.email
+    actor_role = role_of(current_user)
+
+    db.delete(asset)
+    db.commit()
+
+    # Row-first, S3-second -- the same rule the upload pipeline's S3-first,
+    # row-second order follows, applied at the other end of the asset's
+    # life: never let the database claim bytes that aren't there. On create
+    # the row must not exist before the object; on delete it must not
+    # outlive it. The real justification is asymmetry of consequence, not
+    # symmetry of mechanism -- a leftover S3 object is invisible and costs
+    # only storage, while a row pointing at missing bytes breaks the listing
+    # today and 404s in byte serving on an asset the UI insists still
+    # exists.
+    #
+    # A failed object (or thumbnail) delete here is NOT picked up by
+    # cleanup.py's sweep -- cleanup_orphaned_media walks content rows
+    # looking for a missing S3 file (row -> file); it has no S3 listing and
+    # no awareness of media_assets, so it can never discover an S3 object
+    # with no row pointing at it. The only recovery path for that orphan is
+    # the ERROR log line below, which names the key.
+    cleanup_upload_artifacts(object_key, thumbnail_key, context=f"Deleted media {asset_id}")
+
+    logger.info(
+        "Media %s deleted by %s (role=%s)",
+        asset_id, actor_email, actor_role,
+    )
+    return {"message": "Media deleted", "id": asset_id}
 ```
 
 - [ ] **Step 4: Register the router**
