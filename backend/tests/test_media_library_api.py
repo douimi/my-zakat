@@ -1230,3 +1230,65 @@ def test_delete_also_removes_the_thumbnail(
 
     client.delete(f"/api/media-library/{asset.id}", headers=auth_headers)
     assert fake_s3 == {}
+
+
+def test_delete_guard_catches_a_private_legacy_asset(
+    client, db_session, auth_headers, monkeypatch, fake_s3
+):
+    """The guard runs for every status, not just public: a Task 18 backfilled
+    asset is referenced by get_file_url()'s proxy URL while sitting at any
+    status, because that URL is served straight from S3 and never consults
+    this row. Narrowing the guard to status == "public" would delete bytes
+    the live site is still serving."""
+    import s3_service
+    from models import GalleryItem
+
+    monkeypatch.setattr(s3_service, "FRONTEND_URL", "https://myzakat.org")
+    asset = _make_asset(db_session, None, filename="hero.jpg", status="private")
+    asset.object_key = "images/hero.jpg"  # legacy shape: no workspaces/ prefix
+    db_session.commit()
+    db_session.add(GalleryItem(media_filename=s3_service.get_file_url(asset.object_key)))
+    db_session.commit()
+
+    response = client.delete(f"/api/media-library/{asset.id}", headers=auth_headers)
+    assert response.status_code == 409
+    assert db_session.query(MediaAsset).filter(MediaAsset.id == asset.id).first() is not None
+
+
+def test_owner_cannot_delete_a_submitted_asset(
+    client, db_session, field_staff_headers, field_staff_user, fake_s3
+):
+    """Only a still-private asset is the owner's to delete -- once it has
+    been submitted, removing it becomes a review decision (same rule as
+    public, exercised separately above)."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
+    response = client.delete(f"/api/media-library/{asset.id}", headers=field_staff_headers)
+    assert response.status_code == 403
+
+
+def test_delete_survives_an_s3_failure_with_the_row_already_removed(
+    client, db_session, auth_headers, field_staff_user, monkeypatch, caplog
+):
+    """Row-first, S3-second: a failed object delete must not resurrect the
+    row or fail the request -- the row is already committed gone by the
+    time S3 is touched. cleanup.py's sweep can never find this orphan (it
+    walks content rows looking for a missing file, not S3 objects looking
+    for a missing row), so the ERROR log line naming the key is the only
+    recovery path left, and it must not go missing."""
+    import logging
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="private")
+    asset_id = asset.id
+    object_key = asset.object_key
+
+    monkeypatch.setattr("media_library_upload.delete_file", lambda key, cleanup_db=True: False)
+
+    with caplog.at_level(logging.ERROR):
+        response = client.delete(f"/api/media-library/{asset_id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert db_session.query(MediaAsset).filter(MediaAsset.id == asset_id).first() is None
+    assert any(
+        "orphan object" in record.message and object_key in record.message
+        for record in caplog.records
+    )

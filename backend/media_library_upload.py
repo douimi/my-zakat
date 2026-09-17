@@ -282,23 +282,28 @@ def cleanup_upload_artifacts(
     cleanup_db is hard-coded to False for both the upload-failure case and
     that anticipated delete case, though for different reasons. Here,
     there never was a row: the insert that would have referenced this
-    object never landed, so there is nothing for the async orphan sweep
-    (s3_service.delete_file's cleanup_db=True path) to find. A delete-path
-    caller reaches a different route to the same answer -- *if* it deletes
-    its own MediaAsset row first and calls this only afterwards (the
-    row-first-S3-second mirror of the create path's S3-first-row-second):
-    by the time this runs, the row is already gone, synchronously, in the
-    same request, so the background sweep would again find nothing this
-    call didn't already handle. That ordering is a precondition on the
-    caller, not something this function can enforce -- a caller that
-    deletes S3 before the row would need cleanup_db=True instead, which is
-    why this stays a parameter rather than being inlined as a bare
-    cleanup_db=False at each call site.
+    object never landed, so there is nothing in media_assets for
+    s3_service.delete_file's cleanup_db=True path to reconcile. A
+    delete-path caller reaches a different route to the same answer -- *if*
+    it deletes its own MediaAsset row first and calls this only afterwards
+    (the row-first-S3-second mirror of the create path's
+    S3-first-row-second): by the time this runs, the row is already gone,
+    synchronously, in the same request, so there is again nothing left for
+    that path to do. That ordering is a precondition on the caller, not
+    something this function can enforce -- a caller that deletes S3 before
+    the row would need cleanup_db=True instead, which is why this stays a
+    parameter rather than being inlined as a bare cleanup_db=False at each
+    call site.
 
     delete_file_fn returns False rather than raising on failure, so that
     has to be checked explicitly -- an unchecked call here would silently
-    leave exactly the orphan this cleanup exists to prevent, recoverable
-    only via cleanup.py's sweep.
+    leave exactly the orphan this cleanup exists to prevent. That orphan is
+    NOT recoverable via cleanup.py's sweep: cleanup_orphaned_media walks
+    content rows looking for a missing S3 file (row -> file); it never
+    lists S3 and has no awareness of media_assets, so it can never discover
+    an S3 object with no row pointing at it. The ERROR log line emitted
+    below, naming the key, is the only recovery path for that orphan --
+    which is exactly why it must not be allowed to silently disappear.
     """
     delete_file_fn = delete_file_fn or delete_file
 

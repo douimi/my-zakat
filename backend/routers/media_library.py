@@ -159,7 +159,7 @@ def _require_can_delete(asset: MediaAsset, user: User) -> None:
     if asset.status != "private":
         raise HTTPException(
             status_code=403,
-            detail="Only a private asset may be deleted by its owner.",
+            detail="Once media has been submitted or published, an admin must remove it.",
         )
 
 
@@ -768,21 +768,35 @@ async def delete_media(
 
     object_key = asset.object_key
     thumbnail_key = asset.thumbnail_key
+    # Captured before the commit below: reading current_user.email afterwards
+    # would find the instance expired and force a needless re-SELECT just for
+    # this log line.
+    actor_email = current_user.email
+    actor_role = role_of(current_user)
 
     db.delete(asset)
     db.commit()
 
-    # Row-first, S3-second -- the mirror of the upload pipeline's S3-first,
-    # row-second order. By the time cleanup_upload_artifacts runs here the row
-    # is already gone, synchronously, in this same request, which is exactly
-    # the precondition its docstring documents for passing cleanup_db=False:
-    # a failed object (or thumbnail) delete leaves an orphan for cleanup.py's
-    # sweep to find -- recoverable -- rather than leaving a row that still
-    # points at bytes that no longer exist, which would not be.
+    # Row-first, S3-second -- the same rule the upload pipeline's S3-first,
+    # row-second order follows, applied at the other end of the asset's
+    # life: never let the database claim bytes that aren't there. On create
+    # the row must not exist before the object; on delete it must not
+    # outlive it. The real justification is asymmetry of consequence, not
+    # symmetry of mechanism -- a leftover S3 object is invisible and costs
+    # only storage, while a row pointing at missing bytes breaks the listing
+    # today and 404s in byte serving on an asset the UI insists still
+    # exists.
+    #
+    # A failed object (or thumbnail) delete here is NOT picked up by
+    # cleanup.py's sweep -- cleanup_orphaned_media walks content rows
+    # looking for a missing S3 file (row -> file); it has no S3 listing and
+    # no awareness of media_assets, so it can never discover an S3 object
+    # with no row pointing at it. The only recovery path for that orphan is
+    # the ERROR log line below, which names the key.
     cleanup_upload_artifacts(object_key, thumbnail_key, context=f"Deleted media {asset_id}")
 
     logger.info(
         "Media %s deleted by %s (role=%s)",
-        asset_id, current_user.email, role_of(current_user),
+        asset_id, actor_email, actor_role,
     )
     return {"message": "Media deleted", "id": asset_id}
