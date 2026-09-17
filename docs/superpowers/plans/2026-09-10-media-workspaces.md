@@ -5870,7 +5870,13 @@ The Media group after the edit:
 
 - [x] **Step 3: Confirm nothing else imports the old page**
 
-Run: `cd frontend && grep -rn "AdminS3Media" src/`
+Run: `grep -rn "AdminS3Media" --exclude-dir=node_modules --exclude-dir=dist .`
+
+**Search the whole repo, not just `src/`.** `frontend/vite.config.ts` lists admin
+pages by path in its `manualChunks` config, and neither `tsc --noEmit` nor vitest
+reads that file — so a stale entry there passes every local check and fails only
+at `vite build`, in CI. Replace the entry with the two new pages rather than
+deleting it.
 
 Expected: no matches. If anything is still listed, update it before continuing.
 
