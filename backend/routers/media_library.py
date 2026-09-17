@@ -19,7 +19,6 @@ Task 9. Byte serving lives in media_library_files.py.
 """
 from __future__ import annotations
 
-import hashlib
 import io
 import os
 from datetime import datetime
@@ -39,19 +38,20 @@ from media_library_service import (
     asset_file_url,
     build_object_key,
     build_search_text,
-    build_thumbnail_key,
-    canonical_content_type,
     detect_media_type,
-    is_allow_listed_content_type,
-    media_type_of,
     normalize_tags,
     parse_tag_input,
     search_pattern,
     serialize_asset,
-    sniff_content_type,
     tag_filter_pattern,
     unsupported_hint,
     validate_tags,
+)
+from media_library_upload import (
+    ContentTypeMismatch,
+    cleanup_upload_artifacts,
+    process_upload_bytes,
+    store_processed_upload,
 )
 from media_processing import (
     compress_image,
@@ -245,72 +245,29 @@ async def upload_media(
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
         )
 
-    # The bytes have to say what they are before anything reaches Pillow or
-    # ffmpeg — sniff_content_type() returns every Content-Type alias the
-    # bytes are consistent with, or None if they match no format this module
-    # recognises at all (a forged/corrupt/unsupported upload).
-    declared = (file.content_type or "").split(";", 1)[0].strip().lower()
-    sniffed_content_types = sniff_content_type(content)
-    if sniffed_content_types is None:
-        raise HTTPException(
-            status_code=400,
-            detail="File content does not match its declared type.",
+    # Sniff, compress, strip and checksum the bytes -- the densest and most
+    # security-sensitive part of this endpoint, extracted so it can be
+    # tested directly with real bytes (see test_media_library_upload.py)
+    # instead of only reachable through a full HTTP round trip. See that
+    # module's docstring for the order-of-operations invariants it protects
+    # (sniff before compress, never store the raw header, unconditional
+    # EXIF/GPS stripping, orientation applied before it's discarded).
+    try:
+        processed = process_upload_bytes(
+            file.content_type,
+            content,
+            should_compress_image_fn=should_compress_image,
+            should_compress_video_fn=should_compress_video,
+            compress_image_fn=compress_image,
+            compress_video_fn=compress_video,
+            strip_image_metadata_fn=strip_image_metadata,
+            generate_video_thumbnail_fn=generate_video_thumbnail,
+            image_dimensions_fn=_image_dimensions,
         )
+    except ContentTypeMismatch as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # A declared type that IS allow-listed but ISN'T consistent with the
-    # sniffed bytes is the spoof this endpoint exists to catch (image/gif —
-    # a format should_compress_image() always skips, and so never gets
-    # re-encoded — declared over real JPEG bytes, to dodge the metadata
-    # stripping below). A declared type that is missing, or a generic
-    # default like application/octet-stream (what curl -F and some mobile
-    # webviews send with no OS MIME mapping to consult), is not a claim at
-    # all, so there is nothing to contradict — that used to reach here as a
-    # 400 too, which is the regression a re-review caught: nothing declared
-    # is not the same thing as something declared wrongly.
-    if is_allow_listed_content_type(declared) and declared not in sniffed_content_types:
-        raise HTTPException(
-            status_code=400,
-            detail="File content does not match its declared type.",
-        )
-
-    # Never store the raw header regardless of which branch above was
-    # taken: an accepted-but-generic declaration (or an accepted, correct
-    # one) is stored as-is; anything else falls back to the format's own
-    # canonical type, derived from the bytes rather than the caller.
-    media_type = media_type_of(sniffed_content_types)
-    content_type = declared if declared in sniffed_content_types else canonical_content_type(sniffed_content_types)
-    width = height = None
-    thumbnail_bytes = None
-
-    if media_type == "image":
-        if should_compress_image(content_type):
-            compressed = compress_image(content)
-            # compress_image() returns the original object, unchanged, if
-            # Pillow couldn't process it — relabel only when it actually
-            # produced new (JPEG) bytes, or a PNG Pillow chokes on would be
-            # stored as PNG bytes wearing an image/jpeg label.
-            if compressed is not content:
-                content, content_type = compressed, "image/jpeg"
-        # GPS/EXIF must never reach the public site (Task 8 publishes
-        # approved assets there). Unconditional — not gated on
-        # should_compress_image() — because that gate is exactly what a
-        # spoofed-Content-Type upload would use to dodge stripping if this
-        # depended on it; see strip_image_metadata()'s docstring.
-        stripped = strip_image_metadata(content)
-        if stripped is not content:
-            content = stripped
-        width, height = _image_dimensions(content)
-    else:
-        if should_compress_video(content_type):
-            content = compress_video(content)
-            # Symmetric with the image branch above: compress_video()
-            # transcodes into H.264/MP4 regardless of the source container,
-            # so a 3GP upload stored under its original video/3gpp label
-            # would be MP4 bytes wearing a Content-Type nothing plays.
-            content_type = "video/mp4"
-        thumbnail_bytes = generate_video_thumbnail(content)
-
-    checksum = hashlib.sha256(content).hexdigest()
+    checksum = processed.checksum
     # Advisory by design, not enforced with a unique constraint — see
     # migration 31's comment on idx_media_assets_owner_checksum: a unique
     # constraint would block a legitimate re-upload after a delete, and
@@ -354,18 +311,15 @@ async def upload_media(
 
     parsed_tags = normalize_tags(tag_input)
     object_key = build_object_key(current_user.id, file.filename)
-    thumbnail_key = None
 
     # S3 first, row second: an orphan object is recoverable, a row pointing at
-    # nothing is not.
-    upload_file(content, object_key, content_type=content_type)
-    if thumbnail_bytes:
-        thumbnail_key = build_thumbnail_key(object_key)
-        try:
-            upload_file(thumbnail_bytes, thumbnail_key, content_type="image/jpeg")
-        except Exception as exc:
-            logger.warning("Thumbnail upload failed for %s: %s", object_key, exc)
-            thumbnail_key = None
+    # nothing is not. Writing to S3 only after the duplicate-checksum check
+    # above is what keeps a rejected duplicate from leaving an orphan too —
+    # see media_library_upload's module docstring.
+    thumbnail_key = store_processed_upload(
+        processed, object_key,
+        upload_file_fn=upload_file,
+    )
 
     asset = MediaAsset(
         owner_id=current_user.id,
@@ -378,11 +332,11 @@ async def upload_media(
         # of this function) instead, because a title the user *did* type
         # deserves an honest rejection rather than a silent truncation.
         filename=(file.filename or "upload")[:255],
-        media_type=media_type,
-        content_type=content_type,
-        size_bytes=len(content),
-        width=width,
-        height=height,
+        media_type=processed.media_type,
+        content_type=processed.content_type,
+        size_bytes=len(processed.content),
+        width=processed.width,
+        height=processed.height,
         thumbnail_key=thumbnail_key,
         checksum_sha256=checksum,
         title=(title or None),
@@ -398,16 +352,9 @@ async def upload_media(
         db.refresh(asset)
     except SQLAlchemyError as exc:
         db.rollback()
-        # S3 first, row second (see the comment above upload_file()): a
-        # failed insert must not leave an object with nothing pointing at
-        # it. delete_file() returns False rather than raising on failure, so
-        # that has to be checked explicitly — an unchecked call here would
-        # silently leave exactly the orphan this compensating delete exists
-        # to prevent, recoverable only via cleanup.py's sweep.
-        if not delete_file(object_key, cleanup_db=False):
-            logger.error("Insert failed and S3 cleanup also failed; orphan object left at %s", object_key)
-        if thumbnail_key and not delete_file(thumbnail_key, cleanup_db=False):
-            logger.error("Insert failed and S3 cleanup also failed; orphan thumbnail left at %s", thumbnail_key)
+        # S3 first, row second (see the comment above store_processed_upload()):
+        # a failed insert must not leave an object with nothing pointing at it.
+        cleanup_upload_artifacts(object_key, thumbnail_key, delete_file_fn=delete_file)
         logger.error("Could not index uploaded media %s: %s", object_key, exc)
         raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
