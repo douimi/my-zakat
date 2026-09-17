@@ -28,6 +28,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days default
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
 STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
@@ -96,6 +97,26 @@ def get_current_user(
     if user is None or not user.is_active:
         raise credentials_exception
     
+    return user
+
+
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: Session = Depends(get_db)
+):
+    """Current user if a valid token is present, otherwise None.
+
+    Used by routes that serve public content to anonymous callers but must still
+    recognise a signed-in owner.
+    """
+    if credentials is None:
+        return None
+    email = verify_token(credentials.credentials)
+    if email is None:
+        return None
+    user = db.query(User).filter(User.email == email).first()
+    if user is None or not user.is_active:
+        return None
     return user
 
 
