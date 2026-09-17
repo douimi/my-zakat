@@ -83,7 +83,7 @@
 
 **Note on the conftest change:** the existing `admin_user` fixture sets `is_admin=True` but leaves `role` at its column default of `user`. Because `role_of` prefers a non-empty `role` column, that fixture would be treated as a donor by every role-aware dependency. Production rows were backfilled by migration 21, so this is a stale fixture rather than a live bug — but it must be fixed for these tests to mean anything.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_field_staff_role.py`:
 
@@ -156,13 +156,13 @@ def test_admin_cannot_assign_an_unknown_role(client, auth_headers):
     assert response.status_code == 400
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_field_staff_role.py -v`
 
 Expected: FAIL — `ImportError: cannot import name 'role_of' from 'auth_utils'`.
 
-- [ ] **Step 3: Add the helper and the dependency**
+- [x] **Step 3: Add the helper and the dependency**
 
 In `backend/auth_utils.py`, add after `get_current_admin`:
 
@@ -212,7 +212,7 @@ def get_current_manager_or_admin(
     return current_user
 ```
 
-- [ ] **Step 4: Widen the role allowlist and the comments**
+- [x] **Step 4: Widen the role allowlist and the comments**
 
 In `backend/routers/admin.py`, delete the local `VALID_ROLES` on line 197 and import
 the one in `auth_utils` instead, so the set of legal role strings is defined once.
@@ -251,7 +251,7 @@ In `backend/schemas.py`, change line 44:
     # 'admin' | 'manager' | 'field_staff' | 'user'. If omitted, falls back to is_admin for legacy callers.
 ```
 
-- [ ] **Step 5: Fix the stale admin fixture and add staff fixtures**
+- [x] **Step 5: Fix the stale admin fixture and add staff fixtures**
 
 In `backend/conftest.py`, add `role="admin"` to the existing `admin_user` fixture:
 
@@ -338,19 +338,19 @@ def donor_headers(client, donor_user):
     return _headers_for(client, donor_user.email)
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_field_staff_role.py -v`
 
 Expected: PASS, 10 tests (the parametrized case counts as 3).
 
-- [ ] **Step 7: Run the full backend suite to check nothing regressed**
+- [x] **Step 7: Run the full backend suite to check nothing regressed**
 
 Run: `cd backend && python -m pytest tests -v`
 
 Expected: PASS. The `role="admin"` fixture change and the `role_of` refactor must not break existing tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/auth_utils.py backend/routers/admin.py backend/models.py backend/schemas.py backend/conftest.py backend/tests/test_field_staff_role.py
@@ -370,7 +370,7 @@ git commit -m "feat: add field_staff role and staff-level auth dependency"
 
 **Context you need:** `AdminLayout` currently filters nav with `filterNavForRole(nav, isAdmin)` — a binary admin-or-manager decision driven by a single `MANAGER_ALLOWED` set. A third staff role makes that shape wrong, so it becomes a per-role allowlist map.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/store/__tests__/authStore.test.ts`:
 
@@ -422,13 +422,13 @@ describe('authStore roles', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/store/__tests__/authStore.test.ts`
 
 Expected: FAIL — `isFieldStaff` is `undefined`.
 
-- [ ] **Step 3: Update the auth store**
+- [x] **Step 3: Update the auth store**
 
 In `frontend/src/store/authStore.ts`, make these edits:
 
@@ -480,13 +480,13 @@ function buildAuthState(user: User | null) {
 
 Add `isFieldStaff: false` to both the initial state object and the `logout()` reset object.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/store/__tests__/authStore.test.ts`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Convert AdminLayout to a per-role allowlist**
+- [x] **Step 5: Convert AdminLayout to a per-role allowlist**
 
 In `frontend/src/components/AdminLayout.tsx`, replace the `MANAGER_ALLOWED` constant and the `filterNavForRole` function (lines 146-172) with:
 
@@ -561,7 +561,7 @@ Extend the role badge (lines 340-343):
       : 'bg-gray-100 text-gray-800'
 ```
 
-- [ ] **Step 6: Send field staff to their workspace on login**
+- [x] **Step 6: Send field staff to their workspace on login**
 
 In `frontend/src/App.tsx`, update `AdminIndex` (around line 85):
 
@@ -574,7 +574,7 @@ const AdminIndex = () => {
 }
 ```
 
-- [ ] **Step 7: Add the role to AdminUsers**
+- [x] **Step 7: Add the role to AdminUsers**
 
 In `frontend/src/pages/admin/AdminUsers.tsx`:
 
@@ -604,7 +604,7 @@ And to the edit dropdown (after line 898):
                     <option value="field_staff">Field Staff</option>
 ```
 
-- [ ] **Step 7b: Remove the toggle-admin button**
+- [x] **Step 7b: Remove the toggle-admin button**
 
 `toggle_user_admin` (`backend/routers/admin.py`, `PATCH /api/admin/users/{id}/toggle-admin`)
 recomputes `role` from the `is_admin` boolean:
@@ -635,7 +635,7 @@ Run: `cd frontend && grep -rn "toggle-admin\|toggleAdmin" src/`
 
 Expected: no matches.
 
-- [ ] **Step 7c: Add placeholder routes so the redirect is not dead**
+- [x] **Step 7c: Add placeholder routes so the redirect is not dead**
 
 Step 6 redirects field staff to `/admin/media`, and Step 5 adds nav links to
 `/admin/media` and `/admin/media/all` — but those routes do not exist until Tasks
@@ -651,13 +651,13 @@ Add placeholders in `frontend/src/App.tsx` beside the other `/admin` children:
                 <Route path="media/all" element={<div className="p-8 text-gray-500">All media — coming soon.</div>} />
 ```
 
-- [ ] **Step 8: Type-check and run the frontend suite**
+- [x] **Step 8: Type-check and run the frontend suite**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/store/authStore.ts frontend/src/components/AdminLayout.tsx frontend/src/pages/admin/AdminUsers.tsx frontend/src/utils/api.ts frontend/src/App.tsx frontend/src/store/__tests__/authStore.test.ts
@@ -676,7 +676,7 @@ git commit -m "feat: surface the field_staff role in the admin UI"
 
 **Context you need:** These functions have no DB or S3 dependency, which is why they come first — everything later builds on them. The pipe-delimited tag encoding inside `search_text` is what lets a tag filter be an exact match (`ILIKE '%|gaza|%'`) on both PostgreSQL and the SQLite used in tests, without dialect-specific JSON containment.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_service.py`:
 
@@ -771,13 +771,13 @@ def test_build_thumbnail_key_handles_a_key_without_an_extension():
     assert build_thumbnail_key("workspaces/7/2026/03/abc123") == "workspaces/7/2026/03/abc123_thumb.jpg"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_service.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'media_library_service'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `backend/media_library_service.py`:
 
@@ -1390,14 +1390,14 @@ def serialize_asset(asset: "MediaAsset") -> dict:
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_service.py -v`
 
 Expected: PASS, 77 tests (the 14 originally specified plus the hardening and
 validation tests added across four review rounds).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/media_library_service.py backend/tests/test_media_library_service.py
@@ -1415,7 +1415,7 @@ git commit -m "feat: add pure helpers for media library keys, tags and search te
 
 **Context you need:** The test suite builds its schema from `Base.metadata.create_all`, so the model is what tests see; the SQL migration is what production sees. **Both must be written, and they must agree.** `JSONType` (line 10 of `models.py`) is the existing cross-dialect JSON helper — real JSONB on PostgreSQL, plain JSON on SQLite.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_api.py`:
 
@@ -1467,13 +1467,13 @@ def test_object_key_is_unique(db_session, field_staff_user):
     db_session.rollback()
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: FAIL — `ImportError: cannot import name 'MediaAsset' from 'models'`.
 
-- [ ] **Step 3: Add the model**
+- [x] **Step 3: Add the model**
 
 In `backend/models.py`, add `BigInteger` to the first import line:
 
@@ -1547,13 +1547,13 @@ class MediaAsset(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Write the migration to match**
+- [x] **Step 5: Write the migration to match**
 
 Create `migrations/31_add_media_library.sql`:
 
@@ -1627,7 +1627,7 @@ CREATE INDEX IF NOT EXISTS idx_media_assets_submitted
 SELECT 'Migration 31 completed successfully!' as message;
 ```
 
-- [ ] **Step 6: Check the migration parses**
+- [x] **Step 6: Check the migration parses**
 
 Run: `cd migrations && grep -c "CREATE INDEX" 31_add_media_library.sql`
 
@@ -1637,7 +1637,7 @@ If a local PostgreSQL is reachable, apply it for real instead:
 `docker compose exec -T db psql -U postgres -d myzakat -f /migrations/31_add_media_library.sql`
 Expected: `Migration 31 completed successfully!`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/models.py migrations/31_add_media_library.sql backend/tests/test_media_library_api.py
@@ -1661,7 +1661,7 @@ git commit -m "feat: add media_assets table and model"
 
 **Ordering rule:** write to S3 first, insert the row second. If the insert fails, delete the object. The reverse order would leave a row pointing at nothing, which is worse than an orphan object — `cleanup.py` already sweeps orphan objects.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -1830,13 +1830,13 @@ def test_an_anonymous_caller_cannot_upload(client, fake_s3, no_compression):
     assert response.status_code in (401, 403)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k upload`
 
 Expected: FAIL — every upload test returns 404, because the route does not exist.
 
-- [ ] **Step 3: Write the router**
+- [x] **Step 3: Write the router**
 
 Create `backend/routers/media_library.py`:
 
@@ -2681,7 +2681,7 @@ async def delete_media(
     return {"message": "Media deleted", "id": asset_id}
 ```
 
-- [ ] **Step 4: Register the router**
+- [x] **Step 4: Register the router**
 
 In `backend/main.py`, add after line 222 (`s3_media` registration):
 
@@ -2691,13 +2691,13 @@ app.include_router(media_library.router, prefix="/api/media-library", tags=["med
 
 Add `media_library` to the `from routers import (...)` block at the top of the file — match the existing import style there.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 20 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/main.py backend/tests/test_media_library_api.py
@@ -2714,7 +2714,7 @@ git commit -m "feat: upload media into a per-user workspace"
 
 **Context you need:** Scoping is applied **inside the query**, never by trusting a caller-supplied filter — a field-staff request must be structurally incapable of returning another member's rows. Admins and managers may additionally pass `owner_id`, including the literal `unassigned` for the backfilled legacy pool.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -2871,13 +2871,13 @@ def test_a_donor_cannot_list(client, donor_headers):
     assert client.get("/api/media-library", headers=donor_headers).status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "list or search or sort or pagination or tag_filter or filter_by"`
 
 Expected: FAIL — 404, the route does not exist.
 
-- [ ] **Step 3: Write the list endpoint**
+- [x] **Step 3: Write the list endpoint**
 
 Append to `backend/routers/media_library.py`:
 
@@ -2976,13 +2976,13 @@ async def list_media(
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 24 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -3001,7 +3001,7 @@ git commit -m "feat: list, search, sort and paginate media assets"
 
 **Route ordering matters:** `/workspaces` must be declared **before** `/{asset_id}`, because `asset_id` is typed `int` and FastAPI would reject the literal string `workspaces` with a 422 rather than falling through.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -3159,13 +3159,13 @@ def test_field_staff_cannot_read_the_workspaces_summary(client, field_staff_head
     assert response.status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "detail or patch or workspaces"`
 
 Expected: FAIL — 404 / 405 on the missing routes.
 
-- [ ] **Step 3: Write the endpoints**
+- [x] **Step 3: Write the endpoints**
 
 Append to `backend/routers/media_library.py`. **`/workspaces` must come first in the file** so it is matched before `/{asset_id}`:
 
@@ -3337,13 +3337,13 @@ async def reassign_media(
 
 Because `MediaAssetUpdate` has no `status` field, Pydantic drops an attempted `"status": "public"` from the body — that is what makes `test_patch_cannot_change_status` pass, and it is why status changes live on their own endpoints.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 59 tests in this file (it accumulates across Tasks 4-7).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -3360,7 +3360,7 @@ git commit -m "feat: media asset detail, metadata editing and workspace summarie
 
 **Context you need:** The legal transitions are exactly the table in the spec. Everything else is a 400. Unpublishing (`public → private`) is the one transition with a guard: it is refused while site content still points at the asset.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -3513,13 +3513,13 @@ def test_approving_an_already_public_asset_is_rejected(
     assert response.status_code == 400
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "submit or review or reject or unpublish or promote"`
 
 Expected: FAIL — 404 on the missing routes.
 
-- [ ] **Step 3: Write the endpoints**
+- [x] **Step 3: Write the endpoints**
 
 Append to `backend/routers/media_library.py`:
 
@@ -3646,13 +3646,13 @@ async def review_media(
     return _serialize(asset)
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 45 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -3669,7 +3669,7 @@ git commit -m "feat: submit-for-review and approve/reject/unpublish transitions"
 
 **Context you need:** An owner may delete only their own **private** media — once something has been submitted or published, removing it is a review decision. Deletion is refused entirely while site content references the asset. The row goes in the transaction; the object goes after the commit, so a failed object delete leaves an orphan for `cleanup.py` rather than a row pointing at nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -3740,13 +3740,13 @@ def test_delete_also_removes_the_thumbnail(
     assert fake_s3 == {}
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k delete`
 
 Expected: FAIL — 405 Method Not Allowed.
 
-- [ ] **Step 3: Write the endpoint**
+- [x] **Step 3: Write the endpoint**
 
 Append to `backend/routers/media_library.py`:
 
@@ -3789,13 +3789,13 @@ async def delete_media(
     return {"message": "Media deleted", "id": asset_id}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 51 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -3817,7 +3817,7 @@ git commit -m "feat: delete media with an in-use guard"
 
 **The cache header differs by status.** Public assets get `public, max-age=86400` like today. Private and submitted assets must get `private, no-store` — otherwise an intermediary could cache a beneficiary photo.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_permissions.py`:
 
@@ -3973,13 +3973,13 @@ def test_field_staff_are_refused_on_manager_only_endpoints(
     ).status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_permissions.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'routers.media_library_files'`.
 
-- [ ] **Step 3: Add the optional-auth dependency**
+- [x] **Step 3: Add the optional-auth dependency**
 
 In `backend/auth_utils.py`, add beside the existing `security` object:
 
@@ -4009,7 +4009,7 @@ def get_optional_user(
 
 Add `Optional` to the `typing` import at the top of the file if it is not already imported.
 
-- [ ] **Step 4: Extract the streaming helper**
+- [x] **Step 4: Extract the streaming helper**
 
 In `backend/routers/static_files.py`, add after `get_content_type`:
 
@@ -4102,7 +4102,7 @@ Then replace the body of `serve_video`'s S3 branch (`static_files.py:126-219`) w
 
 Leave the other three video routes alone in this task — they are unrelated to this feature and changing them widens the blast radius.
 
-- [ ] **Step 5: Write the serving router**
+- [x] **Step 5: Write the serving router**
 
 Create `backend/routers/media_library_files.py`:
 
@@ -4227,7 +4227,7 @@ Before running the tests, confirm the `resize_image` signature matches this call
 Run: `cd backend && sed -n '61,80p' image_cache.py`
 If its parameters differ, adjust the call rather than the module.
 
-- [ ] **Step 6: Register the serving router**
+- [x] **Step 6: Register the serving router**
 
 In `backend/main.py`, add immediately after the `media_library` registration:
 
@@ -4237,7 +4237,7 @@ app.include_router(media_library_files.router, prefix="/api/media-library", tags
 
 Add `media_library_files` to the `from routers import (...)` block.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `cd backend && python -m pytest tests/test_media_library_permissions.py -v`
 
@@ -4249,7 +4249,7 @@ Run: `cd backend && python -m pytest tests -v`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/auth_utils.py backend/routers/static_files.py backend/routers/media_library_files.py backend/main.py backend/tests/test_media_library_permissions.py
@@ -4268,7 +4268,7 @@ git commit -m "feat: serve media bytes with per-asset access control"
 
 **Context you need:** `frontend/src/utils/api.ts` exports a configured axios instance as its default export, with an interceptor that attaches `auth_token` and redirects to `/login` on 401. Reuse it — do not create a second axios instance. `getStaticFileUrl()` from the same module turns an `/api/...` path into an absolute URL, which `<img>` and `<video>` elements need in development where Vite proxies only some paths.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/utils/__tests__/mediaLibraryApi.test.ts`:
 
@@ -4329,13 +4329,13 @@ describe('mediaLibraryApi', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/utils/__tests__/mediaLibraryApi.test.ts`
 
 Expected: FAIL — cannot resolve `../mediaLibraryApi`.
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 Create `frontend/src/utils/mediaLibraryApi.ts`:
 
@@ -4496,13 +4496,13 @@ export const mediaLibraryApi = {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/utils/__tests__/mediaLibraryApi.test.ts`
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/utils/mediaLibraryApi.ts frontend/src/utils/__tests__/mediaLibraryApi.test.ts
@@ -4520,7 +4520,7 @@ git commit -m "feat: typed client for the media library API"
 
 **Context you need:** Both admin pages render the same grid, so these components take everything through props and hold no data-fetching logic. That is what keeps `AdminMediaWorkspace` and `AdminMediaLibrary` small — the 743-line `AdminS3Media.tsx` is the shape to avoid.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaGrid.test.tsx`:
 
@@ -4591,13 +4591,13 @@ describe('MediaGrid', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaGrid.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaGrid`.
 
-- [ ] **Step 3: Write MediaCard**
+- [x] **Step 3: Write MediaCard**
 
 Create `frontend/src/components/media/MediaCard.tsx`:
 
@@ -4676,7 +4676,7 @@ const MediaCard = ({ asset, onSelect }: MediaCardProps) => {
 export default MediaCard
 ```
 
-- [ ] **Step 4: Write MediaGrid**
+- [x] **Step 4: Write MediaGrid**
 
 Create `frontend/src/components/media/MediaGrid.tsx`:
 
@@ -4730,13 +4730,13 @@ const MediaGrid = ({ items, loading, onSelect, emptyHint }: MediaGridProps) => {
 export default MediaGrid
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaGrid.test.tsx`
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaCard.tsx frontend/src/components/media/MediaGrid.tsx frontend/src/components/media/__tests__/MediaGrid.test.tsx
@@ -4753,7 +4753,7 @@ git commit -m "feat: media card and grid components"
 
 **Context you need:** The search box is debounced so typing does not fire a request per keystroke. The component is fully controlled — it owns no filter state, only the debounce timer for the text input.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaFilters.test.tsx`:
 
@@ -4801,13 +4801,13 @@ describe('MediaFilters', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaFilters.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaFilters`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaFilters.tsx`:
 
@@ -4932,13 +4932,13 @@ const MediaFilters = ({ query, onChange, showStatusFilter }: MediaFiltersProps) 
 export default MediaFilters
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaFilters.test.tsx`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaFilters.tsx frontend/src/components/media/__tests__/MediaFilters.test.tsx
@@ -4955,7 +4955,7 @@ git commit -m "feat: media filter bar with debounced search"
 
 **Context you need:** Uploads run one at a time so a phone-sized video does not saturate the connection, and each file reports its own progress and its own error. A 409 (duplicate) is an expected outcome, not a failure — it is reported as "already in your workspace".
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaUploader.test.tsx`:
 
@@ -5011,13 +5011,13 @@ describe('MediaUploader', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaUploader.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaUploader`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaUploader.tsx`:
 
@@ -5147,13 +5147,13 @@ const MediaUploader = ({ onUploaded }: MediaUploaderProps) => {
 export default MediaUploader
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaUploader.test.tsx`
 
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaUploader.tsx frontend/src/components/media/__tests__/MediaUploader.test.tsx
@@ -5170,7 +5170,7 @@ git commit -m "feat: media uploader with per-file progress"
 
 **Context you need:** One drawer serves both pages; which actions appear is decided by props, not by the component reading the auth store — that keeps it testable and keeps the permission decision in one obvious place per page.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaDetailDrawer.test.tsx`:
 
@@ -5256,13 +5256,13 @@ describe('MediaDetailDrawer', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaDetailDrawer.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaDetailDrawer`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaDetailDrawer.tsx`:
 
@@ -5491,13 +5491,13 @@ const MediaDetailDrawer = ({
 export default MediaDetailDrawer
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaDetailDrawer.test.tsx`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaDetailDrawer.tsx frontend/src/components/media/__tests__/MediaDetailDrawer.test.tsx
@@ -5514,7 +5514,7 @@ git commit -m "feat: media detail drawer with metadata editing and review action
 
 **Context you need:** This page is deliberately thin — it owns query state and data fetching, and delegates every pixel to the Task 12-15 components. Follow the lazy-import pattern used by every other admin page in `App.tsx`.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/pages/admin/AdminMediaWorkspace.tsx`:
 
@@ -5618,7 +5618,7 @@ const AdminMediaWorkspace = () => {
 export default AdminMediaWorkspace
 ```
 
-- [ ] **Step 2: Wire the route**
+- [x] **Step 2: Wire the route**
 
 In `frontend/src/App.tsx`, add the lazy import beside the other admin pages:
 
@@ -5634,13 +5634,13 @@ do not add a second route for the same path:
                 <Route path="media" element={<AdminMediaWorkspace />} />
 ```
 
-- [ ] **Step 3: Verify it builds and the suite still passes**
+- [x] **Step 3: Verify it builds and the suite still passes**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/pages/admin/AdminMediaWorkspace.tsx frontend/src/App.tsx
@@ -5659,7 +5659,7 @@ git commit -m "feat: My Workspace media page"
 
 **Context you need:** `/admin/s3-media` is repointed at the new page rather than removed, so an existing bookmark still lands somewhere sensible. The usage cross-reference people relied on in AdminS3Media now lives in `MediaDetailDrawer` (the blue "used in N places" panel), and delete still works from there — so nothing that page did is lost.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/pages/admin/AdminMediaLibrary.tsx`:
 
@@ -5828,7 +5828,7 @@ const AdminMediaLibrary = () => {
 export default AdminMediaLibrary
 ```
 
-- [ ] **Step 2: Wire the routes and retire the old page**
+- [x] **Step 2: Wire the routes and retire the old page**
 
 In `frontend/src/App.tsx`:
 
@@ -5868,23 +5868,23 @@ The Media group after the edit:
     ],
 ```
 
-- [ ] **Step 3: Confirm nothing else imports the old page**
+- [x] **Step 3: Confirm nothing else imports the old page**
 
 Run: `cd frontend && grep -rn "AdminS3Media" src/`
 
 Expected: no matches. If anything is still listed, update it before continuing.
 
-- [ ] **Step 4: Delete the old page**
+- [x] **Step 4: Delete the old page**
 
 Run: `git rm frontend/src/pages/admin/AdminS3Media.tsx`
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/pages/admin/AdminMediaLibrary.tsx frontend/src/App.tsx frontend/src/components/AdminLayout.tsx frontend/src/components/adminNav.ts frontend/src/components/__tests__/AdminLayout.test.tsx
@@ -5903,7 +5903,7 @@ git commit -m "feat: All Media page with workspace sidebar and review queue"
 
 **Context you need:** `s3_service.list_files(prefix)` returns dicts with `key`, `size`, `last_modified` and `url`. The existing `/browse` endpoint skips generated thumbnails by filtering names containing `_thumb` — do the same, or thumbnails will appear as standalone assets. The script must be idempotent: it is keyed on `object_key`, so re-running only adds what is missing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_backfill_media_library.py`:
 
@@ -5969,13 +5969,13 @@ def test_backfill_is_idempotent(db_session, fake_listing):
     assert db_session.query(MediaAsset).count() == 2
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_backfill_media_library.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'scripts'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `backend/scripts/__init__.py` (empty file), then `backend/scripts/backfill_media_library.py`:
 
@@ -6069,13 +6069,13 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_backfill_media_library.py -v`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/scripts/__init__.py backend/scripts/backfill_media_library.py backend/tests/test_backfill_media_library.py
@@ -6094,7 +6094,7 @@ git commit -m "feat: backfill existing S3 objects into the media library"
 
 **Do not run step 3 until step 2 reports zero rows.**
 
-- [ ] **Step 1: Write the audit script**
+- [x] **Step 1: Write the audit script**
 
 Create `backend/scripts/audit_direct_s3_urls.py`:
 
@@ -6176,7 +6176,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run the audit against production data**
+- [x] **Step 2: Run the audit against production data**
 
 Run: `docker compose exec backend python -m scripts.audit_direct_s3_urls`
 
@@ -6184,7 +6184,7 @@ Expected: `Clean: no direct S3 URLs found.`
 
 If it lists rows, rewrite each listed value to its proxy form (`/api/uploads/media/<images|videos>/<filename>`) and re-run until clean. **Do not continue while any row is listed.**
 
-- [ ] **Step 3: Remove the public-read bucket policy**
+- [x] **Step 3: Remove the public-read bucket policy**
 
 In `backend/s3_service.py`, inside `ensure_bucket_exists()`, delete both `put_bucket_policy` blocks — the one in the "bucket exists" branch and the one in the "bucket created" branch — replacing each with:
 
@@ -6195,7 +6195,7 @@ In `backend/s3_service.py`, inside `ensure_bucket_exists()`, delete both `put_bu
 
 Then remove the now-unused `import json` statements inside that function.
 
-- [ ] **Step 4: Verify public media still serves and private media does not**
+- [x] **Step 4: Verify public media still serves and private media does not**
 
 Run: `cd backend && python -m pytest tests -v`
 
@@ -6209,7 +6209,7 @@ Expected: `200`
 Run: `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/media-library/<a private id>/file`
 Expected: `404`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/scripts/audit_direct_s3_urls.py backend/s3_service.py
@@ -6225,7 +6225,7 @@ git commit -m "feat: audit direct S3 URLs and remove the public-read bucket poli
 
 **Context you need:** Playwright config lives at `playwright.config.ts` in the repo root; specs live in `e2e/`. This test covers the one path that spans every layer: a field staff member uploads and submits, an admin reviews and publishes.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `e2e/media-workspaces.spec.ts`:
 
@@ -6289,13 +6289,13 @@ test.describe('media workspaces', () => {
 })
 ```
 
-- [ ] **Step 2: Add the fixture image**
+- [x] **Step 2: Add the fixture image**
 
 Run: `mkdir -p e2e/fixtures && python -c "from PIL import Image; Image.new('RGB', (64, 64), 'teal').save('e2e/fixtures/sample.jpg')"`
 
 Expected: `e2e/fixtures/sample.jpg` exists.
 
-- [ ] **Step 3: Seed the field staff account**
+- [x] **Step 3: Seed the field staff account**
 
 Run:
 ```bash
@@ -6314,13 +6314,13 @@ print('seeded')
 
 Expected: `seeded`
 
-- [ ] **Step 4: Run the E2E test**
+- [x] **Step 4: Run the E2E test**
 
 Run: `npx playwright test e2e/media-workspaces.spec.ts`
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add e2e/media-workspaces.spec.ts e2e/fixtures/sample.jpg
@@ -6350,7 +6350,7 @@ verbatim leaves the delete and unpublish guards silently reporting zero usage �
 protection that appears to work and does not. That is the single most important
 constraint in this task.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx`:
 
@@ -6400,13 +6400,13 @@ describe('MediaPickerDialog', () => {
 })
 ```
 
-- [ ] **Step 2: Run it, expect failure**
+- [x] **Step 2: Run it, expect failure**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaPickerDialog.test.tsx`
 
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Build the dialog**
+- [x] **Step 3: Build the dialog**
 
 `MediaPickerDialog` reuses `MediaGrid` and `MediaFilters` from Tasks 12-13. It
 calls `mediaLibraryApi.list({ status: 'public', ... })` — **never anything else**,
@@ -6414,14 +6414,14 @@ because an unpublished asset placed on a page would 404 for visitors. Selecting 
 tile calls `onPick(asset.url, asset)`, where `asset.url` is the `_serialize`
 output, already `/api/media-library/{id}/file`.
 
-- [ ] **Step 4: Wire it into the three screens**
+- [x] **Step 4: Wire it into the three screens**
 
 In each of `AdminGallery.tsx`, `AdminStories.tsx` and `AdminEvents.tsx`, add a
 "Choose from media library" button beside the existing upload control, and set
 the same state field the upload flow sets. Leave the existing upload paths alone
 — this adds a source, it does not replace one.
 
-- [ ] **Step 5: Prove the guard actually fires**
+- [x] **Step 5: Prove the guard actually fires**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -6441,7 +6441,7 @@ def test_a_picked_asset_registers_as_in_use(
     assert body["usage_count"] == 1, "the in-use guard cannot see the picked asset"
 ```
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 Run: `cd backend && python -m pytest tests -q`
