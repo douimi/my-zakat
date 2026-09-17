@@ -6,6 +6,7 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
   POST   /api/media-library/{id}/submit    owner: private -> submitted
+  POST   /api/media-library/{id}/withdraw  owner: submitted -> private
   DELETE /api/media-library/{id}           owner (private only) or admin/manager
 
 Admin or manager only:
@@ -691,6 +692,41 @@ async def submit_for_review(
         "Media %s submitted for review by %s (role=%s)",
         asset.id, current_user.email, role_of(current_user),
     )
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/withdraw")
+async def withdraw_submission(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner pulls a submission back out of the review queue.
+
+    Without this a field worker who uploads something sensitive by mistake and
+    submits it has no exit: delete refuses anything but `private`, and both
+    reject and unpublish are reviewer-only. The photo would sit visible to every
+    admin until someone else acted -- the worst outcome for exactly the content
+    this workflow exists to protect.
+
+    Cannot touch a public asset: pulling live media down stays a reviewer call.
+    """
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "submitted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only submitted media can be withdrawn (this is '{asset.status}').",
+        )
+
+    asset.status = "private"
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info("Media %s withdrawn by %s", asset_id, current_user.email)
     return serialize_asset(asset)
 
 

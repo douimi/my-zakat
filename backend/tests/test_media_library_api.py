@@ -874,6 +874,33 @@ def test_submitting_an_already_submitted_asset_is_rejected(
     assert response.status_code == 400
 
 
+def test_an_owner_can_withdraw_their_own_submission(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """The exit from a mistaken submission."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="oops.jpg", status="submitted")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "private"
+
+
+def test_withdraw_is_refused_on_someone_elses_asset(
+    client, db_session, field_staff_headers, other_field_staff_user
+):
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg", status="submitted")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
+    assert response.status_code == 404
+
+
+def test_withdraw_cannot_unpublish(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Pulling live media down stays a reviewer decision."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="live.jpg", status="public")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
+    assert response.status_code == 400
+
+
 def test_field_staff_cannot_review(client, db_session, field_staff_headers, field_staff_user):
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
     response = client.post(
