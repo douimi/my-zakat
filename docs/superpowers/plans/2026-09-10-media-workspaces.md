@@ -50,7 +50,7 @@
 | Path | Change |
 |---|---|
 | `backend/models.py` | Add `MediaAsset`; add `BigInteger` import; update the role comment. |
-| `backend/auth_utils.py` | Add `_role_of`, `STAFF_ROLES`, `get_current_staff`, `get_optional_user`; make `get_current_manager_or_admin` use `_role_of`. |
+| `backend/auth_utils.py` | Add `role_of`, `STAFF_ROLES`, `get_current_staff`, `get_optional_user`; make `get_current_manager_or_admin` use `role_of`. |
 | `backend/routers/admin.py` | Add `field_staff` to `VALID_ROLES`. |
 | `backend/schemas.py` | Update the role comment on `AdminUserCreate`. |
 | `backend/routers/static_files.py` | Extract `stream_s3_object()`; point `serve_video` at it. |
@@ -79,11 +79,11 @@
 - Modify: `backend/conftest.py:76-96`
 - Test: `backend/tests/test_field_staff_role.py`
 
-**Context you need:** `users.role` is already `VARCHAR(20)` holding `admin | manager | user`, so adding a fourth value needs **no schema change**. `get_current_manager_or_admin` already derives an effective role inline; we are lifting that into a shared `_role_of` helper and adding a staff-level gate beside it.
+**Context you need:** `users.role` is already `VARCHAR(20)` holding `admin | manager | user`, so adding a fourth value needs **no schema change**. `get_current_manager_or_admin` already derives an effective role inline; we are lifting that into a shared `role_of` helper and adding a staff-level gate beside it.
 
-**Note on the conftest change:** the existing `admin_user` fixture sets `is_admin=True` but leaves `role` at its column default of `user`. Because `_role_of` prefers a non-empty `role` column, that fixture would be treated as a donor by every role-aware dependency. Production rows were backfilled by migration 21, so this is a stale fixture rather than a live bug — but it must be fixed for these tests to mean anything.
+**Note on the conftest change:** the existing `admin_user` fixture sets `is_admin=True` but leaves `role` at its column default of `user`. Because `role_of` prefers a non-empty `role` column, that fixture would be treated as a donor by every role-aware dependency. Production rows were backfilled by migration 21, so this is a stale fixture rather than a live bug — but it must be fixed for these tests to mean anything.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_field_staff_role.py`:
 
@@ -92,7 +92,7 @@ Create `backend/tests/test_field_staff_role.py`:
 import pytest
 from fastapi import HTTPException
 
-from auth_utils import _role_of, get_current_staff, get_current_manager_or_admin
+from auth_utils import role_of, get_current_staff, get_current_manager_or_admin
 from models import User
 
 
@@ -101,17 +101,17 @@ def _user(role, is_admin=False):
 
 
 def test_role_of_prefers_the_role_column():
-    assert _role_of(_user("field_staff")) == "field_staff"
-    assert _role_of(_user("manager")) == "manager"
+    assert role_of(_user("field_staff")) == "field_staff"
+    assert role_of(_user("manager")) == "manager"
 
 
 def test_role_of_falls_back_to_is_admin_when_role_is_missing():
-    assert _role_of(_user(None, is_admin=True)) == "admin"
-    assert _role_of(_user(None, is_admin=False)) == "user"
+    assert role_of(_user(None, is_admin=True)) == "admin"
+    assert role_of(_user(None, is_admin=False)) == "user"
 
 
 def test_role_of_rejects_an_unknown_role_value():
-    assert _role_of(_user("wizard", is_admin=False)) == "user"
+    assert role_of(_user("wizard", is_admin=False)) == "user"
 
 
 @pytest.mark.parametrize("role", ["admin", "manager", "field_staff"])
@@ -156,22 +156,23 @@ def test_admin_cannot_assign_an_unknown_role(client, auth_headers):
     assert response.status_code == 400
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_field_staff_role.py -v`
 
-Expected: FAIL — `ImportError: cannot import name '_role_of' from 'auth_utils'`.
+Expected: FAIL — `ImportError: cannot import name 'role_of' from 'auth_utils'`.
 
-- [ ] **Step 3: Add the helper and the dependency**
+- [x] **Step 3: Add the helper and the dependency**
 
 In `backend/auth_utils.py`, add after `get_current_admin`:
 
 ```python
 VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
 STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
+MANAGER_ROLES = frozenset({"admin", "manager"})
 
 
-def _role_of(user: User) -> str:
+def role_of(user: User) -> str:
     """Effective role for a user row.
 
     Prefers the `role` column, falling back to the legacy `is_admin` flag for
@@ -187,7 +188,7 @@ def get_current_staff(
     current_user: User = Depends(get_current_user)
 ):
     """Anyone who owns a media workspace: admin, manager or field staff."""
-    if _role_of(current_user) not in STAFF_ROLES:
+    if role_of(current_user) not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Staff access required."
@@ -202,7 +203,7 @@ def get_current_manager_or_admin(
     current_user: User = Depends(get_current_user)
 ):
     """Allow either admins or managers — used for endpoints that managers can access."""
-    if _role_of(current_user) not in ("admin", "manager"):
+    if role_of(current_user) not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Manager or admin access required."
@@ -211,13 +212,26 @@ def get_current_manager_or_admin(
     return current_user
 ```
 
-- [ ] **Step 4: Widen the role allowlist and the comments**
+- [x] **Step 4: Widen the role allowlist and the comments**
 
-In `backend/routers/admin.py`, change line 197:
+In `backend/routers/admin.py`, delete the local `VALID_ROLES` on line 197 and import
+the one in `auth_utils` instead, so the set of legal role strings is defined once.
+If the two ever drift, an admin could create a user with a role the auth gates do
+not recognise, and that user would be silently treated as a donor:
 
 ```python
-VALID_ROLES = {"admin", "manager", "field_staff", "user"}
+from auth_utils import VALID_ROLES, role_of
 ```
+
+Then replace the two surviving copies of the old inline derivation
+(`getattr(user, "role", None) or ("admin" if user.is_admin else "user")` at roughly
+lines 217 and 369) with `role_of(user)`. Those copies lack the `VALID_ROLES`
+check, so a row with a bad role reads as that bad role in the admin UI while every
+auth gate treats the user as a donor.
+
+Leave `user.role = "admin" if user.is_admin else "user"` in `toggle_user_admin`
+(around line 435) alone — that is a write deriving the column from the just-toggled
+flag, not a read of an effective role. `role_of()` does not apply there.
 
 In `backend/models.py`, change the comment on line 68 and add a property beside `is_manager`:
 
@@ -237,7 +251,7 @@ In `backend/schemas.py`, change line 44:
     # 'admin' | 'manager' | 'field_staff' | 'user'. If omitted, falls back to is_admin for legacy callers.
 ```
 
-- [ ] **Step 5: Fix the stale admin fixture and add staff fixtures**
+- [x] **Step 5: Fix the stale admin fixture and add staff fixtures**
 
 In `backend/conftest.py`, add `role="admin"` to the existing `admin_user` fixture:
 
@@ -255,14 +269,20 @@ In `backend/conftest.py`, add `role="admin"` to the existing `admin_user` fixtur
 Then append these fixtures to the end of the file:
 
 ```python
-def _make_staff_user(db_session, email, role):
+TEST_PASSWORD = "testpass"
+
+
+def _make_user(db_session, email, role):
     user = User(
         email=email,
-        password=get_password_hash("testpass"),
+        password=get_password_hash(TEST_PASSWORD),
         name=email.split("@")[0],
         is_active=True,
         is_admin=(role == "admin"),
         role=role,
+        # routers/auth.py rejects a login from any non-admin whose email is
+        # unverified, so without this every *_headers fixture below errors.
+        email_verified=True,
     )
     db_session.add(user)
     db_session.commit()
@@ -272,7 +292,7 @@ def _make_staff_user(db_session, email, role):
 
 def _headers_for(client, email):
     response = client.post(
-        "/api/auth/login", json={"email": email, "password": "testpass"}
+        "/api/auth/login", json={"email": email, "password": TEST_PASSWORD}
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
@@ -280,22 +300,22 @@ def _headers_for(client, email):
 
 @pytest.fixture(scope="function")
 def manager_user(db_session):
-    return _make_staff_user(db_session, "manager@example.com", "manager")
+    return _make_user(db_session, "manager@example.com", "manager")
 
 
 @pytest.fixture(scope="function")
 def field_staff_user(db_session):
-    return _make_staff_user(db_session, "field@example.com", "field_staff")
+    return _make_user(db_session, "field@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def other_field_staff_user(db_session):
-    return _make_staff_user(db_session, "field2@example.com", "field_staff")
+    return _make_user(db_session, "field2@example.com", "field_staff")
 
 
 @pytest.fixture(scope="function")
 def donor_user(db_session):
-    return _make_staff_user(db_session, "donor@example.com", "user")
+    return _make_user(db_session, "donor@example.com", "user")
 
 
 @pytest.fixture(scope="function")
@@ -318,19 +338,19 @@ def donor_headers(client, donor_user):
     return _headers_for(client, donor_user.email)
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_field_staff_role.py -v`
 
 Expected: PASS, 10 tests (the parametrized case counts as 3).
 
-- [ ] **Step 7: Run the full backend suite to check nothing regressed**
+- [x] **Step 7: Run the full backend suite to check nothing regressed**
 
 Run: `cd backend && python -m pytest tests -v`
 
-Expected: PASS. The `role="admin"` fixture change and the `_role_of` refactor must not break existing tests.
+Expected: PASS. The `role="admin"` fixture change and the `role_of` refactor must not break existing tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/auth_utils.py backend/routers/admin.py backend/models.py backend/schemas.py backend/conftest.py backend/tests/test_field_staff_role.py
@@ -350,7 +370,7 @@ git commit -m "feat: add field_staff role and staff-level auth dependency"
 
 **Context you need:** `AdminLayout` currently filters nav with `filterNavForRole(nav, isAdmin)` — a binary admin-or-manager decision driven by a single `MANAGER_ALLOWED` set. A third staff role makes that shape wrong, so it becomes a per-role allowlist map.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/store/__tests__/authStore.test.ts`:
 
@@ -402,13 +422,13 @@ describe('authStore roles', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/store/__tests__/authStore.test.ts`
 
 Expected: FAIL — `isFieldStaff` is `undefined`.
 
-- [ ] **Step 3: Update the auth store**
+- [x] **Step 3: Update the auth store**
 
 In `frontend/src/store/authStore.ts`, make these edits:
 
@@ -460,13 +480,13 @@ function buildAuthState(user: User | null) {
 
 Add `isFieldStaff: false` to both the initial state object and the `logout()` reset object.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/store/__tests__/authStore.test.ts`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Convert AdminLayout to a per-role allowlist**
+- [x] **Step 5: Convert AdminLayout to a per-role allowlist**
 
 In `frontend/src/components/AdminLayout.tsx`, replace the `MANAGER_ALLOWED` constant and the `filterNavForRole` function (lines 146-172) with:
 
@@ -541,7 +561,7 @@ Extend the role badge (lines 340-343):
       : 'bg-gray-100 text-gray-800'
 ```
 
-- [ ] **Step 6: Send field staff to their workspace on login**
+- [x] **Step 6: Send field staff to their workspace on login**
 
 In `frontend/src/App.tsx`, update `AdminIndex` (around line 85):
 
@@ -554,7 +574,7 @@ const AdminIndex = () => {
 }
 ```
 
-- [ ] **Step 7: Add the role to AdminUsers**
+- [x] **Step 7: Add the role to AdminUsers**
 
 In `frontend/src/pages/admin/AdminUsers.tsx`:
 
@@ -584,16 +604,63 @@ And to the edit dropdown (after line 898):
                     <option value="field_staff">Field Staff</option>
 ```
 
-- [ ] **Step 8: Type-check and run the frontend suite**
+- [x] **Step 7b: Remove the toggle-admin button**
+
+`toggle_user_admin` (`backend/routers/admin.py`, `PATCH /api/admin/users/{id}/toggle-admin`)
+recomputes `role` from the `is_admin` boolean:
+
+```python
+    user.is_admin = not user.is_admin
+    user.role = "admin" if user.is_admin else "user"
+```
+
+So toggling admin off on a `manager` or `field_staff` account silently rewrites
+their role to plain `user`. The role dropdown on the same screen already does this
+correctly via `PUT /api/admin/users/{id}`, which sets `role` and `is_admin` together.
+One control on the page respects roles; the other erases them. The endpoint has no
+test coverage. Once workspaces exist, an accidental click locks a member out of
+their own uploaded media.
+
+Remove the button and its handler from `frontend/src/pages/admin/AdminUsers.tsx`
+(the `fetch` to `/toggle-admin` around line 203, its calling button, and any
+now-unused state), and delete the `toggleAdmin` helper in
+`frontend/src/utils/api.ts` around line 586.
+
+Leave the backend endpoint in place and unchanged — nothing else calls it, and
+removing a route is a separate decision from removing the UI that drove it.
+
+Verify nothing still references it:
+
+Run: `cd frontend && grep -rn "toggle-admin\|toggleAdmin" src/`
+
+Expected: no matches.
+
+- [x] **Step 7c: Add placeholder routes so the redirect is not dead**
+
+Step 6 redirects field staff to `/admin/media`, and Step 5 adds nav links to
+`/admin/media` and `/admin/media/all` — but those routes do not exist until Tasks
+16 and 17. There is no catch-all route in this app, so in React Router v6 an
+unmatched descendant makes the whole `/admin` branch fail to match and `<Routes>`
+renders `null`: a white screen, with nothing thrown for `ErrorBoundary` to catch.
+
+Add placeholders in `frontend/src/App.tsx` beside the other `/admin` children:
+
+```tsx
+                {/* Placeholders: Tasks 16 and 17 replace these with the real pages. */}
+                <Route path="media" element={<div className="p-8 text-gray-500">Media workspace — coming soon.</div>} />
+                <Route path="media/all" element={<div className="p-8 text-gray-500">All media — coming soon.</div>} />
+```
+
+- [x] **Step 8: Type-check and run the frontend suite**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
-git add frontend/src/store/authStore.ts frontend/src/components/AdminLayout.tsx frontend/src/pages/admin/AdminUsers.tsx frontend/src/App.tsx frontend/src/store/__tests__/authStore.test.ts
+git add frontend/src/store/authStore.ts frontend/src/components/AdminLayout.tsx frontend/src/pages/admin/AdminUsers.tsx frontend/src/utils/api.ts frontend/src/App.tsx frontend/src/store/__tests__/authStore.test.ts
 git commit -m "feat: surface the field_staff role in the admin UI"
 ```
 
@@ -609,7 +676,7 @@ git commit -m "feat: surface the field_staff role in the admin UI"
 
 **Context you need:** These functions have no DB or S3 dependency, which is why they come first — everything later builds on them. The pipe-delimited tag encoding inside `search_text` is what lets a tag filter be an exact match (`ILIKE '%|gaza|%'`) on both PostgreSQL and the SQLite used in tests, without dialect-specific JSON containment.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_service.py`:
 
@@ -704,13 +771,13 @@ def test_build_thumbnail_key_handles_a_key_without_an_extension():
     assert build_thumbnail_key("workspaces/7/2026/03/abc123") == "workspaces/7/2026/03/abc123_thumb.jpg"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_service.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'media_library_service'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `backend/media_library_service.py`:
 
@@ -720,47 +787,426 @@ Create `backend/media_library_service.py`:
 No database and no S3 here on purpose — everything in this module is a plain
 function over plain values, which keeps the security-relevant string handling
 (object keys, search text) cheap to test.
+
+The recurring theme in this module is untrusted text reaching a context where
+it has syntactic meaning: a tag containing the tag delimiter, a LIKE pattern
+containing a LIKE wildcard, a Content-Type header containing a parameter, an
+uploaded filename containing an executable extension. Every helper below
+either neutralises that meaning or refuses the input outright.
 """
 from __future__ import annotations
 
 import os
-import re
 import uuid
-from datetime import datetime
-from typing import Iterable, Optional
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional, Sequence
+
+if TYPE_CHECKING:
+    # Only for the type hint on serialize_asset() below — this module stays
+    # database-free at runtime, per the module docstring.
+    from models import MediaAsset
 
 # Tags are stored inside `search_text` wrapped in this delimiter so an exact-tag
 # filter is a plain ILIKE ('%|gaza|%') that behaves the same on PostgreSQL and
 # on the SQLite used by the test suite.
 TAG_DELIM = "|"
 
-IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
-VIDEO_EXTENSIONS = (".mp4", ".webm", ".ogg", ".avi", ".mov", ".mkv")
+# The character LIKE/ILIKE uses to escape '%' and '_' inside a pattern so they
+# match literally. tag_filter_pattern/search_pattern return this alongside
+# their pattern as a (pattern, escape) pair specifically so a caller cannot
+# call ilike(pattern) and drop it without a visibly incomplete unpacking.
+LIKE_ESCAPE = "\\"
 
-_SAFE_EXTENSION = re.compile(r"^\.[a-z0-9]{1,8}$")
+MAX_TAG_LENGTH = 64
+MAX_TAGS = 25
+
+# Leading-bytes tests for the formats we accept. Each takes the *whole*
+# uploaded buffer (not just a fixed-size prefix) because a couple of them
+# need to look past the first four bytes — ISO-BMFF's 'ftyp' box sits at
+# offset 4, RIFF's sub-type tag sits at offset 8 — and slicing a short
+# `bytes` out of range in Python just yields a short (possibly empty)
+# result rather than raising, so these stay safe on tiny/truncated input.
+def _is_jpeg(content: bytes) -> bool:
+    return content.startswith(b"\xff\xd8\xff")
 
 
-def normalize_tags(tags: Optional[Iterable]) -> list:
-    """Lowercase, strip and dedupe tags, preserving first-seen order."""
-    result: list = []
+def _is_png(content: bytes) -> bool:
+    return content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _is_gif(content: bytes) -> bool:
+    return content.startswith((b"GIF87a", b"GIF89a"))
+
+
+def _is_bmp(content: bytes) -> bool:
+    return content.startswith(b"BM")
+
+
+def _is_webp(content: bytes) -> bool:
+    return content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+
+
+def _is_avi(content: bytes) -> bool:
+    return content[:4] == b"RIFF" and content[8:12] == b"AVI "
+
+
+def _is_ogg(content: bytes) -> bool:
+    return content.startswith(b"OggS")
+
+
+def _is_isobmff(content: bytes) -> bool:
+    # ISO base media (mp4/mov/m4v/3gp) puts an 'ftyp' box at offset 4. This
+    # cannot tell those apart from each other by brand, nor from HEIC/HEIF
+    # (which use the same box) — a caller needing that distinction has to
+    # inspect the brand itself. detect_media_type() keeps HEIC out of the
+    # image allow-list entirely (see UNSUPPORTED_HINTS), so it never reaches
+    # this sniffer with a video-shaped Content-Type to slip past.
+    return content[4:8] == b"ftyp"
+
+
+def _is_ebml(content: bytes) -> bool:
+    # WebM is formally a Matroska profile, so the same EBML signature at
+    # offset 0 covers both .webm and .mkv.
+    return content[:4] == b"\x1a\x45\xdf\xa3"
+
+
+class _Format(NamedTuple):
+    content_types: tuple
+    sniff: Callable[[bytes], bool]
+
+
+# Extension -> (accepted Content-Type aliases, byte-signature test). This is
+# the single source of truth: IMAGE_EXTENSIONS / VIDEO_EXTENSIONS /
+# IMAGE_CONTENT_TYPES / VIDEO_CONTENT_TYPES / sniff_content_type() are all
+# derived from these two maps below, so adding a format means touching one
+# place instead of remembering to keep several collections in sync. This
+# used to be true of only the first four; a `_MAGIC` table of leading bytes
+# lived separately in the upload router and had already drifted from this
+# allow-list by the first commit that had both — AVI and Ogg were accepted
+# Content-Types the router's sniffer could not recognise, so a legitimate
+# upload of either was told its content was a forgery. Folding the magic
+# bytes in here as a third derived collection closes that by construction:
+# a format cannot be in the allow-list without also being sniffable.
+#
+# .ogg is conventionally Ogg *audio*, and .ogv is Ogg *video* — .ogg is kept
+# mapped to video here for backward compatibility with existing data/callers.
+# .jpg -> "image/jpg" is a non-standard alias some Android/older clients
+# really send; .bmp -> "image/x-ms-bmp" is the same story for BMP.
+_IMAGE_FORMATS: dict = {
+    ".jpg": _Format(("image/jpeg", "image/jpg"), _is_jpeg),
+    ".jpeg": _Format(("image/jpeg",), _is_jpeg),
+    ".png": _Format(("image/png",), _is_png),
+    ".gif": _Format(("image/gif",), _is_gif),
+    ".webp": _Format(("image/webp",), _is_webp),
+    ".bmp": _Format(("image/bmp", "image/x-ms-bmp"), _is_bmp),
+}
+_VIDEO_FORMATS: dict = {
+    ".mp4": _Format(("video/mp4",), _is_isobmff),
+    ".webm": _Format(("video/webm",), _is_ebml),
+    ".ogg": _Format(("video/ogg",), _is_ogg),
+    ".ogv": _Format(("video/ogg",), _is_ogg),
+    ".avi": _Format(("video/x-msvideo",), _is_avi),
+    ".mov": _Format(("video/quicktime",), _is_isobmff),
+    ".mkv": _Format(("video/x-matroska",), _is_ebml),
+    # 3GP is what low-end Android phones produce — squarely our field-worker
+    # population. It is ISO-BMFF, so Task 5's ftyp sniff already classifies it
+    # as video and ffmpeg reads it.
+    ".3gp": _Format(("video/3gpp", "video/3gpp2"), _is_isobmff),
+    ".m4v": _Format(("video/x-m4v",), _is_isobmff),
+}
+
+# str.endswith() requires a tuple, not a set/frozenset — keep these as tuples.
+# If someone "tidies" them into sets, detect_media_type's extension fallback
+# breaks silently (TypeError at best, since endswith rejects a non-tuple).
+IMAGE_EXTENSIONS: tuple = tuple(_IMAGE_FORMATS)
+VIDEO_EXTENSIONS: tuple = tuple(_VIDEO_FORMATS)
+_ALLOWED_EXTENSIONS = frozenset(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS)
+
+# Content-Type is an allow-list, not a deny-list: a deny-list must be matched
+# exactly (it was, and "image/svg+xml; charset=utf-8" slipped past it), while
+# an allow-list refuses anything unlisted by construction — including the next
+# script-carrying format nobody has thought of yet. Task 5's upload router
+# needs these too.
+IMAGE_CONTENT_TYPES = frozenset(ct for fmt in _IMAGE_FORMATS.values() for ct in fmt.content_types)
+VIDEO_CONTENT_TYPES = frozenset(ct for fmt in _VIDEO_FORMATS.values() for ct in fmt.content_types)
+
+
+def _sniff_rules(formats: dict) -> tuple:
+    """(matcher, canonical content-type, content-type aliases) triples, one
+    per distinct byte test.
+
+    Several extensions share one matcher — .jpg/.jpeg both sniff as JPEG,
+    .ogg/.ogv both sniff as Ogg, .webm/.mkv both sniff as EBML, and every
+    ISO-BMFF extension (.mp4/.mov/.m4v/.3gp) sniffs identically — so this
+    groups by the matcher function itself and unions the content-type
+    aliases of every extension that shares it, rather than testing the same
+    bytes twice for what is, at the byte level, one format. `canonical` is
+    the first content-type of the first-seen extension in that group (dicts
+    preserve insertion order, so this is deterministic): for the ISO-BMFF
+    group that is ".mp4"'s "video/mp4", not ".3gp"'s or ".mov"'s, because
+    .mp4 is declared first in _VIDEO_FORMATS.
+    """
+    grouped: dict = {}
+    order: list = []
+    for fmt in formats.values():
+        if fmt.sniff not in grouped:
+            grouped[fmt.sniff] = {"canonical": fmt.content_types[0], "aliases": set()}
+            order.append(fmt.sniff)
+        grouped[fmt.sniff]["aliases"].update(fmt.content_types)
+    return tuple(
+        (matcher, grouped[matcher]["canonical"], frozenset(grouped[matcher]["aliases"]))
+        for matcher in order
+    )
+
+
+# Image rules before video rules purely so a mixed-format false-positive
+# (none known today) would resolve toward "image" first; sniff_content_type
+# returns on the first match either way.
+_SNIFF_RULES = _sniff_rules(_IMAGE_FORMATS) + _sniff_rules(_VIDEO_FORMATS)
+
+# frozenset(aliases) -> canonical, for canonical_content_type(). Built once
+# from the same rules sniff_content_type() matches against, so the two can
+# never drift relative to each other.
+_CANONICAL_BY_ALIASES = {aliases: canonical for _, canonical, aliases in _SNIFF_RULES}
+
+
+def sniff_content_type(content: bytes) -> Optional[frozenset]:
+    """The Content-Type aliases the file's own leading bytes are consistent
+    with, or None if they match no format this module recognises.
+
+    This is the byte-level counterpart to detect_media_type(): that function
+    trusts a caller-supplied filename/Content-Type, this one trusts nothing
+    but the bytes themselves. The upload router requires an *allow-listed*
+    declared Content-Type to be a member of the returned set — not merely of
+    the right broad image/video category — which is what closes a spoofed
+    "declare image/gif over real JPEG bytes" upload: image/gif is a
+    perfectly valid Content-Type in general, just never a member of the set
+    JPEG bytes sniff to, so the mismatch is caught here regardless of what
+    should_compress_image() would have done with the (wrong) declared type.
+    A declared type that is *not* allow-listed at all (a generic default
+    like application/octet-stream, or no header) is not this kind of
+    mismatch — see is_allow_listed_content_type() and canonical_content_type().
+    """
+    for matcher, _canonical, content_types in _SNIFF_RULES:
+        if matcher(content):
+            return content_types
+    return None
+
+
+def canonical_content_type(content_types) -> str:
+    """The single Content-Type to store for a set sniff_content_type()
+    returned.
+
+    A frozenset has no defined order, so picking a member directly
+    (`next(iter(...))`) is not deterministic across interpreters/runs. This
+    looks the exact set back up against the format tables instead, which
+    were built in a fixed, declared order — the same aliases always
+    canonicalise to the same stored Content-Type.
+    """
+    canonical = _CANONICAL_BY_ALIASES.get(frozenset(content_types))
+    if canonical is not None:
+        return canonical
+    # Defensive only: every real caller passes this the exact return value
+    # of sniff_content_type(), which is always a key of the dict above, so
+    # this should be unreachable. Still deterministic if it is ever hit.
+    return sorted(content_types)[0]
+
+
+def is_allow_listed_content_type(value: Optional[str]) -> bool:
+    """Whether `value` is a Content-Type this module lists for some format —
+    image or video.
+
+    Used to tell "the caller declared a real, specific Content-Type that
+    turned out wrong" (evidence of a spoof) apart from "the caller declared
+    nothing meaningful" (a generic default like application/octet-stream —
+    what curl and some mobile webviews send with no OS MIME mapping to
+    consult — or a missing header entirely). Only the former is a claim
+    worth rejecting on mismatch; the latter should fall back to whatever the
+    bytes actually are.
+    """
+    return value in IMAGE_CONTENT_TYPES or value in VIDEO_CONTENT_TYPES
+
+
+def media_type_of(content_types) -> str:
+    """'image' or 'video' for a set of Content-Type aliases such as
+    sniff_content_type() returns.
+
+    IMAGE_CONTENT_TYPES and VIDEO_CONTENT_TYPES are disjoint by
+    construction (every format map entry contributes to exactly one of
+    them), so membership in either is decisive.
+    """
+    return "image" if content_types & IMAGE_CONTENT_TYPES else "video"
+
+# Recognised formats we cannot decode yet. Named so the API can explain itself
+# instead of returning a generic "unsupported file type" for an obvious photo
+# — an iPhone in default "High Efficiency" mode sends HEIC. detect_media_type
+# still returns None for every one of these; this is purely a better error
+# message, not a classification change. Allow-listing HEIC as an image would
+# be worse: HEIC is ISO-BMFF, so Task 5's ftyp sniffer would call it video.
+UNSUPPORTED_HINTS = {
+    "image/heic": "HEIC photos aren't supported yet. On iPhone: Settings → Camera → Formats → Most Compatible.",
+    "image/heif": "HEIF photos aren't supported yet. On iPhone: Settings → Camera → Formats → Most Compatible.",
+    "image/avif": "AVIF images aren't supported yet. Please upload a JPEG or PNG.",
+    "image/tiff": "TIFF images aren't supported yet. Please upload a JPEG or PNG.",
+}
+_UNSUPPORTED_EXTENSIONS = {
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".avif": "image/avif",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+}
+
+
+def _escape_like(value: str) -> str:
+    """Escape LIKE metacharacters so `value` matches only itself.
+
+    Backslash first, or it would double-escape the escapes added after it.
+    """
+    for ch in (LIKE_ESCAPE, "%", "_"):
+        value = value.replace(ch, LIKE_ESCAPE + ch)
+    return value
+
+
+def _truncate_for_message(value: str, limit: int = MAX_TAG_LENGTH + 10) -> str:
+    """A length-capped, repr-quoted rendering of a value for an error message.
+
+    Without this, an absurdly long input (a 100,000-character tag) lands
+    unabridged in a 400 response body and whatever logs record it.
+    """
+    text = str(value)
+    if len(text) > limit:
+        text = text[:limit] + "..."
+    return repr(text)
+
+
+def normalize_tags(tags: Optional[Sequence]) -> list[str]:
+    """Lowercase, strip and dedupe tags, preserving first-seen order.
+
+    Takes a Sequence rather than a bare Iterable deliberately: validate_tags
+    iterates the same input more than once, and a generator would be consumed
+    by the first pass, leaving the second with nothing.
+
+    Deliberately total and lenient: this runs on both the write path (before
+    a tag is stored) and the read path (before a tag is used as a filter), so
+    it never raises — a bad tag on the write path is a validate_tags problem,
+    not a normalize_tags one. Non-string entries are skipped rather than
+    coerced with str(), so a stray {"tags": [null]} in a JSON body cannot
+    silently create a tag named "none".
+
+    The tag delimiter is removed rather than escaped: a tag containing
+    TAG_DELIM would otherwise match several exact-tag filters at once
+    (["gaza|evil"] would answer to both tag=gaza and tag=evil).
+    """
+    result: list[str] = []
     for raw in tags or []:
-        tag = str(raw).strip().lower()
+        if not isinstance(raw, str):
+            continue
+        tag = raw.replace(TAG_DELIM, " ").strip().lower()
         if tag and tag not in result:
             result.append(tag)
     return result
+
+
+def parse_tag_input(raw: Optional[str]) -> list[str]:
+    """Split a comma-separated tag string into entries worth validating.
+
+    Blank entries are dropped here rather than rejected downstream: "" and a
+    trailing comma mean "no tags", not "an empty tag" -- a naive
+    "".split(",") is [""], and a tagless upload (the common case) must not
+    fail validate_tags' whitespace-only check. Entries are returned
+    unmodified otherwise (not stripped or lowercased) -- validation and
+    normalization stay separate steps -- so validate_tags then only ever
+    sees things the user actually typed.
+    """
+    if not raw:
+        return []
+    return [part for part in raw.split(",") if part.strip()]
+
+
+def validate_tags(tags: Optional[Sequence]) -> list[str]:
+    """Return human-readable problems with caller-supplied tags, or [].
+
+    normalize_tags stays lenient because it runs on both the write and the
+    read path; this is the write-path gate — Task 5's router turns a non-empty
+    result into a 400, so a user is told about a bad tag rather than having it
+    silently rewritten.
+
+    Validates the *normalized* form: surrounding whitespace, casing, and
+    duplicate tags are not themselves errors, since normalize_tags quietly
+    turns them into something valid (["gaza"] * 26 dedupes to one tag and
+    must not be rejected as "too many"). A tag that is empty or only
+    whitespace IS rejected here, even though it would just as quietly vanish
+    in normalize_tags — that silent drop is exactly what this split exists to
+    prevent.
+
+    '%', '_' and '\\' are deliberately NOT rejected: _escape_like already
+    neutralises them in tag_filter_pattern, so banning them would only
+    discard legitimate tags ("50%-off", "water_well") for no security benefit.
+    TAG_DELIM remains banned, because normalize_tags does not merely escape
+    it — it changes the tag's identity (removes the character), which is
+    worth telling the user about rather than silently rewriting.
+    """
+    if tags is None:
+        return []
+    tags = list(tags)
+    problems: list[str] = []
+
+    string_tags: list[str] = []
+    for raw in tags:
+        if not isinstance(raw, str):
+            # repr(raw) directly, not _truncate_for_message(raw): the latter
+            # does repr(str(raw)), which would render None as 'none' -- the
+            # exact stringification normalize_tags deliberately avoids -- and
+            # makes "Tag '5' must be text." read as if the string "5" (which
+            # *is* text) were the problem, rather than the int 5.
+            problems.append(f"Tag {raw!r} must be text.")
+            continue
+        string_tags.append(raw)
+
+        candidate = raw.strip().lower()
+        if not candidate:
+            problems.append("A tag cannot be empty or made only of whitespace.")
+            continue
+        if TAG_DELIM in candidate:
+            problems.append(
+                f"Tag {_truncate_for_message(candidate)} may not contain "
+                f"{TAG_DELIM!r} — it is used internally to separate tags."
+            )
+        if len(candidate) > MAX_TAG_LENGTH:
+            problems.append(
+                f"Tag {_truncate_for_message(candidate)} is longer than "
+                f"{MAX_TAG_LENGTH} characters."
+            )
+
+    normalized_count = len(normalize_tags(string_tags))
+    if normalized_count > MAX_TAGS:
+        problems.append(
+            f"No more than {MAX_TAGS} tags are allowed "
+            f"(got {normalized_count} after removing duplicates)."
+        )
+
+    return problems
 
 
 def build_search_text(
     filename: Optional[str],
     title: Optional[str],
     description: Optional[str],
-    tags: Optional[Iterable],
+    tags: Optional[Sequence],
 ) -> str:
-    """Build the lowercased haystack a single ILIKE searches against."""
+    """Build the lowercased haystack a single ILIKE searches against.
+
+    The tag delimiter is stripped from the free-text fields too, not just from
+    tags: filename, title and description are all user-supplied (a pipe is a
+    legal filename character on Linux and macOS), and any of them could
+    otherwise inject a delimiter pair that a tag_filter_pattern would match
+    against by accident.
+    """
     parts = [
-        (filename or "").lower(),
-        (title or "").lower(),
-        (description or "").lower(),
+        (filename or "").replace(TAG_DELIM, " ").lower(),
+        (title or "").replace(TAG_DELIM, " ").lower(),
+        (description or "").replace(TAG_DELIM, " ").lower(),
     ]
     normalized = normalize_tags(tags)
     if normalized:
@@ -768,20 +1214,64 @@ def build_search_text(
     return " ".join(part for part in parts if part)
 
 
-def tag_filter_pattern(tag: Optional[str]) -> Optional[str]:
-    """ILIKE pattern matching one whole tag, or None if the tag is empty."""
+def tag_filter_pattern(tag: Optional[str]) -> Optional[tuple]:
+    """ILIKE pattern and required escape char matching one whole tag, or
+    None if the tag is empty.
+
+    Returns a (pattern, escape) pair — rather than a bare pattern — so a
+    caller cannot drop the escape without a visibly incomplete unpacking:
+
+        result = tag_filter_pattern(tag)
+        if result is not None:
+            pattern, escape = result
+            query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+
+    The tag is escaped so '%', '_' and a literal backslash inside it match
+    themselves rather than acting as LIKE wildcards — otherwise a tag like
+    "gaz_" would also match "gaza", and a tag of exactly "%" would match every
+    tagged asset.
+    """
     normalized = normalize_tags([tag] if tag is not None else [])
     if not normalized:
         return None
-    return f"%{TAG_DELIM}{normalized[0]}{TAG_DELIM}%"
+    escaped = _escape_like(normalized[0])
+    return f"%{TAG_DELIM}{escaped}{TAG_DELIM}%", LIKE_ESCAPE
+
+
+def search_pattern(q: Optional[str]) -> Optional[tuple]:
+    """ILIKE pattern and required escape char for a free-text query, or None
+    if the query is empty.
+
+    Exists so a free-text search never has to hand-roll its own pattern —
+    `ilike(f"%{q}%")` with no escaping means a query of "%" matches every
+    row. Same shape and the same obligation as tag_filter_pattern: unpack
+    both and pass escape=LIKE_ESCAPE, or the escaping here has no effect.
+    """
+    if q is None:
+        return None
+    cleaned = q.strip().lower()
+    if not cleaned:
+        return None
+    return f"%{_escape_like(cleaned)}%", LIKE_ESCAPE
 
 
 def detect_media_type(filename: Optional[str], content_type: Optional[str]) -> Optional[str]:
-    """Return 'image', 'video', or None for anything we refuse to store."""
-    ct = (content_type or "").lower()
-    if ct.startswith("image/"):
+    """Classify a file as 'image', 'video', or neither.
+
+    This is advisory, not a storage verdict: the result is derived from a
+    caller-supplied filename and a Content-Type header the uploader fully
+    controls (and can trivially spoof), not from the file's actual bytes. A
+    caller holding the bytes must verify them independently before trusting
+    this classification for anything security-relevant — Task 5's upload
+    endpoint does that with a magic-byte check; this function stays pure.
+    """
+    # UploadFile.content_type carries parameters ("image/png; charset=utf-8"),
+    # so match on the bare type. SVG (and anything else script-carrying) is
+    # simply absent from the allow-list rather than named in a deny-list.
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
+    if ct in IMAGE_CONTENT_TYPES:
         return "image"
-    if ct.startswith("video/"):
+    if ct in VIDEO_CONTENT_TYPES:
         return "video"
 
     name = (filename or "").lower()
@@ -792,10 +1282,41 @@ def detect_media_type(filename: Optional[str], content_type: Optional[str]) -> O
     return None
 
 
+def unsupported_hint(filename: Optional[str], content_type: Optional[str]) -> Optional[str]:
+    """A specific explanation when we recognise the format but cannot take it.
+
+    detect_media_type returns None for these formats exactly as it does for
+    any other unsupported file — this only supplies a better message for the
+    API to surface, telling an iPhone user why their HEIC photo bounced
+    instead of leaving them with a generic "unsupported file type" for what
+    is obviously a photo.
+
+    _UNSUPPORTED_EXTENSIONS and UNSUPPORTED_HINTS are hand-maintained in
+    parallel with nothing enforcing the link between them, so both lookups
+    use .get() rather than indexing: a future extension entry added without
+    its hint text degrades to "no hint" instead of a 500 on the upload path.
+    """
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
+    hint = UNSUPPORTED_HINTS.get(ct)
+    if hint is not None:
+        return hint
+
+    name = (filename or "").lower()
+    for ext, mapped_ct in _UNSUPPORTED_EXTENSIONS.items():
+        if name.endswith(ext):
+            return UNSUPPORTED_HINTS.get(mapped_ct)
+    return None
+
+
 def _safe_extension(filename: Optional[str]) -> str:
-    """The lowercased extension, or '' if it is missing or suspicious."""
+    """The lowercased extension if it is one we store, else ''.
+
+    Constrained to the image/video extension allow-list rather than merely
+    well-formed: a well-formed but arbitrary extension (".html", ".exe",
+    ".svg") would otherwise ride unchanged into the object key.
+    """
     ext = os.path.splitext(filename or "")[1].lower()
-    return ext if _SAFE_EXTENSION.match(ext) else ""
+    return ext if ext in _ALLOWED_EXTENSIONS else ""
 
 
 def build_object_key(owner_id: int, filename: Optional[str], now: Optional[datetime] = None) -> str:
@@ -805,7 +1326,12 @@ def build_object_key(owner_id: int, filename: Optional[str], now: Optional[datet
     removes both collisions and path traversal. The original name is kept in the
     `filename` column, where it stays searchable.
     """
-    moment = now or datetime.utcnow()
+    # Interpolated straight into the key, so a non-integer owner could escape its
+    # own namespace ("7/../../other-owner"). Callers pass an authenticated user's
+    # id; this makes that a guarantee rather than an assumption.
+    if isinstance(owner_id, bool) or not isinstance(owner_id, int) or owner_id <= 0:
+        raise ValueError(f"owner_id must be a positive integer, got {owner_id!r}")
+    moment = now or datetime.now(timezone.utc)
     return (
         f"workspaces/{owner_id}/{moment:%Y}/{moment:%m}/"
         f"{uuid.uuid4().hex}{_safe_extension(filename)}"
@@ -818,15 +1344,60 @@ def build_thumbnail_key(object_key: str) -> str:
     stem = basename.rsplit(".", 1)[0] if "." in basename else basename
     prefix = f"{directory}/" if directory else ""
     return f"{prefix}{stem}_thumb.jpg"
+
+
+def asset_file_url(asset_id: int) -> str:
+    """The public path an asset's bytes are served from.
+
+    The one place this string is written. routers/s3_media.py's
+    get_media_usage() matches a published asset's presence in Gallery/Story/
+    etc. columns by exact string equality against this value — a second,
+    independently-typed spelling anywhere else would silently make that
+    in-use check (and the delete/unpublish guards built on it) report zero
+    usage for a genuinely-in-use asset, with nothing raising to say so.
+    """
+    return f"/api/media-library/{asset_id}/file"
+
+
+def serialize_asset(asset: "MediaAsset") -> dict:
+    """MediaAsset row -> the plain dict every media-library endpoint returns.
+
+    Pure in the same sense as the rest of this module: reads attributes off
+    an already-loaded ORM instance, issues no query and touches no Session.
+    """
+    has_thumbnail = bool(asset.thumbnail_key) or asset.media_type == "image"
+    return {
+        "id": asset.id,
+        "owner_id": asset.owner_id,
+        "object_key": asset.object_key,
+        "filename": asset.filename,
+        "media_type": asset.media_type,
+        "content_type": asset.content_type,
+        "size_bytes": asset.size_bytes,
+        "width": asset.width,
+        "height": asset.height,
+        "duration_seconds": asset.duration_seconds,
+        "title": asset.title,
+        "description": asset.description,
+        "tags": asset.tags or [],
+        "status": asset.status,
+        "review_note": asset.review_note,
+        "reviewed_at": asset.reviewed_at,
+        "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
+        "url": asset_file_url(asset.id),
+        "thumbnail_url": f"/api/media-library/{asset.id}/thumb" if has_thumbnail else None,
+    }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_service.py -v`
 
-Expected: PASS, 14 tests.
+Expected: PASS, 77 tests (the 14 originally specified plus the hardening and
+validation tests added across four review rounds).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/media_library_service.py backend/tests/test_media_library_service.py
@@ -844,7 +1415,7 @@ git commit -m "feat: add pure helpers for media library keys, tags and search te
 
 **Context you need:** The test suite builds its schema from `Base.metadata.create_all`, so the model is what tests see; the SQL migration is what production sees. **Both must be written, and they must agree.** `JSONType` (line 10 of `models.py`) is the existing cross-dialect JSON helper — real JSONB on PostgreSQL, plain JSON on SQLite.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_api.py`:
 
@@ -896,18 +1467,18 @@ def test_object_key_is_unique(db_session, field_staff_user):
     db_session.rollback()
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: FAIL — `ImportError: cannot import name 'MediaAsset' from 'models'`.
 
-- [ ] **Step 3: Add the model**
+- [x] **Step 3: Add the model**
 
 In `backend/models.py`, add `BigInteger` to the first import line:
 
 ```python
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
 ```
 
 Then append to the end of the file:
@@ -928,40 +1499,61 @@ class MediaAsset(Base):
     __tablename__ = "media_assets"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # migrations/31_add_media_library.sql owns this table's indexes, not this
+    # model. Several of them are composite or partial (owner_id + created_at,
+    # owner_id + checksum_sha256, a WHERE status = 'submitted' partial index)
+    # and cannot be expressed as a bare Column(index=True). create_all() emits
+    # SQLAlchemy's own ix_ names, which don't collide with the migration's
+    # idx_ names, so a Column(index=True) here does not replace the
+    # migration's index for that column — it adds a second, redundant one.
+    # This is why the columns below carry no index=True even though several
+    # of them are filtered or sorted on: the index already exists, created by
+    # the migration. `object_key` is the one exception that keeps a
+    # SQLAlchemy-level constraint (unique=True): the test suite needs that
+    # uniqueness enforced when it builds its schema from this model, and
+    # unique=True already creates its own index, so no separate index=True
+    # is added on top of it.
+
     # NULL owner = the "Unassigned" workspace: legacy media, or media whose
     # owner's account was deleted.
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    object_key = Column(String(500), nullable=False, unique=True, index=True)
+    #
+    # This model has two FKs to users.id (owner_id, reviewed_by_id). There are
+    # no relationship() calls on MediaAsset today; the first one added must
+    # pass foreign_keys= explicitly or SQLAlchemy raises
+    # AmbiguousForeignKeysError.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    object_key = Column(String(500), nullable=False, unique=True)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(10), nullable=False)  # 'image' | 'video'
     content_type = Column(String(100), nullable=False)
-    size_bytes = Column(BigInteger, nullable=False, default=0)
+    size_bytes = Column(BigInteger, nullable=False, default=0, server_default=text("0"))
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     thumbnail_key = Column(String(500), nullable=True)
-    checksum_sha256 = Column(String(64), nullable=True, index=True)
+    checksum_sha256 = Column(String(64), nullable=True)
     title = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
-    tags = Column(JSONType, nullable=False, default=list)
-    search_text = Column(Text, nullable=False, default="")
+    tags = Column(JSONType, nullable=False, default=list, server_default=text("'[]'"))
+    search_text = Column(Text, nullable=False, default="", server_default="")
     # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
     # | 'public' (served to anyone)
-    status = Column(String(20), nullable=False, default="private", index=True)
+    status = Column(String(20), nullable=False, default="private", server_default="private")
     reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Write the migration to match**
+- [x] **Step 5: Write the migration to match**
 
 Create `migrations/31_add_media_library.sql`:
 
@@ -997,6 +1589,12 @@ CREATE TABLE IF NOT EXISTS media_assets (
     title               VARCHAR(200),
     description         TEXT,
     tags                JSONB          NOT NULL DEFAULT '[]'::jsonb,
+    -- `ILIKE` against this column is a sequential scan by design. A pg_trgm
+    -- GIN index can be added later as a pure-addition migration once the
+    -- table passes roughly 100k rows. It is deliberately not here now,
+    -- partly because `CREATE EXTENSION pg_trgm` needs privileges some
+    -- managed PostgreSQL hosts withhold, and a migration that fails on the
+    -- production host is worse than a seq scan.
     search_text         TEXT           NOT NULL DEFAULT '',
     -- Lifecycle
     status              VARCHAR(20)    NOT NULL DEFAULT 'private', -- private | submitted | public
@@ -1007,10 +1605,19 @@ CREATE TABLE IF NOT EXISTS media_assets (
     updated_at          TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_media_assets_owner ON media_assets(owner_id);
+-- Covers owner-scoped lookups (WHERE owner_id = ? / IS NULL) and the default
+-- workspace listing sort (owner scope + ORDER BY created_at DESC, id DESC
+-- with offset/limit) in one index; a standalone index on owner_id alone
+-- would be pure write cost once this exists.
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner_created
+    ON media_assets(owner_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_media_assets_status ON media_assets(status);
 CREATE INDEX IF NOT EXISTS idx_media_assets_created ON media_assets(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_media_assets_checksum ON media_assets(checksum_sha256);
+-- Not UNIQUE: duplicate detection here is advisory. A unique constraint would
+-- block a legitimate re-upload after a delete, and PostgreSQL treats NULLs as
+-- distinct, so the "Unassigned" workspace (owner_id IS NULL) would slip
+-- through such a constraint anyway.
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner_checksum ON media_assets(owner_id, checksum_sha256);
 CREATE INDEX IF NOT EXISTS idx_media_assets_owner_status ON media_assets(owner_id, status);
 
 -- The review queue is small and read often.
@@ -1020,7 +1627,7 @@ CREATE INDEX IF NOT EXISTS idx_media_assets_submitted
 SELECT 'Migration 31 completed successfully!' as message;
 ```
 
-- [ ] **Step 6: Check the migration parses**
+- [x] **Step 6: Check the migration parses**
 
 Run: `cd migrations && grep -c "CREATE INDEX" 31_add_media_library.sql`
 
@@ -1030,7 +1637,7 @@ If a local PostgreSQL is reachable, apply it for real instead:
 `docker compose exec -T db psql -U postgres -d myzakat -f /migrations/31_add_media_library.sql`
 Expected: `Migration 31 completed successfully!`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/models.py migrations/31_add_media_library.sql backend/tests/test_media_library_api.py
@@ -1050,9 +1657,11 @@ git commit -m "feat: add media_assets table and model"
 
 **Context you need:** `media_processing.py` already provides `compress_image`, `compress_video`, `generate_video_thumbnail`, `should_compress_image` and `should_compress_video` — reuse them unchanged. `s3_service.upload_file(content, object_key, content_type=...)` returns a URL we ignore, because our URLs are id-addressed. `delete_file()` defaults to `cleanup_db=True`, which spawns a background thread; always pass `cleanup_db=False` from this router.
 
+**Verify the bytes, not the header.** `detect_media_type` deliberately trusts the caller-supplied `content_type`, which on an upload is just the multipart header and is trivially spoofed — `payload.exe` declared as `image/png` classifies as an image. This endpoint is the boundary where that must be checked against actual file content, because it is the first place the bytes exist. Sniff before compressing, so a hostile file never reaches Pillow or ffmpeg.
+
 **Ordering rule:** write to S3 first, insert the row second. If the insert fails, delete the object. The reverse order would leave a row pointing at nothing, which is worse than an orphan object — `cleanup.py` already sweeps orphan objects.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -1086,7 +1695,16 @@ def no_compression(monkeypatch):
     monkeypatch.setattr("routers.media_library._image_dimensions", lambda data: (800, 600))
 
 
-def _upload(client, headers, filename="photo.jpg", content=b"fake-image-bytes",
+# A real JPEG header. The bytes must be genuine: the endpoint sniffs magic bytes
+# and rejects anything contradicting the declared type, so a placeholder string
+# would 400 and take most of these tests with it.
+JPEG_BYTES = (
+    b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+    + b"\x00" * 64
+)
+
+
+def _upload(client, headers, filename="photo.jpg", content=JPEG_BYTES,
             content_type="image/jpeg", **form):
     return client.post(
         "/api/media-library",
@@ -1116,12 +1734,40 @@ def test_upload_creates_a_private_asset_in_the_callers_workspace(
     assert body["object_key"] in fake_s3
 
 
+def test_upload_without_tags_succeeds(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """The common case: a photo uploaded with no tags at all."""
+    response = _upload(client, field_staff_headers)
+    assert response.status_code == 201, response.text
+    assert response.json()["tags"] == []
+
+
+def test_upload_tolerates_a_trailing_comma_in_tags(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    response = _upload(client, field_staff_headers, tags="gaza,water,")
+    assert response.status_code == 201, response.text
+    assert response.json()["tags"] == ["gaza", "water"]
+
+
 def test_upload_rejects_an_unsupported_file_type(
     client, field_staff_headers, fake_s3, no_compression
 ):
     response = _upload(client, field_staff_headers, filename="notes.pdf",
                        content=b"%PDF-", content_type="application/pdf")
     assert response.status_code == 400
+
+
+def test_upload_rejects_bytes_that_contradict_the_declared_type(
+    client, field_staff_headers, fake_s3, no_compression
+):
+    """A spoofed Content-Type must not get a non-image classified as an image."""
+    response = _upload(client, field_staff_headers, filename="payload.jpg",
+                       content=b"<html><script>alert(1)</script></html>",
+                       content_type="image/jpeg")
+    assert response.status_code == 400
+    assert fake_s3 == {}, "nothing may reach S3 when the bytes are rejected"
 
 
 def test_upload_rejects_an_empty_file(client, field_staff_headers, fake_s3, no_compression):
@@ -1161,8 +1807,13 @@ def test_a_failed_insert_leaves_no_orphan_object(
     def boom(self):
         raise RuntimeError("database is on fire")
 
-    monkeypatch.setattr(Session, "commit", boom)
-    response = _upload(client, field_staff_headers)
+    # MonkeyPatch.context(), not the monkeypatch fixture: this patches Session
+    # class-wide, and the fixture's teardown runs AFTER db_session's cleanup
+    # commit — so the patch would still be live and break unrelated teardown.
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(Session, "commit", boom)
+        response = _upload(client, field_staff_headers)
+
     assert response.status_code == 500
     assert fake_s3 == {}
 
@@ -1179,13 +1830,13 @@ def test_an_anonymous_caller_cannot_upload(client, fake_s3, no_compression):
     assert response.status_code in (401, 403)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k upload`
 
 Expected: FAIL — every upload test returns 404, because the route does not exist.
 
-- [ ] **Step 3: Write the router**
+- [x] **Step 3: Write the router**
 
 Create `backend/routers/media_library.py`:
 
@@ -1198,47 +1849,59 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
   POST   /api/media-library/{id}/submit    owner: private -> submitted
+  POST   /api/media-library/{id}/withdraw  owner: submitted -> private
   DELETE /api/media-library/{id}           owner (private only) or admin/manager
 
 Admin or manager only:
   GET    /api/media-library/workspaces     workspaces with counts and total size
-  POST   /api/media-library/{id}/review    approve -> public, reject -> private
+  POST   /api/media-library/{id}/review    approve -> public, reject/unpublish -> private
   POST   /api/media-library/{id}/reassign  move an asset into another workspace
 
-Byte serving lives in media_library_files.py.
+Upload, listing, detail, metadata editing, reassignment, the workspaces
+summary, submit/review and delete shipped in Tasks 5-9. Byte serving lives
+in media_library_files.py. The upload endpoint's
+byte-sniffing/compression/EXIF-stripping/thumbnailing/checksum/S3 pipeline
+lives in media_library_upload.py; this module keeps the routing, the
+permission predicates and the status transitions.
 """
 from __future__ import annotations
 
-import hashlib
-import io
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, Field
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, model_validator
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth_utils import _role_of, get_current_manager_or_admin, get_current_staff
+from auth_utils import MANAGER_ROLES, STAFF_ROLES, role_of, get_current_manager_or_admin, get_current_staff
 from database import get_db
 from logging_config import get_logger
 from media_library_service import (
+    asset_file_url,
     build_object_key,
     build_search_text,
-    build_thumbnail_key,
     detect_media_type,
     normalize_tags,
+    parse_tag_input,
+    search_pattern,
+    serialize_asset,
     tag_filter_pattern,
+    unsupported_hint,
+    validate_tags,
 )
-from media_processing import (
-    compress_image,
-    compress_video,
-    generate_video_thumbnail,
-    should_compress_image,
-    should_compress_video,
+from media_library_upload import (
+    ContentTypeMismatch,
+    cleanup_upload_artifacts,
+    process_upload_bytes,
+    store_processed_upload,
 )
 from models import MediaAsset, User
-from s3_service import delete_file, upload_file
+from routers.s3_media import get_media_usage
+from s3_service import get_file_url
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -1249,40 +1912,29 @@ MAX_UPLOAD_BYTES = MAX_MEDIA_UPLOAD_MB * 1024 * 1024
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _serialize(asset: MediaAsset) -> dict:
-    has_thumbnail = bool(asset.thumbnail_key) or asset.media_type == "image"
-    return {
-        "id": asset.id,
-        "owner_id": asset.owner_id,
-        "object_key": asset.object_key,
-        "filename": asset.filename,
-        "media_type": asset.media_type,
-        "content_type": asset.content_type,
-        "size_bytes": asset.size_bytes,
-        "width": asset.width,
-        "height": asset.height,
-        "duration_seconds": asset.duration_seconds,
-        "title": asset.title,
-        "description": asset.description,
-        "tags": asset.tags or [],
-        "status": asset.status,
-        "review_note": asset.review_note,
-        "reviewed_at": asset.reviewed_at,
-        "created_at": asset.created_at,
-        "updated_at": asset.updated_at,
-        "url": f"/api/media-library/{asset.id}/file",
-        "thumbnail_url": f"/api/media-library/{asset.id}/thumb" if has_thumbnail else None,
-    }
+def usage_for_asset(asset: MediaAsset, db: Session) -> dict:
+    """Where an asset is used across the public site.
 
+    Thin wrapper over routers.s3_media.get_media_usage so every caller goes
+    through asset_file_url() for the string it matches on, rather than each
+    retyping it — see that function's docstring for why a second spelling
+    would be a silent failure, not a loud one.
 
-def _image_dimensions(data: bytes):
-    """(width, height) for image bytes, or (None, None) if unreadable."""
-    try:
-        from PIL import Image
-        with Image.open(io.BytesIO(data)) as img:
-            return img.size
-    except Exception:
-        return (None, None)
+    A backfilled (Task 18) legacy asset is referenced in content tables by
+    the proxy URL get_file_url() produces, not by the id-addressed one this
+    module writes for everything uploaded through it — get_media_usage
+    matches by exact string equality, so a legacy asset needs both
+    spellings asked for or this reports zero usage for exactly the
+    population most likely to already be live on the public site. Object
+    keys built by build_object_key() always start with "workspaces/"; a key
+    that doesn't is from before this module existed.
+    """
+    usage = get_media_usage(asset_file_url(asset.id), db)
+    if not asset.object_key.startswith("workspaces/"):
+        legacy = get_media_usage(get_file_url(asset.object_key), db)
+        for key, rows in legacy.items():
+            usage[key] = usage[key] + rows
+    return usage
 
 
 def _load_asset(db: Session, asset_id: int) -> MediaAsset:
@@ -1292,12 +1944,119 @@ def _load_asset(db: Session, asset_id: int) -> MediaAsset:
     return asset
 
 
-def _require_can_edit(asset: MediaAsset, user: User) -> None:
+def _is_reviewer(user: User) -> bool:
+    """Admin or manager: the two roles that see and moderate every workspace."""
+    return role_of(user) in MANAGER_ROLES
+
+
+def _require_can_view(asset: MediaAsset, user: User) -> None:
     """Owner, admin or manager. 404 rather than 403: a 403 confirms it exists."""
-    if _role_of(user) in ("admin", "manager"):
+    if _is_reviewer(user):
         return
     if asset.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Media not found")
+
+
+def _require_can_edit(asset: MediaAsset, user: User) -> None:
+    """Owner, admin or manager — except a non-admin owner may not edit a
+    public asset.
+
+    Reassignment can hand a field-staff member ownership of an asset that is
+    already live on the public site; once it is public, changing its title,
+    description or tags is a reviewer action, not an owner action. This is a
+    real 403, not the existence-hiding 404 above: the owner already knows
+    the asset exists (it's in their own workspace) and is being told about a
+    genuine permission, not probing for one.
+    """
+    _require_can_view(asset, user)
+    if _is_reviewer(user):
+        return
+    if asset.status == "public":
+        raise HTTPException(
+            status_code=403,
+            detail="This media is public. Only a reviewer can edit it now.",
+        )
+
+
+def _require_is_owner(asset: MediaAsset, user: User) -> None:
+    """Strictly the owner — unlike every other predicate here, a reviewer is
+    not waved through.
+
+    private -> submitted is the one transition the table grants to "owner"
+    and nobody else: an admin/manager wanting an asset public can already
+    call /review with decision="approve" directly, so letting them submit
+    someone else's asset on their behalf grants nothing a workflow needs and
+    can queue media with no owner (an Unassigned asset has no one to act on
+    a rejection). Same existence-hiding 404 as _require_can_view rather than
+    a 403 — a reviewer probing someone else's private asset should not learn
+    it exists any more than a stranger would.
+    """
+    if asset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+
+def _require_can_delete(asset: MediaAsset, user: User) -> None:
+    """Owner may delete only while private; admin/manager always."""
+    _require_can_view(asset, user)
+    if _is_reviewer(user):
+        return
+    if asset.status != "private":
+        raise HTTPException(
+            status_code=403,
+            detail="Once media has been submitted or published, an admin must remove it.",
+        )
+
+
+def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
+    """Block an action that would break the public site, naming what points here."""
+    usage = usage_for_asset(asset, db)
+    referenced = {key: value for key, value in usage.items() if value}
+    if referenced:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Cannot {action}: this media is still used on the site.",
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps()s `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
+            },
+        )
+
+
+def _refuse_if_duplicate(db: Session, owner_id: int, checksum: str) -> None:
+    """409 if this exact checksum is already in this owner's workspace.
+
+    Advisory by design, not enforced with a unique constraint — see
+    migration 31's comment on idx_media_assets_owner_checksum: a unique
+    constraint would block a legitimate re-upload after a delete, and
+    PostgreSQL treats NULLs as distinct so the "Unassigned" workspace
+    would slip through it anyway. That also means this check-then-insert
+    is not race-free — two concurrent identical uploads from the same
+    user can both pass this SELECT and both land — which is accepted,
+    not a bug to "fix" by adding a constraint here.
+    """
+    duplicate = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.owner_id == owner_id, MediaAsset.checksum_sha256 == checksum)
+        .first()
+    )
+    if duplicate is None:
+        return
+    # Starlette's default HTTPException handler json.dumps()s `detail`
+    # directly rather than routing it through FastAPI's response
+    # pipeline, so it never sees jsonable_encoder — a raw datetime in
+    # serialize_asset(duplicate) would otherwise turn this 409 into an
+    # unhandled 500 at encode time. Encode here so callers reliably see
+    # a 409 with the existing asset attached, not a 500.
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "message": "This file is already in your workspace.",
+            "existing": jsonable_encoder(serialize_asset(duplicate)),
+        },
+    )
 
 
 # ── Upload ───────────────────────────────────────────────────────────
@@ -1312,11 +2071,30 @@ async def upload_media(
     current_user: User = Depends(get_current_staff),
 ):
     """Upload one photo or video into the caller's own workspace."""
-    media_type = detect_media_type(file.filename, file.content_type)
-    if media_type is None:
+    # Not Form(..., max_length=200): FastAPI turns a Pydantic max_length
+    # violation into a 422 with a Pydantic-shaped error body, not the plain
+    # 400 this endpoint uses for every other input problem (verified against
+    # a throwaway FastAPI app before writing this). A manual check keeps the
+    # error shape consistent and, unlike letting it reach db.commit(),
+    # catches it before a staff member's 100 MB video upload is thrown away
+    # over a VARCHAR(200) title -- PostgreSQL raises DataError there, which
+    # the except SQLAlchemyError below reports as a generic 500, and SQLite
+    # (this suite's engine) does not enforce column length at all, so this
+    # path is otherwise untestable.
+    if title is not None and len(title) > 200:
+        raise HTTPException(status_code=400, detail="Title is longer than 200 characters.")
+
+    # Cheap, header/filename-only pre-check so an obviously unsupported
+    # upload (a .txt file, an unlisted format) 400s before its bytes are
+    # even read. This is *not* the security gate — declared type is
+    # attacker-controlled — just an early exit; the sniff below is what a
+    # spoofed upload actually has to get past.
+    quick_media_type = detect_media_type(file.filename, file.content_type)
+    if quick_media_type is None:
+        hint = unsupported_hint(file.filename, file.content_type)
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type. Upload an image or a video.",
+            detail=hint or "Unsupported file type. Upload an image or a video.",
         )
 
     content = await file.read()
@@ -1328,64 +2106,56 @@ async def upload_media(
             detail=f"File is larger than the {MAX_MEDIA_UPLOAD_MB} MB limit.",
         )
 
-    content_type = file.content_type or (
-        "image/jpeg" if media_type == "image" else "video/mp4"
-    )
-    width = height = None
-    thumbnail_bytes = None
+    # Sniff, compress, strip and checksum the bytes -- the densest and most
+    # security-sensitive part of this endpoint, extracted so it can be
+    # tested directly with real bytes (see test_media_library_upload.py)
+    # instead of only reachable through a full HTTP round trip. See that
+    # module's docstring for the order-of-operations invariants it protects
+    # (sniff before compress, never store the raw header, unconditional
+    # EXIF/GPS stripping, orientation applied before it's discarded).
+    try:
+        processed = process_upload_bytes(file.content_type, content)
+    except ContentTypeMismatch as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if media_type == "image":
-        if should_compress_image(content_type):
-            content = compress_image(content)
-            content_type = "image/jpeg"
-        width, height = _image_dimensions(content)
-    else:
-        if should_compress_video(content_type):
-            content = compress_video(content)
-        thumbnail_bytes = generate_video_thumbnail(content)
+    checksum = processed.checksum
+    _refuse_if_duplicate(db, current_user.id, checksum)
 
-    checksum = hashlib.sha256(content).hexdigest()
-    duplicate = (
-        db.query(MediaAsset)
-        .filter(
-            MediaAsset.owner_id == current_user.id,
-            MediaAsset.checksum_sha256 == checksum,
-        )
-        .first()
-    )
-    if duplicate is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "This file is already in your workspace.",
-                "existing": _serialize(duplicate),
-            },
-        )
+    # parse_tag_input drops blank entries first: "" and a trailing comma mean
+    # "no tags", not "an empty tag" — without it, an upload with no tags at all
+    # would 400. validate_tags then only sees things the user actually typed,
+    # and is the write-path gate that tells them instead of silently rewriting
+    # (normalize_tags stays lenient because it also runs on the read path).
+    tag_input = parse_tag_input(tags)
+    tag_problems = validate_tags(tag_input)
+    if tag_problems:
+        raise HTTPException(status_code=400, detail={"tags": tag_problems})
 
-    parsed_tags = normalize_tags((tags or "").split(","))
+    parsed_tags = normalize_tags(tag_input)
     object_key = build_object_key(current_user.id, file.filename)
-    thumbnail_key = None
 
     # S3 first, row second: an orphan object is recoverable, a row pointing at
-    # nothing is not.
-    upload_file(content, object_key, content_type=content_type)
-    if thumbnail_bytes:
-        thumbnail_key = build_thumbnail_key(object_key)
-        try:
-            upload_file(thumbnail_bytes, thumbnail_key, content_type="image/jpeg")
-        except Exception as exc:
-            logger.warning("Thumbnail upload failed for %s: %s", object_key, exc)
-            thumbnail_key = None
+    # nothing is not. Writing to S3 only after the duplicate-checksum check
+    # above is what keeps a rejected duplicate from leaving an orphan too —
+    # see media_library_upload's module docstring.
+    thumbnail_key = store_processed_upload(processed, object_key)
 
     asset = MediaAsset(
         owner_id=current_user.id,
         object_key=object_key,
-        filename=file.filename or "upload",
-        media_type=media_type,
-        content_type=content_type,
-        size_bytes=len(content),
-        width=width,
-        height=height,
+        # Truncated, not rejected: the caller didn't choose this value (it's
+        # whatever the uploading client sent) and it's display-only, so a
+        # 400 here would only make them retry the same 100 MB upload for
+        # something that isn't their fault. filename is VARCHAR(255); title
+        # gets the opposite treatment (an explicit 400, checked near the top
+        # of this function) instead, because a title the user *did* type
+        # deserves an honest rejection rather than a silent truncation.
+        filename=(file.filename or "upload")[:255],
+        media_type=processed.media_type,
+        content_type=processed.content_type,
+        size_bytes=len(processed.content),
+        width=processed.width,
+        height=processed.height,
         thumbnail_key=thumbnail_key,
         checksum_sha256=checksum,
         title=(title or None),
@@ -1399,18 +2169,519 @@ async def upload_media(
         db.add(asset)
         db.commit()
         db.refresh(asset)
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         db.rollback()
-        delete_file(object_key, cleanup_db=False)
-        if thumbnail_key:
-            delete_file(thumbnail_key, cleanup_db=False)
+        # S3 first, row second (see the comment above store_processed_upload()):
+        # a failed insert must not leave an object with nothing pointing at it.
+        cleanup_upload_artifacts(object_key, thumbnail_key)
         logger.error("Could not index uploaded media %s: %s", object_key, exc)
-        raise HTTPException(status_code=500, detail="Could not save the uploaded file.")
+        raise HTTPException(status_code=500, detail="Could not save the uploaded file.") from exc
 
-    return _serialize(asset)
+    return serialize_asset(asset)
+
+
+# ── Listing ──────────────────────────────────────────────────────────
+
+SORT_FIELDS = {
+    "created_at": MediaAsset.created_at,
+    "filename": MediaAsset.filename,
+    "title": MediaAsset.title,
+    "size": MediaAsset.size_bytes,
+    "type": MediaAsset.media_type,
+}
+
+MEDIA_TYPES = ("image", "video")
+STATUSES = ("private", "submitted", "public")
+
+
+@router.get("")
+async def list_media(
+    q: Optional[str] = Query(None, description="Match filename, title, description or tags"),
+    type: Optional[str] = Query(None, description="image | video"),
+    status: Optional[str] = Query(None, description="private | submitted | public"),
+    tag: Optional[str] = Query(None, description="Exact tag match"),
+    owner_id: Optional[str] = Query(None, description="Admin/manager only; accepts 'unassigned'"),
+    sort: str = Query("created_at"),
+    order: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(48, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """List the caller's workspace, or every workspace for admins and managers."""
+    if sort not in SORT_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown sort field. Use one of: {', '.join(sorted(SORT_FIELDS))}",
+        )
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="order must be 'asc' or 'desc'")
+
+    query = db.query(MediaAsset)
+
+    # Scope first, and structurally: a field-staff query can never widen.
+    role = role_of(current_user)
+    if role not in MANAGER_ROLES:
+        query = query.filter(MediaAsset.owner_id == current_user.id)
+    elif owner_id:
+        if owner_id == "unassigned":
+            query = query.filter(MediaAsset.owner_id.is_(None))
+        else:
+            try:
+                owner_id_int = int(owner_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            # int() has no size limit, so an absurdly long digit string
+            # parses fine here and the error only surfaces once the query
+            # actually executes below -- OverflowError on SQLite, a driver
+            # range error on PostgreSQL, either way an unhandled 500 where
+            # this sibling (non-numeric) path gives a clean 400. owner_id is
+            # a 32-bit Integer column; bounding against that range catches
+            # it here instead of waiting for a specific driver to reject it
+            # in a specific way.
+            if not (-2_147_483_648 <= owner_id_int <= 2_147_483_647):
+                raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
+            query = query.filter(MediaAsset.owner_id == owner_id_int)
+
+    # Both helpers escape LIKE metacharacters and hand back the escape character
+    # with the pattern — without it, q="%" or tag="%" matches every row, and a
+    # trailing backslash behaves differently on PostgreSQL than on SQLite.
+    if q:
+        found = search_pattern(q)
+        if found is not None:
+            pattern, escape = found
+            query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if tag:
+        found = tag_filter_pattern(tag)
+        if found is None:
+            raise HTTPException(status_code=400, detail="tag must not be empty")
+        pattern, escape = found
+        query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
+    if type:
+        if type not in MEDIA_TYPES:
+            raise HTTPException(status_code=400, detail="type must be 'image' or 'video'")
+        query = query.filter(MediaAsset.media_type == type)
+    if status:
+        if status not in STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(STATUSES)}")
+        query = query.filter(MediaAsset.status == status)
+
+    total = query.count()
+
+    column = SORT_FIELDS[sort]
+    query = query.order_by(column.asc() if order == "asc" else column.desc())
+    # Stable tiebreak so pagination cannot repeat or drop a row.
+    query = query.order_by(None).order_by(
+        column.asc() if order == "asc" else column.desc(), MediaAsset.id.asc()
+    )
+
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return {
+        "items": [serialize_asset(asset) for asset in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+# ── Workspaces summary (declare before /{asset_id}) ──────────────────
+
+@router.get("/workspaces")
+async def list_workspaces(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Every staff member's workspace, plus Unassigned if it holds anything.
+
+    Every staff account gets a row even when it holds nothing yet — a workspace
+    exists because the person does, and an empty one still has to be selectable
+    when a reviewer reassigns legacy media.
+    """
+    totals = {
+        row.owner_id: row
+        for row in db.query(
+            MediaAsset.owner_id,
+            func.count(MediaAsset.id).label("asset_count"),
+            func.coalesce(func.sum(MediaAsset.size_bytes), 0).label("total_bytes"),
+        ).group_by(MediaAsset.owner_id).all()
+    }
+
+    submitted = dict(
+        db.query(MediaAsset.owner_id, func.count(MediaAsset.id))
+        .filter(MediaAsset.status == "submitted")
+        .group_by(MediaAsset.owner_id)
+        .all()
+    )
+
+    staff = (
+        db.query(User)
+        .filter(User.role.in_(STAFF_ROLES))
+        .all()
+    )
+
+    def _row(owner_id, name, email):
+        total = totals.get(owner_id)
+        return {
+            "owner_id": owner_id,
+            "owner_name": name,
+            "owner_email": email,
+            "asset_count": int(total.asset_count) if total else 0,
+            "total_bytes": int(total.total_bytes) if total else 0,
+            "submitted_count": int(submitted.get(owner_id, 0)),
+        }
+
+    workspaces = [_row(user.id, user.name or user.email, user.email) for user in staff]
+
+    # Owners who are no longer staff, plus the owner-less legacy pool.
+    known = {user.id for user in staff}
+    for owner_id in totals:
+        if owner_id is None:
+            workspaces.append(_row(None, "Unassigned", None))
+        elif owner_id not in known:
+            owner = db.query(User).filter(User.id == owner_id).first()
+            workspaces.append(_row(
+                owner_id,
+                (owner.name or owner.email) if owner else f"User {owner_id}",
+                owner.email if owner else None,
+            ))
+
+    workspaces.sort(key=lambda w: (w["owner_id"] is None, -w["asset_count"], w["owner_name"]))
+    return {"workspaces": workspaces}
+
+
+# ── Detail and metadata ──────────────────────────────────────────────
+
+class MediaAssetUpdate(BaseModel):
+    # Not Field(None, max_length=200): see the identical note on upload's
+    # manual title-length check above — a Pydantic max_length violation
+    # 422s in FastAPI's own error shape, not the plain 400 every other
+    # validation problem on this resource uses. Checked by hand below.
+    title: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[list] = None
+
+
+@router.get("/{asset_id}")
+async def get_media_detail(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """One asset, plus where it is used across the public site."""
+    asset = _load_asset(db, asset_id)
+    _require_can_view(asset, current_user)
+
+    usage = usage_for_asset(asset, db)
+    payload = serialize_asset(asset)
+    payload["usage"] = usage
+    payload["usage_count"] = sum(len(v) for v in usage.values())
+    return payload
+
+
+@router.patch("/{asset_id}")
+async def update_media_metadata(
+    asset_id: int,
+    payload: MediaAssetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Edit title, description and tags. Status is deliberately not editable here."""
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    if payload.title is not None and len(payload.title) > 200:
+        raise HTTPException(status_code=400, detail="Title is longer than 200 characters.")
+
+    fields = payload.model_dump(exclude_unset=True)
+    if "title" in fields:
+        asset.title = fields["title"] or None
+    if "description" in fields:
+        asset.description = fields["description"] or None
+    if "tags" in fields:
+        # Same write-path gate as upload: without validate_tags() here, PATCH
+        # was the one path into this table that let a >MAX_TAGS list or a
+        # tag containing TAG_DELIM through, silently rewritten (not
+        # rejected) by normalize_tags — exactly what validate_tags' own
+        # docstring says that split exists to prevent.
+        problems = validate_tags(fields["tags"])
+        if problems:
+            raise HTTPException(status_code=400, detail={"tags": problems})
+        asset.tags = normalize_tags(fields["tags"])
+
+    asset.search_text = build_search_text(
+        asset.filename, asset.title, asset.description, asset.tags
+    )
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s metadata updated by %s (role=%s)",
+        asset.id, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+class ReassignRequest(BaseModel):
+    owner_id: Optional[int] = None
+
+
+@router.post("/{asset_id}/reassign")
+async def reassign_media(
+    asset_id: int,
+    payload: ReassignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Move an asset into another member's workspace.
+
+    Chiefly for backfilled legacy media, which arrives owner-less. A null
+    owner_id sends the asset back to the Unassigned workspace. Ownership is
+    deliberately not part of PATCH: it is a privileged action, and keeping it on
+    its own route keeps the privilege check out of the metadata path.
+
+    Deliberately does not touch `status`: reassigning a public asset leaves
+    it public. Reassignment moves who is responsible for an asset, not
+    whether reviewers have already approved it for the site.
+    """
+    asset = _load_asset(db, asset_id)
+    previous_owner_id = asset.owner_id
+
+    if payload.owner_id is not None:
+        owner = db.query(User).filter(User.id == payload.owner_id).first()
+        if owner is None:
+            raise HTTPException(status_code=404, detail="No such user")
+        if role_of(owner) not in STAFF_ROLES:
+            raise HTTPException(
+                status_code=400, detail="Only staff accounts can own media."
+            )
+        # A deactivated account can never log in (get_current_user rejects it),
+        # so media parked there is a silent dead end: not in the Unassigned pool,
+        # and invisible to the one person nominally responsible for it.
+        if not owner.is_active:
+            raise HTTPException(
+                status_code=400,
+                detail="That account is deactivated. Reassign to an active member, "
+                       "or leave the media unassigned.",
+            )
+
+    asset.owner_id = payload.owner_id
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s reassigned from owner_id=%s to owner_id=%s by %s",
+        asset.id, previous_owner_id, payload.owner_id, current_user.email,
+    )
+    return serialize_asset(asset)
+
+
+# ── Lifecycle ────────────────────────────────────────────────────────
+
+# review_note's column is unbounded Text with no DB constraint backing this
+# number (unlike title's VARCHAR(200)) — it exists only because this is a
+# staff-writable string returned in every serialization, same reasoning as
+# title's cap above, minus a column to point at.
+MAX_REVIEW_NOTE_LENGTH = 1000
+
+
+class ReviewDecision(BaseModel):
+    # Literal, not Field(pattern=...): a value outside the three legal
+    # decisions 422s at the schema either way, but a regex fails open — a
+    # fourth decision added to the pattern later would silently fall into
+    # the `else: # unpublish` branch below with no error, and that branch is
+    # the one guarding the public/private boundary. Literal fails closed.
+    decision: Literal["approve", "reject", "unpublish"]
+    note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _reject_must_explain_itself(self):
+        # A field-staff member whose photo is bounced with review_note=None
+        # has no way to know what to fix before resubmitting. Enforced here,
+        # not in the route body, so it fails as a 422 at the schema — the
+        # same shape as an unknown `decision` — rather than a 400 after
+        # _load_asset has already run.
+        if self.decision == "reject" and not (self.note and self.note.strip()):
+            raise ValueError("A rejection must include a note explaining why.")
+        return self
+
+
+@router.post("/{asset_id}/submit")
+async def submit_for_review(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner asks for the asset to be reviewed. It stays private until approved."""
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "private":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only private media can be submitted (this is '{asset.status}').",
+        )
+
+    asset.status = "submitted"
+    # Clear every trace of a previous decision, not just the note: a
+    # reject -> fix -> resubmit cycle must not leave reviewed_at/
+    # reviewed_by_id from the rejection behind on a `submitted` row for a
+    # review-queue UI to misread as "already decided". Migration 31's
+    # partial index on status = 'submitted' says such a queue is coming.
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s submitted for review by %s (role=%s)",
+        asset.id, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/withdraw")
+async def withdraw_submission(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner pulls a submission back out of the review queue.
+
+    Without this a field worker who uploads something sensitive by mistake and
+    submits it has no exit: delete refuses anything but `private`, and both
+    reject and unpublish are reviewer-only. The photo would sit visible to every
+    admin until someone else acted -- the worst outcome for exactly the content
+    this workflow exists to protect.
+
+    Cannot touch a public asset: pulling live media down stays a reviewer call.
+    """
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "submitted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only submitted media can be withdrawn (this is '{asset.status}').",
+        )
+
+    asset.status = "private"
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info("Media %s withdrawn by %s", asset_id, current_user.email)
+    return serialize_asset(asset)
+
+
+@router.post("/{asset_id}/review")
+async def review_media(
+    asset_id: int,
+    payload: ReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Approve (-> public), reject (-> private + note), or unpublish (-> private)."""
+    asset = _load_asset(db, asset_id)
+
+    # Not Field(max_length=...) on the model: see the identical note on
+    # upload's title check above -- a Pydantic max_length violation 422s in
+    # FastAPI's own error shape, not the 400 every other input problem here
+    # uses. The reject-needs-a-reason rule above is deliberately the
+    # exception (it belongs at the schema, alongside the unknown-decision
+    # 422); a length cap is an ordinary input problem, checked by hand.
+    if payload.note is not None and len(payload.note) > MAX_REVIEW_NOTE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Note is longer than {MAX_REVIEW_NOTE_LENGTH} characters.",
+        )
+
+    if payload.decision == "approve":
+        if asset.status not in ("private", "submitted"):
+            raise HTTPException(status_code=400, detail="This media is already public.")
+        asset.status = "public"
+        asset.review_note = None
+    elif payload.decision == "reject":
+        if asset.status != "submitted":
+            raise HTTPException(status_code=400, detail="Only submitted media can be rejected.")
+        asset.status = "private"
+        asset.review_note = payload.note
+    else:  # unpublish
+        if asset.status != "public":
+            raise HTTPException(status_code=400, detail="Only public media can be unpublished.")
+        _refuse_if_in_use(asset, db, "unpublish")
+        asset.status = "private"
+        asset.review_note = payload.note
+
+    # No row locking: two simultaneous review calls on the same asset both
+    # read the pre-decision status, both pass their checks, and the second
+    # commit wins for reviewed_by_id/reviewed_at -- lossy attribution, not a
+    # privacy hole. Nothing here turns an asset public without a reviewer
+    # explicitly calling this endpoint with decision="approve"; accepted,
+    # not a gap to close before Task 9.
+    asset.reviewed_by_id = current_user.id
+    asset.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(asset)
+    logger.info(
+        "Media %s reviewed (%s) by %s (role=%s)",
+        asset.id, payload.decision, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+@router.delete("/{asset_id}")
+async def delete_media(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Remove an asset. Owners may only delete their own still-private media."""
+    asset = _load_asset(db, asset_id)
+    _require_can_delete(asset, current_user)
+
+    # Every status, not just public. A legacy asset backfilled by Task 18 can be
+    # referenced by live site content while sitting at any status, because the
+    # /api/uploads/media/... URL the content tables hold is served straight from
+    # S3 and never consults this row.
+    _refuse_if_in_use(asset, db, "delete")
+
+    object_key = asset.object_key
+    thumbnail_key = asset.thumbnail_key
+    # Captured before the commit below: reading current_user.email afterwards
+    # would find the instance expired and force a needless re-SELECT just for
+    # this log line.
+    actor_email = current_user.email
+    actor_role = role_of(current_user)
+
+    db.delete(asset)
+    db.commit()
+
+    # Row-first, S3-second -- the same rule the upload pipeline's S3-first,
+    # row-second order follows, applied at the other end of the asset's
+    # life: never let the database claim bytes that aren't there. On create
+    # the row must not exist before the object; on delete it must not
+    # outlive it. The real justification is asymmetry of consequence, not
+    # symmetry of mechanism -- a leftover S3 object is invisible and costs
+    # only storage, while a row pointing at missing bytes breaks the listing
+    # today and 404s in byte serving on an asset the UI insists still
+    # exists.
+    #
+    # A failed object (or thumbnail) delete here is NOT picked up by
+    # cleanup.py's sweep -- cleanup_orphaned_media walks content rows
+    # looking for a missing S3 file (row -> file); it has no S3 listing and
+    # no awareness of media_assets, so it can never discover an S3 object
+    # with no row pointing at it. The only recovery path for that orphan is
+    # the ERROR log line below, which names the key.
+    cleanup_upload_artifacts(object_key, thumbnail_key, context=f"Deleted media {asset_id}")
+
+    logger.info(
+        "Media %s deleted by %s (role=%s)",
+        asset_id, actor_email, actor_role,
+    )
+    return {"message": "Media deleted", "id": asset_id}
 ```
 
-- [ ] **Step 4: Register the router**
+- [x] **Step 4: Register the router**
 
 In `backend/main.py`, add after line 222 (`s3_media` registration):
 
@@ -1420,13 +2691,13 @@ app.include_router(media_library.router, prefix="/api/media-library", tags=["med
 
 Add `media_library` to the `from routers import (...)` block at the top of the file — match the existing import style there.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 11 tests.
+Expected: PASS, 20 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/main.py backend/tests/test_media_library_api.py
@@ -1443,7 +2714,7 @@ git commit -m "feat: upload media into a per-user workspace"
 
 **Context you need:** Scoping is applied **inside the query**, never by trusting a caller-supplied filter — a field-staff request must be structurally incapable of returning another member's rows. Admins and managers may additionally pass `owner_id`, including the literal `unassigned` for the backfilled legacy pool.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -1563,6 +2834,18 @@ def test_sorting_by_size_in_both_directions(
     assert [i["filename"] for i in desc["items"]] == ["big.jpg", "small.jpg"]
 
 
+def test_wildcards_in_search_and_tag_are_literal_not_patterns(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Fails if a caller ever drops escape= from the ilike() call."""
+    _make_asset(db_session, field_staff_user.id, filename="a.jpg", tags=["gaza"])
+    _make_asset(db_session, field_staff_user.id, filename="b.jpg", tags=["water"])
+
+    # "%" is a LIKE wildcard; as a query it must match nothing, not everything.
+    assert client.get("/api/media-library?q=%25", headers=field_staff_headers).json()["total"] == 0
+    assert client.get("/api/media-library?tag=%25", headers=field_staff_headers).json()["total"] == 0
+
+
 def test_an_unknown_sort_field_is_rejected(client, field_staff_headers):
     response = client.get("/api/media-library?sort=password", headers=field_staff_headers)
     assert response.status_code == 400
@@ -1588,13 +2871,13 @@ def test_a_donor_cannot_list(client, donor_headers):
     assert client.get("/api/media-library", headers=donor_headers).status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "list or search or sort or pagination or tag_filter or filter_by"`
 
 Expected: FAIL — 404, the route does not exist.
 
-- [ ] **Step 3: Write the list endpoint**
+- [x] **Step 3: Write the list endpoint**
 
 Append to `backend/routers/media_library.py`:
 
@@ -1639,7 +2922,7 @@ async def list_media(
     query = db.query(MediaAsset)
 
     # Scope first, and structurally: a field-staff query can never widen.
-    role = _role_of(current_user)
+    role = role_of(current_user)
     if role not in ("admin", "manager"):
         query = query.filter(MediaAsset.owner_id == current_user.id)
     elif owner_id:
@@ -1651,13 +2934,20 @@ async def list_media(
             except ValueError:
                 raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
 
+    # Both helpers escape LIKE metacharacters and hand back the escape character
+    # with the pattern — without it, q="%" or tag="%" matches every row, and a
+    # trailing backslash behaves differently on PostgreSQL than on SQLite.
     if q:
-        query = query.filter(MediaAsset.search_text.ilike(f"%{q.strip().lower()}%"))
+        found = search_pattern(q)
+        if found is not None:
+            pattern, escape = found
+            query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
     if tag:
-        pattern = tag_filter_pattern(tag)
-        if pattern is None:
+        found = tag_filter_pattern(tag)
+        if found is None:
             raise HTTPException(status_code=400, detail="tag must not be empty")
-        query = query.filter(MediaAsset.search_text.ilike(pattern))
+        pattern, escape = found
+        query = query.filter(MediaAsset.search_text.ilike(pattern, escape=escape))
     if type:
         if type not in MEDIA_TYPES:
             raise HTTPException(status_code=400, detail="type must be 'image' or 'video'")
@@ -1686,13 +2976,13 @@ async def list_media(
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 23 tests.
+Expected: PASS, 24 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -1711,7 +3001,7 @@ git commit -m "feat: list, search, sort and paginate media assets"
 
 **Route ordering matters:** `/workspaces` must be declared **before** `/{asset_id}`, because `asset_id` is typed `int` and FastAPI would reject the literal string `workspaces` with a 422 rather than falling through.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -1807,6 +3097,23 @@ def test_reassigning_to_a_nonexistent_user_is_rejected(
     assert response.status_code == 404
 
 
+def test_reassigning_to_a_deactivated_account_is_rejected(
+    client, db_session, auth_headers, field_staff_user
+):
+    """A deactivated owner can never log in, so their workspace is a dead end."""
+    asset = _make_asset(db_session, None, filename="legacy.jpg", status="public")
+    field_staff_user.is_active = False
+    db_session.commit()
+
+    response = client.post(
+        f"/api/media-library/{asset.id}/reassign",
+        headers=auth_headers,
+        json={"owner_id": field_staff_user.id},
+    )
+    assert response.status_code == 400
+    assert "deactivated" in str(response.json()["detail"]).lower()
+
+
 def test_field_staff_cannot_reassign(client, db_session, field_staff_headers, field_staff_user):
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
     response = client.post(
@@ -1852,13 +3159,13 @@ def test_field_staff_cannot_read_the_workspaces_summary(client, field_staff_head
     assert response.status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "detail or patch or workspaces"`
 
 Expected: FAIL — 404 / 405 on the missing routes.
 
-- [ ] **Step 3: Write the endpoints**
+- [x] **Step 3: Write the endpoints**
 
 Append to `backend/routers/media_library.py`. **`/workspaces` must come first in the file** so it is matched before `/{asset_id}`:
 
@@ -2008,9 +3315,18 @@ async def reassign_media(
         owner = db.query(User).filter(User.id == payload.owner_id).first()
         if owner is None:
             raise HTTPException(status_code=404, detail="No such user")
-        if _role_of(owner) not in ("admin", "manager", "field_staff"):
+        if role_of(owner) not in ("admin", "manager", "field_staff"):
             raise HTTPException(
                 status_code=400, detail="Only staff accounts can own media."
+            )
+        # A deactivated account can never log in (get_current_user rejects it),
+        # so media parked there is a silent dead end: not in the Unassigned pool,
+        # and invisible to the one person nominally responsible for it.
+        if not owner.is_active:
+            raise HTTPException(
+                status_code=400,
+                detail="That account is deactivated. Reassign to an active member, "
+                       "or leave the media unassigned.",
             )
 
     asset.owner_id = payload.owner_id
@@ -2021,13 +3337,13 @@ async def reassign_media(
 
 Because `MediaAssetUpdate` has no `status` field, Pydantic drops an attempted `"status": "public"` from the body — that is what makes `test_patch_cannot_change_status` pass, and it is why status changes live on their own endpoints.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
-Expected: PASS, 35 tests.
+Expected: PASS, 59 tests in this file (it accumulates across Tasks 4-7).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -2044,7 +3360,7 @@ git commit -m "feat: media asset detail, metadata editing and workspace summarie
 
 **Context you need:** The legal transitions are exactly the table in the spec. Everything else is a 400. Unpublishing (`public → private`) is the one transition with a guard: it is refused while site content still points at the asset.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -2065,6 +3381,33 @@ def test_submitting_an_already_submitted_asset_is_rejected(
 ):
     asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="submitted")
     response = client.post(f"/api/media-library/{asset.id}/submit", headers=field_staff_headers)
+    assert response.status_code == 400
+
+
+def test_an_owner_can_withdraw_their_own_submission(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """The exit from a mistaken submission."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="oops.jpg", status="submitted")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "private"
+
+
+def test_withdraw_is_refused_on_someone_elses_asset(
+    client, db_session, field_staff_headers, other_field_staff_user
+):
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg", status="submitted")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
+    assert response.status_code == 404
+
+
+def test_withdraw_cannot_unpublish(
+    client, db_session, field_staff_headers, field_staff_user
+):
+    """Pulling live media down stays a reviewer decision."""
+    asset = _make_asset(db_session, field_staff_user.id, filename="live.jpg", status="public")
+    response = client.post(f"/api/media-library/{asset.id}/withdraw", headers=field_staff_headers)
     assert response.status_code == 400
 
 
@@ -2170,13 +3513,13 @@ def test_approving_an_already_public_asset_is_rejected(
     assert response.status_code == 400
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k "submit or review or reject or unpublish or promote"`
 
 Expected: FAIL — 404 on the missing routes.
 
-- [ ] **Step 3: Write the endpoints**
+- [x] **Step 3: Write the endpoints**
 
 Append to `backend/routers/media_library.py`:
 
@@ -2202,7 +3545,11 @@ def _refuse_if_in_use(asset: MediaAsset, db: Session, action: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": f"Cannot {action}: this media is still used on the site.",
-                "usage": referenced,
+                # Safe today — get_media_usage returns only ids and strings — but
+                # FastAPI json.dumps() `detail` without jsonable_encoder, so the
+                # day someone adds a date to that payload this 409 silently
+                # becomes a 500. One call is cheaper than that surprise.
+                "usage": jsonable_encoder(referenced),
             },
         )
 
@@ -2228,6 +3575,41 @@ async def submit_for_review(
     db.commit()
     db.refresh(asset)
     return _serialize(asset)
+
+
+@router.post("/{asset_id}/withdraw")
+async def withdraw_submission(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Owner pulls a submission back out of the review queue.
+
+    Without this a field worker who uploads something sensitive by mistake and
+    submits it has no exit: delete refuses anything but `private`, and both
+    reject and unpublish are reviewer-only. The photo would sit visible to every
+    admin until someone else acted -- the worst outcome for exactly the content
+    this workflow exists to protect.
+
+    Cannot touch a public asset: pulling live media down stays a reviewer call.
+    """
+    asset = _load_asset(db, asset_id)
+    _require_is_owner(asset, current_user)
+
+    if asset.status != "submitted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only submitted media can be withdrawn (this is '{asset.status}').",
+        )
+
+    asset.status = "private"
+    asset.review_note = None
+    asset.reviewed_by_id = None
+    asset.reviewed_at = None
+    db.commit()
+    db.refresh(asset)
+    logger.info("Media %s withdrawn by %s", asset_id, current_user.email)
+    return serialize_asset(asset)
 
 
 @router.post("/{asset_id}/review")
@@ -2264,13 +3646,13 @@ async def review_media(
     return _serialize(asset)
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 45 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -2287,7 +3669,7 @@ git commit -m "feat: submit-for-review and approve/reject/unpublish transitions"
 
 **Context you need:** An owner may delete only their own **private** media — once something has been submitted or published, removing it is a review decision. Deletion is refused entirely while site content references the asset. The row goes in the transaction; the object goes after the commit, so a failed object delete leaves an orphan for `cleanup.py` rather than a row pointing at nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_media_library_api.py`:
 
@@ -2358,13 +3740,13 @@ def test_delete_also_removes_the_thumbnail(
     assert fake_s3 == {}
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v -k delete`
 
 Expected: FAIL — 405 Method Not Allowed.
 
-- [ ] **Step 3: Write the endpoint**
+- [x] **Step 3: Write the endpoint**
 
 Append to `backend/routers/media_library.py`:
 
@@ -2379,13 +3761,17 @@ async def delete_media(
     asset = _load_asset(db, asset_id)
     _require_can_edit(asset, current_user)
 
-    is_privileged = _role_of(current_user) in ("admin", "manager")
+    is_privileged = role_of(current_user) in ("admin", "manager")
     if not is_privileged and asset.status != "private":
         raise HTTPException(
             status_code=403,
             detail="Once media has been submitted or published, an admin must remove it.",
         )
 
+    # Every status, not just public. A legacy asset backfilled by Task 18 can be
+    # referenced by live site content while sitting at any status, because the
+    # /api/uploads/media/... URL the content tables hold is served straight from
+    # S3 and never consults this row.
     _refuse_if_in_use(asset, db, "delete")
 
     object_key = asset.object_key
@@ -2403,13 +3789,13 @@ async def delete_media(
     return {"message": "Media deleted", "id": asset_id}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_media_library_api.py -v`
 
 Expected: PASS, 51 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/media_library.py backend/tests/test_media_library_api.py
@@ -2431,7 +3817,7 @@ git commit -m "feat: delete media with an in-use guard"
 
 **The cache header differs by status.** Public assets get `public, max-age=86400` like today. Private and submitted assets must get `private, no-store` — otherwise an intermediary could cache a beneficiary photo.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_media_library_permissions.py`:
 
@@ -2587,13 +3973,13 @@ def test_field_staff_are_refused_on_manager_only_endpoints(
     ).status_code == 403
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_media_library_permissions.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'routers.media_library_files'`.
 
-- [ ] **Step 3: Add the optional-auth dependency**
+- [x] **Step 3: Add the optional-auth dependency**
 
 In `backend/auth_utils.py`, add beside the existing `security` object:
 
@@ -2623,7 +4009,7 @@ def get_optional_user(
 
 Add `Optional` to the `typing` import at the top of the file if it is not already imported.
 
-- [ ] **Step 4: Extract the streaming helper**
+- [x] **Step 4: Extract the streaming helper**
 
 In `backend/routers/static_files.py`, add after `get_content_type`:
 
@@ -2716,7 +4102,7 @@ Then replace the body of `serve_video`'s S3 branch (`static_files.py:126-219`) w
 
 Leave the other three video routes alone in this task — they are unrelated to this feature and changing them widens the blast radius.
 
-- [ ] **Step 5: Write the serving router**
+- [x] **Step 5: Write the serving router**
 
 Create `backend/routers/media_library_files.py`:
 
@@ -2739,7 +4125,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from auth_utils import _role_of, get_optional_user
+from auth_utils import role_of, get_optional_user
 from database import get_db
 from logging_config import get_logger
 from models import MediaAsset, User
@@ -2767,7 +4153,7 @@ def _visible_asset(db: Session, asset_id: int, user: Optional[User]) -> MediaAss
         return asset
     if user is None:
         raise HTTPException(status_code=404, detail="Media not found")
-    if _role_of(user) in ("admin", "manager"):
+    if role_of(user) in ("admin", "manager"):
         return asset
     if asset.owner_id == user.id:
         return asset
@@ -2841,7 +4227,7 @@ Before running the tests, confirm the `resize_image` signature matches this call
 Run: `cd backend && sed -n '61,80p' image_cache.py`
 If its parameters differ, adjust the call rather than the module.
 
-- [ ] **Step 6: Register the serving router**
+- [x] **Step 6: Register the serving router**
 
 In `backend/main.py`, add immediately after the `media_library` registration:
 
@@ -2851,7 +4237,7 @@ app.include_router(media_library_files.router, prefix="/api/media-library", tags
 
 Add `media_library_files` to the `from routers import (...)` block.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run: `cd backend && python -m pytest tests/test_media_library_permissions.py -v`
 
@@ -2863,7 +4249,7 @@ Run: `cd backend && python -m pytest tests -v`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/auth_utils.py backend/routers/static_files.py backend/routers/media_library_files.py backend/main.py backend/tests/test_media_library_permissions.py
@@ -2882,7 +4268,7 @@ git commit -m "feat: serve media bytes with per-asset access control"
 
 **Context you need:** `frontend/src/utils/api.ts` exports a configured axios instance as its default export, with an interceptor that attaches `auth_token` and redirects to `/login` on 401. Reuse it — do not create a second axios instance. `getStaticFileUrl()` from the same module turns an `/api/...` path into an absolute URL, which `<img>` and `<video>` elements need in development where Vite proxies only some paths.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/utils/__tests__/mediaLibraryApi.test.ts`:
 
@@ -2943,13 +4329,13 @@ describe('mediaLibraryApi', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/utils/__tests__/mediaLibraryApi.test.ts`
 
 Expected: FAIL — cannot resolve `../mediaLibraryApi`.
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 Create `frontend/src/utils/mediaLibraryApi.ts`:
 
@@ -3110,13 +4496,13 @@ export const mediaLibraryApi = {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/utils/__tests__/mediaLibraryApi.test.ts`
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/utils/mediaLibraryApi.ts frontend/src/utils/__tests__/mediaLibraryApi.test.ts
@@ -3134,7 +4520,7 @@ git commit -m "feat: typed client for the media library API"
 
 **Context you need:** Both admin pages render the same grid, so these components take everything through props and hold no data-fetching logic. That is what keeps `AdminMediaWorkspace` and `AdminMediaLibrary` small — the 743-line `AdminS3Media.tsx` is the shape to avoid.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaGrid.test.tsx`:
 
@@ -3205,13 +4591,13 @@ describe('MediaGrid', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaGrid.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaGrid`.
 
-- [ ] **Step 3: Write MediaCard**
+- [x] **Step 3: Write MediaCard**
 
 Create `frontend/src/components/media/MediaCard.tsx`:
 
@@ -3290,7 +4676,7 @@ const MediaCard = ({ asset, onSelect }: MediaCardProps) => {
 export default MediaCard
 ```
 
-- [ ] **Step 4: Write MediaGrid**
+- [x] **Step 4: Write MediaGrid**
 
 Create `frontend/src/components/media/MediaGrid.tsx`:
 
@@ -3344,13 +4730,13 @@ const MediaGrid = ({ items, loading, onSelect, emptyHint }: MediaGridProps) => {
 export default MediaGrid
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaGrid.test.tsx`
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaCard.tsx frontend/src/components/media/MediaGrid.tsx frontend/src/components/media/__tests__/MediaGrid.test.tsx
@@ -3367,7 +4753,7 @@ git commit -m "feat: media card and grid components"
 
 **Context you need:** The search box is debounced so typing does not fire a request per keystroke. The component is fully controlled — it owns no filter state, only the debounce timer for the text input.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaFilters.test.tsx`:
 
@@ -3415,13 +4801,13 @@ describe('MediaFilters', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaFilters.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaFilters`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaFilters.tsx`:
 
@@ -3546,13 +4932,13 @@ const MediaFilters = ({ query, onChange, showStatusFilter }: MediaFiltersProps) 
 export default MediaFilters
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaFilters.test.tsx`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaFilters.tsx frontend/src/components/media/__tests__/MediaFilters.test.tsx
@@ -3569,7 +4955,7 @@ git commit -m "feat: media filter bar with debounced search"
 
 **Context you need:** Uploads run one at a time so a phone-sized video does not saturate the connection, and each file reports its own progress and its own error. A 409 (duplicate) is an expected outcome, not a failure — it is reported as "already in your workspace".
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaUploader.test.tsx`:
 
@@ -3625,13 +5011,13 @@ describe('MediaUploader', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaUploader.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaUploader`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaUploader.tsx`:
 
@@ -3761,13 +5147,13 @@ const MediaUploader = ({ onUploaded }: MediaUploaderProps) => {
 export default MediaUploader
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaUploader.test.tsx`
 
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaUploader.tsx frontend/src/components/media/__tests__/MediaUploader.test.tsx
@@ -3784,7 +5170,7 @@ git commit -m "feat: media uploader with per-file progress"
 
 **Context you need:** One drawer serves both pages; which actions appear is decided by props, not by the component reading the auth store — that keeps it testable and keeps the permission decision in one obvious place per page.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/media/__tests__/MediaDetailDrawer.test.tsx`:
 
@@ -3870,13 +5256,13 @@ describe('MediaDetailDrawer', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaDetailDrawer.test.tsx`
 
 Expected: FAIL — cannot resolve `../MediaDetailDrawer`.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `frontend/src/components/media/MediaDetailDrawer.tsx`:
 
@@ -4105,13 +5491,13 @@ const MediaDetailDrawer = ({
 export default MediaDetailDrawer
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaDetailDrawer.test.tsx`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/media/MediaDetailDrawer.tsx frontend/src/components/media/__tests__/MediaDetailDrawer.test.tsx
@@ -4128,7 +5514,7 @@ git commit -m "feat: media detail drawer with metadata editing and review action
 
 **Context you need:** This page is deliberately thin — it owns query state and data fetching, and delegates every pixel to the Task 12-15 components. Follow the lazy-import pattern used by every other admin page in `App.tsx`.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/pages/admin/AdminMediaWorkspace.tsx`:
 
@@ -4232,7 +5618,7 @@ const AdminMediaWorkspace = () => {
 export default AdminMediaWorkspace
 ```
 
-- [ ] **Step 2: Wire the route**
+- [x] **Step 2: Wire the route**
 
 In `frontend/src/App.tsx`, add the lazy import beside the other admin pages:
 
@@ -4240,19 +5626,21 @@ In `frontend/src/App.tsx`, add the lazy import beside the other admin pages:
 const AdminMediaWorkspace = lazy(() => import('./pages/admin/AdminMediaWorkspace'))
 ```
 
-And add the route inside the `/admin` route block, beside `gallery`:
+Then **replace** the `media` placeholder route Task 2 added inside the `/admin`
+route block (it renders "Media workspace — coming soon.") with the real page —
+do not add a second route for the same path:
 
 ```tsx
                 <Route path="media" element={<AdminMediaWorkspace />} />
 ```
 
-- [ ] **Step 3: Verify it builds and the suite still passes**
+- [x] **Step 3: Verify it builds and the suite still passes**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/pages/admin/AdminMediaWorkspace.tsx frontend/src/App.tsx
@@ -4271,7 +5659,7 @@ git commit -m "feat: My Workspace media page"
 
 **Context you need:** `/admin/s3-media` is repointed at the new page rather than removed, so an existing bookmark still lands somewhere sensible. The usage cross-reference people relied on in AdminS3Media now lives in `MediaDetailDrawer` (the blue "used in N places" panel), and delete still works from there — so nothing that page did is lost.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/pages/admin/AdminMediaLibrary.tsx`:
 
@@ -4440,7 +5828,7 @@ const AdminMediaLibrary = () => {
 export default AdminMediaLibrary
 ```
 
-- [ ] **Step 2: Wire the routes and retire the old page**
+- [x] **Step 2: Wire the routes and retire the old page**
 
 In `frontend/src/App.tsx`:
 
@@ -4448,14 +5836,28 @@ In `frontend/src/App.tsx`:
 const AdminMediaLibrary = lazy(() => import('./pages/admin/AdminMediaLibrary'))
 ```
 
-Remove the `AdminS3Media` lazy import, then set both routes to the new page:
+Remove the `AdminS3Media` lazy import, then set both routes to the new page —
+replacing the `media/all` placeholder Task 2 added, rather than adding a duplicate:
 
 ```tsx
                 <Route path="media/all" element={<AdminMediaLibrary />} />
                 <Route path="s3-media" element={<AdminMediaLibrary />} />
 ```
 
-In `frontend/src/components/AdminLayout.tsx`, drop the `S3 Browser` entry from the Media group so the nav has one obvious destination:
+In `frontend/src/components/AdminLayout.tsx`, drop the `S3 Browser` entry from the Media group so the nav has one obvious destination.
+
+**While you are in that file, extract the nav data.** Task 2 exported `NAV`,
+`ROLE_ALLOWED` and `filterNavForRole` from `AdminLayout.tsx` for testability, which
+left one file holding four responsibilities: nav data, role policy, a pure filter,
+and a React component — and the first three have nothing to do with React. Move
+those three into a sibling `frontend/src/components/adminNav.ts`, re-point the
+import in `AdminLayout.tsx` and in
+`frontend/src/components/__tests__/AdminLayout.test.tsx`, and type the exports as
+`Partial<Record<Role, ReadonlySet<string>>>` and `readonly NavEntry[]` so importers
+cannot mutate shared module state (`export const` prevents rebinding, not mutation).
+This task is already editing `NAV`, which makes it the natural moment.
+
+The Media group after the edit:
 
 ```typescript
     items: [
@@ -4466,26 +5868,26 @@ In `frontend/src/components/AdminLayout.tsx`, drop the `S3 Browser` entry from t
     ],
 ```
 
-- [ ] **Step 3: Confirm nothing else imports the old page**
+- [x] **Step 3: Confirm nothing else imports the old page**
 
 Run: `cd frontend && grep -rn "AdminS3Media" src/`
 
 Expected: no matches. If anything is still listed, update it before continuing.
 
-- [ ] **Step 4: Delete the old page**
+- [x] **Step 4: Delete the old page**
 
 Run: `git rm frontend/src/pages/admin/AdminS3Media.tsx`
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `cd frontend && npx tsc --noEmit && npx vitest run`
 
 Expected: no type errors; all tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-git add frontend/src/pages/admin/AdminMediaLibrary.tsx frontend/src/App.tsx frontend/src/components/AdminLayout.tsx
+git add frontend/src/pages/admin/AdminMediaLibrary.tsx frontend/src/App.tsx frontend/src/components/AdminLayout.tsx frontend/src/components/adminNav.ts frontend/src/components/__tests__/AdminLayout.test.tsx
 git commit -m "feat: All Media page with workspace sidebar and review queue"
 ```
 
@@ -4501,7 +5903,7 @@ git commit -m "feat: All Media page with workspace sidebar and review queue"
 
 **Context you need:** `s3_service.list_files(prefix)` returns dicts with `key`, `size`, `last_modified` and `url`. The existing `/browse` endpoint skips generated thumbnails by filtering names containing `_thumb` — do the same, or thumbnails will appear as standalone assets. The script must be idempotent: it is keyed on `object_key`, so re-running only adds what is missing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_backfill_media_library.py`:
 
@@ -4567,13 +5969,13 @@ def test_backfill_is_idempotent(db_session, fake_listing):
     assert db_session.query(MediaAsset).count() == 2
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd backend && python -m pytest tests/test_backfill_media_library.py -v`
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'scripts'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `backend/scripts/__init__.py` (empty file), then `backend/scripts/backfill_media_library.py`:
 
@@ -4630,6 +6032,9 @@ def backfill(db: Session) -> int:
 
             media_type = detect_media_type(filename, None)
             if media_type is None:
+                # Includes any .svg already in the bucket: SVG was dropped from the
+                # allowed types as a script-carrying document format. Read whatever
+                # this logs before treating the backfill as complete.
                 logger.info("Skipping unsupported object %s", object_key)
                 continue
 
@@ -4664,13 +6069,13 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_backfill_media_library.py -v`
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/scripts/__init__.py backend/scripts/backfill_media_library.py backend/tests/test_backfill_media_library.py
@@ -4689,7 +6094,7 @@ git commit -m "feat: backfill existing S3 objects into the media library"
 
 **Do not run step 3 until step 2 reports zero rows.**
 
-- [ ] **Step 1: Write the audit script**
+- [x] **Step 1: Write the audit script**
 
 Create `backend/scripts/audit_direct_s3_urls.py`:
 
@@ -4771,7 +6176,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run the audit against production data**
+- [x] **Step 2: Run the audit against production data**
 
 Run: `docker compose exec backend python -m scripts.audit_direct_s3_urls`
 
@@ -4779,7 +6184,7 @@ Expected: `Clean: no direct S3 URLs found.`
 
 If it lists rows, rewrite each listed value to its proxy form (`/api/uploads/media/<images|videos>/<filename>`) and re-run until clean. **Do not continue while any row is listed.**
 
-- [ ] **Step 3: Remove the public-read bucket policy**
+- [x] **Step 3: Remove the public-read bucket policy**
 
 In `backend/s3_service.py`, inside `ensure_bucket_exists()`, delete both `put_bucket_policy` blocks — the one in the "bucket exists" branch and the one in the "bucket created" branch — replacing each with:
 
@@ -4790,7 +6195,7 @@ In `backend/s3_service.py`, inside `ensure_bucket_exists()`, delete both `put_bu
 
 Then remove the now-unused `import json` statements inside that function.
 
-- [ ] **Step 4: Verify public media still serves and private media does not**
+- [x] **Step 4: Verify public media still serves and private media does not**
 
 Run: `cd backend && python -m pytest tests -v`
 
@@ -4804,7 +6209,7 @@ Expected: `200`
 Run: `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/media-library/<a private id>/file`
 Expected: `404`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/scripts/audit_direct_s3_urls.py backend/s3_service.py
@@ -4820,7 +6225,7 @@ git commit -m "feat: audit direct S3 URLs and remove the public-read bucket poli
 
 **Context you need:** Playwright config lives at `playwright.config.ts` in the repo root; specs live in `e2e/`. This test covers the one path that spans every layer: a field staff member uploads and submits, an admin reviews and publishes.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `e2e/media-workspaces.spec.ts`:
 
@@ -4884,13 +6289,13 @@ test.describe('media workspaces', () => {
 })
 ```
 
-- [ ] **Step 2: Add the fixture image**
+- [x] **Step 2: Add the fixture image**
 
 Run: `mkdir -p e2e/fixtures && python -c "from PIL import Image; Image.new('RGB', (64, 64), 'teal').save('e2e/fixtures/sample.jpg')"`
 
 Expected: `e2e/fixtures/sample.jpg` exists.
 
-- [ ] **Step 3: Seed the field staff account**
+- [x] **Step 3: Seed the field staff account**
 
 Run:
 ```bash
@@ -4909,13 +6314,13 @@ print('seeded')
 
 Expected: `seeded`
 
-- [ ] **Step 4: Run the E2E test**
+- [x] **Step 4: Run the E2E test**
 
 Run: `npx playwright test e2e/media-workspaces.spec.ts`
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add e2e/media-workspaces.spec.ts e2e/fixtures/sample.jpg
@@ -4924,15 +6329,195 @@ git commit -m "test: end-to-end media workspace upload, review and publish"
 
 ---
 
+### Task 21: Wire the content pickers to the media library
+
+**Files:**
+- Create: `frontend/src/components/media/MediaPickerDialog.tsx`
+- Modify: `frontend/src/pages/admin/AdminGallery.tsx`, `AdminStories.tsx`, `AdminEvents.tsx`
+- Test: `frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx`
+- Test: `backend/tests/test_media_library_api.py` (append one usage test)
+
+**Why this task exists.** Tasks 8 and 9 make an asset `public` and servable at
+`/api/media-library/{id}/file`, but nothing puts that URL into a Story, an Event
+or the Gallery — each of those screens has its own upload flow and has never
+heard of the library. So "promote to site" currently ends one step short of the
+site, and an admin would have to paste a URL by hand.
+
+This also decides whether the in-use guards work at all. `get_media_usage` in
+`routers/s3_media.py` does **exact string equality** against the content tables,
+so a picker that writes anything other than `/api/media-library/{id}/file`
+verbatim leaves the delete and unpublish guards silently reporting zero usage —
+protection that appears to work and does not. That is the single most important
+constraint in this task.
+
+- [x] **Step 1: Write the failing test**
+
+Create `frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx`:
+
+```tsx
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import MediaPickerDialog from '../MediaPickerDialog'
+import { mediaLibraryApi } from '../../../utils/mediaLibraryApi'
+
+vi.mock('../../../utils/mediaLibraryApi', () => ({
+  mediaLibraryApi: { list: vi.fn(), thumbUrl: (id: number) => `http://api.test/t/${id}` },
+}))
+
+const asset = (id: number, filename: string) => ({
+  id, owner_id: 3, object_key: 'k', filename, media_type: 'image',
+  content_type: 'image/jpeg', size_bytes: 10, width: null, height: null,
+  duration_seconds: null, title: null, description: null, tags: [],
+  status: 'public', review_note: null, reviewed_at: null,
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+  url: `/api/media-library/${id}/file`, thumbnail_url: `/api/media-library/${id}/thumb`,
+})
+
+describe('MediaPickerDialog', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('only ever offers published media', async () => {
+    vi.mocked(mediaLibraryApi.list).mockResolvedValue(
+      { items: [asset(1, 'a.jpg')], total: 1, page: 1, page_size: 48 } as never
+    )
+    render(<MediaPickerDialog open onClose={vi.fn()} onPick={vi.fn()} />)
+    await waitFor(() => expect(mediaLibraryApi.list).toHaveBeenCalled())
+    expect(vi.mocked(mediaLibraryApi.list).mock.calls[0][0]).toMatchObject({ status: 'public' })
+  })
+
+  it('hands back exactly the URL the in-use guards match on', async () => {
+    vi.mocked(mediaLibraryApi.list).mockResolvedValue(
+      { items: [asset(7, 'well.jpg')], total: 1, page: 1, page_size: 48 } as never
+    )
+    const onPick = vi.fn()
+    render(<MediaPickerDialog open onClose={vi.fn()} onPick={onPick} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /well\.jpg/i }))
+    // Exact string: get_media_usage compares by equality, so any other shape
+    // silently disables the delete and unpublish guards.
+    expect(onPick).toHaveBeenCalledWith('/api/media-library/7/file', expect.objectContaining({ id: 7 }))
+  })
+})
+```
+
+- [x] **Step 2: Run it, expect failure**
+
+Run: `cd frontend && npx vitest run src/components/media/__tests__/MediaPickerDialog.test.tsx`
+
+Expected: FAIL — the module does not exist.
+
+- [x] **Step 3: Build the dialog**
+
+`MediaPickerDialog` reuses `MediaGrid` and `MediaFilters` from Tasks 12-13. It
+calls `mediaLibraryApi.list({ status: 'public', ... })` — **never anything else**,
+because an unpublished asset placed on a page would 404 for visitors. Selecting a
+tile calls `onPick(asset.url, asset)`, where `asset.url` is the `_serialize`
+output, already `/api/media-library/{id}/file`.
+
+- [x] **Step 4: Wire it into the three screens**
+
+In each of `AdminGallery.tsx`, `AdminStories.tsx` and `AdminEvents.tsx`, add a
+"Choose from media library" button beside the existing upload control, and set
+the same state field the upload flow sets. Leave the existing upload paths alone
+— this adds a source, it does not replace one.
+
+- [x] **Step 5: Prove the guard actually fires**
+
+Append to `backend/tests/test_media_library_api.py`:
+
+```python
+def test_a_picked_asset_registers_as_in_use(
+    client, db_session, auth_headers, field_staff_user
+):
+    """The picker's URL shape must be the one get_media_usage matches on."""
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    picked_url = f"/api/media-library/{asset.id}/file"   # what MediaPickerDialog hands back
+    db_session.add(GalleryItem(media_filename=picked_url))
+    db_session.commit()
+
+    body = client.get(f"/api/media-library/{asset.id}", headers=auth_headers).json()
+    assert body["usage_count"] == 1, "the in-use guard cannot see the picked asset"
+```
+
+- [x] **Step 6: Verify and commit**
+
+Run: `cd frontend && npx tsc --noEmit && npx vitest run`
+Run: `cd backend && python -m pytest tests -q`
+
+```bash
+git add frontend/src/components/media/MediaPickerDialog.tsx frontend/src/pages/admin/AdminGallery.tsx frontend/src/pages/admin/AdminStories.tsx frontend/src/pages/admin/AdminEvents.tsx frontend/src/components/media/__tests__/MediaPickerDialog.test.tsx backend/tests/test_media_library_api.py
+git commit -m "feat: choose published library media from the content screens"
+```
+
+---
+
+## Follow-up work (not in this plan)
+
+Recorded here so it is not lost; each needs its own spec/plan cycle.
+
+**HEIC/HEIF support.** iPhones shoot HEIC by default, and a photo uploaded from
+Files or a share sheet (rather than through Safari, which auto-transcodes) arrives
+as `image/heic`. Task 3 gives it a named error telling the user how to switch to
+"Most Compatible", which is the honest short-term answer, but the real fix is
+support. It needs three things together, and doing any one alone makes things
+worse: an allow-list entry, **brand-aware sniffing** (HEIC is ISO-BMFF, so the
+`ftyp`-at-offset-4 check classifies it as *video* — the major brand has to be read
+to tell `heic`/`mif1` from `isom`/`mp4`), and `pillow-heif` to transcode to JPEG,
+since browsers cannot display HEIC natively. Note the native dependency has to
+build in the backend Docker image.
+
+**`safe_download_filename()` before any Content-Disposition use.** `filename` is
+stored raw, and `backend/routers/project_proposals.py:266` already builds
+`f'attachment; filename="{filename}"'` unescaped. A name containing a quote or a
+CR/LF is filename spoofing or header injection. Task 10 does not currently set
+that header, but the local precedent makes it likely a future reader copies it.
+The helper belongs in `media_library_service.py`, same shape as `_safe_extension`.
+
+**`toggle_user_admin` has no test coverage.** Task 2 removed the UI that drove it
+(it clobbered `role` from the `is_admin` boolean, silently demoting managers and
+field staff to donors). The endpoint itself was deliberately left in place and
+unchanged — removing a route is a separate decision from removing its UI — but it
+is now unreachable from the app and still untested.
+
+**`run_all_migrations.sql` has been stale since migration 07.** It runs 8 files
+while 33 exist, so migrations 08 through 31 — including this feature's — are
+unregistered. Anyone bootstrapping a fresh database from that file gets a schema
+24 migrations behind, with no error to say so. Migration 31 deliberately follows
+the existing convention (unregistered, applied directly) rather than being the
+one file that breaks it, but the convention is the problem. Predates this work.
+
+**`main.py:26` runs `Base.metadata.create_all` on every non-test boot**, so for a
+*new* table whichever happens first — the app booting or the migration running —
+wins the `CREATE TABLE`, and the migration's `IF NOT EXISTS` then no-ops. Task 4
+handles this for `media_assets` by giving the model `server_default`s that match
+the migration's `DEFAULT` clauses, so both paths produce the same table. Any
+future table needs the same care, or its migration is decorative.
+
+**The backend suite is not order-independent.** Two independent measurements of
+the same base commit disagreed on the failure count (19 versus 31 of the same 167
+tests), which points at shared state between tests rather than at any change here.
+Worth knowing before the suite grows much further.
+
 ## Deployment order
 
 The tasks are ordered so `main` stays deployable, but the production rollout has its own sequence:
 
 1. Apply `migrations/31_add_media_library.sql`.
 2. Deploy backend and frontend.
-3. Run `python -m scripts.backfill_media_library`.
+3. Run `python -m scripts.backfill_media_library`, then read its "Skipping unsupported
+   object" lines — any `.svg` in the bucket is skipped by design and will not appear
+   in the library.
 4. Run `python -m scripts.audit_direct_s3_urls` until it reports clean.
 5. Only then deploy the `s3_service.py` change from Task 19 that drops the public-read policy.
+
+**Before running the backfill, know this:** the in-use guard matches content-table
+URLs by exact string equality, and legacy media is referenced by the proxy form
+`get_file_url()` produces (`/api/uploads/media/<type>/<filename>`), not by the
+id-addressed form new uploads get. `usage_for_asset` asks for both spellings for
+exactly this reason. If that ever regresses, deleting a backfilled asset removes
+an object the live site is still serving, and the guard reports nothing wrong.
 
 Steps 4 and 5 are separable and independently revertible on purpose — that is the one change that can take the public site's images down.
 

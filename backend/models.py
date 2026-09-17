@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
@@ -65,7 +65,7 @@ class User(Base):
     password = Column(String(200), nullable=False)
     name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
-    # role: 'admin' | 'manager' | 'user'. `is_admin` is kept in sync for legacy code.
+    # role: 'admin' | 'manager' | 'field_staff' | 'user'. `is_admin` is kept in sync for legacy code.
     role = Column(String(20), nullable=False, default="user", server_default="user", index=True)
     is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
@@ -77,6 +77,10 @@ class User(Base):
     @property
     def is_manager(self) -> bool:
         return self.role == "manager"
+
+    @property
+    def is_field_staff(self) -> bool:
+        return self.role == "field_staff"
 
 
 class Event(Base):
@@ -647,3 +651,69 @@ class ProjectProposal(Base):
     sms_consent = Column(Boolean, nullable=False, default=False)
     sms_consent_at = Column(DateTime, nullable=True)
     sms_consent_text = Column(Text, nullable=True)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Media library — per-user workspaces on top of S3
+# ─────────────────────────────────────────────────────────────────────
+
+class MediaAsset(Base):
+    """A single photo or video in a staff member's media workspace.
+
+    Privacy is a column, not a location: the object lands once at `object_key`
+    and never moves, and `status` alone decides who may read the bytes.
+    `search_text` is denormalized on every write so search is one ILIKE that
+    behaves identically on PostgreSQL and on the SQLite used in tests.
+    """
+    __tablename__ = "media_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # migrations/31_add_media_library.sql owns this table's indexes, not this
+    # model. Several of them are composite or partial (owner_id + created_at,
+    # owner_id + checksum_sha256, a WHERE status = 'submitted' partial index)
+    # and cannot be expressed as a bare Column(index=True). create_all() emits
+    # SQLAlchemy's own ix_ names, which don't collide with the migration's
+    # idx_ names, so a Column(index=True) here does not replace the
+    # migration's index for that column — it adds a second, redundant one.
+    # This is why the columns below carry no index=True even though several
+    # of them are filtered or sorted on: the index already exists, created by
+    # the migration. `object_key` is the one exception that keeps a
+    # SQLAlchemy-level constraint (unique=True): the test suite needs that
+    # uniqueness enforced when it builds its schema from this model, and
+    # unique=True already creates its own index, so no separate index=True
+    # is added on top of it.
+
+    # NULL owner = the "Unassigned" workspace: legacy media, or media whose
+    # owner's account was deleted.
+    #
+    # This model has two FKs to users.id (owner_id, reviewed_by_id). There are
+    # no relationship() calls on MediaAsset today; the first one added must
+    # pass foreign_keys= explicitly or SQLAlchemy raises
+    # AmbiguousForeignKeysError.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    object_key = Column(String(500), nullable=False, unique=True)
+    filename = Column(String(255), nullable=False)
+    media_type = Column(String(10), nullable=False)  # 'image' | 'video'
+    content_type = Column(String(100), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False, default=0, server_default=text("0"))
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    thumbnail_key = Column(String(500), nullable=True)
+    checksum_sha256 = Column(String(64), nullable=True)
+    title = Column(String(200), nullable=True)
+    description = Column(Text, nullable=True)
+    tags = Column(JSONType, nullable=False, default=list, server_default=text("'[]'"))
+    search_text = Column(Text, nullable=False, default="", server_default="")
+    # 'private' (owner + admins) | 'submitted' (awaiting review, still private)
+    # | 'public' (served to anyone)
+    status = Column(String(20), nullable=False, default="private", server_default="private")
+    reviewed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    # Set by a rejection (submitted -> private) *or* an unpublish
+    # (public -> private) -- don't assume it only ever means "why your
+    # submission came back".
+    review_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

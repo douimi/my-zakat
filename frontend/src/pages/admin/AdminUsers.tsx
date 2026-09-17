@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Users, Shield, ShieldOff, Eye, Trash2, UserCheck, UserX, X, UserPlus, Edit2, Key } from 'lucide-react'
+import { Users, Eye, Trash2, UserCheck, UserX, X, UserPlus, Edit2, Key } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
-type Role = 'admin' | 'manager' | 'user'
+type Role = 'admin' | 'manager' | 'field_staff' | 'user'
 
 interface User {
   id: number
@@ -20,12 +20,14 @@ const roleOf = (u: User): Role => (u.role as Role) || (u.is_admin ? 'admin' : 'u
 const ROLE_LABEL: Record<Role, string> = {
   admin: 'Admin',
   manager: 'Manager',
+  field_staff: 'Field Staff',
   user: 'User',
 }
 
 const ROLE_BADGE: Record<Role, string> = {
   admin: 'bg-purple-100 text-purple-800',
   manager: 'bg-amber-100 text-amber-800',
+  field_staff: 'bg-teal-100 text-teal-800',
   user: 'bg-gray-100 text-gray-800',
 }
 
@@ -61,7 +63,6 @@ const AdminUsers = () => {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'admin' | 'delete'
     userId: number
     userName: string
     action: string
@@ -177,52 +178,6 @@ const AdminUsers = () => {
     }
   }
 
-  const toggleUserAdmin = async (userId: number) => {
-    // Prevent admins from removing their own admin privileges
-    if (currentUser && currentUser.id === userId) {
-      showError('Error', 'You cannot modify your own admin privileges')
-      return
-    }
-
-    const user = users.find(u => u.id === userId)
-    const action = user?.is_admin ? 'remove admin privileges from' : 'grant admin privileges to'
-    
-    // Show confirmation modal instead of browser confirm
-    setConfirmAction({
-      type: 'admin',
-      userId,
-      userName: user?.name || user?.email || 'this user',
-      action
-    })
-    return
-  }
-
-  const executeToggleUserAdmin = async (userId: number) => {
-
-    try {
-      const response = await fetch(`${API_URL}/api/admin/users/${userId}/toggle-admin`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        showSuccess('Success', data.message || 'User admin status updated successfully')
-        fetchUsers()
-        if (selectedUser && selectedUser.user.id === userId) {
-          fetchUserDetails(userId)
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to update admin status' }))
-        showError('Error', errorData.detail || 'Failed to update admin status')
-      }
-    } catch (error) {
-      console.error('Error toggling user admin status:', error)
-      showError('Error', 'Network error while updating admin status')
-    }
-  }
-
   const deleteUser = async (userId: number) => {
     // Prevent admins from deleting themselves
     if (currentUser && currentUser.id === userId) {
@@ -234,7 +189,6 @@ const AdminUsers = () => {
     
     // Show confirmation modal instead of browser confirm
     setConfirmAction({
-      type: 'delete',
       userId,
       userName: user?.name || user?.email || 'this user',
       action: 'delete'
@@ -528,24 +482,6 @@ const AdminUsers = () => {
                       {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                     </button>
                     <button
-                      onClick={() => toggleUserAdmin(user.id)}
-                      disabled={currentUser?.id === user.id}
-                      className={
-                        currentUser?.id === user.id
-                          ? 'text-gray-400 cursor-not-allowed'
-                          : user.is_admin 
-                            ? 'text-purple-600 hover:text-purple-900' 
-                            : 'text-gray-600 hover:text-gray-900'
-                      }
-                      title={
-                        currentUser?.id === user.id
-                          ? 'Cannot modify your own privileges'
-                          : user.is_admin ? 'Remove Admin' : 'Make Admin'
-                      }
-                    >
-                      {user.is_admin ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-                    </button>
-                    <button
                       onClick={() => deleteUser(user.id)}
                       disabled={currentUser?.id === user.id}
                       className={
@@ -718,11 +654,9 @@ const AdminUsers = () => {
               </h3>
               <p className="text-gray-600 mb-6">
                 Are you sure you want to {confirmAction.action} <strong>{confirmAction.userName}</strong>?
-                {confirmAction.type === 'delete' && (
-                  <span className="block mt-2 text-red-600 font-medium">
-                    This action cannot be undone.
-                  </span>
-                )}
+                <span className="block mt-2 text-red-600 font-medium">
+                  This action cannot be undone.
+                </span>
               </p>
               <div className="flex justify-end space-x-3">
                 <button
@@ -733,20 +667,12 @@ const AdminUsers = () => {
                 </button>
                 <button
                   onClick={() => {
-                    if (confirmAction.type === 'admin') {
-                      executeToggleUserAdmin(confirmAction.userId)
-                    } else if (confirmAction.type === 'delete') {
-                      executeDeleteUser(confirmAction.userId)
-                    }
+                    executeDeleteUser(confirmAction.userId)
                     setConfirmAction(null)
                   }}
-                  className={`px-4 py-2 rounded-lg font-medium text-white ${
-                    confirmAction.type === 'delete'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
+                  className="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700"
                 >
-                  {confirmAction.type === 'delete' ? 'Delete' : 'Confirm'}
+                  Delete
                 </button>
               </div>
             </div>
@@ -819,6 +745,7 @@ const AdminUsers = () => {
                   >
                     <option value="user">User — public donor / signup</option>
                     <option value="manager">Manager — contacts, volunteers, stories (with approval)</option>
+                    <option value="field_staff">Field Staff — media workspace only</option>
                     <option value="admin">Admin — full access</option>
                   </select>
                 </div>
@@ -896,6 +823,7 @@ const AdminUsers = () => {
                   >
                     <option value="user">User</option>
                     <option value="manager">Manager</option>
+                    <option value="field_staff">Field Staff</option>
                     <option value="admin">Admin</option>
                   </select>
                   {currentUser?.id === editUser?.id && (

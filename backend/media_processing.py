@@ -3,7 +3,7 @@ Media processing utilities for compression and thumbnail generation
 """
 import os
 import io
-from PIL import Image
+from PIL import Image, ImageOps
 from typing import Optional, Tuple
 import subprocess
 import tempfile
@@ -79,6 +79,93 @@ def compress_image(image_data: bytes, max_width: int = IMAGE_MAX_WIDTH, max_heig
     except Exception as e:
         logger.warning("Image compression failed: %s", e)
         # Return original if compression fails
+        return image_data
+
+
+def strip_image_metadata(image_data: bytes) -> bytes:
+    """Re-save an image with no EXIF and no comment block, applying the
+    orientation first.
+
+    GPS coordinates in a field photo must never reach the public site. This
+    runs for every image regardless of declared type, because relying on the
+    compression path to strip metadata as a side effect is one spoofed
+    Content-Type away from being bypassed (should_compress_image() returns
+    False for image/gif, so a caller who declares GIF over real JPEG bytes
+    would otherwise sail through untouched — the upload router's byte-sniff
+    now rejects that specific spoof too, but this function does not rely on
+    it: it strips whatever image bytes it is handed, unconditionally).
+
+    Two things ride along even after a plain re-save with no `exif=` kwarg,
+    verified against Pillow's actual writers rather than assumed:
+    1. EXIF orientation. ImageOps.exif_transpose() bakes it into the pixels
+       BEFORE anything discards the EXIF block that encodes it. Strip first
+       and every portrait phone photo — the orientation tag is what tells a
+       viewer "this sensor-landscape frame is actually held upright" — comes
+       back out sideways.
+    2. The JPEG COM segment / GIF Comment Extension. Pillow's writers for
+       both formats fall back to `im.info.get("comment")` when no `comment=`
+       is passed at save time, so arbitrary attacker-controlled text in an
+       uploaded file's comment field is otherwise re-emitted into the stored
+       copy untouched — not stripped by "just don't pass exif=" the way EXIF
+       is. `comment=b""` closes that explicitly, for both formats.
+
+    Multi-frame images (animated GIF/WEBP) are returned unchanged: re-saving
+    only Pillow's "current" frame would silently collapse the animation to a
+    single frame. This is a real, accepted trade-off, not an absence of
+    risk — an animated GIF's Application Extension is the standard XMP
+    carrier, and GIF/WEBP can both carry comment blocks the same as a still
+    image — but losing the animation is worse than the residual metadata
+    risk on those specific frames, and EXIF/GPS (the motivating risk) is not
+    a thing either animated format carries the way JPEG does.
+
+    On any failure the original bytes are returned, consistent with
+    compress_image()'s behaviour — but logged as a warning, because unlike a
+    failed compression (a cosmetic miss), a silent failure here means GPS
+    metadata survives into a file Task 8 can publish to the public site.
+    """
+    try:
+        image = Image.open(io.BytesIO(image_data))
+        image_format = image.format
+
+        if getattr(image, "n_frames", 1) > 1:
+            return image_data
+
+        image = ImageOps.exif_transpose(image)
+        if image is None:
+            return image_data
+
+        # comment=b"" applies to every format Pillow's save() accepts it for
+        # (JPEG, GIF) and is silently ignored for the rest (PNG/BMP/WEBP
+        # take no comment kwarg) -- verified harmless across this module's
+        # whole format list, so it is simpler to pass unconditionally than
+        # to special-case it per format.
+        save_kwargs = {"comment": b""}
+
+        if image_format == "JPEG":
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            # quality="keep" -- reusing the source's own quantization
+            # tables, so this step costs only a decode/encode roundtrip
+            # instead of a second lossy generation -- is not available here.
+            # Verified: Pillow raises ValueError("Cannot use 'keep' when
+            # original image is not a JPEG") unconditionally at this point,
+            # because ImageOps.exif_transpose() always hands back a *new*
+            # Image object -- even when there is no orientation tag and
+            # nothing is actually rotated -- and that new object no longer
+            # carries the source's JPEG decoder state "keep" reads from.
+            # Every JPEG that reaches this function already passed through
+            # compress_image() at IMAGE_QUALITY, so re-saving at that same
+            # constant reproduces its quantization tables byte-for-byte
+            # (also verified) instead of falling through to Pillow's
+            # default of 75 and losing a second generation of quality.
+            save_kwargs["quality"] = IMAGE_QUALITY
+            save_kwargs["optimize"] = True
+
+        output = io.BytesIO()
+        image.save(output, format=image_format or "JPEG", **save_kwargs)
+        return output.getvalue()
+    except Exception as e:
+        logger.warning("EXIF strip failed, storing original bytes: %s", e)
         return image_data
 
 

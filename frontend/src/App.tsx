@@ -44,7 +44,8 @@ const AdminProgramCategories = lazy(() => import('./pages/admin/AdminProgramCate
 const AdminPrograms = lazy(() => import('./pages/admin/AdminPrograms'))
 const AdminGallery = lazy(() => import('./pages/admin/AdminGallery'))
 const AdminCleanup = lazy(() => import('./pages/admin/AdminCleanup'))
-const AdminS3Media = lazy(() => import('./pages/admin/AdminS3Media'))
+const AdminMediaWorkspace = lazy(() => import('./pages/admin/AdminMediaWorkspace'))
+const AdminMediaLibrary = lazy(() => import('./pages/admin/AdminMediaLibrary'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminSlideshow = lazy(() => import('./pages/admin/AdminSlideshow'))
 const AdminUrgentNeeds = lazy(() => import('./pages/admin/AdminUrgentNeeds'))
@@ -80,10 +81,13 @@ const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAna
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
 
-// Managers don't have access to the admin dashboard — send them to their
-// landing page (stories) instead of the admin metrics view.
+// Managers and field staff don't have access to the admin dashboard — send
+// them to their landing page (stories, media workspace) instead of the
+// admin metrics view.
 const AdminIndex = () => {
   const isManager = useAuthStore((s) => s.isManager)
+  const isFieldStaff = useAuthStore((s) => s.isFieldStaff)
+  if (isFieldStaff) return <Navigate to="/admin/media" replace />
   if (isManager) return <Navigate to="/admin/stories" replace />
   return <AdminDashboard />
 }
@@ -172,6 +176,8 @@ function App() {
                 <Route path="subscriptions" element={<AdminSubscriptions />} />
                 <Route path="program-categories" element={<AdminProgramCategories />} />
                 <Route path="programs" element={<AdminPrograms />} />
+                <Route path="media" element={<AdminMediaWorkspace />} />
+                <Route path="media/all" element={<AdminMediaLibrary />} />
                 <Route path="gallery" element={<AdminGallery />} />
                 <Route path="slideshow" element={<AdminSlideshow />} />
                 <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
@@ -186,7 +192,9 @@ function App() {
                 <Route path="fundraising-projects" element={<AdminFundraisingProjects />} />
                 <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
                 <Route path="cleanup" element={<AdminCleanup />} />
-                <Route path="s3-media" element={<AdminS3Media />} />
+                {/* Bookmark compatibility: /admin/s3-media is repointed at the new page
+                    rather than removed, so an existing bookmark still lands somewhere sensible. */}
+                <Route path="s3-media" element={<AdminMediaLibrary />} />
                 <Route path="settings" element={<AdminSettings />} />
               </Route>
             </Routes>

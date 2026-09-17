@@ -1,155 +1,16 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
   Heart,
-  Calendar,
-  BookOpen,
-  MessageSquare,
-  Star,
-  CreditCard,
-  Settings,
   LogOut,
   Menu,
   X,
   ChevronDown,
-  Image as ImageIcon,
-  UserCog,
-  UserPlus,
-  Film,
-  AlertCircle,
-  TrendingUp,
-  Trash2,
-  FolderOpen,
-  Layers,
-  Newspaper,
-  Megaphone,
-  Mail,
-  ShieldOff,
-  Send,
-  FileText,
-  Filter,
-  Rocket,
-  HeartHandshake,
-  FolderKanban,
   ExternalLink,
-  type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { clsx } from 'clsx'
-
-// ─────────────────────────────────────────────────────────────────────
-// Navigation structure
-// ─────────────────────────────────────────────────────────────────────
-
-type NavLink = {
-  kind: 'link'
-  name: string
-  href: string
-  icon: LucideIcon
-}
-
-type NavGroup = {
-  kind: 'group'
-  id: string
-  label: string
-  icon: LucideIcon
-  items: NavLink[]
-}
-
-type NavEntry = NavLink | NavGroup
-
-const NAV: NavEntry[] = [
-  { kind: 'link', name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-
-  {
-    kind: 'group',
-    id: 'donations',
-    label: 'Donations',
-    icon: Heart,
-    items: [
-      { kind: 'link', name: 'All Donations', href: '/admin/donations', icon: Heart },
-      { kind: 'link', name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
-    ],
-  },
-
-  {
-    kind: 'group',
-    id: 'people',
-    label: 'People',
-    icon: Users,
-    items: [
-      { kind: 'link', name: 'Users', href: '/admin/users', icon: UserCog },
-      { kind: 'link', name: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
-      { kind: 'link', name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
-      { kind: 'link', name: 'Testimonials', href: '/admin/testimonials', icon: Star },
-      { kind: 'link', name: 'Project Proposals', href: '/admin/project-proposals', icon: FolderKanban },
-    ],
-  },
-
-  {
-    kind: 'group',
-    id: 'content',
-    label: 'Content',
-    icon: Newspaper,
-    items: [
-      { kind: 'link', name: 'Stories', href: '/admin/stories', icon: BookOpen },
-      { kind: 'link', name: 'Events', href: '/admin/events', icon: Calendar },
-      { kind: 'link', name: 'Slideshow', href: '/admin/slideshow', icon: ImageIcon },
-      { kind: 'link', name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
-      { kind: 'link', name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
-      { kind: 'link', name: 'Fund Projects', href: '/admin/fundraising-projects', icon: HeartHandshake },
-    ],
-  },
-
-  {
-    kind: 'group',
-    id: 'programs',
-    label: 'Programs',
-    icon: TrendingUp,
-    items: [
-      { kind: 'link', name: 'Programs', href: '/admin/programs', icon: TrendingUp },
-      { kind: 'link', name: 'Categories', href: '/admin/program-categories', icon: Layers },
-    ],
-  },
-
-  {
-    kind: 'group',
-    id: 'media',
-    label: 'Media',
-    icon: Film,
-    items: [
-      { kind: 'link', name: 'Gallery', href: '/admin/gallery', icon: Film },
-      { kind: 'link', name: 'S3 Browser', href: '/admin/s3-media', icon: FolderOpen },
-      { kind: 'link', name: 'Cleanup', href: '/admin/cleanup', icon: Trash2 },
-    ],
-  },
-
-  {
-    kind: 'group',
-    id: 'marketing',
-    label: 'Marketing',
-    icon: Send,
-    items: [
-      { kind: 'link', name: 'Campaigns', href: '/admin/marketing-campaigns', icon: Rocket },
-      { kind: 'link', name: 'Templates', href: '/admin/email-templates', icon: FileText },
-      { kind: 'link', name: 'Audiences', href: '/admin/audiences', icon: Filter },
-      { kind: 'link', name: 'Email Log', href: '/admin/email-log', icon: Mail },
-      { kind: 'link', name: 'Suppressions', href: '/admin/suppressions', icon: ShieldOff },
-    ],
-  },
-
-  { kind: 'link', name: 'Settings', href: '/admin/settings', icon: Settings },
-]
-
-// Items managers are allowed to access.
-const MANAGER_ALLOWED = new Set([
-  '/admin/contacts',
-  '/admin/volunteers',
-  '/admin/stories',
-  '/admin/project-proposals',
-])
+import { NAV, filterNavForRole, type NavEntry, type NavLink, type NavGroup } from './adminNav'
 
 const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 
@@ -157,25 +18,12 @@ const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function filterNavForRole(nav: NavEntry[], isAdmin: boolean): NavEntry[] {
-  if (isAdmin) return nav
-  return nav
-    .map((entry) => {
-      if (entry.kind === 'link') {
-        return MANAGER_ALLOWED.has(entry.href) ? entry : null
-      }
-      const items = entry.items.filter((i) => MANAGER_ALLOWED.has(i.href))
-      return items.length > 0 ? { ...entry, items } : null
-    })
-    .filter((e): e is NavEntry => e !== null)
-}
-
 function isLinkActive(pathname: string, href: string): boolean {
   if (href === '/admin') return pathname === '/admin'
   return pathname === href || pathname.startsWith(href + '/')
 }
 
-function findActivePageName(nav: NavEntry[], pathname: string): string | null {
+function findActivePageName(nav: readonly NavEntry[], pathname: string): string | null {
   for (const entry of nav) {
     if (entry.kind === 'link' && isLinkActive(pathname, entry.href)) {
       return entry.name
@@ -188,7 +36,7 @@ function findActivePageName(nav: NavEntry[], pathname: string): string | null {
   return null
 }
 
-function findActiveGroupId(nav: NavEntry[], pathname: string): string | null {
+function findActiveGroupId(nav: readonly NavEntry[], pathname: string): string | null {
   for (const entry of nav) {
     if (entry.kind === 'group' && entry.items.some((i) => isLinkActive(pathname, i.href))) {
       return entry.id
@@ -226,9 +74,9 @@ const AdminLayout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const location = useLocation()
-  const { logout, user, isAdmin, role } = useAuthStore()
+  const { logout, user, role } = useAuthStore()
 
-  const nav = useMemo(() => filterNavForRole(NAV, isAdmin), [isAdmin])
+  const nav = useMemo(() => filterNavForRole(NAV, role), [role])
   const activeGroupId = useMemo(
     () => findActiveGroupId(nav, location.pathname),
     [nav, location.pathname],
@@ -337,10 +185,15 @@ const AdminLayout = () => {
   // ── Account section ─────────────────────────────────────────────
 
   const userInitial = (user?.name || user?.email || '?').charAt(0).toUpperCase()
-  const roleLabel = role === 'admin' ? 'Admin' : role === 'manager' ? 'Manager' : 'User'
+  const roleLabel =
+    role === 'admin' ? 'Admin'
+      : role === 'manager' ? 'Manager'
+      : role === 'field_staff' ? 'Field Staff'
+      : 'User'
   const roleBadgeClass =
     role === 'admin' ? 'bg-purple-100 text-purple-800'
       : role === 'manager' ? 'bg-amber-100 text-amber-800'
+      : role === 'field_staff' ? 'bg-teal-100 text-teal-800'
       : 'bg-gray-100 text-gray-700'
 
   // ── Render ──────────────────────────────────────────────────────

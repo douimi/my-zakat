@@ -30,12 +30,6 @@ def get_media_usage(filename_or_url: str, db: Session) -> Dict[str, List]:
         "settings": []
     }
     
-    # Extract filename if it's a URL
-    check_value = filename_or_url
-    if filename_or_url.startswith('http://') or filename_or_url.startswith('https://'):
-        parts = filename_or_url.split('/')
-        check_value = parts[-1] if parts else filename_or_url
-    
     # Check Gallery Items
     gallery_items = db.query(GalleryItem).filter(
         GalleryItem.media_filename == filename_or_url

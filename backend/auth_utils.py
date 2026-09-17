@@ -28,6 +28,11 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days default
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
+
+VALID_ROLES = frozenset({"admin", "manager", "field_staff", "user"})
+STAFF_ROLES = frozenset({"admin", "manager", "field_staff"})
+MANAGER_ROLES = frozenset({"admin", "manager"})
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -95,10 +100,35 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: Session = Depends(get_db)
+):
+    """Current user if a valid token is present, otherwise None.
+
+    Used by routes that serve public content to anonymous callers but must still
+    recognise a signed-in owner.
+    """
+    if credentials is None:
+        return None
+    email = verify_token(credentials.credentials)
+    if email is None:
+        return None
+    user = db.query(User).filter(User.email == email).first()
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 def get_current_admin(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user and verify they have admin privileges"""
+    """Get current user and verify they have admin privileges.
+
+    Deliberately checks `is_admin` directly rather than going through
+    `role_of` — admin is the one role every legacy row can already assert
+    correctly, so this gate predates (and doesn't need) the helper.
+    """
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -108,12 +138,35 @@ def get_current_admin(
     return current_user
 
 
+def role_of(user: User) -> str:
+    """Effective role for a user row.
+
+    Prefers the `role` column, falling back to the legacy `is_admin` flag for
+    rows created before migration 21 added the column.
+    """
+    role = getattr(user, "role", None)
+    if role in VALID_ROLES:
+        return role
+    return "admin" if getattr(user, "is_admin", False) else "user"
+
+
+def get_current_staff(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Anyone who owns a media workspace: admin, manager or field staff."""
+    if role_of(current_user) not in STAFF_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Staff access required."
+        )
+    return current_user
+
+
 def get_current_manager_or_admin(
     current_user: User = Depends(get_current_user)
-):
+) -> User:
     """Allow either admins or managers — used for endpoints that managers can access."""
-    role = getattr(current_user, "role", None) or ("admin" if current_user.is_admin else "user")
-    if role not in ("admin", "manager"):
+    if role_of(current_user) not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Manager or admin access required."

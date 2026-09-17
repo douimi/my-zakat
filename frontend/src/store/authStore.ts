@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type Role = 'admin' | 'manager' | 'user'
+export type Role = 'admin' | 'manager' | 'field_staff' | 'user'
 
 export interface User {
   id: number
@@ -14,7 +14,14 @@ export interface User {
 
 function deriveRole(user: User | null): Role {
   if (!user) return 'user'
-  if (user.role === 'admin' || user.role === 'manager' || user.role === 'user') return user.role
+  if (
+    user.role === 'admin' ||
+    user.role === 'manager' ||
+    user.role === 'field_staff' ||
+    user.role === 'user'
+  ) {
+    return user.role
+  }
   return user.is_admin ? 'admin' : 'user'
 }
 
@@ -24,7 +31,8 @@ interface AuthState {
   isAuthenticated: boolean
   isAdmin: boolean
   isManager: boolean
-  isStaff: boolean // admin OR manager — anyone who can access /admin/*
+  isFieldStaff: boolean
+  isStaff: boolean // admin, manager OR field_staff — anyone who can access /admin/*
   role: Role
   login: (user: User, token: string) => void
   logout: () => void
@@ -36,7 +44,8 @@ function buildAuthState(user: User | null) {
   return {
     isAdmin: role === 'admin',
     isManager: role === 'manager',
-    isStaff: role === 'admin' || role === 'manager',
+    isFieldStaff: role === 'field_staff',
+    isStaff: role === 'admin' || role === 'manager' || role === 'field_staff',
     role,
   }
 }
@@ -47,6 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isAdmin: false,
   isManager: false,
+  isFieldStaff: false,
   isStaff: false,
   role: 'user',
 
@@ -74,6 +84,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: false,
       isAdmin: false,
       isManager: false,
+      isFieldStaff: false,
       isStaff: false,
       role: 'user',
     })

@@ -2,7 +2,15 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import FileResponse, Response, RedirectResponse
 import os
 from pathlib import Path
-from s3_service import file_exists, get_file_url, download_file, extract_object_key_from_url, get_file_info
+from s3_service import (
+    file_exists,
+    get_file_url,
+    download_file,
+    extract_object_key_from_url,
+    get_file_info,
+    get_s3_client,
+    S3_BUCKET_NAME,
+)
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -38,6 +46,73 @@ def get_content_type(filename: str) -> str:
         '.svg': 'image/svg+xml',
     }
     return content_types.get(ext, 'application/octet-stream')
+
+
+def stream_s3_object(
+    object_key: str,
+    request: Request,
+    content_type: str = None,
+    cache_control: str = 'public, max-age=86400',
+):
+    """Serve one S3 object, honouring HEAD and Range requests.
+
+    Shared by the media-library routes and the legacy per-section video routes so
+    range handling exists in exactly one place.
+    """
+    file_info = get_file_info(object_key)
+    if not file_info:
+        raise HTTPException(status_code=404, detail="File not found in S3")
+
+    file_size = file_info['size']
+    resolved_type = content_type or file_info.get('content_type') or get_content_type(object_key)
+
+    base_headers = {
+        'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Range',
+        'Cache-Control': cache_control,
+    }
+
+    if request.method == 'HEAD':
+        return Response(
+            status_code=200,
+            headers={**base_headers, 'Content-Type': resolved_type,
+                     'Content-Length': str(file_size)},
+        )
+
+    range_header = request.headers.get('range')
+    if range_header:
+        bounds = range_header.replace('bytes=', '').split('-')
+        start = int(bounds[0]) if bounds[0] else 0
+        end = int(bounds[1]) if len(bounds) > 1 and bounds[1] else file_size - 1
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+        end = min(end, file_size - 1)
+
+        client = get_s3_client()
+        s3_response = client.get_object(
+            Bucket=S3_BUCKET_NAME, Key=object_key, Range=f'bytes={start}-{end}'
+        )
+        chunk = s3_response['Body'].read()
+        return Response(
+            content=chunk,
+            status_code=206,
+            media_type=resolved_type,
+            headers={**base_headers,
+                     'Content-Range': f'bytes {start}-{end}/{file_size}',
+                     'Content-Length': str(len(chunk)),
+                     'Content-Type': resolved_type},
+        )
+
+    content = download_file(object_key)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found in S3")
+    return Response(
+        content=content,
+        media_type=resolved_type,
+        headers={**base_headers, 'Content-Length': str(file_size)},
+    )
 
 
 @router.options("/media/videos/{filename}")
@@ -123,100 +198,14 @@ async def serve_video(filename: str, request: Request):
     if object_key and file_exists(object_key):
         try:
             logger.info("Serving video from S3: %s", object_key)
-            
-            # Get file info from S3
-            file_info = get_file_info(object_key)
-            if not file_info:
-                raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
-            
-            file_size = file_info['size']
-            content_type = file_info.get('content_type', 'video/mp4')
-            
-            # Handle range requests for video seeking
-            range_header = request.headers.get('range')
-            
-            # For HEAD requests or metadata-only requests, return file info without body
-            if request.method == 'HEAD':
-                return Response(
-                    status_code=200,
-                    headers={
-                        'Content-Type': content_type,
-                        'Content-Length': str(file_size),
-                        'Accept-Ranges': 'bytes',
-                        'Access-Control-Allow-Origin': '*',
-                        'Cache-Control': 'public, max-age=86400',
-                    }
-                )
-            
-            if range_header:
-                # Parse range header
-                range_match = range_header.replace('bytes=', '').split('-')
-                start = int(range_match[0]) if range_match[0] else 0
-                end = int(range_match[1]) if range_match[1] else file_size - 1
-                
-                # Ensure valid range
-                if start >= file_size:
-                    raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-                if end >= file_size:
-                    end = file_size - 1
-                
-                # Download specific range from S3
-                from s3_service import get_s3_client, S3_BUCKET_NAME
-                client = get_s3_client()
-                
-                response = client.get_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=object_key,
-                    Range=f'bytes={start}-{end}'
-                )
-                
-                chunk_data = response['Body'].read()
-                chunk_size = len(chunk_data)
-                
-                logger.info("Serving video range %s-%s from S3: %s (%s bytes)", start, end, object_key, chunk_size)
-                
-                # Return partial content response
-                return Response(
-                    content=chunk_data,
-                    status_code=206,
-                    media_type=content_type,
-                    headers={
-                        'Content-Range': f'bytes {start}-{end}/{file_size}',
-                        'Accept-Ranges': 'bytes',
-                        'Content-Length': str(chunk_size),
-                        'Content-Type': content_type,
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Range',
-                        'Cache-Control': 'public, max-age=86400',
-                    }
-                )
-            else:
-                # Return full file from S3
-                file_content = download_file(object_key)
-                if not file_content:
-                    raise HTTPException(status_code=404, detail=f"Video not found in S3: {object_key}")
-                
-                logger.info("Successfully served full video from S3: %s (%s bytes)", object_key, len(file_content))
-                
-                return Response(
-                    content=file_content,
-                    media_type=content_type,
-                    headers={
-                        'Accept-Ranges': 'bytes',
-                        'Content-Length': str(file_size),
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Range',
-                        'Cache-Control': 'public, max-age=86400',
-                    }
-                )
+            return stream_s3_object(object_key, request, content_type='video/mp4')
+        except HTTPException:
+            raise
         except Exception as e:
             import traceback
             logger.error("Error serving video from S3: %s", object_key)
             logger.error("   Error: %s", str(e))
             logger.error(traceback.format_exc())
-            # Don't fall back to filesystem - fail instead
             raise HTTPException(status_code=500, detail=f"Failed to retrieve video from S3: {str(e)}")
     
     # If we reach here, file doesn't exist in S3

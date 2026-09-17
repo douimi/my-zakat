@@ -169,6 +169,7 @@ API.
 | From | To | Who | Guard |
 |---|---|---|---|
 | `private` | `submitted` | owner | — |
+| `submitted` | `private` | **owner** | withdraw: the only exit from a mistaken submission |
 | `submitted` | `public` | admin, manager | — |
 | `submitted` | `private` | admin, manager | records `review_note` |
 | `private` | `public` | admin, manager | direct promote, no queue |
@@ -231,6 +232,7 @@ Mounted at `/api/media-library`. (`/api/media` is already taken by `media.py`.)
 | `GET` | `/{id}/thumb` | per `status` | serve thumbnail |
 | `PATCH` | `/{id}` | owner or admin/manager | title, description, tags |
 | `POST` | `/{id}/submit` | owner | `private → submitted` |
+| `POST` | `/{id}/withdraw` | owner | `submitted → private` |
 | `POST` | `/{id}/review` | admin, manager | approve or reject |
 | `POST` | `/{id}/reassign` | admin, manager | move an asset into another workspace |
 | `DELETE` | `/{id}` | owner (private only) or admin/manager | blocked while referenced |

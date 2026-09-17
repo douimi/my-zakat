@@ -83,28 +83,8 @@ def ensure_bucket_exists():
         try:
             client.head_bucket(Bucket=S3_BUCKET_NAME)
             bucket_exists = True
-            # Ensure bucket policy is set for public read access (even if bucket exists)
-            import json
-            bucket_policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"AWS": "*"},
-                        "Action": ["s3:GetObject"],
-                        "Resource": [f"arn:aws:s3:::{S3_BUCKET_NAME}/*"]
-                    }
-                ]
-            }
-            try:
-                client.put_bucket_policy(
-                    Bucket=S3_BUCKET_NAME,
-                    Policy=json.dumps(bucket_policy)
-                )
-                logger.info("Bucket policy verified/set for public read access on %s", S3_BUCKET_NAME)
-            except Exception as e:
-                logger.warning("Could not set bucket policy: %s", e)
-                logger.warning("   You may need to set it manually in MinIO console")
+            # No public-read policy: the application is the only path to a byte.
+            # Access is decided per asset by media_library_files.py.
             # Ensure CORS is configured on existing bucket
             ensure_bucket_cors()
         except ClientError as e:
@@ -112,32 +92,12 @@ def ensure_bucket_exists():
             if error_code == '404':
                 # Bucket doesn't exist, create it
                 client.create_bucket(Bucket=S3_BUCKET_NAME)
-                # Set bucket policy for public read access
-                import json
-                bucket_policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Principal": {"AWS": "*"},
-                            "Action": ["s3:GetObject"],
-                            "Resource": [f"arn:aws:s3:::{S3_BUCKET_NAME}/*"]
-                        }
-                    ]
-                }
-                try:
-                    client.put_bucket_policy(
-                        Bucket=S3_BUCKET_NAME,
-                        Policy=json.dumps(bucket_policy)
-                    )
-                    logger.info("Bucket policy set for public read access on %s", S3_BUCKET_NAME)
-                except Exception as e:
-                    logger.warning("Could not set bucket policy: %s", e)
-                    logger.warning("   You may need to set it manually in MinIO console")
-                
+                # No public-read policy: the application is the only path to a byte.
+                # Access is decided per asset by media_library_files.py.
+
                 # Set CORS configuration
                 ensure_bucket_cors()
-                
+
                 bucket_exists = True
             else:
                 raise

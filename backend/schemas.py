@@ -41,7 +41,7 @@ class AdminUserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: Optional[str] = None
-    # 'admin' | 'manager' | 'user'. If omitted, falls back to is_admin for legacy callers.
+    # 'admin' | 'manager' | 'field_staff' | 'user'. If omitted, falls back to is_admin for legacy callers.
     role: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True

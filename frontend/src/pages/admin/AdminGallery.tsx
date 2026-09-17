@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X, Play, ImagePlus } from 'lucide-react'
+import { Upload, Trash2, GripVertical, Eye, EyeOff, Image as ImageIcon, Video, Loader2, X, Play, ImagePlus, LibraryBig } from 'lucide-react'
 import { galleryAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
@@ -8,6 +8,7 @@ import VideoThumbnail from '../../components/VideoThumbnail'
 import type { GalleryItem } from '../../types'
 import MediaInput from '../../components/MediaInput'
 import MediaPicker from '../../components/MediaPicker'
+import MediaPickerDialog from '../../components/media/MediaPickerDialog'
 import LazyVideo from '../../components/LazyVideo'
 
 interface GalleryItemType extends GalleryItem {
@@ -19,6 +20,7 @@ const AdminGallery = () => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlValue, setUrlValue] = useState('')
+  const [showMediaLibraryPicker, setShowMediaLibraryPicker] = useState(false)
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null)
   // Which video gallery item is currently picking a custom thumbnail.
   const [thumbnailPickerItemId, setThumbnailPickerItemId] = useState<number | null>(null)
@@ -178,6 +180,19 @@ const AdminGallery = () => {
     })
   }
 
+  // Attach a published media-library asset to the gallery. Sets the same
+  // `media_filename` field the "Add URL" flow sets, and passes the URL
+  // through untouched — get_media_usage matches it by exact string equality.
+  const handleMediaLibraryPick = (url: string) => {
+    const maxOrder = galleryItems ? Math.max(...galleryItems.map((item: GalleryItemType) => item.display_order || 0), -1) : -1
+    createFromUrlMutation.mutate({
+      media_filename: url,
+      display_order: maxOrder + 1,
+      is_active: true
+    })
+    setShowMediaLibraryPicker(false)
+  }
+
   const handleDelete = async (id: number) => {
     const confirmed = await confirm({
       title: 'Delete Gallery Item',
@@ -289,6 +304,13 @@ const AdminGallery = () => {
               className="btn-outline flex items-center"
             >
               Add URL
+            </button>
+            <button
+              onClick={() => setShowMediaLibraryPicker(true)}
+              className="btn-outline flex items-center"
+            >
+              <LibraryBig className="w-4 h-4 mr-2" />
+              Choose from media library
             </button>
           </div>
         </div>
@@ -504,6 +526,13 @@ const AdminGallery = () => {
         onClose={() => setThumbnailPickerItemId(null)}
         onSelect={handleThumbnailSelect}
         mediaType="images"
+      />
+
+      {/* Add a gallery item from an already-published media library asset */}
+      <MediaPickerDialog
+        open={showMediaLibraryPicker}
+        onClose={() => setShowMediaLibraryPicker(false)}
+        onPick={handleMediaLibraryPick}
       />
 
       <ConfirmationDialog />
