@@ -6,7 +6,7 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
   POST   /api/media-library/{id}/submit    owner: private -> submitted
-  DELETE /api/media-library/{id}           owner (private only) or admin/manager             (Task 9)
+  DELETE /api/media-library/{id}           owner (private only) or admin/manager
 
 Admin or manager only:
   GET    /api/media-library/workspaces     workspaces with counts and total size
@@ -14,8 +14,8 @@ Admin or manager only:
   POST   /api/media-library/{id}/reassign  move an asset into another workspace
 
 Upload, listing, detail, metadata editing, reassignment, the workspaces
-summary and submit/review shipped in Tasks 5-8. Delete is still a stub for
-Task 9. Byte serving lives in media_library_files.py. The upload endpoint's
+summary, submit/review and delete shipped in Tasks 5-9. Byte serving lives
+in media_library_files.py. The upload endpoint's
 byte-sniffing/compression/EXIF-stripping/thumbnailing/checksum/S3 pipeline
 lives in media_library_upload.py; this module keeps the routing, the
 permission predicates and the status transitions.
@@ -151,7 +151,6 @@ def _require_is_owner(asset: MediaAsset, user: User) -> None:
         raise HTTPException(status_code=404, detail="Media not found")
 
 
-# Staged for Task 9 (delete): no route below calls this yet.
 def _require_can_delete(asset: MediaAsset, user: User) -> None:
     """Owner may delete only while private; admin/manager always."""
     _require_can_view(asset, user)
@@ -749,3 +748,41 @@ async def review_media(
         asset.id, payload.decision, current_user.email, role_of(current_user),
     )
     return serialize_asset(asset)
+
+
+@router.delete("/{asset_id}")
+async def delete_media(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """Remove an asset. Owners may only delete their own still-private media."""
+    asset = _load_asset(db, asset_id)
+    _require_can_delete(asset, current_user)
+
+    # Every status, not just public. A legacy asset backfilled by Task 18 can be
+    # referenced by live site content while sitting at any status, because the
+    # /api/uploads/media/... URL the content tables hold is served straight from
+    # S3 and never consults this row.
+    _refuse_if_in_use(asset, db, "delete")
+
+    object_key = asset.object_key
+    thumbnail_key = asset.thumbnail_key
+
+    db.delete(asset)
+    db.commit()
+
+    # Row-first, S3-second -- the mirror of the upload pipeline's S3-first,
+    # row-second order. By the time cleanup_upload_artifacts runs here the row
+    # is already gone, synchronously, in this same request, which is exactly
+    # the precondition its docstring documents for passing cleanup_db=False:
+    # a failed object (or thumbnail) delete leaves an orphan for cleanup.py's
+    # sweep to find -- recoverable -- rather than leaving a row that still
+    # points at bytes that no longer exist, which would not be.
+    cleanup_upload_artifacts(object_key, thumbnail_key, context=f"Deleted media {asset_id}")
+
+    logger.info(
+        "Media %s deleted by %s (role=%s)",
+        asset_id, current_user.email, role_of(current_user),
+    )
+    return {"message": "Media deleted", "id": asset_id}

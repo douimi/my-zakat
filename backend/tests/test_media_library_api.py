@@ -1164,3 +1164,69 @@ def test_resubmitting_after_a_rejection_clears_the_stale_reviewer_stamp(
     assert asset.reviewed_at is None
     assert asset.reviewed_by_id is None
     assert asset.review_note is None
+
+
+# ── Delete ───────────────────────────────────────────────────────────
+
+def test_owner_deletes_their_own_private_asset(
+    client, db_session, field_staff_headers, field_staff_user, fake_s3
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg")
+    fake_s3[asset.object_key] = (b"bytes", "image/jpeg")
+
+    response = client.delete(f"/api/media-library/{asset.id}", headers=field_staff_headers)
+    assert response.status_code == 200, response.text
+
+    assert db_session.query(MediaAsset).filter(MediaAsset.id == asset.id).first() is None
+    assert asset.object_key not in fake_s3
+
+
+def test_owner_cannot_delete_a_public_asset(
+    client, db_session, field_staff_headers, field_staff_user, fake_s3
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.delete(f"/api/media-library/{asset.id}", headers=field_staff_headers)
+    assert response.status_code == 403
+
+
+def test_an_admin_can_delete_a_public_asset(
+    client, db_session, auth_headers, field_staff_user, fake_s3
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    response = client.delete(f"/api/media-library/{asset.id}", headers=auth_headers)
+    assert response.status_code == 200
+
+
+def test_delete_is_refused_while_the_site_uses_the_asset(
+    client, db_session, auth_headers, field_staff_user, fake_s3
+):
+    from models import GalleryItem
+
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.jpg", status="public")
+    db_session.add(GalleryItem(media_filename=f"/api/media-library/{asset.id}/file"))
+    db_session.commit()
+
+    response = client.delete(f"/api/media-library/{asset.id}", headers=auth_headers)
+    assert response.status_code == 409
+    assert db_session.query(MediaAsset).filter(MediaAsset.id == asset.id).first() is not None
+
+
+def test_deleting_another_members_asset_is_a_404(
+    client, db_session, field_staff_headers, other_field_staff_user, fake_s3
+):
+    asset = _make_asset(db_session, other_field_staff_user.id, filename="theirs.jpg")
+    response = client.delete(f"/api/media-library/{asset.id}", headers=field_staff_headers)
+    assert response.status_code == 404
+
+
+def test_delete_also_removes_the_thumbnail(
+    client, db_session, auth_headers, field_staff_user, fake_s3
+):
+    asset = _make_asset(db_session, field_staff_user.id, filename="a.mp4", media_type="video")
+    asset.thumbnail_key = "workspaces/1/2026/03/a_thumb.jpg"
+    db_session.commit()
+    fake_s3[asset.object_key] = (b"v", "video/mp4")
+    fake_s3[asset.thumbnail_key] = (b"t", "image/jpeg")
+
+    client.delete(f"/api/media-library/{asset.id}", headers=auth_headers)
+    assert fake_s3 == {}
