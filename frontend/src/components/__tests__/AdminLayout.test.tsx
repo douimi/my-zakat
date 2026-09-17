@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NAV, ROLE_ALLOWED, filterNavForRole } from '../AdminLayout'
+import { NAV, ROLE_ALLOWED, filterNavForRole } from '../adminNav'
 import type { Role } from '../../store/authStore'
 
 // Flatten a nav tree (top-level links + group items) down to hrefs.
