@@ -51,21 +51,24 @@ def ensure_bucket_cors():
     """
     Ensure CORS is configured on the bucket for direct browser access
     Note: MinIO doesn't support PutBucketCors via boto3 API.
-    CORS must be configured manually via MinIO Console or mc CLI.
+    CORS must be configured manually with the mc CLI. The embedded MinIO Console
+    was removed from the community edition, so the browser workflow this docstring
+    used to describe no longer exists on RELEASE.2025-09-07 and later.
     
     However, since we're using Traefik with CORS middleware, CORS is handled at the proxy level.
-    You still need to configure CORS in MinIO Console for direct access:
-    1. Go to MinIO Console (https://minio.myzakat.org or http://31.97.131.31:9001)
-    2. Select bucket 'myzakat-media' -> Access Policy -> CORS Configuration
-    3. Add rule:
+    If you ever need CORS for direct browser access, set it with mc:
+    1. mc alias set myzakat https://minio.myzakat.org <user> <password>
+    2. mc admin config set myzakat api cors_allow_origin="https://myzakat.org,https://www.myzakat.org"
+    3. mc admin service restart myzakat
+       Equivalent to the old console rule:
        - Allowed Origins: https://myzakat.org, https://www.myzakat.org
        - Allowed Methods: GET, HEAD, OPTIONS
        - Allowed Headers: *
        - Exposed Headers: ETag
        - Max Age: 3600
     """
-    logger.info("CORS is handled by Traefik middleware, but you can also configure it in MinIO Console")
-    logger.info("   Go to: https://minio.myzakat.org -> Buckets -> myzakat-media -> Access Policy -> CORS")
+    logger.info("CORS is handled by Traefik middleware; set it on MinIO itself with mc if ever needed")
+    logger.info("   mc admin config set <alias> api cors_allow_origin=\"https://myzakat.org\"")
     return True
 
 
