@@ -15,7 +15,10 @@ Admin or manager only:
 
 Upload, listing, detail, metadata editing, reassignment, the workspaces
 summary and submit/review shipped in Tasks 5-8. Delete is still a stub for
-Task 9. Byte serving lives in media_library_files.py.
+Task 9. Byte serving lives in media_library_files.py. The upload endpoint's
+byte-sniffing/compression/EXIF-stripping/thumbnailing/checksum/S3 pipeline
+lives in media_library_upload.py; this module keeps the routing, the
+permission predicates and the status transitions.
 """
 from __future__ import annotations
 
