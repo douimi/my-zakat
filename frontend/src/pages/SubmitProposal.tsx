@@ -109,7 +109,7 @@ const SubmitProposal = () => {
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">Submit a Project Proposal</h1>
           <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
             Apply for funding support from the <strong>Zakat Distribution Foundation</strong>. Four short sections —
-            we'll email you a copy and follow up after review.
+            we'll email you your reference number and follow up after review.
           </p>
         </div>
 

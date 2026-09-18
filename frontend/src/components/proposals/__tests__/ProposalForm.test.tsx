@@ -34,6 +34,35 @@ const filled = (): ProposalFormValues => ({
   additional_expenses_usd: '500',
 })
 
+/** Every field long enough to clear MIN_LEN, so Continue and Submit enable. */
+const complete = (): ProposalFormValues => ({
+  full_name: 'Amina Yusuf',
+  national_id: 'ID-90210',
+  date_of_birth_year: '1992',
+  place_of_residence: 'Gaza City',
+  mobile_number: '+970599000000',
+  email: 'amina@example.com',
+  educational_level: 'BSc Agricultural Engineering',
+  project_name: 'Community Water Well',
+  project_description: 'Drilling and equipping a community water well for displaced families.',
+  problem_solved: 'There is no safe drinking water within four kilometres of the camp.',
+  target_beneficiaries: '250 displaced families in the northern camp.',
+  community_impact: 'Free, metered water points open to every household in the camp.',
+  expected_impact: 'Fewer waterborne illnesses and hours of walking returned to schooling.',
+  implementation_steps: 'Survey the site\nDrill the borehole\nInstall the pump',
+  implementation_location: 'Northern displacement camp',
+  required_materials: 'Drilling rig\nSubmersible pump\nStorage tank',
+  expected_duration: 'Two weeks after procurement',
+  continuity_plan: 'A local water committee collects a small maintenance fee.',
+  feasibility: 'The aquifer is shallow here and the contractor is already on site.',
+  expected_challenges: 'Fuel shortages: stockpile diesel before drilling starts.',
+  number_of_beneficiaries: '250',
+  cost_per_unit_usd: '20',
+  unit_type: 'family',
+  additional_expenses_usd: '0',
+  additional_expenses_description: '',
+})
+
 describe('ProposalForm', () => {
   it('starts on step 1 with an editable email in create mode', () => {
     renderForm()
@@ -97,6 +126,52 @@ describe('ProposalForm', () => {
     }
   })
 
+  it('seeds the SMS opt-in from the dossier when revising', async () => {
+    // A revision rewrites the consent columns from whatever the form posts, so
+    // a form that can only ever post `false` withdraws an opt-in the applicant
+    // gave earlier and never touched. Seeding it restates that consent.
+    renderForm({ mode: 'revise', initialValues: complete(), initialSmsConsent: true })
+
+    expect(screen.getByRole('checkbox')).toBeChecked()
+  })
+
+  it('says out loud that a ticked box is a restatement, and can be undone', async () => {
+    const user = userEvent.setup()
+    renderForm({ mode: 'revise', initialValues: complete(), initialSmsConsent: true })
+
+    expect(screen.getByText(/opted in to SMS messages on your previous submission/i))
+      .toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox'))
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+  })
+
+  it('never pre-ticks the SMS box on a first submission', () => {
+    // 10DLC requires the applicant's own affirmative act the first time, so
+    // `create` mode refuses the seed outright rather than trusting callers.
+    renderForm({ mode: 'create', initialValues: complete(), initialSmsConsent: true })
+
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(screen.queryByText(/opted in to SMS messages on your previous submission/i))
+      .toBeNull()
+  })
+
+  it('carries the seeded consent through to the payload it submits', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderForm({ mode: 'revise', initialValues: complete(), initialSmsConsent: true, onSubmit })
+
+    for (let i = 0; i < 3; i += 1) {
+      await user.click(screen.getByRole('button', { name: /^continue$/i }))
+    }
+    await user.click(screen.getByRole('button', { name: /^resubmit proposal$/i }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    const payload = onSubmit.mock.calls[0][0]
+    expect(payload.sms_consent).toBe(true)
+    expect(payload.sms_consent_text).toContain('Customer care')
+  })
+
   it('advances to step 2 once every step-1 field is filled', async () => {
     const user = userEvent.setup()
     renderForm({ initialValues: {
@@ -126,7 +201,9 @@ describe('buildProposalPayload', () => {
   })
 
   it('sends the consent wording only when the box was ticked', () => {
+    expect(buildProposalPayload(filled(), false).sms_consent).toBe(false)
     expect(buildProposalPayload(filled(), false).sms_consent_text).toBeNull()
+    expect(buildProposalPayload(filled(), true).sms_consent).toBe(true)
     expect(buildProposalPayload(filled(), true).sms_consent_text).toContain('Customer care')
   })
 

@@ -48,9 +48,18 @@ export const verifyPortalCode = async (email: string, code: string): Promise<voi
   sessionStorage.setItem(PORTAL_TOKEN_KEY, data.token)
 }
 
-export const fetchMyProposals = async (): Promise<PortalProposal[]> => {
+export interface PortalDossiers {
+  email: string
+  items: PortalProposal[]
+}
+
+export const fetchMyProposals = async (): Promise<PortalDossiers> => {
   const { data } = await portalApi.get(`${PORTAL_BASE}/me`)
-  return data.items || []
+  // The address comes back with the list on purpose: it is the only way a
+  // reloaded tab -- which still holds the token but has lost all React state --
+  // can learn whose proposals it is showing, and therefore where to send a
+  // fresh code when the token lapses mid-revision.
+  return { email: data.email ?? '', items: data.items ?? [] }
 }
 
 export const submitRevision = async (

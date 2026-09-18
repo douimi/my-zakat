@@ -65,7 +65,7 @@ export const EMPTY_PROPOSAL_FORM: ProposalFormValues = {
   additional_expenses_usd: '0', additional_expenses_description: '',
 }
 
-export const CURRENT_YEAR = new Date().getFullYear()
+const CURRENT_YEAR = new Date().getFullYear()
 
 // TCR / 10DLC-compliant SMS opt-in disclosure. The message category must
 // be exactly "Customer care" because that is the campaign use case we
@@ -75,7 +75,7 @@ export const CURRENT_YEAR = new Date().getFullYear()
 // Stored verbatim with the proposal row when the applicant ticks the box
 // so we can prove later exactly what they agreed to. Keep this wording
 // in sync with what the checkbox actually shows.
-export const PROPOSAL_SMS_CONSENT_TEXT = (
+const PROPOSAL_SMS_CONSENT_TEXT = (
   'By checking this box, I agree to receive SMS messages about Customer ' +
   'care from MyZakat at the mobile number provided above. Message ' +
   'frequency may vary. Message and data rates may apply. Text HELP to ' +
@@ -87,7 +87,7 @@ export const PROPOSAL_SMS_CONSENT_TEXT = (
 // routers/project_proposals.py. Keeping the map in one place makes it trivial
 // to keep both sides in sync and to render field-specific "X of Y characters"
 // hints under each textarea.
-export const MIN_LEN: Partial<Record<keyof ProposalFormValues, number>> = {
+const MIN_LEN: Partial<Record<keyof ProposalFormValues, number>> = {
   project_description: 10,
   problem_solved: 10,
   target_beneficiaries: 5,
@@ -104,7 +104,7 @@ export const MIN_LEN: Partial<Record<keyof ProposalFormValues, number>> = {
 // Human labels + which step each field lives on. Used to turn opaque Pydantic
 // errors (which name fields by their snake_case key) into a friendly
 // "Step 2 · Project description: needs at least 10 characters" list.
-export const FIELD_INFO: Record<string, { label: string; step: 1 | 2 | 3 | 4 }> = {
+const FIELD_INFO: Record<string, { label: string; step: 1 | 2 | 3 | 4 }> = {
   full_name:              { label: 'Full name',              step: 1 },
   national_id:            { label: 'National ID',            step: 1 },
   date_of_birth_year:     { label: 'Date of birth',          step: 1 },
@@ -220,21 +220,38 @@ const CharCount = ({ current, min }: { current: number; min: number | undefined 
   )
 }
 
-export interface ProposalFormProps {
+interface ProposalFormProps {
   mode: 'create' | 'revise'
   initialValues?: Partial<ProposalFormValues>
+  /**
+   * Seeds the SMS opt-in checkbox. Honoured in `revise` mode only.
+   *
+   * A revision rewrites the consent columns from whatever the form posts, so a
+   * form that always posts `false` silently withdraws an opt-in the applicant
+   * gave on an earlier version -- a 10DLC record destroyed by a typo fix. In
+   * `create` mode this is ignored outright: a pre-ticked box is not consent.
+   */
+  initialSmsConsent?: boolean
   onSubmit: (payload: ReturnType<typeof buildProposalPayload>) => void | Promise<void>
   submitting: boolean
   fieldErrors: FieldError[]
   genericError: string
 }
 
-const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, genericError }: ProposalFormProps) => {
+const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit, submitting, fieldErrors, genericError }: ProposalFormProps) => {
   const [step, setStep] = useState<StepIndex>(1)
   const [form, setForm] = useState<ProposalFormValues>({ ...EMPTY_PROPOSAL_FORM, ...initialValues })
-  // Optional SMS opt-in. Must default to false (never pre-selected) per 10DLC
-  // rules, and must not gate submission — applicants can submit without it.
-  const [smsConsent, setSmsConsent] = useState(false)
+  // Optional SMS opt-in. Must not gate submission — applicants can submit
+  // without it.
+  //
+  // First collection (`create`) is never pre-ticked: 10DLC requires the
+  // applicant's own affirmative act, so the seed is refused structurally here
+  // rather than trusted to every caller. A revision is different: the box
+  // restates consent the applicant already gave on the previous version, which
+  // is legitimate as long as it is visible and can be undone — see the notice
+  // under the checkbox.
+  const restatingConsent = mode === 'revise' && initialSmsConsent
+  const [smsConsent, setSmsConsent] = useState(restatingConsent)
 
   const emailLocked = mode === 'revise'
   const submitLabel = mode === 'revise' ? 'Resubmit proposal' : 'Submit proposal'
@@ -372,6 +389,12 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
                     </Link>.
                   </span>
                 </label>
+                {restatingConsent && (
+                  <p className="text-xs text-gray-600 mt-2 ml-7">
+                    You opted in to SMS messages on your previous submission, so
+                    this box starts ticked. Untick it to withdraw your consent.
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-2 ml-7">
                   You can submit your proposal without opting in.
                 </p>

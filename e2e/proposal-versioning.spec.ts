@@ -25,9 +25,6 @@ const HAS_CREDENTIALS = Boolean(process.env.E2E_ADMIN_EMAIL && process.env.E2E_A
 const APPLICANT = `e2e-proposal-${Date.now()}@example.com`
 const KNOWN_CODE = '424242'
 
-// The dossier the repo ships with, already rejected. Read-only here.
-const REJECTED_APPLICANT = 'legacy@example.com'
-
 const ORIGINAL_PROJECT = `E2E Well Project ${Date.now()}`
 const REVISED_PROJECT = `${ORIGINAL_PROJECT} (revised)`
 const REVIEWER_MESSAGE = 'Please give us a firmer number for the beneficiaries and a clearer budget breakdown.'
@@ -113,7 +110,7 @@ async function gotoProposalsList(page: Page) {
  * Pydantic min_length rules — a shorter string would stop the Continue button
  * from enabling and the failure would look like a locator problem.
  */
-async function fillProposal(page: Page, projectName: string) {
+async function fillProposal(page: Page, projectName: string, applicant: string = APPLICANT) {
   // Step 1 — personal
   await page.getByLabel('Full name').fill('Amina Yusuf')
   await page.getByLabel('National ID number').fill('E2E-90210')
@@ -123,7 +120,7 @@ async function fillProposal(page: Page, projectName: string) {
   // with a disclosure that says "…at the mobile number provided above", so a
   // bare substring match finds two controls.
   await page.getByLabel(/^Mobile number/).fill('+970599000000')
-  await page.getByLabel('Email').fill(APPLICANT)
+  await page.getByLabel('Email').fill(applicant)
   await page.getByLabel('Educational level').fill('BSc Agricultural Engineering')
   await page.getByRole('button', { name: /^continue$/i }).click()
 
@@ -159,9 +156,9 @@ async function fillProposal(page: Page, projectName: string) {
  * Sign in to the submitter portal with a planted code, landing on the list.
  *
  * Note for anyone re-running this locally: proposal_otp caps code requests at
- * three per address per fifteen minutes. The first test mints a fresh address
- * each run and is immune, but the second reuses the fixed rejected dossier, so
- * a fourth run inside the same quarter hour will legitimately get a 429.
+ * three per address per fifteen minutes. Both tests mint a fresh address every
+ * run, so neither can trip that cap -- which is the other reason no test here
+ * signs in as a fixed address.
  */
 async function portalSignIn(page: Page, email: string) {
   await page.goto('/my-proposals')
@@ -197,6 +194,18 @@ async function closeAdminDossier(adminPage: Page) {
   await expect(adminPage.locator('div.fixed.inset-0.z-50')).toHaveCount(0)
 }
 
+/**
+ * Type the applicant-facing reason and press one of the decision buttons.
+ *
+ * The dossier's modal must already be open. `changeStatus` refuses a rejection
+ * or a change request with an empty comment, because the applicant would get an
+ * email with no reason in it, so the comment comes first.
+ */
+async function recordDecision(adminPage: Page, action: RegExp, comment: string) {
+  await adminPage.getByPlaceholder(/what the applicant will read/i).fill(comment)
+  await adminPage.getByRole('button', { name: action }).click()
+}
+
 test.describe('proposal versioning', () => {
   test.skip(!HAS_CREDENTIALS, 'needs E2E_ADMIN_* credentials for an admin account')
 
@@ -222,8 +231,7 @@ test.describe('proposal versioning', () => {
     await gotoProposalsList(adminPage)
     await openAdminDossier(adminPage, ORIGINAL_PROJECT)
 
-    await adminPage.getByPlaceholder(/what the applicant will read/i).fill(REVIEWER_MESSAGE)
-    await adminPage.getByRole('button', { name: /request changes/i }).click()
+    await recordDecision(adminPage, /request changes/i, REVIEWER_MESSAGE)
 
     // Scoped to the modal: the status <select> behind it carries a
     // "Changes requested" <option> that an unscoped match would find whatever
@@ -289,13 +297,50 @@ test.describe('proposal versioning', () => {
     expect(sql(`SELECT status FROM project_proposals WHERE id = ${proposalId};`)).toBe('submitted')
   })
 
-  test('a rejected dossier is not offered for revision', async ({ page }) => {
-    test.setTimeout(120_000)
+  test('a rejected dossier is not offered for revision', async ({ page, browser }) => {
+    // A submission, an admin login and a portal round-trip, same as test 1.
+    test.setTimeout(240_000)
 
-    await portalSignIn(page, REJECTED_APPLICANT)
+    // This dossier is created here rather than assumed. Nothing in the repo --
+    // no migration, no seed, no fixture -- ships a rejected proposal, so a
+    // hard-coded address only ever passes on a machine where somebody once
+    // INSERTed one by hand, and fails everywhere else on an assertion that
+    // says nothing about rejected dossiers.
+    const applicant = `e2e-rejected-${Date.now()}@example.com`
+    const projectName = `E2E Rejected Project ${Date.now()}`
+    const reason = 'We cannot fund transport-only budgets this cycle.'
 
+    // ── 1. The applicant submits ──────────────────────────────────────
+    await page.goto('/submit-proposal')
+    await fillProposal(page, projectName, applicant)
+    await page.getByRole('button', { name: /^submit proposal$/i }).click()
+    await expect(page.getByRole('heading', { name: /proposal received/i })).toBeVisible()
+
+    // ── 2. An admin rejects it, with a reason ─────────────────────────
+    const adminContext = await browser.newContext()
+    const adminPage = await adminContext.newPage()
+    await login(adminPage, ADMIN)
+    await gotoProposalsList(adminPage)
+    await openAdminDossier(adminPage, projectName)
+
+    await recordDecision(adminPage, /^reject$/i, reason)
+
+    // Scoped to the modal, for the same reason as test 1: the filter bar behind
+    // it carries a "Rejected" <option>. `.first()` is the dossier's own badge;
+    // version 1's, in the history, reads the same and is equally correct.
+    const modal = adminPage.locator('div.fixed.inset-0.z-50')
+    await expect(modal.getByText('Rejected', { exact: true }).first()).toBeVisible()
+    await adminContext.close()
+
+    // ── 3. The applicant sees a verdict, not an invitation ────────────
+    await page.context().clearCookies()
+    await page.evaluate(() => { sessionStorage.clear(); localStorage.clear() })
+    await portalSignIn(page, applicant)
+
+    await expect(page.getByRole('heading', { name: projectName })).toBeVisible()
     // The portal softens "Rejected" to "Not funded" for the applicant.
     await expect(page.getByText('Not funded')).toBeVisible()
+    await expect(page.getByText(reason)).toBeVisible()
     await expect(page.getByRole('button', { name: /fix and resubmit/i })).toHaveCount(0)
   })
 })

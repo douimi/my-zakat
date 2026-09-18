@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import axios from 'axios'
 import {
-  PORTAL_TOKEN_KEY, clearPortalToken, hasPortalToken, portalApi,
+  PORTAL_TOKEN_KEY, clearPortalToken, fetchMyProposals, hasPortalToken, portalApi,
   requestPortalCode, verifyPortalCode,
 } from '../proposalPortalApi'
 
@@ -48,6 +48,27 @@ describe('proposalPortalApi', () => {
     expect(hasPortalToken()).toBe(true)
     clearPortalToken()
     expect(hasPortalToken()).toBe(false)
+  })
+
+  it('keeps the address /portal/me answers with, not just the list', async () => {
+    // A reloaded tab holds the token and has lost every piece of React state.
+    // This address is the only thing that can tell it whose proposals it is
+    // showing, and therefore where to send a fresh code when the token lapses
+    // mid-revision -- so it must not be dropped on the floor here.
+    vi.spyOn(portalApi, 'get').mockResolvedValue({
+      data: { email: 'amina@example.com', items: [{ id: 7 }] },
+    })
+
+    const dossiers = await fetchMyProposals()
+
+    expect(dossiers.email).toBe('amina@example.com')
+    expect(dossiers.items).toHaveLength(1)
+  })
+
+  it('survives a payload with neither key', async () => {
+    vi.spyOn(portalApi, 'get').mockResolvedValue({ data: {} })
+
+    expect(await fetchMyProposals()).toEqual({ email: '', items: [] })
   })
 
   it('asks for a code by email', async () => {

@@ -113,6 +113,23 @@ const toFormValues = (content: Record<string, unknown>): ProposalFormValues => {
   return out
 }
 
+/**
+ * Thrown instead of posting an empty address to /portal/request-code.
+ *
+ * An empty `email` earns a 422 from the backend, and the generic failure
+ * handling that used to follow swapped the applicant onto the code panel --
+ * a panel no code can ever satisfy, because none was ever sent. A distinct
+ * error type lets the 401 handler treat "we have no address" differently from
+ * "the address is fine but the send failed", which is the difference between
+ * an unrecoverable dead end and a retry.
+ */
+class MissingPortalEmailError extends Error {
+  constructor() {
+    super('No email address to send a portal sign-in code to.')
+    this.name = 'MissingPortalEmailError'
+  }
+}
+
 const statusOf = (error: any): number | undefined => error?.response?.status
 
 const detailOf = (error: any): unknown => error?.response?.data?.detail
@@ -144,7 +161,14 @@ const MyProposals = () => {
   const loadList = useCallback(async () => {
     setBusy(true); setError('')
     try {
-      setItems(await fetchMyProposals())
+      const { email: tokenEmail, items: dossiers } = await fetchMyProposals()
+      // Adopt the address the token was issued for. After a same-tab reload
+      // `email` is '' -- the mount effect goes straight to the list and the
+      // sign-in input never runs -- and without this the 401 handler in
+      // sendRevision would have nowhere to send a fresh code, and the code
+      // panel's "we sent it to ..." label would render blank.
+      if (tokenEmail) setEmail(tokenEmail)
+      setItems(dossiers)
       setView('list')
     } catch (exc: any) {
       if (statusOf(exc) === 401) {
@@ -152,7 +176,13 @@ const MyProposals = () => {
         setView('email')
         setError('Your sign-in session has expired. Please request a new code.')
       } else {
+        // Set the view explicitly. Leaving it alone let the render chain fall
+        // through to the sign-in panel, so an applicant holding a perfectly
+        // valid token was asked to sign in again beside a load error -- and,
+        // after a successful revision, beside the green "your proposal has
+        // been sent" flash too. Stay on the list, where the error belongs.
         setError('We could not load your proposals. Please try again.')
+        setView('list')
       }
     } finally {
       setBusy(false)
@@ -167,7 +197,11 @@ const MyProposals = () => {
 
   // ── Step: ask for a code ─────────────────────────────────────────────
   const askForCode = async (target: string, opts?: { silent?: boolean }) => {
-    const { message } = await requestPortalCode(target)
+    // Never post an empty address, and never move to the code panel without
+    // one: the applicant would be staring at an input for a code that was
+    // never sent, with no way out that keeps their work.
+    if (!target.trim()) throw new MissingPortalEmailError()
+    const { message } = await requestPortalCode(target.trim())
     if (!opts?.silent) setNotice(message)
     setCode('')
     setView('code')
@@ -208,7 +242,31 @@ const MyProposals = () => {
         try {
           await askForCode(email.trim(), { silent: true })
           setNotice('Your sign-in session expired while you were writing. We have emailed you a new code — enter it and we will send your proposal straight through. Nothing you typed has been lost.')
-        } catch {
+        } catch (codeExc: any) {
+          // This is the one path where the applicant's unsaved work is at
+          // stake: the form below holds the only copy of a twenty-six field
+          // revision, and it cannot be copied out of a hidden panel. So when we
+          // cannot get a code to them we keep `view = 'edit'`, which leaves the
+          // form visible (`reauthenticating` stays false), and keep
+          // pendingPayload so a token arriving by any route still replays it.
+          if (codeExc instanceof MissingPortalEmailError) {
+            // No address at all -- a reloaded tab whose /portal/me answer we
+            // never got, so `email` was never adopted. Asking for a code is
+            // impossible here and "Send me a new code" would fail identically,
+            // so do not offer the code panel. Say what happened and point at a
+            // second tab, which leaves this one -- and everything typed into
+            // it -- untouched.
+            setGenericError(
+              'Your sign-in session expired and this tab no longer knows which address to email a code to. '
+              + 'Everything you typed is still here — please do not reload this tab. '
+              + 'Open My Proposals in a new tab, sign in there, and copy your answers across from here.',
+            )
+            return
+          }
+          // The address is good and the send failed (rate limit, network). The
+          // code panel is still the way through, and "Send me a new code"
+          // genuinely works from it, so offer it -- the form stays mounted
+          // behind it and the payload is replayed once a token lands.
           setError('Your session expired and we could not email a new code. Please try again in a few minutes.')
           setView('code')
         }
@@ -433,7 +491,20 @@ const MyProposals = () => {
         </div>
       )}
 
-      {!busy && items.length === 0 && (
+      {/* A failed load leaves `items` empty too, and "No proposals yet" would
+          then be a guess dressed up as a fact. Offer the retry instead. */}
+      {!busy && items.length === 0 && error && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <button
+            onClick={() => void loadList()}
+            className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!busy && items.length === 0 && !error && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center space-y-3">
           <Inbox className="w-10 h-10 mx-auto text-gray-300" />
           <h2 className="text-lg font-bold text-gray-900">No proposals yet</h2>
@@ -537,6 +608,12 @@ const MyProposals = () => {
         <ProposalForm
           mode="revise"
           initialValues={initialValues}
+          // Read defensively: `serialize_for_portal`'s content dict is built
+          // from PROPOSAL_CONTENT_FIELDS, which does not include sms_consent,
+          // so this is `undefined` today and the box stays unticked. The moment
+          // the backend adds the field to that payload, an existing opt-in is
+          // restated by the revision instead of being silently revoked.
+          initialSmsConsent={Boolean((editing.content as any).sms_consent)}
           onSubmit={handleFormSubmit}
           submitting={busy}
           fieldErrors={fieldErrors}
