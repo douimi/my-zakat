@@ -98,6 +98,11 @@ const Footer = () => {
                   Submit a Project Proposal
                 </Link>
               </li>
+              <li>
+                <Link to="/my-proposals" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
+                  My Proposals
+                </Link>
+              </li>
             </ul>
           </div>
 
