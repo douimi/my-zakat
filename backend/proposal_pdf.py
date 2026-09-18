@@ -14,6 +14,7 @@ Layout mirrors a formal letter of request:
 from __future__ import annotations
 
 import io
+from typing import Any
 
 
 def safe_slug(text: str) -> str:
@@ -21,8 +22,14 @@ def safe_slug(text: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "-", text or "proposal").strip("-").lower()[:40] or "proposal"
 
 
-def render_proposal_pdf(p: ProjectProposal) -> bytes:
+def render_proposal_pdf(p: Any) -> bytes:
     """Render the proposal as a polished funding-request document.
+
+    `p` is deliberately untyped: this module must not import the ORM models it
+    would otherwise name, and the object it receives changes by caller — a
+    dossier today, a version with the dossier's id and status attached once the
+    router serves the version chain. Any object exposing the content attributes
+    plus `id`, `status` and `submitted_at` renders.
 
     Layout mirrors a formal letter of request:
       • Page 1 — cover letter (bold labeled header, justified body,

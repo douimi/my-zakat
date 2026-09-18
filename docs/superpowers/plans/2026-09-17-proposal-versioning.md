@@ -1481,7 +1481,7 @@ def delete_proposal(db: Session, proposal: ProjectProposal) -> None:
 - [ ] **Step 4: Run the tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_service.py -v`
-Expected: 13 passed.
+Expected: 14 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -2124,7 +2124,7 @@ def send_proposal_approved(*, email, name, proposal_id, version_no, project_name
 - [ ] **Step 7: Run the proposal tests**
 
 Run: `cd backend && python -m pytest tests/test_project_proposals.py tests/test_proposal_service.py -v`
-Expected: all pass — 16 in the router file, 13 in the service file.
+Expected: all pass — 16 in the router file, 14 in the service file.
 
 - [ ] **Step 8: Run the whole suite**
 
