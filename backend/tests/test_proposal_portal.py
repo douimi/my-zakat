@@ -47,3 +47,36 @@ def test_an_expired_portal_token_is_refused():
     token = create_portal_token("applicant@example.com", expires_delta=timedelta(minutes=-1))
 
     assert verify_portal_token(token) is None
+
+
+def test_a_portal_token_is_not_attributed_to_a_staff_member_in_the_audit_log(
+    admin_user, monkeypatch
+):
+    """A rejected portal request must not appear in the audit trail under an
+    administrator's name -- that would disguise the very confusion the typ
+    claim exists to prevent."""
+    import audit_middleware
+    import auth_utils
+    from audit_middleware import _decode_user_from_request
+    from auth_utils import create_access_token, create_portal_token
+
+    # audit_middleware defaults SECRET_KEY to "dev-only-insecure-secret-key"
+    # while auth_utils defaults it to "test-secret-key-not-for-production"
+    # under TESTING=true. In production both read the same env var, so align
+    # them here -- otherwise the decoder rejects every token on signature
+    # alone and the test would pass without exercising the typ check at all.
+    monkeypatch.setattr(audit_middleware, "SECRET_KEY", auth_utils.SECRET_KEY)
+
+    class _Request:
+        def __init__(self, token):
+            self.headers = {"authorization": f"Bearer {token}"}
+            self.cookies = {}
+
+    portal = _decode_user_from_request(_Request(create_portal_token(admin_user.email)))
+    staff = _decode_user_from_request(_Request(create_access_token({"sub": admin_user.email})))
+
+    # Returns a dict (or None), so compare by key -- getattr on a dict would
+    # yield None and pass vacuously even with the bug present.
+    assert portal is None
+    assert staff is not None
+    assert staff["email"] == admin_user.email

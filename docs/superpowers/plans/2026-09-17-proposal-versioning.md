@@ -2834,6 +2834,7 @@ console. Fix it before any portal token can exist.
 
 **Files:**
 - Modify: `backend/auth_utils.py:66-79`
+- Modify: `backend/audit_middleware.py` (`_decode_user_from_request`, ~line 191)
 - Test: `backend/tests/test_proposal_portal.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -2890,6 +2891,39 @@ def test_an_expired_portal_token_is_refused():
     token = create_portal_token("applicant@example.com", expires_delta=timedelta(minutes=-1))
 
     assert verify_portal_token(token) is None
+
+
+def test_a_portal_token_is_not_attributed_to_a_staff_member_in_the_audit_log(
+    admin_user, monkeypatch
+):
+    """A rejected portal request must not appear in the audit trail under an
+    administrator's name -- that would disguise the very confusion the typ
+    claim exists to prevent."""
+    import audit_middleware
+    import auth_utils
+    from audit_middleware import _decode_user_from_request
+    from auth_utils import create_access_token, create_portal_token
+
+    # audit_middleware defaults SECRET_KEY to "dev-only-insecure-secret-key"
+    # while auth_utils defaults it to "test-secret-key-not-for-production"
+    # under TESTING=true. In production both read the same env var, so align
+    # them here -- otherwise the decoder rejects every token on signature
+    # alone and the test would pass without exercising the typ check at all.
+    monkeypatch.setattr(audit_middleware, "SECRET_KEY", auth_utils.SECRET_KEY)
+
+    class _Request:
+        def __init__(self, token):
+            self.headers = {"authorization": f"Bearer {token}"}
+            self.cookies = {}
+
+    portal = _decode_user_from_request(_Request(create_portal_token(admin_user.email)))
+    staff = _decode_user_from_request(_Request(create_access_token({"sub": admin_user.email})))
+
+    # Returns a dict (or None), so compare by key -- getattr on a dict would
+    # yield None and pass vacuously even with the bug present.
+    assert portal is None
+    assert staff is not None
+    assert staff["email"] == admin_user.email
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -2971,10 +3005,39 @@ def get_portal_email(
     return email
 ```
 
+- [ ] **Step 3b: Patch `backend/audit_middleware.py`**
+
+`auth_utils.verify_token` is not the only decoder. `_decode_user_from_request`
+(~line 191) decodes the bearer token itself to label the audit log's actor, and
+falls back to the `sub` claim when no `User` row matches. It grants no access —
+every route still gates on `get_current_user` — but left alone it would record a
+*rejected* portal request under the staff account's own name, misdescribing in
+the audit trail precisely the confusion the `typ` claim exists to prevent. Guard
+it the same way, immediately after the decode and before `sub` is trusted:
+
+```python
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # A scoped token (the submitter portal's) is not a staff session, and
+        # its subject may coincide with a staff address. Attributing it to that
+        # User would label a rejected portal request with an administrator's
+        # name -- misdescribing, in the audit log, precisely the confusion
+        # verify_token() exists to prevent.
+        if payload.get("typ", "user") != "user":
+            return None
+        email = payload.get("sub")
+        if not email:
+            return None
+```
+
+Keep the literal `"user"`: the test is default-deny (refuse every scope but the
+staff one), so it names no portal-specific value. Importing `PORTAL_TOKEN_TYPE`
+here would invert it into `== PORTAL_TOKEN_TYPE`, which would wave through any
+scope added later. `None` is this function's existing "no user" sentinel.
+
 - [ ] **Step 4: Run the portal auth tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_portal.py -v`
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Prove no existing authentication regressed**
 
@@ -3763,7 +3826,7 @@ app.include_router(project_proposals.router, prefix="/api/project-proposals", ta
 - [ ] **Step 5: Run the portal tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_portal.py -v`
-Expected: 21 passed (5 from Task 7 plus 16 here).
+Expected: 22 passed (6 from Task 7 plus 16 here).
 
 - [ ] **Step 6: Run the whole suite**
 
