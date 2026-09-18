@@ -3,19 +3,23 @@
 Endpoints
 ─────────
 Public (no auth):
-  POST   /api/project-proposals/                  → submit a proposal
+  POST   /api/project-proposals/                     → open a dossier (version 1)
 
 Admin / manager (auth):
-  GET    /api/project-proposals/                  → list all
-  GET    /api/project-proposals/{id}              → get one
-  PATCH  /api/project-proposals/{id}/status       → update review status + admin note
-  DELETE /api/project-proposals/{id}              → delete
-  GET    /api/project-proposals/{id}/pdf          → download reconstructed PDF
+  GET    /api/project-proposals/                     → list, current content flattened
+  GET    /api/project-proposals/{id}                 → dossier + version history
+  GET    /api/project-proposals/{id}/versions/{n}    → one frozen version
+  PATCH  /api/project-proposals/{id}/status          → record a decision, email the applicant
+  DELETE /api/project-proposals/{id}                 → delete the dossier and its versions
+  GET    /api/project-proposals/{id}/pdf             → PDF of the current version
+  GET    /api/project-proposals/{id}/versions/{n}/pdf→ PDF of that version
+
+The submitter-facing half of this feature lives in routers/proposal_portal.py.
+Domain rules live in proposal_service.py; this module only maps HTTP to them.
 """
 from __future__ import annotations
 
 import io
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -23,17 +27,21 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
+import email_service
+import proposal_service
 from auth_utils import get_current_manager_or_admin
 from database import get_db
 from logging_config import get_logger
-from models import ProjectProposal, User
+from models import ProjectProposal, ProposalVersion, User
 from proposal_pdf import render_proposal_pdf, safe_slug
+from proposal_service import (
+    DecisionCommentRequired,
+    InvalidProposalStatus,
+    ProposalError,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
-
-
-VALID_STATUSES = {"submitted", "under_review", "approved", "rejected"}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────
@@ -96,86 +104,74 @@ class ProposalSubmit(BaseModel):
 
 class ProposalStatusUpdate(BaseModel):
     status: str
-    admin_notes: Optional[str] = None
+    # Shown to the applicant and quoted in the decision email. Omit to leave
+    # the existing comment untouched (the "save internal note only" path).
+    decision_comment: Optional[str] = None
+    internal_note: Optional[str] = None
 
 
-def _serialize(p: ProjectProposal, *, include_admin: bool = False) -> dict:
-    out = {
-        "id": p.id,
-        "full_name": p.full_name,
-        "national_id": p.national_id,
-        "date_of_birth_year": p.date_of_birth_year,
-        "place_of_residence": p.place_of_residence,
-        "mobile_number": p.mobile_number,
-        "email": p.email,
-        "educational_level": p.educational_level,
-        "project_name": p.project_name,
-        "project_description": p.project_description,
-        "problem_solved": p.problem_solved,
-        "target_beneficiaries": p.target_beneficiaries,
-        "community_impact": p.community_impact,
-        "expected_impact": p.expected_impact,
-        "implementation_steps": p.implementation_steps,
-        "implementation_location": p.implementation_location,
-        "required_materials": p.required_materials,
-        "expected_duration": p.expected_duration,
-        "continuity_plan": p.continuity_plan,
-        "feasibility": p.feasibility,
-        "expected_challenges": p.expected_challenges,
-        "number_of_beneficiaries": p.number_of_beneficiaries,
-        "cost_per_unit_usd": float(p.cost_per_unit_usd),
-        "unit_type": p.unit_type,
-        "additional_expenses_usd": float(p.additional_expenses_usd or 0),
-        "additional_expenses_description": p.additional_expenses_description,
-        "total_amount_usd": float(p.total_amount_usd),
-        "status": p.status,
-        "submitted_at": p.submitted_at,
-        "updated_at": p.updated_at,
-    }
-    if include_admin:
-        out["admin_notes"] = p.admin_notes
-        out["reviewed_at"] = p.reviewed_at
-        out["reviewed_by"] = p.reviewed_by
-        out["submitted_ip"] = p.submitted_ip
-    return out
+def client_ip(request: Request) -> str:
+    """Caller's IP, honouring the proxy header Traefik sets."""
+    xff = request.headers.get("x-forwarded-for")
+    raw = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "")
+    return raw[:45]
+
+
+def _load(db: Session, proposal_id: int) -> ProjectProposal:
+    found = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
+    if not found:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return found
+
+
+def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
+    version = (
+        db.query(ProposalVersion)
+        .filter(
+            ProposalVersion.proposal_id == dossier.id,
+            ProposalVersion.version_no == version_no,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return version
 
 
 # ── Public: submit ───────────────────────────────────────────────────
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session = Depends(get_db)):
-    """Public endpoint anyone can call. Creates a new proposal in 'submitted' state."""
-    xff = request.headers.get("x-forwarded-for")
-    client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else ""))[:45]
+    """Public endpoint anyone can call. Always opens a NEW dossier.
 
+    A revision of an existing dossier goes through the portal
+    (PUT /api/project-proposals/portal/{id}), never through here.
+    """
     data = payload.model_dump()
-    # Only stamp the SMS consent timestamp when the box was actually ticked.
-    # If the client sent consent_text without consent=True, ignore the text
-    # so we never record a false consent trail.
-    if not data.get("sms_consent"):
-        data["sms_consent_text"] = None
-        sms_consent_at = None
-    else:
-        sms_consent_at = datetime.utcnow()
-
-    p = ProjectProposal(
-        **data,
-        status="submitted",
-        submitted_ip=client_ip,
-        sms_consent_at=sms_consent_at,
+    dossier, version = proposal_service.create_proposal(
+        db,
+        content=data,
+        submitted_ip=client_ip(request),
+        sms_consent=bool(data.get("sms_consent")),
+        sms_consent_text=data.get("sms_consent_text"),
     )
-    db.add(p)
-    db.commit()
-    db.refresh(p)
     logger.info(
         "Project proposal #%s submitted by %s (%s)%s",
-        p.id, p.email, p.project_name[:60],
-        " [SMS opt-in]" if p.sms_consent else "",
+        dossier.id, dossier.email, version.project_name[:60],
+        " [SMS opt-in]" if version.sms_consent else "",
+    )
+    email_service.send_proposal_received(
+        email=dossier.email,
+        name=version.full_name,
+        proposal_id=dossier.id,
+        version_no=version.version_no,
+        project_name=version.project_name,
     )
     return {
-        "id": p.id,
+        "id": dossier.id,
+        "version_no": version.version_no,
         "message": "Your proposal has been submitted. Our team will review it and get back to you.",
-        "submitted_at": p.submitted_at,
+        "submitted_at": version.submitted_at,
     }
 
 
@@ -190,11 +186,25 @@ async def list_proposals(
     current_user: User = Depends(get_current_manager_or_admin),
 ):
     q = db.query(ProjectProposal)
-    if status_filter and status_filter in VALID_STATUSES:
+    if status_filter and status_filter in proposal_service.VALID_STATUSES:
         q = q.filter(ProjectProposal.status == status_filter)
     total = q.count()
-    rows = q.order_by(ProjectProposal.submitted_at.desc()).offset(skip).limit(min(limit, 500)).all()
-    return {"total": total, "items": [_serialize(p, include_admin=True) for p in rows]}
+    rows = (
+        q.order_by(ProjectProposal.updated_at.desc())
+        .offset(skip)
+        .limit(min(limit, 500))
+        .all()
+    )
+    # Two queries for the whole page, not one per row.
+    grouped = proposal_service.versions_by_proposal(db, [r.id for r in rows])
+    items = []
+    for row in rows:
+        versions = grouped.get(row.id, [])
+        current = versions[-1] if versions else None
+        items.append(
+            proposal_service.serialize_for_admin(row, current, db=db, versions=versions)
+        )
+    return {"total": total, "items": items}
 
 
 @router.get("/{proposal_id}")
@@ -203,10 +213,22 @@ async def get_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    return _serialize(p, include_admin=True)
+    dossier = _load(db, proposal_id)
+    return proposal_service.serialize_for_admin(
+        dossier, proposal_service.current_version(db, dossier), db=db
+    )
+
+
+@router.get("/{proposal_id}/versions/{version_no}")
+async def get_proposal_version(
+    proposal_id: int,
+    version_no: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    dossier = _load(db, proposal_id)
+    version = _load_version(db, dossier, version_no)
+    return proposal_service.serialize_version_detail(dossier, version)
 
 
 @router.patch("/{proposal_id}/status")
@@ -216,20 +238,56 @@ async def update_proposal_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    if payload.status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    p.status = payload.status
-    if payload.admin_notes is not None:
-        p.admin_notes = payload.admin_notes
-    p.reviewed_at = datetime.utcnow()
-    p.reviewed_by = current_user.id
-    db.commit()
-    db.refresh(p)
-    logger.info("Proposal #%s status → %s by %s", p.id, p.status, current_user.email)
-    return _serialize(p, include_admin=True)
+    """Record the reviewer's decision and notify the applicant.
+
+    The email goes out only when the status actually changes, so re-saving an
+    internal note on an already-rejected dossier does not re-notify anyone.
+    """
+    dossier = _load(db, proposal_id)
+    previous_status = dossier.status
+    try:
+        version = proposal_service.record_decision(
+            db, dossier,
+            status=payload.status,
+            decision_comment=payload.decision_comment,
+            internal_note=payload.internal_note,
+            reviewer_id=current_user.id,
+        )
+    except (InvalidProposalStatus, DecisionCommentRequired) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ProposalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    logger.info("Proposal #%s status → %s by %s", dossier.id, dossier.status, current_user.email)
+
+    if previous_status != dossier.status:
+        _notify_decision(dossier, version)
+
+    return proposal_service.serialize_for_admin(dossier, version, db=db)
+
+
+def _notify_decision(dossier: ProjectProposal, version: ProposalVersion) -> None:
+    """Queue the one email that matches the new status. Never raises."""
+    senders = {
+        "approved": email_service.send_proposal_approved,
+        "rejected": email_service.send_proposal_rejected,
+        "changes_requested": email_service.send_proposal_changes_requested,
+    }
+    send = senders.get(dossier.status)
+    if send is None:
+        return  # 'submitted' / 'under_review' are not worth an email
+    try:
+        send(
+            email=dossier.email,
+            name=version.full_name,
+            proposal_id=dossier.id,
+            version_no=version.version_no,
+            project_name=version.project_name,
+            comment=version.decision_comment or "",
+        )
+    except Exception:
+        # A queueing failure must not roll back a decision the reviewer just made.
+        logger.exception("Could not queue the decision email for proposal #%s", dossier.id)
 
 
 @router.delete("/{proposal_id}")
@@ -238,16 +296,13 @@ async def delete_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    db.delete(p)
-    db.commit()
+    dossier = _load(db, proposal_id)
+    proposal_service.delete_proposal(db, dossier)
     logger.info("Proposal #%s deleted by %s", proposal_id, current_user.email)
     return {"deleted": True}
 
 
-# ── Admin: PDF export (reconstructs the original 4-section layout) ──
+# ── Admin: PDF export ────────────────────────────────────────────────
 
 @router.get("/{proposal_id}/pdf")
 async def download_proposal_pdf(
@@ -255,12 +310,35 @@ async def download_proposal_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    dossier = _load(db, proposal_id)
+    version = proposal_service.current_version(db, dossier)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Proposal has no content to export")
+    return _pdf_response(dossier, version)
 
-    pdf_bytes = render_proposal_pdf(p)
-    filename = f"proposal-{p.id}-{safe_slug(p.project_name)}.pdf"
+
+@router.get("/{proposal_id}/versions/{version_no}/pdf")
+async def download_proposal_version_pdf(
+    proposal_id: int,
+    version_no: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    dossier = _load(db, proposal_id)
+    return _pdf_response(dossier, _load_version(db, dossier, version_no))
+
+
+def _pdf_response(dossier: ProjectProposal, version: ProposalVersion) -> StreamingResponse:
+    """Render one version, stamped with the dossier's reference and status.
+
+    The renderer is duck-typed on a single object, so the dossier's identity is
+    attached to the version in memory rather than threaded through every
+    reportlab call. Nothing is persisted: these attributes are not columns.
+    """
+    version.id = dossier.id
+    version.status = dossier.status
+    pdf_bytes = render_proposal_pdf(version)
+    filename = f"proposal-{dossier.id}-v{version.version_no}-{safe_slug(version.project_name)}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

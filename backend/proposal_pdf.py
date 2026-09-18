@@ -61,7 +61,7 @@ def render_proposal_pdf(p: Any) -> bytes:
         )
         canvas.drawString(
             0.75 * inch, 0.5 * inch,
-            f"Ref #{p.id} · myzakat.org",
+            f"Ref #{p.id} v{getattr(p, 'version_no', 1)} · myzakat.org",
         )
         canvas.restoreState()
 
@@ -303,7 +303,8 @@ def render_proposal_pdf(p: Any) -> bytes:
                             spaceBefore=0, spaceAfter=6))
     story.append(Paragraph(
         f"Submitted via myzakat.org on {p.submitted_at.strftime('%B %d, %Y at %H:%M UTC')} "
-        f"&nbsp;·&nbsp; reference #{p.id} &nbsp;·&nbsp; status: {p.status.replace('_', ' ')}",
+        f"&nbsp;·&nbsp; reference #{p.id} &nbsp;·&nbsp; version {getattr(p, 'version_no', 1)} "
+        f"&nbsp;·&nbsp; status: {p.status.replace('_', ' ')}",
         meta,
     ))
 

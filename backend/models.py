@@ -595,12 +595,9 @@ class ProjectProposal(Base):
     """One dossier per funding request.
 
     The dossier holds identity and review state; the submitted content lives in
-    `proposal_versions`, one immutable row per submission.
-
-    The content columns below are LEGACY: migration 32 drops their NOT NULL
-    constraints and backfills version 1 from them, the code stops reading them
-    in Task 5, and migration 33 drops them. They stay here, nullable, only so
-    that the window between those two migrations is safe.
+    `proposal_versions`, one immutable row per submission. `email` is the
+    identity key — it is set at first submission and never changed by the
+    application.
     """
     __tablename__ = "project_proposals"
 
@@ -608,7 +605,7 @@ class ProjectProposal(Base):
 
     # ── Identity (stable across versions) ──────────────────
     email = Column(String(200), nullable=False, index=True)
-    full_name = Column(String(200), nullable=True)
+    full_name = Column(String(200), nullable=False)
 
     # ── Review state ───────────────────────────────────────
     # submitted | under_review | changes_requested | approved | rejected
@@ -632,37 +629,6 @@ class ProjectProposal(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)
     reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-
-    # ── Legacy content columns (see the docstring) ─────────
-    national_id = Column(String(50), nullable=True)
-    date_of_birth_year = Column(Integer, nullable=True)
-    place_of_residence = Column(String(300), nullable=True)
-    mobile_number = Column(String(50), nullable=True)
-    educational_level = Column(String(200), nullable=True)
-    project_name = Column(String(300), nullable=True)
-    project_description = Column(Text, nullable=True)
-    problem_solved = Column(Text, nullable=True)
-    target_beneficiaries = Column(Text, nullable=True)
-    community_impact = Column(Text, nullable=True)
-    expected_impact = Column(Text, nullable=True)
-    implementation_steps = Column(Text, nullable=True)
-    implementation_location = Column(Text, nullable=True)
-    required_materials = Column(Text, nullable=True)
-    expected_duration = Column(String(300), nullable=True)
-    continuity_plan = Column(Text, nullable=True)
-    feasibility = Column(Text, nullable=True)
-    expected_challenges = Column(Text, nullable=True)
-    number_of_beneficiaries = Column(Integer, nullable=True)
-    cost_per_unit_usd = Column(Float, nullable=True)
-    unit_type = Column(String(50), nullable=True)
-    additional_expenses_usd = Column(Float, nullable=True, default=0)
-    additional_expenses_description = Column(Text, nullable=True)
-    total_amount_usd = Column(Float, nullable=True)
-    admin_notes = Column(Text, nullable=True)
-    submitted_ip = Column(String(45), nullable=True)
-    sms_consent = Column(Boolean, nullable=True, default=False)
-    sms_consent_at = Column(DateTime, nullable=True)
-    sms_consent_text = Column(Text, nullable=True)
 
 
 class ProposalVersion(Base):

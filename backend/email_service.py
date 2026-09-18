@@ -204,3 +204,22 @@ def send_volunteer_acknowledgement(name: str, email: str, interest: str) -> bool
         },
         category="transactional",
     )
+
+
+# ── Project proposals ────────────────────────────────────────────────
+# Filled in by the next task; the router already calls them.
+
+def send_proposal_received(*, email, name, proposal_id, version_no, project_name) -> bool:
+    return True
+
+
+def send_proposal_changes_requested(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
+    return True
+
+
+def send_proposal_rejected(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
+    return True
+
+
+def send_proposal_approved(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
+    return True

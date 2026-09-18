@@ -114,3 +114,174 @@ def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session
     assert pdf.startswith(b"%PDF-")
     assert len(pdf) > 2000
     assert safe_slug("Fresh Food Parcels!") == "fresh-food-parcels"
+
+
+def _payload(**overrides) -> dict:
+    """The public POST body: content plus the optional consent pair."""
+    body = _content()
+    body.update(overrides)
+    return body
+
+
+def test_public_submit_creates_a_dossier_with_version_one(client, db_session):
+    resp = client.post("/api/project-proposals/", json=_payload())
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["version_no"] == 1
+    assert body["id"] > 0
+    assert "submitted_at" in body
+
+    dossier = db_session.query(ProjectProposal).filter(ProjectProposal.id == body["id"]).one()
+    assert dossier.status == "submitted"
+    assert db_session.query(ProposalVersion).filter(
+        ProposalVersion.proposal_id == dossier.id
+    ).count() == 1
+
+
+def test_public_submit_always_opens_a_new_dossier(client, db_session):
+    first = client.post("/api/project-proposals/", json=_payload()).json()
+    second = client.post("/api/project-proposals/", json=_payload()).json()
+
+    assert first["id"] != second["id"]
+    assert second["version_no"] == 1
+
+
+def test_submit_rejects_a_total_that_contradicts_the_breakdown(client):
+    resp = client.post("/api/project-proposals/", json=_payload(total_amount_usd=99999.0))
+    assert resp.status_code == 422
+
+
+def test_admin_list_flattens_the_current_version(client, auth_headers):
+    client.post("/api/project-proposals/", json=_payload())
+
+    resp = client.get("/api/project-proposals/", headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["project_name"] == "Fresh Food Parcels"
+    assert item["version_count"] == 1
+    assert item["current_version_no"] == 1
+    assert item["total_amount_usd"] == 4500.0
+
+
+def test_admin_list_filters_on_changes_requested(client, auth_headers):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+    client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "changes_requested", "decision_comment": "Detail the transport costs."},
+        headers=auth_headers,
+    )
+
+    resp = client.get(
+        "/api/project-proposals/?status_filter=changes_requested", headers=auth_headers
+    )
+
+    assert resp.status_code == 200
+    assert [i["id"] for i in resp.json()["items"]] == [created["id"]]
+
+
+def test_admin_detail_lists_the_version_history(client, auth_headers):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+    client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={
+            "status": "changes_requested",
+            "decision_comment": "Detail the transport costs.",
+            "internal_note": "Budget looks padded.",
+        },
+        headers=auth_headers,
+    )
+
+    resp = client.get(f"/api/project-proposals/{created['id']}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "changes_requested"
+    assert body["version_count"] == 1
+    assert body["versions"][0]["decision"] == "changes_requested"
+    assert body["versions"][0]["decision_comment"] == "Detail the transport costs."
+    assert body["versions"][0]["internal_note"] == "Budget looks padded."
+
+
+def test_a_rejection_without_a_message_is_refused(client, auth_headers):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    resp = client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "rejected"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400
+    assert "message" in resp.json()["detail"].lower()
+
+
+def test_an_invalid_status_is_refused(client, auth_headers):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    resp = client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "archived", "decision_comment": "x"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400
+
+
+def test_a_historical_version_can_be_read_and_exported(client, auth_headers, db_session):
+    from proposal_service import add_revision
+    from models import ProjectProposal as PP
+
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+    client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "changes_requested", "decision_comment": "Detail the transport costs."},
+        headers=auth_headers,
+    )
+    dossier = db_session.query(PP).filter(PP.id == created["id"]).one()
+    add_revision(db_session, dossier, content=_content(project_name="Parcels v2"),
+                 submitted_ip="", sms_consent=False, sms_consent_text=None)
+
+    first = client.get(f"/api/project-proposals/{created['id']}/versions/1", headers=auth_headers)
+    assert first.status_code == 200
+    assert first.json()["project_name"] == "Fresh Food Parcels"
+    assert first.json()["decision"] == "changes_requested"
+
+    current = client.get(f"/api/project-proposals/{created['id']}", headers=auth_headers)
+    assert current.json()["project_name"] == "Parcels v2"
+
+    pdf = client.get(f"/api/project-proposals/{created['id']}/versions/1/pdf", headers=auth_headers)
+    assert pdf.status_code == 200
+    assert pdf.content.startswith(b"%PDF-")
+    assert "v1" in pdf.headers["content-disposition"]
+
+
+def test_a_missing_version_is_a_404(client, auth_headers):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    resp = client.get(f"/api/project-proposals/{created['id']}/versions/7", headers=auth_headers)
+
+    assert resp.status_code == 404
+
+
+def test_admin_endpoints_reject_anonymous_callers(client):
+    for path in ("/api/project-proposals/", "/api/project-proposals/1",
+                 "/api/project-proposals/1/versions/1", "/api/project-proposals/1/pdf"):
+        assert client.get(path).status_code in (401, 403), path
+
+
+def test_deleting_a_dossier_removes_its_versions(client, auth_headers, db_session):
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    resp = client.delete(f"/api/project-proposals/{created['id']}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert db_session.query(ProposalVersion).filter(
+        ProposalVersion.proposal_id == created["id"]
+    ).count() == 0
+    assert db_session.query(ProjectProposal).filter(
+        ProjectProposal.id == created["id"]
+    ).count() == 0
