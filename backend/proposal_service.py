@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import ProjectProposal, ProposalVersion
@@ -148,12 +149,15 @@ def add_revision(
     fields = _content_only(content)
     fields["email"] = proposal.email
 
-    next_no = (
-        db.query(ProposalVersion)
+    # MAX, not COUNT: a gap in the chain (a version removed by some future
+    # cleanup) would make COUNT+1 collide with a version that already exists and
+    # brick the dossier for good. MAX+1 just skips the gap.
+    highest = (
+        db.query(func.max(ProposalVersion.version_no))
         .filter(ProposalVersion.proposal_id == proposal.id)
-        .count()
-        + 1
+        .scalar()
     )
+    next_no = (highest or 0) + 1
     version = ProposalVersion(
         proposal_id=proposal.id,
         version_no=next_no,
@@ -192,6 +196,12 @@ def record_decision(
     what the admin drawer sends when it is only saving an internal note. An
     empty or blank string on a rejection or change request is refused: the
     submitter would receive an email with no reason in it.
+
+    Reopening never erases history: moving a dossier back to `submitted` or
+    `under_review` changes the dossier's status only and leaves the version's
+    `decision`, `decided_at` and `decided_by` exactly as they were. Those fields
+    record the last verdict actually taken on this version, which remains a true
+    statement about the past however the file moves on afterwards.
     """
     if status not in VALID_STATUSES:
         raise InvalidProposalStatus(f"Invalid status: {status}")
@@ -216,11 +226,11 @@ def record_decision(
         version.decision = status
         version.decided_at = datetime.utcnow()
         version.decided_by = reviewer_id
-    else:
-        # Back to an open state: this version is awaiting a verdict again.
-        version.decision = None
-        version.decided_at = None
-        version.decided_by = None
+    # A move to 'submitted' or 'under_review' deliberately leaves the version's
+    # decision fields alone. They record the last verdict actually taken on this
+    # version, which stays true after a reopening -- and the point of the
+    # version chain is that such a fact is never lost. The dossier's `status` is
+    # what says where the file stands right now.
 
     proposal.status = status
     proposal.reviewed_at = datetime.utcnow()
@@ -306,7 +316,7 @@ def serialize_for_admin(
     proposal: ProjectProposal,
     version: ProposalVersion | None,
     *,
-    db: Session,
+    db: Session | None = None,
     versions: list[ProposalVersion] | None = None,
 ) -> dict[str, Any]:
     """Dossier + current content flattened + the full version history.
@@ -317,6 +327,8 @@ def serialize_for_admin(
     query per row.
     """
     if versions is None:
+        if db is None:
+            raise ValueError("serialize_for_admin needs either `db` or `versions`.")
         versions = (
             db.query(ProposalVersion)
             .filter(ProposalVersion.proposal_id == proposal.id)

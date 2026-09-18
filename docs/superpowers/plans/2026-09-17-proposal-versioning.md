@@ -1065,6 +1065,115 @@ def test_versions_for_many_dossiers_load_in_one_query(db_session):
     assert [v.id for v in grouped[first.id]] == [v1.id]
     assert [v.id for v in grouped[second.id]] == [v2.id]
     assert grouped.get(99999, []) == []
+
+
+def test_reopening_a_decided_version_keeps_who_decided_it(db_session, admin_user):
+    """The audit trail must survive a reopening — that is the point of versions."""
+    from proposal_service import create_proposal, current_version, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="rejected", decision_comment="Out of scope.",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    record_decision(db_session, dossier, status="under_review", decision_comment=None,
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    version = current_version(db_session, dossier)
+    assert dossier.status == "under_review"
+    assert version.decision == "rejected"
+    assert version.decided_by == admin_user.id
+    assert version.decided_at is not None
+    assert version.decision_comment == "Out of scope."
+
+
+def test_version_numbers_survive_a_gap_in_the_chain(db_session, admin_user):
+    from models import ProposalVersion
+    from proposal_service import add_revision, create_proposal, record_decision
+
+    dossier, v1 = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v2 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Again",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v3 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    assert [v1.version_no, v2.version_no, v3.version_no] == [1, 2, 3]
+
+    # Punch a hole in the middle, the way a future cleanup script might.
+    db_session.query(ProposalVersion).filter(ProposalVersion.id == v2.id).delete()
+    db_session.commit()
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Once more",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    v4 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+
+    assert v4.version_no == 4, "COUNT+1 would have produced 3 and collided with v3"
+
+
+def test_deleting_a_dossier_takes_its_whole_chain(db_session, admin_user):
+    from models import ProjectProposal, ProposalVersion
+    from proposal_service import add_revision, create_proposal, delete_proposal, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                 sms_consent=False, sms_consent_text=None)
+    proposal_id = dossier.id
+
+    delete_proposal(db_session, dossier)
+
+    assert db_session.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).count() == 0
+    assert db_session.query(ProposalVersion).filter(
+        ProposalVersion.proposal_id == proposal_id).count() == 0
+
+
+def test_current_version_falls_back_to_the_highest_when_the_pointer_is_missing(db_session, admin_user):
+    """The pointer is NULL for rows migration 32 has not yet stamped."""
+    from proposal_service import add_revision, create_proposal, current_version, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v2 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    dossier.current_version_id = None
+    db_session.commit()
+
+    assert current_version(db_session, dossier).id == v2.id
+
+
+def test_version_detail_serialization_carries_content_and_decision(db_session, admin_user):
+    from proposal_service import (
+        create_proposal, current_version, record_decision, serialize_version_detail,
+    )
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="rejected", decision_comment="Out of scope.",
+                    internal_note="Third time applying.", reviewer_id=admin_user.id)
+
+    out = serialize_version_detail(dossier, current_version(db_session, dossier))
+
+    assert out["proposal_id"] == dossier.id
+    assert out["version_no"] == 1
+    assert out["project_name"] == "Fresh Food Parcels"
+    assert out["decision"] == "rejected"
+    assert out["decision_comment"] == "Out of scope."
+    assert out["internal_note"] == "Third time applying."
+    assert out["total_amount_usd"] == 4500.0
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1095,6 +1204,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import ProjectProposal, ProposalVersion
@@ -1225,12 +1335,15 @@ def add_revision(
     fields = _content_only(content)
     fields["email"] = proposal.email
 
-    next_no = (
-        db.query(ProposalVersion)
+    # MAX, not COUNT: a gap in the chain (a version removed by some future
+    # cleanup) would make COUNT+1 collide with a version that already exists and
+    # brick the dossier for good. MAX+1 just skips the gap.
+    highest = (
+        db.query(func.max(ProposalVersion.version_no))
         .filter(ProposalVersion.proposal_id == proposal.id)
-        .count()
-        + 1
+        .scalar()
     )
+    next_no = (highest or 0) + 1
     version = ProposalVersion(
         proposal_id=proposal.id,
         version_no=next_no,
@@ -1269,6 +1382,12 @@ def record_decision(
     what the admin drawer sends when it is only saving an internal note. An
     empty or blank string on a rejection or change request is refused: the
     submitter would receive an email with no reason in it.
+
+    Reopening never erases history: moving a dossier back to `submitted` or
+    `under_review` changes the dossier's status only and leaves the version's
+    `decision`, `decided_at` and `decided_by` exactly as they were. Those fields
+    record the last verdict actually taken on this version, which remains a true
+    statement about the past however the file moves on afterwards.
     """
     if status not in VALID_STATUSES:
         raise InvalidProposalStatus(f"Invalid status: {status}")
@@ -1293,11 +1412,11 @@ def record_decision(
         version.decision = status
         version.decided_at = datetime.utcnow()
         version.decided_by = reviewer_id
-    else:
-        # Back to an open state: this version is awaiting a verdict again.
-        version.decision = None
-        version.decided_at = None
-        version.decided_by = None
+    # A move to 'submitted' or 'under_review' deliberately leaves the version's
+    # decision fields alone. They record the last verdict actually taken on this
+    # version, which stays true after a reopening -- and the point of the
+    # version chain is that such a fact is never lost. The dossier's `status` is
+    # what says where the file stands right now.
 
     proposal.status = status
     proposal.reviewed_at = datetime.utcnow()
@@ -1383,7 +1502,7 @@ def serialize_for_admin(
     proposal: ProjectProposal,
     version: ProposalVersion | None,
     *,
-    db: Session,
+    db: Session | None = None,
     versions: list[ProposalVersion] | None = None,
 ) -> dict[str, Any]:
     """Dossier + current content flattened + the full version history.
@@ -1394,6 +1513,8 @@ def serialize_for_admin(
     query per row.
     """
     if versions is None:
+        if db is None:
+            raise ValueError("serialize_for_admin needs either `db` or `versions`.")
         versions = (
             db.query(ProposalVersion)
             .filter(ProposalVersion.proposal_id == proposal.id)
@@ -1481,7 +1602,7 @@ def delete_proposal(db: Session, proposal: ProjectProposal) -> None:
 - [ ] **Step 4: Run the tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_service.py -v`
-Expected: 14 passed.
+Expected: 19 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -2124,7 +2245,7 @@ def send_proposal_approved(*, email, name, proposal_id, version_no, project_name
 - [ ] **Step 7: Run the proposal tests**
 
 Run: `cd backend && python -m pytest tests/test_project_proposals.py tests/test_proposal_service.py -v`
-Expected: all pass — 16 in the router file, 14 in the service file.
+Expected: all pass — 16 in the router file, 19 in the service file.
 
 - [ ] **Step 8: Run the whole suite**
 
