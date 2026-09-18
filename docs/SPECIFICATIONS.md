@@ -13,6 +13,7 @@ see [ARCHITECTURE.md](ARCHITECTURE.md). For API details, see [API.md](API.md).
 | **Visitor** | No authentication | Browse public content, calculate Zakat, submit contact/volunteer forms, donate (no account required) |
 | **Registered user** | JWT after login | All of the above + access personal dashboard with donation history, manage recurring subscriptions, download/email certificates |
 | **Admin** | JWT + `is_admin = true` flag | All of the above + full admin console (manage all content, view all donations, manage users) |
+| **Proposal applicant** | No account — a six-digit code emailed to the address on their proposal, exchanged for a 30-minute portal token | Track and revise their own funding applications at `/my-proposals`, and nothing else |
 
 The first admin is auto-created on first startup if no admin exists:
 `admin@example.com` / `admin123` — **must be changed in production**.
@@ -187,25 +188,129 @@ Aggregate stats: total donations, donor count, average donation, charts.
 - Scan for orphaned media (S3 files not referenced in any DB record)
 - One-click auto-cleanup with usage report
 
+### 4.18 Project proposals `/admin/project-proposals`
+- Review funding requests submitted through the public `/submit-proposal` form
+- Filter by status, search by applicant name, project, or email
+- Detail view shows every field in the same order as the PDF, plus the
+  dossier's version history — each past version readable and exportable on its own
+- Two separate comment fields: a **decision comment** shown to the applicant and
+  quoted in the decision email, and an **internal note** staff keep to themselves
+- Change status. `Rejected` and `Changes requested` require a message for the
+  applicant; the applicant is emailed only when the status actually changes
+- Download the reconstructed PDF of the current version or of any earlier one
+- See section 5 for the lifecycle these actions move an application through
+
 ---
 
-## 5. Contact & volunteer flows
+## 5. Project proposals
 
-### 5.1 Contact form (`/contact`)
+Individuals apply for project funding through the public form at
+`/submit-proposal`. Staff review the application, may send it back for changes,
+and the applicant revises it through a passwordless portal at `/my-proposals`.
+No account is created at any point.
+
+### 5.1 Data model: dossier + versions
+
+An application is stored as two things:
+
+- **The dossier** (`project_proposals`) — one row per application. It holds the
+  applicant's email (the identity key: set at the first submission and never
+  changed by the application), their name, the review `status`, a pointer to the
+  current version, and the review timestamps. It holds no form content.
+- **The versions** (`proposal_versions`) — one immutable row per submission,
+  holding the 26 form fields exactly as they were sent, that submission's own
+  metadata (`version_no`, `submitted_at`, `submitted_ip`, SMS consent), and the
+  verdict passed on it: `decision`, `decision_comment` (shown to the applicant),
+  `internal_note` (staff only), `decided_at`, `decided_by`.
+
+Only the current version is ever written to. Once a newer version exists the
+older one is frozen, which makes the chain read as a history: the comment on
+version 1 is precisely what caused version 2.
+
+One email address may own several dossiers — every public submission opens a
+new one.
+
+### 5.2 Application lifecycle
+
+| Status | Meaning | Who moves it here |
+|---|---|---|
+| `submitted` | Awaiting review. Set on the first submission and on every revision. | Applicant |
+| `under_review` | A reviewer has picked it up. No email is sent. | Staff |
+| `changes_requested` | Sent back with a reason. The only status an applicant may revise from. | Staff |
+| `approved` | Accepted. | Staff |
+| `rejected` | Declined. | Staff |
+
+`rejected` is **terminal for the submitter** — the portal offers no way out of
+it. An admin reopens a dossier by moving it to `changes_requested`, which
+requires a message for the applicant and emails them. From `changes_requested`
+the applicant submits a new version, which appends the next version and returns
+the dossier to `submitted`.
+
+A decision is always recorded on the dossier's **current** version, and
+`rejected` and `changes_requested` are refused without a non-blank message for
+the applicant. Reopening never erases a verdict already recorded: moving a
+dossier back to `submitted` or `under_review` changes the dossier's status
+alone, and the version keeps the last verdict actually taken on it. That stays a
+true statement about the past however the file moves on afterwards.
+
+Staff do all of this from `/admin/project-proposals` — see section 4.18.
+
+### 5.3 The public form (`/submit-proposal`)
+
+Four sections — personal information, project information, project plan,
+required budget — 26 fields in all. The stated total must agree with
+`beneficiaries × cost per unit + additional expenses` to within $1. An optional
+SMS-consent checkbox, unchecked by default, records the exact wording the
+applicant agreed to for 10DLC audit purposes; consent text is never stored
+without consent.
+
+The same form component serves this page and the portal's revision screen, so a
+revision can never be less complete than the original.
+
+### 5.4 The submitter portal (`/my-proposals`)
+
+Applicants have no account and no password:
+
+1. They enter the address they applied with. The server replies with the same
+   opaque message whatever the address, so the page never reveals who has
+   applied for funding.
+2. If a dossier exists for it, a six-digit code is emailed. The code is
+   bcrypt-hashed at rest, lives 10 minutes, is single-use, and is burned after
+   5 wrong guesses; requesting a new one invalidates the previous one. Requests
+   are capped at 3 per address per 15 minutes and 10 per IP per hour.
+3. The code is exchanged for a portal token valid 30 minutes, held in
+   `sessionStorage` so the session dies with the tab.
+4. The portal lists every dossier for that address with its status and the
+   reviewer's message, and offers "Fix and resubmit" on the ones in
+   `changes_requested`.
+
+A portal token is not a staff session: the staff token verifier rejects the
+claim it carries, so someone signing in to the portal with an address that also
+owns a staff account cannot reach the admin console, and the audit log never
+attributes such a request to a staff member. A dossier belonging to another
+address answers "not found" rather than "forbidden", which would confirm it
+exists. The applicant never sees internal notes, submission IPs, or reviewer
+identities.
+
+---
+
+## 6. Contact & volunteer flows
+
+### 6.1 Contact form (`/contact`)
 1. Visitor fills name, email, message.
 2. Backend stores the submission and sends two emails (in background):
    - **To admin** (`info@myzakat.org`): full message + link to admin panel
    - **To visitor**: thank-you acknowledgement + copy of their message
 
-### 5.2 Volunteer form (`/volunteer`)
+### 6.2 Volunteer form (`/volunteer`)
 Same dual-notification pattern: admin gets the application, volunteer gets a thank-you.
 
-### 5.3 Newsletter signup
+### 6.3 Newsletter signup
 Footer form. Stores the email; sends no auto-email until a newsletter campaign is sent.
 
 ---
 
-## 6. Authentication
+## 7. Authentication
 
 - Email/password registration with email verification (token sent via SMTP).
 - Login returns a JWT (HS256, 7-day expiry).
@@ -216,7 +321,7 @@ Footer form. Stores the email; sends no auto-email until a newsletter campaign i
 
 ---
 
-## 7. Email communications
+## 8. Email communications
 
 Sent via the configured SMTP server (`netsol-smtp-oxcs.hostingplatform.com`):
 
@@ -229,13 +334,20 @@ Sent via the configured SMTP server (`netsol-smtp-oxcs.hostingplatform.com`):
 | Volunteer signup | Volunteer | "Thank you for volunteering" |
 | Volunteer signup | Admin | Notification with link to admin panel |
 | Admin replies to contact | Original submitter | Reply email |
+| Proposal submitted — first version and every revision | Applicant | `proposal_received` |
+| Proposal sent back for changes | Applicant | `proposal_changes_requested`, quoting the reviewer's message |
+| Proposal rejected | Applicant | `proposal_rejected`, quoting the reason |
+| Proposal approved | Applicant | `proposal_approved` |
+| Portal sign-in code requested | Applicant | `proposal_access_code` |
 
 All emails are sent via FastAPI `BackgroundTasks` so the user-facing
-response is never blocked by SMTP latency.
+response is never blocked by SMTP latency. The five proposal emails are
+instead queued in the outbound email table and delivered by the `worker`
+container; all five are categorised `transactional`.
 
 ---
 
-## 8. Search Engine Optimization (SEO)
+## 9. Search Engine Optimization (SEO)
 
 - Every page has a `SEOHead` component setting:
   - `<title>` (e.g. "Donate Zakat & Sadaqa Online | MyZakat – …")
@@ -252,7 +364,7 @@ For AI/LLM discoverability:
 
 ---
 
-## 9. Audit logging
+## 10. Audit logging
 
 Every state-changing request (POST/PUT/PATCH/DELETE) is logged with:
 - Actor display name (extracted from JWT)
@@ -265,7 +377,7 @@ Logs flow to Loki via Promtail and are visualized in the
 
 ---
 
-## 10. Out of scope (intentionally not implemented)
+## 11. Out of scope (intentionally not implemented)
 
 - Multi-currency donations (USD only)
 - Multi-language UI (English only)
@@ -276,7 +388,7 @@ Logs flow to Loki via Promtail and are visualized in the
 
 ---
 
-## 11. Contact
+## 12. Contact
 
 For specification questions or proposed changes, contact:
 
