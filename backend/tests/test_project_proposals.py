@@ -285,3 +285,46 @@ def test_deleting_a_dossier_removes_its_versions(client, auth_headers, db_sessio
     assert db_session.query(ProjectProposal).filter(
         ProjectProposal.id == created["id"]
     ).count() == 0
+
+
+def test_a_decision_emails_the_applicant_once(client, auth_headers, monkeypatch):
+    import routers.project_proposals as router_module
+
+    sent = []
+    monkeypatch.setattr(
+        router_module.email_service, "send_proposal_changes_requested",
+        lambda **kwargs: sent.append(kwargs) or True,
+    )
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "changes_requested", "decision_comment": "Detail the transport costs."},
+        headers=auth_headers,
+    )
+    # Re-saving the same status (the "save internal note" path) must not re-notify.
+    client.patch(
+        f"/api/project-proposals/{created['id']}/status",
+        json={"status": "changes_requested", "internal_note": "Chased by phone."},
+        headers=auth_headers,
+    )
+
+    assert len(sent) == 1
+    assert sent[0]["comment"] == "Detail the transport costs."
+    assert sent[0]["proposal_id"] == created["id"]
+
+
+def test_under_review_does_not_email_the_applicant(client, auth_headers, monkeypatch):
+    import routers.project_proposals as router_module
+
+    sent = []
+    for name in ("send_proposal_approved", "send_proposal_rejected",
+                 "send_proposal_changes_requested"):
+        monkeypatch.setattr(router_module.email_service, name,
+                            lambda **kwargs: sent.append(kwargs) or True)
+    created = client.post("/api/project-proposals/", json=_payload()).json()
+
+    client.patch(f"/api/project-proposals/{created['id']}/status",
+                 json={"status": "under_review"}, headers=auth_headers)
+
+    assert sent == []

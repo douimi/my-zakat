@@ -206,20 +206,101 @@ def send_volunteer_acknowledgement(name: str, email: str, interest: str) -> bool
     )
 
 
-# ── Project proposals ────────────────────────────────────────────────
-# Filled in by the next task; the router already calls them.
+# ─────────────────────────────────────────────────────────────────────
+# Project proposals
+# ─────────────────────────────────────────────────────────────────────
 
-def send_proposal_received(*, email, name, proposal_id, version_no, project_name) -> bool:
-    return True
-
-
-def send_proposal_changes_requested(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
-    return True
+PROPOSAL_PORTAL_URL = f"{FRONTEND_URL}/my-proposals"
 
 
-def send_proposal_rejected(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
-    return True
+def _proposal_context(
+    name: str, proposal_id: int, version_no: int, project_name: str, comment: str = ""
+) -> dict:
+    return {
+        "name": name,
+        "proposal_id": proposal_id,
+        "version_no": version_no,
+        "project_name": project_name,
+        "comment": comment,
+        "portal_url": PROPOSAL_PORTAL_URL,
+    }
 
 
-def send_proposal_approved(*, email, name, proposal_id, version_no, project_name, comment) -> bool:
-    return True
+def send_proposal_received(
+    *, email: str, name: str, proposal_id: int, version_no: int, project_name: str
+) -> bool:
+    """Acknowledge a submission — the first one and every revision."""
+    return _enqueue(
+        "proposal_received",
+        to_email=email,
+        to_name=name,
+        subject=f"We received your proposal #{proposal_id} — MyZakat",
+        context=_proposal_context(name, proposal_id, version_no, project_name),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-v{version_no}-received",
+    )
+
+
+def send_proposal_changes_requested(
+    *, email: str, name: str, proposal_id: int, version_no: int,
+    project_name: str, comment: str,
+) -> bool:
+    """Ask the applicant for changes, quoting the reviewer's message."""
+    return _enqueue(
+        "proposal_changes_requested",
+        to_email=email,
+        to_name=name,
+        subject=f"Changes requested on your proposal #{proposal_id} — MyZakat",
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-v{version_no}-changes_requested",
+    )
+
+
+def send_proposal_rejected(
+    *, email: str, name: str, proposal_id: int, version_no: int,
+    project_name: str, comment: str,
+) -> bool:
+    """Tell the applicant the request was declined, with the reason."""
+    return _enqueue(
+        "proposal_rejected",
+        to_email=email,
+        to_name=name,
+        subject=f"Decision on your proposal #{proposal_id} — MyZakat",
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-v{version_no}-rejected",
+    )
+
+
+def send_proposal_approved(
+    *, email: str, name: str, proposal_id: int, version_no: int,
+    project_name: str, comment: str = "",
+) -> bool:
+    """Confirm an approval."""
+    return _enqueue(
+        "proposal_approved",
+        to_email=email,
+        to_name=name,
+        subject=f"Your proposal #{proposal_id} has been approved — MyZakat",
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-v{version_no}-approved",
+    )
+
+
+def send_proposal_access_code(*, email: str, code: str, ttl_minutes: int = 10) -> bool:
+    """Send a one-time portal sign-in code.
+
+    No idempotency key: every request must deliver its own fresh code, and the
+    previous one has already been invalidated server-side. No name, project or
+    reference either — this email goes out before the requester has proved they
+    control the address.
+    """
+    return _enqueue(
+        "proposal_access_code",
+        to_email=email,
+        subject="Your MyZakat sign-in code",
+        context={"code": code, "ttl_minutes": ttl_minutes},
+        category="transactional",
+    )

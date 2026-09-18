@@ -1,0 +1,14 @@
+Assalamu alaikum {{ name }},
+
+Our review team has looked at '{{ project_name }}' (reference #{{ proposal_id }}) and would like some changes before taking a decision.
+
+What we would like you to change
+--------------------------------
+{{ comment }}
+
+To update your application, go to {{ portal_url }} and enter this email address. We will send you a six-digit code to sign in — you do not need an account or a password.
+
+Your previous version is kept on file, so nothing you have already written is lost.
+
+With gratitude,
+The MyZakat Team

@@ -1,0 +1,9 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #2563eb; margin: 0 0 18px 0; font-size: 20px;">Your sign-in code</h2>
+<p>Use this code to see the project proposals submitted with this email address:</p>
+<p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #111827; margin: 24px 0;">{{ code }}</p>
+<p>The code expires in {{ ttl_minutes }} minutes and can be used once.</p>
+<p style="color: #6b7280; font-size: 13px;">If you did not ask for this code, you can ignore this email — nothing has been shared and no account has been created.</p>
+<p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+{% endblock %}

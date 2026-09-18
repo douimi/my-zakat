@@ -1,0 +1,12 @@
+Assalamu alaikum {{ name }},
+
+Thank you for submitting '{{ project_name }}' (reference #{{ proposal_id }}). After review, we are not able to fund this request.
+
+Reason
+------
+{{ comment }}
+
+This decision applies to this application only. You are welcome to submit a new proposal in a future funding cycle, and if anything in the explanation above is unclear you can reply to this email.
+
+With gratitude,
+The MyZakat Team

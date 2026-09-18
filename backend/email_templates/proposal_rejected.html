@@ -1,0 +1,15 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #1f2937; margin: 0 0 18px 0; font-size: 20px;">Decision on your proposal</h2>
+<p>Assalamu alaikum {{ name }},</p>
+<p>Thank you for submitting <strong>{{ project_name }}</strong> (reference <strong>#{{ proposal_id }}</strong>). After review, we are not able to fund this request.</p>
+<table role="presentation" width="100%" style="margin: 18px 0; border-collapse: collapse;">
+  <tr>
+    <td style="border-left: 4px solid #6b7280; background: #f9fafb; padding: 14px 16px; color: #1f2937;">
+      {{ comment }}
+    </td>
+  </tr>
+</table>
+<p>This decision applies to this application only. You are welcome to submit a new proposal in a future funding cycle, and if anything in the explanation above is unclear you can reply to this email.</p>
+<p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+{% endblock %}
