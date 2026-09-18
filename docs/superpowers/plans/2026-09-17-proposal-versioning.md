@@ -3079,6 +3079,7 @@ from models import ProposalAccessCode
 
 
 def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
+    from auth_utils import verify_password
     from proposal_otp import issue_code
 
     code = issue_code(db_session, email="a@example.com", ip="203.0.113.1")
@@ -3086,8 +3087,14 @@ def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
     assert code is not None
     assert len(code) == 6 and code.isdigit()
     row = db_session.query(ProposalAccessCode).one()
-    assert code not in row.code_hash
+    # The stored value is a bcrypt digest that verifies the code, never the
+    # code itself. (Asserting the digits are absent as a SUBSTRING would flake:
+    # a six-digit run turns up in a bcrypt tail roughly once in 1,400 runs.)
+    assert row.code_hash != code
     assert row.code_hash.startswith("$2")
+    assert len(row.code_hash) >= 55
+    assert verify_password(code, row.code_hash) is True
+    assert verify_password("000000" if code != "000000" else "111111", row.code_hash) is False
     assert row.email == "a@example.com"
     assert row.request_ip == "203.0.113.1"
     assert row.expires_at > datetime.utcnow()
@@ -3216,6 +3223,14 @@ limited.
 The project has no rate-limiting middleware, so the limits are enforced by
 counting rows in `proposal_access_codes` — the same record we want for audit
 anyway.
+
+On the two limits: the per-ADDRESS cap is the one that actually protects an
+applicant, and it cannot be evaded, because the address is what the code is
+minted for. The per-IP cap is defence in depth against someone sweeping many
+addresses at once; it rests on X-Forwarded-For, which Traefik overwrites rather
+than trusts (traefik.yml sets no forwardedHeaders.trustedIPs and does not
+enable `insecure`), so it holds behind the proxy — but it would be evadable by
+anything able to reach the backend port directly.
 """
 from __future__ import annotations
 
@@ -3330,6 +3345,12 @@ def verify_code(db: Session, *, email: str, code: str) -> bool:
         return False
 
     if row.attempts >= MAX_ATTEMPTS:
+        # Unreachable through this module's own writes -- the elif below burns
+        # the row on the fifth wrong guess, in the same call that reaches the
+        # cap. Kept as a backstop for a row left at the cap unconsumed by some
+        # other path, and as a reminder that the increment must stay BELOW this
+        # check: moving it above would spend an applicant's fifth legitimate
+        # attempt before it was ever compared.
         row.consumed_at = now
         db.commit()
         return False

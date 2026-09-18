@@ -5,6 +5,7 @@ from models import ProposalAccessCode
 
 
 def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
+    from auth_utils import verify_password
     from proposal_otp import issue_code
 
     code = issue_code(db_session, email="a@example.com", ip="203.0.113.1")
@@ -12,8 +13,14 @@ def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
     assert code is not None
     assert len(code) == 6 and code.isdigit()
     row = db_session.query(ProposalAccessCode).one()
-    assert code not in row.code_hash
+    # The stored value is a bcrypt digest that verifies the code, never the
+    # code itself. (Asserting the digits are absent as a SUBSTRING would flake:
+    # a six-digit run turns up in a bcrypt tail roughly once in 1,400 runs.)
+    assert row.code_hash != code
     assert row.code_hash.startswith("$2")
+    assert len(row.code_hash) >= 55
+    assert verify_password(code, row.code_hash) is True
+    assert verify_password("000000" if code != "000000" else "111111", row.code_hash) is False
     assert row.email == "a@example.com"
     assert row.request_ip == "203.0.113.1"
     assert row.expires_at > datetime.utcnow()

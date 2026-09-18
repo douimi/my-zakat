@@ -131,6 +131,12 @@ def verify_code(db: Session, *, email: str, code: str) -> bool:
         return False
 
     if row.attempts >= MAX_ATTEMPTS:
+        # Unreachable through this module's own writes -- the elif below burns
+        # the row on the fifth wrong guess, in the same call that reaches the
+        # cap. Kept as a backstop for a row left at the cap unconsumed by some
+        # other path, and as a reminder that the increment must stay BELOW this
+        # check: moving it above would spend an applicant's fifth legitimate
+        # attempt before it was ever compared.
         row.consumed_at = now
         db.commit()
         return False
