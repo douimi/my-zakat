@@ -87,3 +87,30 @@ def test_access_code_row_records_its_own_expiry_and_attempts(db_session):
     assert code.attempts == 0
     assert code.consumed_at is None
     assert code.created_at is not None
+
+
+def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session):
+    """The renderer is duck-typed: it reads attributes, not a specific class.
+
+    Task 5 hands it a ProposalVersion; today the router hands it a
+    ProjectProposal. Both work, which is what lets the move be behaviour-free.
+    """
+    from proposal_pdf import render_proposal_pdf, safe_slug
+
+    dossier = ProjectProposal(email="amina@example.com", full_name="Amina Yusuf", status="submitted")
+    db_session.add(dossier)
+    db_session.flush()
+    version = ProposalVersion(proposal_id=dossier.id, version_no=1, **_content())
+    db_session.add(version)
+    db_session.commit()
+
+    # The renderer needs .id, .status and .submitted_at alongside the content;
+    # a version carries submitted_at, and the dossier carries id and status.
+    version.id = dossier.id
+    version.status = dossier.status
+
+    pdf = render_proposal_pdf(version)
+
+    assert pdf.startswith(b"%PDF-")
+    assert len(pdf) > 2000
+    assert safe_slug("Fresh Food Parcels!") == "fresh-food-parcels"
