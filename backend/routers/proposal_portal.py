@@ -63,9 +63,9 @@ def _dossiers_for(db: Session, email: str) -> list[ProjectProposal]:
 async def request_code(payload: CodeRequest, request: Request, db: Session = Depends(get_db)):
     """Email a one-time code, but only if the address actually has a dossier.
 
-    The reply is the same either way. Over the rate limit it is a 429, which
-    does reveal that *someone* has been asking about this address recently — an
-    acceptable trade for a limit that cannot be bypassed by rotating addresses.
+    Every caller gets the same 202 and the same body: an unknown address, a
+    known one, and a known one over the rate limit are indistinguishable from
+    outside. The limit still holds — a capped caller simply receives no email.
     """
     email = payload.email.strip()
 
@@ -75,10 +75,13 @@ async def request_code(payload: CodeRequest, request: Request, db: Session = Dep
 
     code = proposal_otp.issue_code(db, email=email, ip=client_ip(request))
     if code is None:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many sign-in codes requested. Please try again later.",
-        )
+        # Rate limited. Answer exactly as for an unknown address rather than
+        # 429: a 429 only ever reached addresses that HAVE a dossier, which
+        # turned three unauthenticated posts into a way of asking "has this
+        # person applied for funding?". The opaque wording already covers
+        # sending nothing -- "if that address has a proposal with us".
+        logger.warning("Proposal portal: code request rate-limited for %s", email)
+        return OPAQUE_REQUEST_REPLY
 
     email_service.send_proposal_access_code(
         email=email, code=code, ttl_minutes=proposal_otp.CODE_TTL_MINUTES

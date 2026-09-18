@@ -202,6 +202,11 @@ def record_decision(
     `decision`, `decided_at` and `decided_by` exactly as they were. Those fields
     record the last verdict actually taken on this version, which remains a true
     statement about the past however the file moves on afterwards.
+
+    `decided_at` and `decided_by` move only when the verdict itself changes. The
+    drawer's "save without notifying" re-sends the status already on file, and a
+    note saved that way must not re-date the decision nor credit it to whoever
+    happened to open the drawer last.
     """
     if status not in VALID_STATUSES:
         raise InvalidProposalStatus(f"Invalid status: {status}")
@@ -223,9 +228,15 @@ def record_decision(
         version.internal_note = internal_note.strip() or None
 
     if status in DECISION_STATUSES:
-        version.decision = status
-        version.decided_at = datetime.utcnow()
-        version.decided_by = reviewer_id
+        # Re-stamp only on a real change of verdict. The admin drawer's
+        # "save without notifying" re-sends the CURRENT status, and that must
+        # not re-date a decision or re-attribute it to whoever last opened the
+        # drawer -- the history would then show a date on which nothing was
+        # sent, beside a name that did not decide.
+        if version.decision != status:
+            version.decision = status
+            version.decided_at = datetime.utcnow()
+            version.decided_by = reviewer_id
     # A move to 'submitted' or 'under_review' deliberately leaves the version's
     # decision fields alone. They record the last verdict actually taken on this
     # version, which stays true after a reopening -- and the point of the
@@ -390,7 +401,16 @@ def serialize_for_portal(
         "submitted_at": proposal.submitted_at,
         "updated_at": proposal.updated_at,
         "version_no": version.version_no if version else None,
-        "decision_comment": version.decision_comment if version else None,
+        # Only while the dossier still stands on a decision. The version keeps
+        # its comment for the admin history either way -- but an applicant must
+        # never read a past verdict as though it were the current one, which is
+        # what happens the moment a reviewer moves a rejected dossier back to
+        # 'submitted' or 'under_review' for a second look.
+        "decision_comment": (
+            version.decision_comment
+            if version is not None and proposal.status in DECISION_STATUSES
+            else None
+        ),
         "content": _content_dict(version),
     }
 

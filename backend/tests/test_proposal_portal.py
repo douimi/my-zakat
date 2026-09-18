@@ -169,20 +169,6 @@ def test_a_wrong_code_is_401(client, db_session):
     assert resp.status_code == 401
 
 
-def test_too_many_code_requests_is_429(client, db_session):
-    from proposal_otp import MAX_CODES_PER_EMAIL
-
-    client.post("/api/project-proposals/", json=_payload())
-    for _ in range(MAX_CODES_PER_EMAIL):
-        client.post("/api/project-proposals/portal/request-code",
-                    json={"email": "amina@example.com"})
-
-    resp = client.post("/api/project-proposals/portal/request-code",
-                       json={"email": "amina@example.com"})
-
-    assert resp.status_code == 429
-
-
 # ── The dashboard ────────────────────────────────────────────────────
 
 def test_the_portal_lists_only_the_signed_in_address_dossiers(client, auth_headers):
@@ -339,3 +325,38 @@ def test_an_incomplete_revision_is_refused(client, auth_headers):
                       json=_payload(project_description="too short"), headers=headers)
 
     assert resp.status_code == 422
+
+
+def test_request_code_is_indistinguishable_for_known_and_unknown_addresses(client, db_session):
+    """Three posts must not reveal whether an address has applied for funding."""
+    from proposal_otp import MAX_CODES_PER_EMAIL
+
+    client.post("/api/project-proposals/", json=_payload())
+
+    known, unknown = [], []
+    for _ in range(MAX_CODES_PER_EMAIL + 2):
+        known.append(client.post("/api/project-proposals/portal/request-code",
+                                 json={"email": "amina@example.com"}))
+        unknown.append(client.post("/api/project-proposals/portal/request-code",
+                                   json={"email": "nobody-here@example.com"}))
+
+    assert [r.status_code for r in known] == [r.status_code for r in unknown]
+    assert {r.status_code for r in known} == {202}
+    assert [r.json() for r in known] == [r.json() for r in unknown]
+
+
+def test_a_rate_limited_address_is_told_nothing_and_emailed_nothing(client, db_session, monkeypatch):
+    import routers.proposal_portal as portal_module
+    from proposal_otp import MAX_CODES_PER_EMAIL
+
+    sent = []
+    monkeypatch.setattr(portal_module.email_service, "send_proposal_access_code",
+                        lambda **kwargs: sent.append(kwargs) or True)
+    client.post("/api/project-proposals/", json=_payload())
+
+    for _ in range(MAX_CODES_PER_EMAIL + 1):
+        resp = client.post("/api/project-proposals/portal/request-code",
+                           json={"email": "amina@example.com"})
+        assert resp.status_code == 202
+
+    assert len(sent) == MAX_CODES_PER_EMAIL, "the capped request must not send a code"

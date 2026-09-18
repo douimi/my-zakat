@@ -17,6 +17,12 @@ addresses at once; it rests on X-Forwarded-For, which Traefik overwrites rather
 than trusts (traefik.yml sets no forwardedHeaders.trustedIPs and does not
 enable `insecure`), so it holds behind the proxy — but it would be evadable by
 anything able to reach the backend port directly.
+
+Reaching a limit is never announced. `issue_code` returns None and the router
+answers the same opaque 202 it gives an address it has never heard of: a
+distinct reply would only ever have been served to addresses that do have a
+dossier, which is exactly the enumeration this module exists to prevent. A
+capped caller receives no email, and that is the whole of the enforcement.
 """
 from __future__ import annotations
 

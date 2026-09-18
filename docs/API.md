@@ -383,8 +383,12 @@ endpoint must not let anyone discover who has applied for funding. A code is
 only actually sent when a dossier exists, and issuing one consumes any earlier
 unconsumed code for that address, so only the newest one ever works.
 
-`429` once the address has requested 3 codes in 15 minutes, or the caller's IP
-10 in an hour.
+The answer is **always `202`**, never `429`. Once the address has requested 3
+codes in 15 minutes, or the caller's IP 10 in an hour, the limit takes effect
+silently: the reply is byte-for-byte the one above and no email is sent. A
+distinct status would only ever have been returned to addresses that do have a
+dossier, which would have made three unauthenticated requests enough to reveal
+who has applied for funding.
 
 #### `POST /api/project-proposals/portal/verify-code` — public
 
@@ -492,7 +496,9 @@ Returns environment + Stripe configuration status. For local debugging.
 There is no rate-limiting middleware. The one limited endpoint is
 `POST /api/project-proposals/portal/request-code`, which enforces its own caps
 by counting rows in `proposal_access_codes` — 3 codes per address per 15
-minutes and 10 per IP per hour, both answering `429`.
+minutes and 10 per IP per hour. Neither answers `429`: a capped caller still
+receives the ordinary `202` and simply gets no email, so the endpoint cannot be
+used to tell a known address from an unknown one.
 
 Site-wide rate limiting is still unimplemented. Tracked in
 [PRODUCTION_READINESS_REPORT.md](PRODUCTION_READINESS_REPORT.md) as a
@@ -513,7 +519,7 @@ hardening item.
 | 404 | Resource not found — also used where a 403 would leak the existence of someone else's record |
 | 409 | Conflict with the resource's current state (e.g. revising a proposal that is not awaiting changes) |
 | 422 | Pydantic validation error (malformed body) |
-| 429 | Rate limited |
+| 429 | Rate limited — reserved; no endpoint returns it today (the portal's code request stays `202` when capped, so it cannot be used to enumerate applicants) |
 | 500 | Server error (logged with traceback) |
 
 Error responses are always JSON: `{ "detail": "human-readable message" }`.

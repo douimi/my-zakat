@@ -374,3 +374,50 @@ def test_version_detail_serialization_carries_content_and_decision(db_session, a
     assert out["decision_comment"] == "Out of scope."
     assert out["internal_note"] == "Third time applying."
     assert out["total_amount_usd"] == 4500.0
+
+
+def test_a_reopened_dossier_stops_showing_the_old_reason_to_the_applicant(db_session, admin_user):
+    """The admin's "mark submitted" must not leave a rejection reason on the
+    applicant's card under a "Submitted" badge."""
+    from proposal_service import (
+        create_proposal, current_version, record_decision, serialize_for_portal,
+    )
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="rejected",
+                    decision_comment="We cannot fund drilling this cycle.",
+                    internal_note=None, reviewer_id=admin_user.id)
+    assert serialize_for_portal(dossier, current_version(db_session, dossier))["decision_comment"]
+
+    record_decision(db_session, dossier, status="submitted", decision_comment=None,
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    out = serialize_for_portal(dossier, current_version(db_session, dossier))
+    assert out["status"] == "submitted"
+    assert out["decision_comment"] is None
+    # The admin history keeps it.
+    assert current_version(db_session, dossier).decision_comment == "We cannot fund drilling this cycle."
+
+
+def test_saving_a_note_does_not_re_date_or_re_attribute_a_decision(db_session, admin_user, manager_user):
+    """"Save without notifying" re-sends the current status; the audit trail
+    must not move."""
+    from proposal_service import create_proposal, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    decided = record_decision(db_session, dossier, status="rejected",
+                              decision_comment="Out of scope.", internal_note=None,
+                              reviewer_id=admin_user.id)
+    decided_at, decided_by = decided.decided_at, decided.decided_by
+
+    again = record_decision(db_session, dossier, status="rejected", decision_comment=None,
+                            internal_note="Chased by phone.", reviewer_id=manager_user.id)
+
+    assert again.decided_at == decided_at, "a notes-only save must not re-date the decision"
+    assert again.decided_by == decided_by, "a notes-only save must not re-attribute it"
+    assert again.internal_note == "Chased by phone."
+    assert again.decision_comment == "Out of scope."
