@@ -686,8 +686,8 @@ Append to `backend/tests/test_project_proposals.py`:
 def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session):
     """The renderer is duck-typed: it reads attributes, not a specific class.
 
-    Task 5 hands it a ProposalVersion; today the router hands it a
-    ProjectProposal. Both work, which is what lets the move be behaviour-free.
+    The router hands it a namespace built from a ProposalVersion plus the
+    dossier's id and status; this test hands it the version itself.
     """
     from proposal_pdf import render_proposal_pdf, safe_slug
 
@@ -695,7 +695,6 @@ def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session
     db_session.add(dossier)
     db_session.flush()
     version = ProposalVersion(proposal_id=dossier.id, version_no=1, **_content())
-    version.id = None
     db_session.add(version)
     db_session.commit()
 
