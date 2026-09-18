@@ -54,6 +54,7 @@ def test_the_rejection_gives_the_reason_and_offers_no_edit_link():
 
     assert "Outside this funding cycle" in text
     assert "my-proposals" not in html, "a closed dossier must not invite an edit"
+    assert "my-proposals" not in text, "a closed dossier must not invite an edit"
 
 
 def test_the_access_code_email_shows_the_code_and_its_lifetime():
@@ -67,13 +68,22 @@ def test_the_access_code_email_names_no_applicant_or_project():
     """It is sent before we know the requester controls the address.
 
     Confirming "yes, Amina Yusuf has a proposal here" to whoever typed the
-    address would leak exactly what /portal/request-code refuses to leak.
+    address would leak exactly what /portal/request-code refuses to leak. The
+    values below are deliberately IN the context: the guarantee is that the
+    template does not reference them, not that the caller withholds them.
     """
-    html, _ = render("proposal_access_code", {"code": "483920", "ttl_minutes": 10})
+    html, text = render("proposal_access_code", {
+        "code": "483920",
+        "ttl_minutes": 10,
+        "name": "Amina Yusuf",
+        "project_name": "Secret Wells Project",
+        "proposal_id": 42,
+    })
 
-    assert "{{" not in html
-    for leaked in ("project_name", "proposal_id"):
-        assert leaked not in html
+    for leaked in ("Amina Yusuf", "Secret Wells Project", "#42"):
+        assert leaked not in html, f"{leaked} must not reach an unverified address"
+        assert leaked not in text, f"{leaked} must not reach an unverified address"
+    assert "483920" in html and "483920" in text
 
 
 def test_the_shims_queue_one_email_each(monkeypatch):
@@ -108,3 +118,35 @@ def test_the_shims_queue_one_email_each(monkeypatch):
     # The code email carries no key: every request must deliver a fresh code.
     assert "idempotency_key" not in queued[2][1]
     assert queued[2][1]["category"] == "transactional"
+
+
+def test_a_multi_line_reviewer_comment_survives_in_both_variants():
+    """An admin writing a numbered list must not be delivered a run-on sentence."""
+    comment = "Please do three things:\n1. Itemise transport\n2. Attach the quote\n3. Name the committee"
+    html, text = render("proposal_changes_requested", {
+        "name": "Amina Yusuf",
+        "proposal_id": 42,
+        "version_no": 1,
+        "project_name": "Fresh Food Parcels",
+        "comment": comment,
+        "portal_url": "https://myzakat.org/my-proposals",
+    })
+
+    assert "1. Itemise transport" in text and "3. Name the committee" in text
+    assert "1. Itemise transport" in html
+    # Without pre-wrap the client collapses the newlines into one paragraph.
+    assert "pre-wrap" in html
+
+
+def test_an_applicants_html_in_a_project_name_is_escaped():
+    """project_name comes from a public, unauthenticated form."""
+    html, _ = render("proposal_received", {
+        "name": "Amina Yusuf",
+        "proposal_id": 42,
+        "version_no": 1,
+        "project_name": "<script>alert(1)</script>",
+        "portal_url": "https://myzakat.org/my-proposals",
+    })
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
