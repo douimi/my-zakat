@@ -421,3 +421,62 @@ def test_saving_a_note_does_not_re_date_or_re_attribute_a_decision(db_session, a
     assert again.decided_by == decided_by, "a notes-only save must not re-attribute it"
     assert again.internal_note == "Chased by phone."
     assert again.decision_comment == "Out of scope."
+
+
+def test_the_portal_tells_a_revising_applicant_they_already_opted_in(db_session, admin_user):
+    """Without this the consent checkbox renders empty and the revision
+    silently withdraws an opt-in the applicant never withdrew."""
+    from proposal_service import (
+        create_proposal, current_version, record_decision, serialize_for_portal,
+    )
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="",
+        sms_consent=True, sms_consent_text="I agree to SMS",
+    )
+    record_decision(db_session, dossier, status="changes_requested",
+                    decision_comment="Detail the transport costs.",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    out = serialize_for_portal(dossier, current_version(db_session, dossier))
+
+    assert out["content"]["sms_consent"] is True
+    # The wording itself is proof-of-consent and stays staff-side.
+    assert "sms_consent_text" not in out["content"]
+
+
+def test_the_portal_reports_no_consent_when_none_was_given(db_session, admin_user):
+    from proposal_service import (
+        create_proposal, current_version, record_decision, serialize_for_portal,
+    )
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="",
+        sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    out = serialize_for_portal(dossier, current_version(db_session, dossier))
+
+    assert out["content"]["sms_consent"] is False
+
+
+def test_a_revision_that_restates_consent_keeps_it_on_the_new_version(db_session, admin_user):
+    """The applicant re-ticks the box; the new version must record it, with its
+    own timestamp -- consent belongs to the submission act."""
+    from proposal_service import add_revision, create_proposal, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="",
+        sms_consent=True, sms_consent_text="I agree to SMS",
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    v2 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=True, sms_consent_text="I agree to SMS")
+
+    assert v2.sms_consent is True
+    assert v2.sms_consent_text == "I agree to SMS"
+    assert v2.sms_consent_at is not None

@@ -298,13 +298,28 @@ def versions_by_proposal(
 
 
 def _content_dict(version: ProposalVersion | None) -> dict[str, Any]:
-    """The content fields of a version, with the numeric ones as plain floats."""
+    """The content fields of a version, with the numeric ones as plain floats.
+
+    `sms_consent` is added on top of PROPOSAL_CONTENT_FIELDS rather than into
+    it: that tuple also filters inbound payloads, and consent arrives by its own
+    route (_consent_fields), so listing it there would write it twice from two
+    sources. It belongs in the OUTPUT because the portal has to be able to show
+    a revising applicant the opt-in they already gave -- otherwise the form
+    renders an empty box and the revision silently withdraws consent the
+    applicant never withdrew.
+
+    `sms_consent_text` stays out: the exact wording agreed to is a 10DLC audit
+    artifact for staff, and the portal has no use for it.
+    """
     if version is None:
-        return {key: None for key in PROPOSAL_CONTENT_FIELDS}
+        out: dict[str, Any] = {key: None for key in PROPOSAL_CONTENT_FIELDS}
+        out["sms_consent"] = False
+        return out
     out = {key: getattr(version, key) for key in PROPOSAL_CONTENT_FIELDS}
     out["cost_per_unit_usd"] = float(version.cost_per_unit_usd or 0)
     out["additional_expenses_usd"] = float(version.additional_expenses_usd or 0)
     out["total_amount_usd"] = float(version.total_amount_usd or 0)
+    out["sms_consent"] = bool(version.sms_consent)
     return out
 
 
