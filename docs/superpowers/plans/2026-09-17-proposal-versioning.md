@@ -398,7 +398,7 @@ git commit -m "Add proposal version and access-code models"
 CREATE TABLE IF NOT EXISTS proposal_versions (
     id                          SERIAL PRIMARY KEY,
     proposal_id                 INTEGER         NOT NULL REFERENCES project_proposals(id) ON DELETE CASCADE,
-    version_no                  INTEGER         NOT NULL,
+    version_no                  INTEGER         NOT NULL CHECK (version_no > 0),
 
     -- ── Section 1: Personal information ────────────────────
     full_name                   VARCHAR(200)    NOT NULL,
@@ -443,7 +443,8 @@ CREATE TABLE IF NOT EXISTS proposal_versions (
 
     -- ── The decision on this version ───────────────────────
     -- NULL = awaiting review | approved | rejected | changes_requested
-    decision                    VARCHAR(20),
+    decision                    VARCHAR(20)
+        CHECK (decision IS NULL OR decision IN ('approved', 'rejected', 'changes_requested')),
     decision_comment            TEXT,           -- shown to the submitter
     internal_note               TEXT,           -- staff only
     decided_at                  TIMESTAMP,
@@ -451,9 +452,6 @@ CREATE TABLE IF NOT EXISTS proposal_versions (
 
     CONSTRAINT uq_proposal_version_no UNIQUE (proposal_id, version_no)
 );
-
-CREATE INDEX IF NOT EXISTS idx_proposal_versions_proposal
-    ON proposal_versions(proposal_id, version_no);
 
 CREATE TABLE IF NOT EXISTS proposal_access_codes (
     id            SERIAL PRIMARY KEY,
@@ -476,7 +474,14 @@ ALTER TABLE project_proposals
     REFERENCES proposal_versions(id) ON DELETE SET NULL;
 
 -- ── Backfill: every pre-existing proposal becomes its own version 1 ────
--- Guarded by current_version_id IS NULL, so re-running changes nothing.
+-- The INSERT and the UPDATE are one transaction on purpose. psql runs a
+-- script in autocommit, so without this an INSERT that commits before a
+-- failing UPDATE would leave a version row with a NULL pointer -- and the
+-- re-run would then collide with uq_proposal_version_no and abort for good.
+-- ON CONFLICT covers the same hole from the other side: if a version 1 does
+-- somehow already exist, the UPDATE still repairs the pointer.
+BEGIN;
+
 INSERT INTO proposal_versions (
     proposal_id, version_no,
     full_name, national_id, date_of_birth_year, place_of_residence,
@@ -513,7 +518,8 @@ SELECT
     CASE WHEN p.status IN ('approved', 'rejected') THEN p.reviewed_at ELSE NULL END,
     CASE WHEN p.status IN ('approved', 'rejected') THEN p.reviewed_by ELSE NULL END
 FROM project_proposals p
-WHERE p.current_version_id IS NULL;
+WHERE p.current_version_id IS NULL
+ON CONFLICT ON CONSTRAINT uq_proposal_version_no DO NOTHING;
 
 UPDATE project_proposals p
    SET current_version_id = v.id
@@ -521,6 +527,8 @@ UPDATE project_proposals p
  WHERE v.proposal_id = p.id
    AND v.version_no = 1
    AND p.current_version_id IS NULL;
+
+COMMIT;
 
 -- ── Relax the legacy content columns ──────────────────────────────────
 -- The new code writes content to proposal_versions and inserts dossier rows
