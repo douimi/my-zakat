@@ -92,8 +92,8 @@ def test_access_code_row_records_its_own_expiry_and_attempts(db_session):
 def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session):
     """The renderer is duck-typed: it reads attributes, not a specific class.
 
-    Task 5 hands it a ProposalVersion; today the router hands it a
-    ProjectProposal. Both work, which is what lets the move be behaviour-free.
+    The router hands it a namespace built from a ProposalVersion plus the
+    dossier's id and status; this test hands it the version itself.
     """
     from proposal_pdf import render_proposal_pdf, safe_slug
 
@@ -328,3 +328,21 @@ def test_under_review_does_not_email_the_applicant(client, auth_headers, monkeyp
                  json={"status": "under_review"}, headers=auth_headers)
 
     assert sent == []
+
+
+def test_the_admin_list_puts_recently_touched_dossiers_first(client, auth_headers):
+    """Ordering is by last activity, not submission date: a revised or
+    freshly-decided file belongs at the top of a review queue."""
+    first = client.post("/api/project-proposals/", json=_payload()).json()
+    second = client.post("/api/project-proposals/", json=_payload(project_name="Second")).json()
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [second["id"], first["id"]]
+
+    client.patch(
+        f"/api/project-proposals/{first['id']}/status",
+        json={"status": "under_review"}, headers=auth_headers,
+    )
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [first["id"], second["id"]]

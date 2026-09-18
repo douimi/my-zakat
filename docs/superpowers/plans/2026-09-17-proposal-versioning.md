@@ -1804,6 +1804,24 @@ def test_deleting_a_dossier_removes_its_versions(client, auth_headers, db_sessio
     assert db_session.query(ProjectProposal).filter(
         ProjectProposal.id == created["id"]
     ).count() == 0
+
+
+def test_the_admin_list_puts_recently_touched_dossiers_first(client, auth_headers):
+    """Ordering is by last activity, not submission date: a revised or
+    freshly-decided file belongs at the top of a review queue."""
+    first = client.post("/api/project-proposals/", json=_payload()).json()
+    second = client.post("/api/project-proposals/", json=_payload(project_name="Second")).json()
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [second["id"], first["id"]]
+
+    client.patch(
+        f"/api/project-proposals/{first['id']}/status",
+        json={"status": "under_review"}, headers=auth_headers,
+    )
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [first["id"], second["id"]]
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1842,6 +1860,7 @@ Domain rules live in proposal_service.py; this module only maps HTTP to them.
 from __future__ import annotations
 
 import io
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -2022,7 +2041,12 @@ async def list_proposals(
     items = []
     for row in rows:
         versions = grouped.get(row.id, [])
-        current = versions[-1] if versions else None
+        # Follow the same pointer the detail endpoint follows, so the two admin
+        # views can never disagree about which version is current. The fallback
+        # to the highest version matches current_version()'s own fallback for
+        # rows migration 32 has not yet stamped.
+        by_id = {v.id: v for v in versions}
+        current = by_id.get(row.current_version_id) or (versions[-1] if versions else None)
         items.append(
             proposal_service.serialize_for_admin(row, current, db=db, versions=versions)
         )
@@ -2153,13 +2177,24 @@ async def download_proposal_version_pdf(
 def _pdf_response(dossier: ProjectProposal, version: ProposalVersion) -> StreamingResponse:
     """Render one version, stamped with the dossier's reference and status.
 
-    The renderer is duck-typed on a single object, so the dossier's identity is
-    attached to the version in memory rather than threaded through every
-    reportlab call. Nothing is persisted: these attributes are not columns.
+    The renderer takes a single duck-typed object, so the dossier's identity has
+    to travel with the version's content. That is done by copying both into a
+    throwaway namespace rather than by assigning onto the ProposalVersion: its
+    `id` is a mapped primary key, and setting it would leave a persisted row's
+    PK dirty in the identity map, one stray flush away from an UPDATE that
+    rewrites the wrong row.
+
+    The footer therefore shows the dossier's CURRENT status even on an exported
+    older version, while that version's own verdict stays in its `decision`
+    field. That is deliberate: the reader needs to know where the file stands
+    now, not only what was decided about this particular draft.
     """
-    version.id = dossier.id
-    version.status = dossier.status
-    pdf_bytes = render_proposal_pdf(version)
+    view = SimpleNamespace(
+        **{column.name: getattr(version, column.name) for column in version.__table__.columns}
+    )
+    view.id = dossier.id
+    view.status = dossier.status
+    pdf_bytes = render_proposal_pdf(view)
     filename = f"proposal-{dossier.id}-v{version.version_no}-{safe_slug(version.project_name)}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
