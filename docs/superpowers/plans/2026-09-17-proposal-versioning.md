@@ -1946,6 +1946,20 @@ def _load(db: Session, proposal_id: int) -> ProjectProposal:
     return found
 
 
+def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
+    version = (
+        db.query(ProposalVersion)
+        .filter(
+            ProposalVersion.proposal_id == dossier.id,
+            ProposalVersion.version_no == version_no,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return version
+
+
 # ── Public: submit ───────────────────────────────────────────────────
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -2037,20 +2051,6 @@ async def get_proposal_version(
     dossier = _load(db, proposal_id)
     version = _load_version(db, dossier, version_no)
     return proposal_service.serialize_version_detail(dossier, version)
-
-
-def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
-    version = (
-        db.query(ProposalVersion)
-        .filter(
-            ProposalVersion.proposal_id == dossier.id,
-            ProposalVersion.version_no == version_no,
-        )
-        .first()
-    )
-    if not version:
-        raise HTTPException(status_code=404, detail="Version not found")
-    return version
 
 
 @router.patch("/{proposal_id}/status")
