@@ -84,6 +84,19 @@ describe('ProposalForm', () => {
     expect(screen.getByText('Network error. Please try again.')).toBeInTheDocument()
   })
 
+  it('associates every visible label with its control', () => {
+    renderForm()
+
+    // Step 1's seven fields; the same Field component renders every step, so
+    // one step proves the wiring. An unassociated label is invisible to a
+    // screen reader as well as to getByLabelText.
+    for (const label of [/^full name/i, /^national id number/i, /^date of birth/i,
+                         /^place of residence/i, /^mobile number/i, /^email/i,
+                         /^educational level/i]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+  })
+
   it('advances to step 2 once every step-1 field is filled', async () => {
     const user = userEvent.setup()
     renderForm({ initialValues: {

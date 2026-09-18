@@ -324,20 +324,20 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
               <p className="text-sm text-gray-500 mt-1">Tell us about you — the applicant responsible for this project.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Full name" required>
-                <input required value={form.full_name} onChange={(e) => set('full_name')(e.target.value)} className="input-field" />
+              <Field htmlFor="proposal-full_name" label="Full name" required>
+                <input id="proposal-full_name" required value={form.full_name} onChange={(e) => set('full_name')(e.target.value)} className="input-field" />
               </Field>
-              <Field label="National ID number" required>
-                <input required value={form.national_id} onChange={(e) => set('national_id')(e.target.value)} className="input-field" />
+              <Field htmlFor="proposal-national_id" label="National ID number" required>
+                <input id="proposal-national_id" required value={form.national_id} onChange={(e) => set('national_id')(e.target.value)} className="input-field" />
               </Field>
-              <Field label="Date of birth (year)" required>
-                <input required type="number" min={1900} max={CURRENT_YEAR - 5} value={form.date_of_birth_year} onChange={(e) => set('date_of_birth_year')(e.target.value)} className="input-field" placeholder="e.g. 1992" />
+              <Field htmlFor="proposal-date_of_birth_year" label="Date of birth (year)" required>
+                <input id="proposal-date_of_birth_year" required type="number" min={1900} max={CURRENT_YEAR - 5} value={form.date_of_birth_year} onChange={(e) => set('date_of_birth_year')(e.target.value)} className="input-field" placeholder="e.g. 1992" />
               </Field>
-              <Field label="Place of residence" required>
-                <input required value={form.place_of_residence} onChange={(e) => set('place_of_residence')(e.target.value)} className="input-field" placeholder="City / Governorate" />
+              <Field htmlFor="proposal-place_of_residence" label="Place of residence" required>
+                <input id="proposal-place_of_residence" required value={form.place_of_residence} onChange={(e) => set('place_of_residence')(e.target.value)} className="input-field" placeholder="City / Governorate" />
               </Field>
-              <Field label="Mobile number" required>
-                <input required value={form.mobile_number} onChange={(e) => set('mobile_number')(e.target.value)} className="input-field" placeholder="With country code" />
+              <Field htmlFor="proposal-mobile_number" label="Mobile number" required>
+                <input id="proposal-mobile_number" required value={form.mobile_number} onChange={(e) => set('mobile_number')(e.target.value)} className="input-field" placeholder="With country code" />
               </Field>
 
               {/* Optional SMS opt-in — 10DLC / TCR compliance.
@@ -393,8 +393,8 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
                   className={`input-field ${emailLocked ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                 />
               </Field>
-              <Field label="Educational level" required>
-                <input required value={form.educational_level} onChange={(e) => set('educational_level')(e.target.value)} className="input-field" placeholder="e.g. Bachelor of Business Administration" />
+              <Field htmlFor="proposal-educational_level" label="Educational level" required>
+                <input id="proposal-educational_level" required value={form.educational_level} onChange={(e) => set('educational_level')(e.target.value)} className="input-field" placeholder="e.g. Bachelor of Business Administration" />
               </Field>
             </div>
             <div className="flex justify-end pt-4 border-t border-gray-100">
@@ -410,27 +410,27 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
               <h2 className="text-lg font-bold text-gray-900">Project information</h2>
               <p className="text-sm text-gray-500 mt-1">Describe what the project does and who it helps.</p>
             </div>
-            <Field label="Project name" required>
-              <input required value={form.project_name} onChange={(e) => set('project_name')(e.target.value)} className="input-field" placeholder="e.g. Fresh Chicken Food Parcels Project" />
+            <Field htmlFor="proposal-project_name" label="Project name" required>
+              <input id="proposal-project_name" required value={form.project_name} onChange={(e) => set('project_name')(e.target.value)} className="input-field" placeholder="e.g. Fresh Chicken Food Parcels Project" />
             </Field>
-            <Field label="Project idea description" required hint="A short paragraph summarizing what the project does.">
-              <textarea required rows={4} value={form.project_description} onChange={(e) => set('project_description')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-project_description" label="Project idea description" required hint="A short paragraph summarizing what the project does.">
+              <textarea id="proposal-project_description" required rows={4} value={form.project_description} onChange={(e) => set('project_description')(e.target.value)} className="input-field" />
               <CharCount current={form.project_description.trim().length} min={MIN_LEN.project_description} />
             </Field>
-            <Field label="What problem does the project solve?" required>
-              <textarea required rows={3} value={form.problem_solved} onChange={(e) => set('problem_solved')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-problem_solved" label="What problem does the project solve?" required>
+              <textarea id="proposal-problem_solved" required rows={3} value={form.problem_solved} onChange={(e) => set('problem_solved')(e.target.value)} className="input-field" />
               <CharCount current={form.problem_solved.trim().length} min={MIN_LEN.problem_solved} />
             </Field>
-            <Field label="Target beneficiaries" required hint="Include number and description of who benefits (e.g. 250 displaced families).">
-              <textarea required rows={3} value={form.target_beneficiaries} onChange={(e) => set('target_beneficiaries')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-target_beneficiaries" label="Target beneficiaries" required hint="Include number and description of who benefits (e.g. 250 displaced families).">
+              <textarea id="proposal-target_beneficiaries" required rows={3} value={form.target_beneficiaries} onChange={(e) => set('target_beneficiaries')(e.target.value)} className="input-field" />
               <CharCount current={form.target_beneficiaries.trim().length} min={MIN_LEN.target_beneficiaries} />
             </Field>
-            <Field label="How will the project serve the community?" required>
-              <textarea required rows={3} value={form.community_impact} onChange={(e) => set('community_impact')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-community_impact" label="How will the project serve the community?" required>
+              <textarea id="proposal-community_impact" required rows={3} value={form.community_impact} onChange={(e) => set('community_impact')(e.target.value)} className="input-field" />
               <CharCount current={form.community_impact.trim().length} min={MIN_LEN.community_impact} />
             </Field>
-            <Field label="Expected economic or social impact" required>
-              <textarea required rows={3} value={form.expected_impact} onChange={(e) => set('expected_impact')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-expected_impact" label="Expected economic or social impact" required>
+              <textarea id="proposal-expected_impact" required rows={3} value={form.expected_impact} onChange={(e) => set('expected_impact')(e.target.value)} className="input-field" />
               <CharCount current={form.expected_impact.trim().length} min={MIN_LEN.expected_impact} />
             </Field>
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
@@ -447,31 +447,31 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
               <h2 className="text-lg font-bold text-gray-900">Project plan</h2>
               <p className="text-sm text-gray-500 mt-1">How you'll actually run it. For bullet lists, put each item on its own line — we'll format it in the PDF.</p>
             </div>
-            <Field label="Implementation steps" required hint="One step per line. The PDF will render these as a bulleted list.">
-              <textarea required rows={5} value={form.implementation_steps} onChange={(e) => set('implementation_steps')(e.target.value)} className="input-field" placeholder={"Planning and identifying target families\nPurchasing supplies\nDistributing parcels\nDocumenting the project"} />
+            <Field htmlFor="proposal-implementation_steps" label="Implementation steps" required hint="One step per line. The PDF will render these as a bulleted list.">
+              <textarea id="proposal-implementation_steps" required rows={5} value={form.implementation_steps} onChange={(e) => set('implementation_steps')(e.target.value)} className="input-field" placeholder={"Planning and identifying target families\nPurchasing supplies\nDistributing parcels\nDocumenting the project"} />
               <CharCount current={form.implementation_steps.trim().length} min={MIN_LEN.implementation_steps} />
             </Field>
-            <Field label="Where will the project be implemented?" required>
-              <textarea required rows={2} value={form.implementation_location} onChange={(e) => set('implementation_location')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-implementation_location" label="Where will the project be implemented?" required>
+              <textarea id="proposal-implementation_location" required rows={2} value={form.implementation_location} onChange={(e) => set('implementation_location')(e.target.value)} className="input-field" />
               <CharCount current={form.implementation_location.trim().length} min={MIN_LEN.implementation_location} />
             </Field>
-            <Field label="Required materials or equipment" required hint="One item per line.">
-              <textarea required rows={4} value={form.required_materials} onChange={(e) => set('required_materials')(e.target.value)} className="input-field" placeholder={"Fresh chicken\nPackaging bags\nTransportation\nAdministrative materials"} />
+            <Field htmlFor="proposal-required_materials" label="Required materials or equipment" required hint="One item per line.">
+              <textarea id="proposal-required_materials" required rows={4} value={form.required_materials} onChange={(e) => set('required_materials')(e.target.value)} className="input-field" placeholder={"Fresh chicken\nPackaging bags\nTransportation\nAdministrative materials"} />
               <CharCount current={form.required_materials.trim().length} min={MIN_LEN.required_materials} />
             </Field>
-            <Field label="Expected duration to start implementation" required>
-              <input required value={form.expected_duration} onChange={(e) => set('expected_duration')(e.target.value)} className="input-field" placeholder="e.g. Within one day after procurement is complete" />
+            <Field htmlFor="proposal-expected_duration" label="Expected duration to start implementation" required>
+              <input id="proposal-expected_duration" required value={form.expected_duration} onChange={(e) => set('expected_duration')(e.target.value)} className="input-field" placeholder="e.g. Within one day after procurement is complete" />
             </Field>
-            <Field label="How will the project continue after funding?" required>
-              <textarea required rows={3} value={form.continuity_plan} onChange={(e) => set('continuity_plan')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-continuity_plan" label="How will the project continue after funding?" required>
+              <textarea id="proposal-continuity_plan" required rows={3} value={form.continuity_plan} onChange={(e) => set('continuity_plan')(e.target.value)} className="input-field" />
               <CharCount current={form.continuity_plan.trim().length} min={MIN_LEN.continuity_plan} />
             </Field>
-            <Field label="Why is it feasible under current conditions?" required>
-              <textarea required rows={3} value={form.feasibility} onChange={(e) => set('feasibility')(e.target.value)} className="input-field" />
+            <Field htmlFor="proposal-feasibility" label="Why is it feasible under current conditions?" required>
+              <textarea id="proposal-feasibility" required rows={3} value={form.feasibility} onChange={(e) => set('feasibility')(e.target.value)} className="input-field" />
               <CharCount current={form.feasibility.trim().length} min={MIN_LEN.feasibility} />
             </Field>
-            <Field label="Expected challenges and how to address them" required hint="One challenge per line, with your mitigation for each.">
-              <textarea required rows={4} value={form.expected_challenges} onChange={(e) => set('expected_challenges')(e.target.value)} className="input-field" placeholder={"Difficulty reaching families: coordinate with local committees\nCrowding at distribution: allocate time slots"} />
+            <Field htmlFor="proposal-expected_challenges" label="Expected challenges and how to address them" required hint="One challenge per line, with your mitigation for each.">
+              <textarea id="proposal-expected_challenges" required rows={4} value={form.expected_challenges} onChange={(e) => set('expected_challenges')(e.target.value)} className="input-field" placeholder={"Difficulty reaching families: coordinate with local committees\nCrowding at distribution: allocate time slots"} />
               <CharCount current={form.expected_challenges.trim().length} min={MIN_LEN.expected_challenges} />
             </Field>
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
@@ -489,22 +489,22 @@ const ProposalForm = ({ mode, initialValues, onSubmit, submitting, fieldErrors, 
               <p className="text-sm text-gray-500 mt-1">We'll calculate the total for you as you fill in the breakdown.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="Beneficiaries (count)" required>
-                <input required type="number" min={1} value={form.number_of_beneficiaries} onChange={(e) => set('number_of_beneficiaries')(e.target.value)} className="input-field" placeholder="200" />
+              <Field htmlFor="proposal-number_of_beneficiaries" label="Beneficiaries (count)" required>
+                <input id="proposal-number_of_beneficiaries" required type="number" min={1} value={form.number_of_beneficiaries} onChange={(e) => set('number_of_beneficiaries')(e.target.value)} className="input-field" placeholder="200" />
               </Field>
-              <Field label="Cost per unit (USD)" required>
-                <input required type="number" min={0.01} step="0.01" value={form.cost_per_unit_usd} onChange={(e) => set('cost_per_unit_usd')(e.target.value)} className="input-field" placeholder="20" />
+              <Field htmlFor="proposal-cost_per_unit_usd" label="Cost per unit (USD)" required>
+                <input id="proposal-cost_per_unit_usd" required type="number" min={0.01} step="0.01" value={form.cost_per_unit_usd} onChange={(e) => set('cost_per_unit_usd')(e.target.value)} className="input-field" placeholder="20" />
               </Field>
-              <Field label="Unit type" required hint="What you're counting: family, parcel, person, etc.">
-                <input required value={form.unit_type} onChange={(e) => set('unit_type')(e.target.value)} className="input-field" placeholder="family" />
+              <Field htmlFor="proposal-unit_type" label="Unit type" required hint="What you're counting: family, parcel, person, etc.">
+                <input id="proposal-unit_type" required value={form.unit_type} onChange={(e) => set('unit_type')(e.target.value)} className="input-field" placeholder="family" />
               </Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Additional expenses (USD)" hint="Transportation, packaging, admin costs, etc.">
-                <input type="number" min={0} step="0.01" value={form.additional_expenses_usd} onChange={(e) => set('additional_expenses_usd')(e.target.value)} className="input-field" placeholder="0" />
+              <Field htmlFor="proposal-additional_expenses_usd" label="Additional expenses (USD)" hint="Transportation, packaging, admin costs, etc.">
+                <input id="proposal-additional_expenses_usd" type="number" min={0} step="0.01" value={form.additional_expenses_usd} onChange={(e) => set('additional_expenses_usd')(e.target.value)} className="input-field" placeholder="0" />
               </Field>
-              <Field label="What are those additional expenses?">
-                <input value={form.additional_expenses_description} onChange={(e) => set('additional_expenses_description')(e.target.value)} className="input-field" placeholder="e.g. Transportation & packaging" />
+              <Field htmlFor="proposal-additional_expenses_description" label="What are those additional expenses?">
+                <input id="proposal-additional_expenses_description" value={form.additional_expenses_description} onChange={(e) => set('additional_expenses_description')(e.target.value)} className="input-field" placeholder="e.g. Transportation & packaging" />
               </Field>
             </div>
 
