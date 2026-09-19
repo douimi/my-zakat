@@ -204,7 +204,7 @@ All paths under `/api/project-proposals`.
 | Route | Behaviour |
 |---|---|
 | `POST /` | Unchanged request contract. Creates the dossier and version 1. Response gains `version_no`. One email may own several dossiers: this route always opens a new one, never a version of an existing dossier. |
-| `POST /portal/request-code` | `{email}` → always `202` with an identical body whether or not a dossier exists, so the endpoint cannot be used to enumerate applicants. Invalidates that email's unconsumed codes. Past the rate limit the reply is that same `202` — no email is sent, and nothing distinguishes the case. |
+| `POST /portal/request-code` | `{email}` → always `202` with an identical body whether or not a dossier exists, so the endpoint cannot be used to enumerate applicants. Invalidates that email's unconsumed codes. Past the rate limit the reply is that same `202` — no email is sent, and nothing distinguishes the case. **Superseded 2026-09-19** — see the note under "Portal authentication" below; the endpoint now answers `404` for no dossier and `429` when capped. |
 | `POST /portal/verify-code` | `{email, code}` → `{token, expires_in}`. Increments `attempts`; burns the code at 5. |
 | `GET /portal/me` | Portal token. The dossiers for that email: `id`, `project_name`, `status`, `submitted_at`, `updated_at`, latest `decision_comment`, `editable`, and the current version's content for form prefill. |
 | `PUT /portal/{id}` | Portal token. Creates version N+1 and returns the dossier to `submitted`. `409` if the status is not `changes_requested`. Any `email` in the payload is ignored in favour of the dossier's. |
@@ -234,6 +234,15 @@ opaque body, with no email sent. A `429` was considered and rejected — it coul
 only ever be served to an address that has a dossier, so it would have turned
 three unauthenticated posts into a test for "has this person applied for
 funding?", defeating the opaque reply this endpoint is built around.
+
+> **Superseded 2026-09-19.** The no-enumeration guarantee described above and
+> in the route table was deliberately dropped: `request-code` now answers
+> `404` for an address with no dossier and `429` when capped, both with
+> honest messages, instead of the uniform `202` this section describes. The
+> reasoning that produced the original design is left in place above; the
+> reversal and its rationale are recorded in
+> `docs/superpowers/specs/2026-09-19-funding-menu-and-portal-lookup-design.md`
+> ("Why the lookup now reveals whether an address has a proposal").
 
 **Token.** `{sub: <email>, typ: "proposal_portal", exp: +30 min}`, signed with
 the existing secret.
