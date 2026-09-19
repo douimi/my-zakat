@@ -271,9 +271,12 @@ revision can never be less complete than the original.
 
 Applicants have no account and no password:
 
-1. They enter the address they applied with. The server replies with the same
-   opaque message whatever the address, so the page never reveals who has
-   applied for funding.
+1. They enter the address they applied with. The server answers truthfully: a
+   sign-in code is emailed if a dossier exists for that address, and a plain
+   "no proposal filed under this address" message if not — a deliberate
+   choice to spare the honest applicant a code screen and an email that would
+   never arrive, at the cost of letting the lookup reveal whether an address
+   has applied for funding.
 2. If a dossier exists for it, a six-digit code is emailed. The code is
    bcrypt-hashed at rest, lives 10 minutes, is single-use, and is burned after
    5 wrong guesses; requesting a new one invalidates the previous one. Requests

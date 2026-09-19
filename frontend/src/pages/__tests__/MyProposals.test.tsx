@@ -22,7 +22,12 @@ import {
   submitRevision, verifyPortalCode,
 } from '../../utils/proposalPortalApi'
 
-vi.mock('../../utils/proposalPortalApi', () => ({
+// Only the HTTP calls are replaced. Everything else — notably
+// `isNoProposalForAddress`, the predicate the page branches on — is the real
+// implementation, so a change to it fails these tests instead of passing a
+// stale copy of itself.
+vi.mock('../../utils/proposalPortalApi', async (importActual) => ({
+  ...(await importActual<typeof import('../../utils/proposalPortalApi')>()),
   hasPortalToken: vi.fn(),
   clearPortalToken: vi.fn(),
   fetchMyProposals: vi.fn(),
@@ -80,6 +85,10 @@ const DOSSIER = {
 const httpError = (status: number, detail?: unknown) =>
   ({ response: { status, data: { detail } } })
 
+/** The 404 the backend now sends when nothing is filed under the address. */
+const notFoundError = () =>
+  httpError(404, 'We have no proposal filed under this address.')
+
 let tokenPresent = false
 
 const renderPortal = () =>
@@ -118,7 +127,7 @@ beforeEach(() => {
   vi.mocked(hasPortalToken).mockImplementation(() => tokenPresent)
   vi.mocked(clearPortalToken).mockImplementation(() => { tokenPresent = false })
   vi.mocked(verifyPortalCode).mockImplementation(async () => { tokenPresent = true })
-  vi.mocked(requestPortalCode).mockResolvedValue({ message: 'If that address has a proposal, a code is on its way.' })
+  vi.mocked(requestPortalCode).mockResolvedValue({ message: `A sign-in code is on its way to ${APPLICANT}.` })
   vi.mocked(fetchMyProposals).mockResolvedValue({ email: '', items: [] })
   vi.mocked(submitRevision).mockResolvedValue(DOSSIER as never)
 })
@@ -281,5 +290,53 @@ describe('MyProposals — the SMS opt-in', () => {
     await openRevision(user)
 
     expect(screen.getByRole('checkbox')).not.toBeChecked()
+  })
+})
+
+describe('MyProposals — an address with no dossier', () => {
+  it('tells the applicant plainly when no proposal is filed under the address', async () => {
+    const user = userEvent.setup()
+    vi.mocked(requestPortalCode).mockRejectedValue(notFoundError())
+    renderPortal()
+
+    await user.type(screen.getByLabelText(/email address you applied with/i), 'nobody@example.com')
+    await user.click(screen.getByRole('button', { name: /email me a code/i }))
+
+    expect(await screen.findByText(/no proposal filed under this address/i)).toBeInTheDocument()
+    expect(screen.getByText('nobody@example.com')).toBeInTheDocument()
+    // The code screen must not appear: no code was sent.
+    expect(screen.queryByLabelText(/six-digit code/i)).not.toBeInTheDocument()
+  })
+
+  it('offers both ways forward from the not-found screen', async () => {
+    const user = userEvent.setup()
+    vi.mocked(requestPortalCode).mockRejectedValue(notFoundError())
+    renderPortal()
+
+    await user.type(screen.getByLabelText(/email address you applied with/i), 'nobody@example.com')
+    await user.click(screen.getByRole('button', { name: /email me a code/i }))
+    await screen.findByText(/no proposal filed under this address/i)
+
+    expect(screen.getByRole('link', { name: /submit a proposal/i })).toHaveAttribute(
+      'href', '/submit-proposal',
+    )
+    await user.click(screen.getByRole('button', { name: /try a different address/i }))
+
+    const input = screen.getByLabelText(/email address you applied with/i) as HTMLInputElement
+    expect(input.value).toBe('nobody@example.com')
+  })
+
+  it('says how long to wait when the address is capped', async () => {
+    const user = userEvent.setup()
+    vi.mocked(requestPortalCode).mockRejectedValue(
+      httpError(429, 'Too many sign-in codes requested. Please wait and try again later. This usually clears within 15 minutes, or up to an hour if you share a network connection with other applicants.'),
+    )
+    renderPortal()
+
+    await user.type(screen.getByLabelText(/email address you applied with/i), 'amina@example.com')
+    await user.click(screen.getByRole('button', { name: /email me a code/i }))
+
+    expect(await screen.findByText(/up to an hour if you share a network connection/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/six-digit code/i)).not.toBeInTheDocument()
   })
 })

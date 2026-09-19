@@ -68,3 +68,7 @@ export const submitRevision = async (
   const { data } = await portalApi.put(`${PORTAL_BASE}/${proposalId}`, payload)
   return data
 }
+
+/** True when the backend said no proposal is filed under the address tried. */
+export const isNoProposalForAddress = (error: unknown): boolean =>
+  (error as { response?: { status?: number } })?.response?.status === 404

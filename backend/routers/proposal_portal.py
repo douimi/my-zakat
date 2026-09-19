@@ -2,7 +2,7 @@
 
 Endpoints (all mounted under /api/project-proposals/portal)
 ───────────────────────────────────────────────────────────
-  POST /request-code    → email a six-digit code (202 whatever the address)
+  POST /request-code    → email a six-digit code (404 if the address has none)
   POST /verify-code     → exchange the code for a 30-minute portal token
   GET  /me              → the dossiers belonging to the token's address
   PUT  /{proposal_id}   → submit the next version of one of them
@@ -34,12 +34,6 @@ from routers.project_proposals import ProposalSubmit, client_ip
 logger = get_logger(__name__)
 router = APIRouter()
 
-# Identical for a known and an unknown address: this endpoint must not let
-# anyone discover who has applied for funding.
-OPAQUE_REQUEST_REPLY = {
-    "message": "If that address has a proposal with us, a sign-in code is on its way."
-}
-
 
 class CodeRequest(BaseModel):
     email: EmailStr
@@ -61,32 +55,49 @@ def _dossiers_for(db: Session, email: str) -> list[ProjectProposal]:
 
 @router.post("/request-code", status_code=status.HTTP_202_ACCEPTED)
 async def request_code(payload: CodeRequest, request: Request, db: Session = Depends(get_db)):
-    """Email a one-time code, but only if the address actually has a dossier.
+    """Email a one-time code to an address that has a dossier.
 
-    Every caller gets the same 202 and the same body: an unknown address, a
-    known one, and a known one over the rate limit are indistinguishable from
-    outside. The limit still holds — a capped caller simply receives no email.
+    This endpoint answers truthfully: an address with no proposal gets a 404
+    saying so, and a capped one gets a 429 saying so. It therefore reveals
+    whether a given address has applied for funding.
+
+    That was a deliberate reversal, recorded in
+    docs/superpowers/specs/2026-09-19-funding-menu-and-portal-lookup-design.md.
+    The uniform reply it replaced protected a sensitive population from
+    enumeration, but it charged the whole cost to the honest applicant who
+    mistyped their address: a code screen, and an email that was never coming.
+    Against a threat that needs the attacker to know the address already, on a
+    small charity's site, that was judged the larger harm. If the applicant
+    base grows more exposed, the middle road is to keep the truth but throttle
+    how many addresses one IP may test per hour.
     """
     email = payload.email.strip()
 
     if not _dossiers_for(db, email):
-        logger.info("Proposal portal: code requested for an address with no dossier")
-        return OPAQUE_REQUEST_REPLY
+        logger.info("Proposal portal: lookup for an address with no dossier")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="We have no proposal filed under this address.",
+        )
 
     code = proposal_otp.issue_code(db, email=email, ip=client_ip(request))
     if code is None:
-        # Rate limited. Answer exactly as for an unknown address rather than
-        # 429: a 429 only ever reached addresses that HAVE a dossier, which
-        # turned three unauthenticated posts into a way of asking "has this
-        # person applied for funding?". The opaque wording already covers
-        # sending nothing -- "if that address has a proposal with us".
-        logger.warning("Proposal portal: code request rate-limited for %s", email)
-        return OPAQUE_REQUEST_REPLY
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            # Both caps feed this one message, so it has to be true of the
+            # longer: EMAIL_WINDOW_MINUTES is 15, but IP_WINDOW_MINUTES is 60
+            # and a shared office IP or NAT is what usually trips it.
+            detail=(
+                "Too many sign-in codes requested. Please wait and try again later. "
+                "This usually clears within 15 minutes, or up to an hour if you "
+                "share a network connection with other applicants."
+            ),
+        )
 
     email_service.send_proposal_access_code(
         email=email, code=code, ttl_minutes=proposal_otp.CODE_TTL_MINUTES
     )
-    return OPAQUE_REQUEST_REPLY
+    return {"sent": True, "message": f"A sign-in code is on its way to {email}."}
 
 
 @router.post("/verify-code")

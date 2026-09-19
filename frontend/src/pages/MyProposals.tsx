@@ -7,10 +7,10 @@
  * deliberately a separate axios instance so a staff member's session is never
  * touched by this flow).
  *
- * Four views:
+ * Five views:
  *   email — "the email address you applied with"; POST /portal/request-code.
- *           The server answers the same opaque message whatever the address,
- *           and we show exactly that so the page leaks nothing.
+ *   not-found — the server answered 404: nothing is filed under that address,
+ *           so no code was sent and saying one was would be a lie.
  *   code  — the six digits; POST /portal/verify-code stores the token.
  *   list  — GET /portal/me, one card per dossier, with "Fix and resubmit" on
  *           the ones the reviewers marked editable.
@@ -48,13 +48,14 @@ import {
   clearPortalToken,
   fetchMyProposals,
   hasPortalToken,
+  isNoProposalForAddress,
   requestPortalCode,
   submitRevision,
   verifyPortalCode,
   type PortalProposal,
 } from '../utils/proposalPortalApi'
 
-type View = 'email' | 'code' | 'list' | 'edit'
+type View = 'email' | 'code' | 'list' | 'edit' | 'not-found'
 type ProposalPayload = ReturnType<typeof buildProposalPayload>
 
 const STATUS_BADGE: Record<string, string> = {
@@ -213,8 +214,22 @@ const MyProposals = () => {
     try {
       await askForCode(email.trim())
     } catch (exc: any) {
-      if (statusOf(exc) === 429) {
-        setError('Too many codes requested. Please wait a few minutes and try again.')
+      if (isNoProposalForAddress(exc)) {
+        if (pendingPayload) {
+          // Mid-revision: the dossier vanished under us. Do not swap the view
+          // out from under a form that still holds the applicant's edits --
+          // keep them where they are and say what happened.
+          setError('We can no longer find a proposal under this address. Your changes are still on screen — copy anything you need before leaving this page.')
+          return
+        }
+        // Not an error the applicant caused -- most often they used a
+        // different address than the one on the application. Say so, and
+        // give them somewhere to go.
+        setView('not-found')
+      } else if (statusOf(exc) === 429) {
+        setError(exc?.response?.data?.detail
+          ?? 'Too many sign-in codes requested. Please wait and try again later. '
+            + 'This usually clears within 15 minutes, or up to an hour if you share a network connection with other applicants.')
       } else {
         setError('We could not send the code. Please check the address and try again.')
       }
@@ -260,6 +275,17 @@ const MyProposals = () => {
               'Your sign-in session expired and this tab no longer knows which address to email a code to. '
               + 'Everything you typed is still here — please do not reload this tab. '
               + 'Open My Proposals in a new tab, sign in there, and copy your answers across from here.',
+            )
+            return
+          }
+          if (isNoProposalForAddress(codeExc)) {
+            // The dossier is gone from under the applicant. The code panel
+            // would promise "enter the six-digit code we sent to ..." when
+            // nothing was sent, so stay on the form -- it is still mounted and
+            // still holds the only copy of what they wrote.
+            setGenericError(
+              'We can no longer find a proposal under this address. '
+              + 'Your changes are still on screen — copy anything you need before leaving this page.',
             )
             return
           }
@@ -423,6 +449,43 @@ const MyProposals = () => {
       <p className="text-xs text-gray-500">
         Haven't applied yet?{' '}
         <Link to="/submit-proposal" className="text-primary-700 font-medium hover:underline">Submit a project proposal</Link>.
+      </p>
+    </div>
+  )
+
+  // ── View: nothing is filed under that address ────────────────────────
+  //
+  // Reached only from the sign-in panel, where the backend answers 404 rather
+  // than the opaque 202 it used to. Before that, an unknown address landed on
+  // the code panel reading "enter the code we sent to ..." — a sentence that
+  // was simply untrue.
+  const notFoundPanel = (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 max-w-md mx-auto space-y-4">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <AlertCircle className="w-5 h-5 text-amber-700" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-gray-900">No proposal filed under this address</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            We looked for <strong className="text-gray-900 break-all">{email.trim()}</strong> and
+            found nothing. The most common reason is that the application was sent from a
+            different email address.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => { setView('email'); setError(''); setNotice('') }}
+        className="w-full px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg"
+      >
+        Try a different address
+      </button>
+      <p className="text-sm text-gray-600 text-center">
+        Never sent one?{' '}
+        <Link to="/submit-proposal" className="text-primary-700 font-medium hover:underline">
+          Submit a proposal
+        </Link>
       </p>
     </div>
   )
@@ -624,6 +687,7 @@ const MyProposals = () => {
   )
 
   if (editing) return shell(<>{alerts}{editPanel}</>)
+  if (view === 'not-found') return shell(notFoundPanel)
   if (view === 'code') return shell(<>{alerts}{codePanel}</>)
   if (view === 'list') return shell(<>{alerts}{listPanel}</>)
   return shell(<>{alerts}{emailPanel}</>)

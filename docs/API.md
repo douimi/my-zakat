@@ -373,22 +373,23 @@ member's name.
 
 ```json
 Request:  { "email": "jane@example.com" }
-Response (202): {
-  "message": "If that address has a proposal with us, a sign-in code is on its way."
-}
+Response (202): { "sent": true, "message": "A sign-in code is on its way to jane@example.com." }
+Response (404): { "detail": "We have no proposal filed under this address." }
+Response (429): { "detail": "Too many sign-in codes requested. Please wait a few minutes and try again." }
 ```
 
-The `202` and its body are identical whether or not the address is known — the
-endpoint must not let anyone discover who has applied for funding. A code is
-only actually sent when a dossier exists, and issuing one consumes any earlier
-unconsumed code for that address, so only the newest one ever works.
+The endpoint answers truthfully: `202` and a code is emailed when the address
+has at least one dossier, `404` when it has none, and `429` when the address
+(3 per 15 minutes) or the caller's IP (10 per hour) has asked too often.
+Issuing a code consumes any earlier unconsumed code for that address, so only
+the newest one ever works.
 
-The answer is **always `202`**, never `429`. Once the address has requested 3
-codes in 15 minutes, or the caller's IP 10 in an hour, the limit takes effect
-silently: the reply is byte-for-byte the one above and no email is sent. A
-distinct status would only ever have been returned to addresses that do have a
-dossier, which would have made three unauthenticated requests enough to reveal
-who has applied for funding.
+This means the endpoint reveals whether a given address has a proposal on
+file — a deliberate reversal of an earlier design that answered an identical
+`202` regardless of the address, to prevent that exact disclosure. See
+[`docs/superpowers/specs/2026-09-19-funding-menu-and-portal-lookup-design.md`](superpowers/specs/2026-09-19-funding-menu-and-portal-lookup-design.md)
+("Why the lookup now reveals whether an address has a proposal") for why the
+uniform reply was dropped.
 
 #### `POST /api/project-proposals/portal/verify-code` — public
 
@@ -496,9 +497,8 @@ Returns environment + Stripe configuration status. For local debugging.
 There is no rate-limiting middleware. The one limited endpoint is
 `POST /api/project-proposals/portal/request-code`, which enforces its own caps
 by counting rows in `proposal_access_codes` — 3 codes per address per 15
-minutes and 10 per IP per hour. Neither answers `429`: a capped caller still
-receives the ordinary `202` and simply gets no email, so the endpoint cannot be
-used to tell a known address from an unknown one.
+minutes and 10 per IP per hour. Both caps are announced: a capped caller
+receives `429` and no email is sent.
 
 Site-wide rate limiting is still unimplemented. Tracked in
 [PRODUCTION_READINESS_REPORT.md](PRODUCTION_READINESS_REPORT.md) as a
@@ -512,14 +512,14 @@ hardening item.
 |---|---|
 | 200 | Success |
 | 201 | Created (e.g. a new proposal dossier) |
-| 202 | Accepted — deliberately says nothing about the outcome (portal code request) |
+| 202 | Accepted — a sign-in code was emailed (portal code request) |
 | 400 | Bad request (validation, business rule) |
 | 401 | Missing/invalid JWT |
 | 403 | Authenticated but not authorized (e.g. non-admin hitting admin endpoint) |
 | 404 | Resource not found — also used where a 403 would leak the existence of someone else's record |
 | 409 | Conflict with the resource's current state (e.g. revising a proposal that is not awaiting changes) |
 | 422 | Pydantic validation error (malformed body) |
-| 429 | Rate limited — reserved; no endpoint returns it today (the portal's code request stays `202` when capped, so it cannot be used to enumerate applicants) |
+| 429 | Rate limited — the portal's code request, when the address or the caller's IP has asked too often |
 | 500 | Server error (logged with traceback) |
 
 Error responses are always JSON: `{ "detail": "human-readable message" }`.
