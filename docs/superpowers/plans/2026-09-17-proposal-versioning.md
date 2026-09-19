@@ -398,7 +398,7 @@ git commit -m "Add proposal version and access-code models"
 CREATE TABLE IF NOT EXISTS proposal_versions (
     id                          SERIAL PRIMARY KEY,
     proposal_id                 INTEGER         NOT NULL REFERENCES project_proposals(id) ON DELETE CASCADE,
-    version_no                  INTEGER         NOT NULL,
+    version_no                  INTEGER         NOT NULL CHECK (version_no > 0),
 
     -- ── Section 1: Personal information ────────────────────
     full_name                   VARCHAR(200)    NOT NULL,
@@ -443,7 +443,8 @@ CREATE TABLE IF NOT EXISTS proposal_versions (
 
     -- ── The decision on this version ───────────────────────
     -- NULL = awaiting review | approved | rejected | changes_requested
-    decision                    VARCHAR(20),
+    decision                    VARCHAR(20)
+        CHECK (decision IS NULL OR decision IN ('approved', 'rejected', 'changes_requested')),
     decision_comment            TEXT,           -- shown to the submitter
     internal_note               TEXT,           -- staff only
     decided_at                  TIMESTAMP,
@@ -451,9 +452,6 @@ CREATE TABLE IF NOT EXISTS proposal_versions (
 
     CONSTRAINT uq_proposal_version_no UNIQUE (proposal_id, version_no)
 );
-
-CREATE INDEX IF NOT EXISTS idx_proposal_versions_proposal
-    ON proposal_versions(proposal_id, version_no);
 
 CREATE TABLE IF NOT EXISTS proposal_access_codes (
     id            SERIAL PRIMARY KEY,
@@ -476,7 +474,14 @@ ALTER TABLE project_proposals
     REFERENCES proposal_versions(id) ON DELETE SET NULL;
 
 -- ── Backfill: every pre-existing proposal becomes its own version 1 ────
--- Guarded by current_version_id IS NULL, so re-running changes nothing.
+-- The INSERT and the UPDATE are one transaction on purpose. psql runs a
+-- script in autocommit, so without this an INSERT that commits before a
+-- failing UPDATE would leave a version row with a NULL pointer -- and the
+-- re-run would then collide with uq_proposal_version_no and abort for good.
+-- ON CONFLICT covers the same hole from the other side: if a version 1 does
+-- somehow already exist, the UPDATE still repairs the pointer.
+BEGIN;
+
 INSERT INTO proposal_versions (
     proposal_id, version_no,
     full_name, national_id, date_of_birth_year, place_of_residence,
@@ -513,7 +518,8 @@ SELECT
     CASE WHEN p.status IN ('approved', 'rejected') THEN p.reviewed_at ELSE NULL END,
     CASE WHEN p.status IN ('approved', 'rejected') THEN p.reviewed_by ELSE NULL END
 FROM project_proposals p
-WHERE p.current_version_id IS NULL;
+WHERE p.current_version_id IS NULL
+ON CONFLICT ON CONSTRAINT uq_proposal_version_no DO NOTHING;
 
 UPDATE project_proposals p
    SET current_version_id = v.id
@@ -521,6 +527,8 @@ UPDATE project_proposals p
  WHERE v.proposal_id = p.id
    AND v.version_no = 1
    AND p.current_version_id IS NULL;
+
+COMMIT;
 
 -- ── Relax the legacy content columns ──────────────────────────────────
 -- The new code writes content to proposal_versions and inserts dossier rows
@@ -678,8 +686,8 @@ Append to `backend/tests/test_project_proposals.py`:
 def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session):
     """The renderer is duck-typed: it reads attributes, not a specific class.
 
-    Task 5 hands it a ProposalVersion; today the router hands it a
-    ProjectProposal. Both work, which is what lets the move be behaviour-free.
+    The router hands it a namespace built from a ProposalVersion plus the
+    dossier's id and status; this test hands it the version itself.
     """
     from proposal_pdf import render_proposal_pdf, safe_slug
 
@@ -687,7 +695,6 @@ def test_renderer_produces_a_pdf_from_any_object_carrying_the_content(db_session
     db_session.add(dossier)
     db_session.flush()
     version = ProposalVersion(proposal_id=dossier.id, version_no=1, **_content())
-    version.id = None
     db_session.add(version)
     db_session.commit()
 
@@ -1057,6 +1064,115 @@ def test_versions_for_many_dossiers_load_in_one_query(db_session):
     assert [v.id for v in grouped[first.id]] == [v1.id]
     assert [v.id for v in grouped[second.id]] == [v2.id]
     assert grouped.get(99999, []) == []
+
+
+def test_reopening_a_decided_version_keeps_who_decided_it(db_session, admin_user):
+    """The audit trail must survive a reopening — that is the point of versions."""
+    from proposal_service import create_proposal, current_version, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="rejected", decision_comment="Out of scope.",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    record_decision(db_session, dossier, status="under_review", decision_comment=None,
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    version = current_version(db_session, dossier)
+    assert dossier.status == "under_review"
+    assert version.decision == "rejected"
+    assert version.decided_by == admin_user.id
+    assert version.decided_at is not None
+    assert version.decision_comment == "Out of scope."
+
+
+def test_version_numbers_survive_a_gap_in_the_chain(db_session, admin_user):
+    from models import ProposalVersion
+    from proposal_service import add_revision, create_proposal, record_decision
+
+    dossier, v1 = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v2 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Again",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v3 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    assert [v1.version_no, v2.version_no, v3.version_no] == [1, 2, 3]
+
+    # Punch a hole in the middle, the way a future cleanup script might.
+    db_session.query(ProposalVersion).filter(ProposalVersion.id == v2.id).delete()
+    db_session.commit()
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Once more",
+                    internal_note=None, reviewer_id=admin_user.id)
+
+    v4 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+
+    assert v4.version_no == 4, "COUNT+1 would have produced 3 and collided with v3"
+
+
+def test_deleting_a_dossier_takes_its_whole_chain(db_session, admin_user):
+    from models import ProjectProposal, ProposalVersion
+    from proposal_service import add_revision, create_proposal, delete_proposal, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                 sms_consent=False, sms_consent_text=None)
+    proposal_id = dossier.id
+
+    delete_proposal(db_session, dossier)
+
+    assert db_session.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).count() == 0
+    assert db_session.query(ProposalVersion).filter(
+        ProposalVersion.proposal_id == proposal_id).count() == 0
+
+
+def test_current_version_falls_back_to_the_highest_when_the_pointer_is_missing(db_session, admin_user):
+    """The pointer is NULL for rows migration 32 has not yet stamped."""
+    from proposal_service import add_revision, create_proposal, current_version, record_decision
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="changes_requested", decision_comment="Fix it",
+                    internal_note=None, reviewer_id=admin_user.id)
+    v2 = add_revision(db_session, dossier, content=_content(), submitted_ip="",
+                      sms_consent=False, sms_consent_text=None)
+    dossier.current_version_id = None
+    db_session.commit()
+
+    assert current_version(db_session, dossier).id == v2.id
+
+
+def test_version_detail_serialization_carries_content_and_decision(db_session, admin_user):
+    from proposal_service import (
+        create_proposal, current_version, record_decision, serialize_version_detail,
+    )
+
+    dossier, _ = create_proposal(
+        db_session, content=_content(), submitted_ip="", sms_consent=False, sms_consent_text=None,
+    )
+    record_decision(db_session, dossier, status="rejected", decision_comment="Out of scope.",
+                    internal_note="Third time applying.", reviewer_id=admin_user.id)
+
+    out = serialize_version_detail(dossier, current_version(db_session, dossier))
+
+    assert out["proposal_id"] == dossier.id
+    assert out["version_no"] == 1
+    assert out["project_name"] == "Fresh Food Parcels"
+    assert out["decision"] == "rejected"
+    assert out["decision_comment"] == "Out of scope."
+    assert out["internal_note"] == "Third time applying."
+    assert out["total_amount_usd"] == 4500.0
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1087,6 +1203,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import ProjectProposal, ProposalVersion
@@ -1217,12 +1334,15 @@ def add_revision(
     fields = _content_only(content)
     fields["email"] = proposal.email
 
-    next_no = (
-        db.query(ProposalVersion)
+    # MAX, not COUNT: a gap in the chain (a version removed by some future
+    # cleanup) would make COUNT+1 collide with a version that already exists and
+    # brick the dossier for good. MAX+1 just skips the gap.
+    highest = (
+        db.query(func.max(ProposalVersion.version_no))
         .filter(ProposalVersion.proposal_id == proposal.id)
-        .count()
-        + 1
+        .scalar()
     )
+    next_no = (highest or 0) + 1
     version = ProposalVersion(
         proposal_id=proposal.id,
         version_no=next_no,
@@ -1261,6 +1381,12 @@ def record_decision(
     what the admin drawer sends when it is only saving an internal note. An
     empty or blank string on a rejection or change request is refused: the
     submitter would receive an email with no reason in it.
+
+    Reopening never erases history: moving a dossier back to `submitted` or
+    `under_review` changes the dossier's status only and leaves the version's
+    `decision`, `decided_at` and `decided_by` exactly as they were. Those fields
+    record the last verdict actually taken on this version, which remains a true
+    statement about the past however the file moves on afterwards.
     """
     if status not in VALID_STATUSES:
         raise InvalidProposalStatus(f"Invalid status: {status}")
@@ -1285,11 +1411,11 @@ def record_decision(
         version.decision = status
         version.decided_at = datetime.utcnow()
         version.decided_by = reviewer_id
-    else:
-        # Back to an open state: this version is awaiting a verdict again.
-        version.decision = None
-        version.decided_at = None
-        version.decided_by = None
+    # A move to 'submitted' or 'under_review' deliberately leaves the version's
+    # decision fields alone. They record the last verdict actually taken on this
+    # version, which stays true after a reopening -- and the point of the
+    # version chain is that such a fact is never lost. The dossier's `status` is
+    # what says where the file stands right now.
 
     proposal.status = status
     proposal.reviewed_at = datetime.utcnow()
@@ -1375,7 +1501,7 @@ def serialize_for_admin(
     proposal: ProjectProposal,
     version: ProposalVersion | None,
     *,
-    db: Session,
+    db: Session | None = None,
     versions: list[ProposalVersion] | None = None,
 ) -> dict[str, Any]:
     """Dossier + current content flattened + the full version history.
@@ -1386,6 +1512,8 @@ def serialize_for_admin(
     query per row.
     """
     if versions is None:
+        if db is None:
+            raise ValueError("serialize_for_admin needs either `db` or `versions`.")
         versions = (
             db.query(ProposalVersion)
             .filter(ProposalVersion.proposal_id == proposal.id)
@@ -1473,7 +1601,7 @@ def delete_proposal(db: Session, proposal: ProjectProposal) -> None:
 - [ ] **Step 4: Run the tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_service.py -v`
-Expected: 13 passed.
+Expected: 19 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -1675,6 +1803,24 @@ def test_deleting_a_dossier_removes_its_versions(client, auth_headers, db_sessio
     assert db_session.query(ProjectProposal).filter(
         ProjectProposal.id == created["id"]
     ).count() == 0
+
+
+def test_the_admin_list_puts_recently_touched_dossiers_first(client, auth_headers):
+    """Ordering is by last activity, not submission date: a revised or
+    freshly-decided file belongs at the top of a review queue."""
+    first = client.post("/api/project-proposals/", json=_payload()).json()
+    second = client.post("/api/project-proposals/", json=_payload(project_name="Second")).json()
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [second["id"], first["id"]]
+
+    client.patch(
+        f"/api/project-proposals/{first['id']}/status",
+        json={"status": "under_review"}, headers=auth_headers,
+    )
+
+    listed = client.get("/api/project-proposals/", headers=auth_headers).json()["items"]
+    assert [i["id"] for i in listed] == [first["id"], second["id"]]
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1713,6 +1859,7 @@ Domain rules live in proposal_service.py; this module only maps HTTP to them.
 from __future__ import annotations
 
 import io
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -1817,6 +1964,20 @@ def _load(db: Session, proposal_id: int) -> ProjectProposal:
     return found
 
 
+def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
+    version = (
+        db.query(ProposalVersion)
+        .filter(
+            ProposalVersion.proposal_id == dossier.id,
+            ProposalVersion.version_no == version_no,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return version
+
+
 # ── Public: submit ───────────────────────────────────────────────────
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -1879,7 +2040,12 @@ async def list_proposals(
     items = []
     for row in rows:
         versions = grouped.get(row.id, [])
-        current = versions[-1] if versions else None
+        # Follow the same pointer the detail endpoint follows, so the two admin
+        # views can never disagree about which version is current. The fallback
+        # to the highest version matches current_version()'s own fallback for
+        # rows migration 32 has not yet stamped.
+        by_id = {v.id: v for v in versions}
+        current = by_id.get(row.current_version_id) or (versions[-1] if versions else None)
         items.append(
             proposal_service.serialize_for_admin(row, current, db=db, versions=versions)
         )
@@ -1908,20 +2074,6 @@ async def get_proposal_version(
     dossier = _load(db, proposal_id)
     version = _load_version(db, dossier, version_no)
     return proposal_service.serialize_version_detail(dossier, version)
-
-
-def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
-    version = (
-        db.query(ProposalVersion)
-        .filter(
-            ProposalVersion.proposal_id == dossier.id,
-            ProposalVersion.version_no == version_no,
-        )
-        .first()
-    )
-    if not version:
-        raise HTTPException(status_code=404, detail="Version not found")
-    return version
 
 
 @router.patch("/{proposal_id}/status")
@@ -2024,13 +2176,24 @@ async def download_proposal_version_pdf(
 def _pdf_response(dossier: ProjectProposal, version: ProposalVersion) -> StreamingResponse:
     """Render one version, stamped with the dossier's reference and status.
 
-    The renderer is duck-typed on a single object, so the dossier's identity is
-    attached to the version in memory rather than threaded through every
-    reportlab call. Nothing is persisted: these attributes are not columns.
+    The renderer takes a single duck-typed object, so the dossier's identity has
+    to travel with the version's content. That is done by copying both into a
+    throwaway namespace rather than by assigning onto the ProposalVersion: its
+    `id` is a mapped primary key, and setting it would leave a persisted row's
+    PK dirty in the identity map, one stray flush away from an UPDATE that
+    rewrites the wrong row.
+
+    The footer therefore shows the dossier's CURRENT status even on an exported
+    older version, while that version's own verdict stays in its `decision`
+    field. That is deliberate: the reader needs to know where the file stands
+    now, not only what was decided about this particular draft.
     """
-    version.id = dossier.id
-    version.status = dossier.status
-    pdf_bytes = render_proposal_pdf(version)
+    view = SimpleNamespace(
+        **{column.name: getattr(version, column.name) for column in version.__table__.columns}
+    )
+    view.id = dossier.id
+    view.status = dossier.status
+    pdf_bytes = render_proposal_pdf(view)
     filename = f"proposal-{dossier.id}-v{version.version_no}-{safe_slug(version.project_name)}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -2116,7 +2279,7 @@ def send_proposal_approved(*, email, name, proposal_id, version_no, project_name
 - [ ] **Step 7: Run the proposal tests**
 
 Run: `cd backend && python -m pytest tests/test_project_proposals.py tests/test_proposal_service.py -v`
-Expected: all pass — 16 in the router file, 13 in the service file.
+Expected: all pass — 16 in the router file, 19 in the service file.
 
 - [ ] **Step 8: Run the whole suite**
 
@@ -2211,6 +2374,7 @@ def test_the_rejection_gives_the_reason_and_offers_no_edit_link():
 
     assert "Outside this funding cycle" in text
     assert "my-proposals" not in html, "a closed dossier must not invite an edit"
+    assert "my-proposals" not in text, "a closed dossier must not invite an edit"
 
 
 def test_the_access_code_email_shows_the_code_and_its_lifetime():
@@ -2224,13 +2388,22 @@ def test_the_access_code_email_names_no_applicant_or_project():
     """It is sent before we know the requester controls the address.
 
     Confirming "yes, Amina Yusuf has a proposal here" to whoever typed the
-    address would leak exactly what /portal/request-code refuses to leak.
+    address would leak exactly what /portal/request-code refuses to leak. The
+    values below are deliberately IN the context: the guarantee is that the
+    template does not reference them, not that the caller withholds them.
     """
-    html, _ = render("proposal_access_code", {"code": "483920", "ttl_minutes": 10})
+    html, text = render("proposal_access_code", {
+        "code": "483920",
+        "ttl_minutes": 10,
+        "name": "Amina Yusuf",
+        "project_name": "Secret Wells Project",
+        "proposal_id": 42,
+    })
 
-    assert "{{" not in html
-    for leaked in ("project_name", "proposal_id"):
-        assert leaked not in html
+    for leaked in ("Amina Yusuf", "Secret Wells Project", "#42"):
+        assert leaked not in html, f"{leaked} must not reach an unverified address"
+        assert leaked not in text, f"{leaked} must not reach an unverified address"
+    assert "483920" in html and "483920" in text
 
 
 def test_the_shims_queue_one_email_each(monkeypatch):
@@ -2265,6 +2438,38 @@ def test_the_shims_queue_one_email_each(monkeypatch):
     # The code email carries no key: every request must deliver a fresh code.
     assert "idempotency_key" not in queued[2][1]
     assert queued[2][1]["category"] == "transactional"
+
+
+def test_a_multi_line_reviewer_comment_survives_in_both_variants():
+    """An admin writing a numbered list must not be delivered a run-on sentence."""
+    comment = "Please do three things:\n1. Itemise transport\n2. Attach the quote\n3. Name the committee"
+    html, text = render("proposal_changes_requested", {
+        "name": "Amina Yusuf",
+        "proposal_id": 42,
+        "version_no": 1,
+        "project_name": "Fresh Food Parcels",
+        "comment": comment,
+        "portal_url": "https://myzakat.org/my-proposals",
+    })
+
+    assert "1. Itemise transport" in text and "3. Name the committee" in text
+    assert "1. Itemise transport" in html
+    # Without pre-wrap the client collapses the newlines into one paragraph.
+    assert "pre-wrap" in html
+
+
+def test_an_applicants_html_in_a_project_name_is_escaped():
+    """project_name comes from a public, unauthenticated form."""
+    html, _ = render("proposal_received", {
+        "name": "Amina Yusuf",
+        "proposal_id": 42,
+        "version_no": 1,
+        "project_name": "<script>alert(1)</script>",
+        "portal_url": "https://myzakat.org/my-proposals",
+    })
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -2309,7 +2514,7 @@ The MyZakat Team
 <p>Our review team has looked at <strong>{{ project_name }}</strong> (reference <strong>#{{ proposal_id }}</strong>) and would like some changes before taking a decision.</p>
 <table role="presentation" width="100%" style="margin: 18px 0; border-collapse: collapse;">
   <tr>
-    <td style="border-left: 4px solid #b45309; background: #fffbeb; padding: 14px 16px; color: #1f2937;">
+    <td style="border-left: 4px solid #b45309; background: #fffbeb; padding: 14px 16px; color: #1f2937; white-space: pre-wrap;">
       {{ comment }}
     </td>
   </tr>
@@ -2350,7 +2555,7 @@ refuse with a 409 is worse than saying nothing.
 <p>Thank you for submitting <strong>{{ project_name }}</strong> (reference <strong>#{{ proposal_id }}</strong>). After review, we are not able to fund this request.</p>
 <table role="presentation" width="100%" style="margin: 18px 0; border-collapse: collapse;">
   <tr>
-    <td style="border-left: 4px solid #6b7280; background: #f9fafb; padding: 14px 16px; color: #1f2937;">
+    <td style="border-left: 4px solid #6b7280; background: #f9fafb; padding: 14px 16px; color: #1f2937; white-space: pre-wrap;">
       {{ comment }}
     </td>
   </tr>
@@ -2386,7 +2591,7 @@ The MyZakat Team
 {% if comment %}
 <table role="presentation" width="100%" style="margin: 18px 0; border-collapse: collapse;">
   <tr>
-    <td style="border-left: 4px solid #16a34a; background: #f0fdf4; padding: 14px 16px; color: #1f2937;">
+    <td style="border-left: 4px solid #16a34a; background: #f0fdf4; padding: 14px 16px; color: #1f2937; white-space: pre-wrap;">
       {{ comment }}
     </td>
   </tr>
@@ -2554,7 +2759,7 @@ def send_proposal_access_code(*, email: str, code: str, ttl_minutes: int = 10) -
 - [ ] **Step 9: Run the email tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_emails.py -v`
-Expected: 10 passed (5 parametrized + 5).
+Expected: 12 passed (5 parametrized + 7).
 
 - [ ] **Step 10: Confirm a decision emails the applicant exactly once**
 
@@ -2629,6 +2834,7 @@ console. Fix it before any portal token can exist.
 
 **Files:**
 - Modify: `backend/auth_utils.py:66-79`
+- Modify: `backend/audit_middleware.py` (`_decode_user_from_request`, ~line 191)
 - Test: `backend/tests/test_proposal_portal.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -2685,6 +2891,39 @@ def test_an_expired_portal_token_is_refused():
     token = create_portal_token("applicant@example.com", expires_delta=timedelta(minutes=-1))
 
     assert verify_portal_token(token) is None
+
+
+def test_a_portal_token_is_not_attributed_to_a_staff_member_in_the_audit_log(
+    admin_user, monkeypatch
+):
+    """A rejected portal request must not appear in the audit trail under an
+    administrator's name -- that would disguise the very confusion the typ
+    claim exists to prevent."""
+    import audit_middleware
+    import auth_utils
+    from audit_middleware import _decode_user_from_request
+    from auth_utils import create_access_token, create_portal_token
+
+    # audit_middleware defaults SECRET_KEY to "dev-only-insecure-secret-key"
+    # while auth_utils defaults it to "test-secret-key-not-for-production"
+    # under TESTING=true. In production both read the same env var, so align
+    # them here -- otherwise the decoder rejects every token on signature
+    # alone and the test would pass without exercising the typ check at all.
+    monkeypatch.setattr(audit_middleware, "SECRET_KEY", auth_utils.SECRET_KEY)
+
+    class _Request:
+        def __init__(self, token):
+            self.headers = {"authorization": f"Bearer {token}"}
+            self.cookies = {}
+
+    portal = _decode_user_from_request(_Request(create_portal_token(admin_user.email)))
+    staff = _decode_user_from_request(_Request(create_access_token({"sub": admin_user.email})))
+
+    # Returns a dict (or None), so compare by key -- getattr on a dict would
+    # yield None and pass vacuously even with the bug present.
+    assert portal is None
+    assert staff is not None
+    assert staff["email"] == admin_user.email
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -2766,10 +3005,39 @@ def get_portal_email(
     return email
 ```
 
+- [ ] **Step 3b: Patch `backend/audit_middleware.py`**
+
+`auth_utils.verify_token` is not the only decoder. `_decode_user_from_request`
+(~line 191) decodes the bearer token itself to label the audit log's actor, and
+falls back to the `sub` claim when no `User` row matches. It grants no access —
+every route still gates on `get_current_user` — but left alone it would record a
+*rejected* portal request under the staff account's own name, misdescribing in
+the audit trail precisely the confusion the `typ` claim exists to prevent. Guard
+it the same way, immediately after the decode and before `sub` is trusted:
+
+```python
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # A scoped token (the submitter portal's) is not a staff session, and
+        # its subject may coincide with a staff address. Attributing it to that
+        # User would label a rejected portal request with an administrator's
+        # name -- misdescribing, in the audit log, precisely the confusion
+        # verify_token() exists to prevent.
+        if payload.get("typ", "user") != "user":
+            return None
+        email = payload.get("sub")
+        if not email:
+            return None
+```
+
+Keep the literal `"user"`: the test is default-deny (refuse every scope but the
+staff one), so it names no portal-specific value. Importing `PORTAL_TOKEN_TYPE`
+here would invert it into `== PORTAL_TOKEN_TYPE`, which would wave through any
+scope added later. `None` is this function's existing "no user" sentinel.
+
 - [ ] **Step 4: Run the portal auth tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_portal.py -v`
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Prove no existing authentication regressed**
 
@@ -2811,6 +3079,7 @@ from models import ProposalAccessCode
 
 
 def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
+    from auth_utils import verify_password
     from proposal_otp import issue_code
 
     code = issue_code(db_session, email="a@example.com", ip="203.0.113.1")
@@ -2818,8 +3087,14 @@ def test_a_code_is_six_digits_and_stored_only_as_a_hash(db_session):
     assert code is not None
     assert len(code) == 6 and code.isdigit()
     row = db_session.query(ProposalAccessCode).one()
-    assert code not in row.code_hash
+    # The stored value is a bcrypt digest that verifies the code, never the
+    # code itself. (Asserting the digits are absent as a SUBSTRING would flake:
+    # a six-digit run turns up in a bcrypt tail roughly once in 1,400 runs.)
+    assert row.code_hash != code
     assert row.code_hash.startswith("$2")
+    assert len(row.code_hash) >= 55
+    assert verify_password(code, row.code_hash) is True
+    assert verify_password("000000" if code != "000000" else "111111", row.code_hash) is False
     assert row.email == "a@example.com"
     assert row.request_ip == "203.0.113.1"
     assert row.expires_at > datetime.utcnow()
@@ -2948,6 +3223,14 @@ limited.
 The project has no rate-limiting middleware, so the limits are enforced by
 counting rows in `proposal_access_codes` — the same record we want for audit
 anyway.
+
+On the two limits: the per-ADDRESS cap is the one that actually protects an
+applicant, and it cannot be evaded, because the address is what the code is
+minted for. The per-IP cap is defence in depth against someone sweeping many
+addresses at once; it rests on X-Forwarded-For, which Traefik overwrites rather
+than trusts (traefik.yml sets no forwardedHeaders.trustedIPs and does not
+enable `insecure`), so it holds behind the proxy — but it would be evadable by
+anything able to reach the backend port directly.
 """
 from __future__ import annotations
 
@@ -3062,6 +3345,12 @@ def verify_code(db: Session, *, email: str, code: str) -> bool:
         return False
 
     if row.attempts >= MAX_ATTEMPTS:
+        # Unreachable through this module's own writes -- the elif below burns
+        # the row on the fifth wrong guess, in the same call that reaches the
+        # cap. Kept as a backstop for a row left at the cap unconsumed by some
+        # other path, and as a reminder that the increment must stay BELOW this
+        # check: moving it above would spend an applicant's fifth legitimate
+        # attempt before it was ever compared.
         row.consumed_at = now
         db.commit()
         return False
@@ -3558,7 +3847,7 @@ app.include_router(project_proposals.router, prefix="/api/project-proposals", ta
 - [ ] **Step 5: Run the portal tests**
 
 Run: `cd backend && python -m pytest tests/test_proposal_portal.py -v`
-Expected: 21 passed (5 from Task 7 plus 16 here).
+Expected: 22 passed (6 from Task 7 plus 16 here).
 
 - [ ] **Step 6: Run the whole suite**
 

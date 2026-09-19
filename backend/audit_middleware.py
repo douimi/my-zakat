@@ -189,6 +189,13 @@ def _decode_user_from_request(request: Request) -> Optional[dict]:
     token = auth[7:]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # A scoped token (the submitter portal's) is not a staff session, and
+        # its subject may coincide with a staff address. Attributing it to that
+        # User would label a rejected portal request with an administrator's
+        # name -- misdescribing, in the audit log, precisely the confusion
+        # verify_token() exists to prevent.
+        if payload.get("typ", "user") != "user":
+            return None
         email = payload.get("sub")
         if not email:
             return None

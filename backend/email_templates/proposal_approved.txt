@@ -1,0 +1,14 @@
+Assalamu alaikum {{ name }},
+
+We are pleased to tell you that '{{ project_name }}' (reference #{{ proposal_id }}) has been approved by our review team.
+{% if comment %}
+
+A note from the reviewer
+------------------------
+{{ comment }}
+{% endif %}
+
+A member of our team will contact you at this address about the next steps, including disbursement and reporting.
+
+With gratitude,
+The MyZakat Team

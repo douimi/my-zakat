@@ -3,19 +3,24 @@
 Endpoints
 ─────────
 Public (no auth):
-  POST   /api/project-proposals/                  → submit a proposal
+  POST   /api/project-proposals/                     → open a dossier (version 1)
 
 Admin / manager (auth):
-  GET    /api/project-proposals/                  → list all
-  GET    /api/project-proposals/{id}              → get one
-  PATCH  /api/project-proposals/{id}/status       → update review status + admin note
-  DELETE /api/project-proposals/{id}              → delete
-  GET    /api/project-proposals/{id}/pdf          → download reconstructed PDF
+  GET    /api/project-proposals/                     → list, current content flattened
+  GET    /api/project-proposals/{id}                 → dossier + version history
+  GET    /api/project-proposals/{id}/versions/{n}    → one frozen version
+  PATCH  /api/project-proposals/{id}/status          → record a decision, email the applicant
+  DELETE /api/project-proposals/{id}                 → delete the dossier and its versions
+  GET    /api/project-proposals/{id}/pdf             → PDF of the current version
+  GET    /api/project-proposals/{id}/versions/{n}/pdf→ PDF of that version
+
+The submitter-facing half of this feature lives in routers/proposal_portal.py.
+Domain rules live in proposal_service.py; this module only maps HTTP to them.
 """
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -23,16 +28,21 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
+import email_service
+import proposal_service
 from auth_utils import get_current_manager_or_admin
 from database import get_db
 from logging_config import get_logger
-from models import ProjectProposal, User
+from models import ProjectProposal, ProposalVersion, User
+from proposal_pdf import render_proposal_pdf, safe_slug
+from proposal_service import (
+    DecisionCommentRequired,
+    InvalidProposalStatus,
+    ProposalError,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
-
-
-VALID_STATUSES = {"submitted", "under_review", "approved", "rejected"}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────
@@ -95,86 +105,74 @@ class ProposalSubmit(BaseModel):
 
 class ProposalStatusUpdate(BaseModel):
     status: str
-    admin_notes: Optional[str] = None
+    # Shown to the applicant and quoted in the decision email. Omit to leave
+    # the existing comment untouched (the "save internal note only" path).
+    decision_comment: Optional[str] = None
+    internal_note: Optional[str] = None
 
 
-def _serialize(p: ProjectProposal, *, include_admin: bool = False) -> dict:
-    out = {
-        "id": p.id,
-        "full_name": p.full_name,
-        "national_id": p.national_id,
-        "date_of_birth_year": p.date_of_birth_year,
-        "place_of_residence": p.place_of_residence,
-        "mobile_number": p.mobile_number,
-        "email": p.email,
-        "educational_level": p.educational_level,
-        "project_name": p.project_name,
-        "project_description": p.project_description,
-        "problem_solved": p.problem_solved,
-        "target_beneficiaries": p.target_beneficiaries,
-        "community_impact": p.community_impact,
-        "expected_impact": p.expected_impact,
-        "implementation_steps": p.implementation_steps,
-        "implementation_location": p.implementation_location,
-        "required_materials": p.required_materials,
-        "expected_duration": p.expected_duration,
-        "continuity_plan": p.continuity_plan,
-        "feasibility": p.feasibility,
-        "expected_challenges": p.expected_challenges,
-        "number_of_beneficiaries": p.number_of_beneficiaries,
-        "cost_per_unit_usd": float(p.cost_per_unit_usd),
-        "unit_type": p.unit_type,
-        "additional_expenses_usd": float(p.additional_expenses_usd or 0),
-        "additional_expenses_description": p.additional_expenses_description,
-        "total_amount_usd": float(p.total_amount_usd),
-        "status": p.status,
-        "submitted_at": p.submitted_at,
-        "updated_at": p.updated_at,
-    }
-    if include_admin:
-        out["admin_notes"] = p.admin_notes
-        out["reviewed_at"] = p.reviewed_at
-        out["reviewed_by"] = p.reviewed_by
-        out["submitted_ip"] = p.submitted_ip
-    return out
+def client_ip(request: Request) -> str:
+    """Caller's IP, honouring the proxy header Traefik sets."""
+    xff = request.headers.get("x-forwarded-for")
+    raw = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "")
+    return raw[:45]
+
+
+def _load(db: Session, proposal_id: int) -> ProjectProposal:
+    found = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
+    if not found:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return found
+
+
+def _load_version(db: Session, dossier: ProjectProposal, version_no: int) -> ProposalVersion:
+    version = (
+        db.query(ProposalVersion)
+        .filter(
+            ProposalVersion.proposal_id == dossier.id,
+            ProposalVersion.version_no == version_no,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return version
 
 
 # ── Public: submit ───────────────────────────────────────────────────
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session = Depends(get_db)):
-    """Public endpoint anyone can call. Creates a new proposal in 'submitted' state."""
-    xff = request.headers.get("x-forwarded-for")
-    client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else ""))[:45]
+    """Public endpoint anyone can call. Always opens a NEW dossier.
 
+    A revision of an existing dossier goes through the portal
+    (PUT /api/project-proposals/portal/{id}), never through here.
+    """
     data = payload.model_dump()
-    # Only stamp the SMS consent timestamp when the box was actually ticked.
-    # If the client sent consent_text without consent=True, ignore the text
-    # so we never record a false consent trail.
-    if not data.get("sms_consent"):
-        data["sms_consent_text"] = None
-        sms_consent_at = None
-    else:
-        sms_consent_at = datetime.utcnow()
-
-    p = ProjectProposal(
-        **data,
-        status="submitted",
-        submitted_ip=client_ip,
-        sms_consent_at=sms_consent_at,
+    dossier, version = proposal_service.create_proposal(
+        db,
+        content=data,
+        submitted_ip=client_ip(request),
+        sms_consent=bool(data.get("sms_consent")),
+        sms_consent_text=data.get("sms_consent_text"),
     )
-    db.add(p)
-    db.commit()
-    db.refresh(p)
     logger.info(
         "Project proposal #%s submitted by %s (%s)%s",
-        p.id, p.email, p.project_name[:60],
-        " [SMS opt-in]" if p.sms_consent else "",
+        dossier.id, dossier.email, version.project_name[:60],
+        " [SMS opt-in]" if version.sms_consent else "",
+    )
+    email_service.send_proposal_received(
+        email=dossier.email,
+        name=version.full_name,
+        proposal_id=dossier.id,
+        version_no=version.version_no,
+        project_name=version.project_name,
     )
     return {
-        "id": p.id,
+        "id": dossier.id,
+        "version_no": version.version_no,
         "message": "Your proposal has been submitted. Our team will review it and get back to you.",
-        "submitted_at": p.submitted_at,
+        "submitted_at": version.submitted_at,
     }
 
 
@@ -189,11 +187,30 @@ async def list_proposals(
     current_user: User = Depends(get_current_manager_or_admin),
 ):
     q = db.query(ProjectProposal)
-    if status_filter and status_filter in VALID_STATUSES:
+    if status_filter and status_filter in proposal_service.VALID_STATUSES:
         q = q.filter(ProjectProposal.status == status_filter)
     total = q.count()
-    rows = q.order_by(ProjectProposal.submitted_at.desc()).offset(skip).limit(min(limit, 500)).all()
-    return {"total": total, "items": [_serialize(p, include_admin=True) for p in rows]}
+    rows = (
+        q.order_by(ProjectProposal.updated_at.desc())
+        .offset(skip)
+        .limit(min(limit, 500))
+        .all()
+    )
+    # Two queries for the whole page, not one per row.
+    grouped = proposal_service.versions_by_proposal(db, [r.id for r in rows])
+    items = []
+    for row in rows:
+        versions = grouped.get(row.id, [])
+        # Follow the same pointer the detail endpoint follows, so the two admin
+        # views can never disagree about which version is current. The fallback
+        # to the highest version matches current_version()'s own fallback for
+        # rows migration 32 has not yet stamped.
+        by_id = {v.id: v for v in versions}
+        current = by_id.get(row.current_version_id) or (versions[-1] if versions else None)
+        items.append(
+            proposal_service.serialize_for_admin(row, current, db=db, versions=versions)
+        )
+    return {"total": total, "items": items}
 
 
 @router.get("/{proposal_id}")
@@ -202,10 +219,22 @@ async def get_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    return _serialize(p, include_admin=True)
+    dossier = _load(db, proposal_id)
+    return proposal_service.serialize_for_admin(
+        dossier, proposal_service.current_version(db, dossier), db=db
+    )
+
+
+@router.get("/{proposal_id}/versions/{version_no}")
+async def get_proposal_version(
+    proposal_id: int,
+    version_no: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    dossier = _load(db, proposal_id)
+    version = _load_version(db, dossier, version_no)
+    return proposal_service.serialize_version_detail(dossier, version)
 
 
 @router.patch("/{proposal_id}/status")
@@ -215,20 +244,56 @@ async def update_proposal_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    if payload.status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    p.status = payload.status
-    if payload.admin_notes is not None:
-        p.admin_notes = payload.admin_notes
-    p.reviewed_at = datetime.utcnow()
-    p.reviewed_by = current_user.id
-    db.commit()
-    db.refresh(p)
-    logger.info("Proposal #%s status → %s by %s", p.id, p.status, current_user.email)
-    return _serialize(p, include_admin=True)
+    """Record the reviewer's decision and notify the applicant.
+
+    The email goes out only when the status actually changes, so re-saving an
+    internal note on an already-rejected dossier does not re-notify anyone.
+    """
+    dossier = _load(db, proposal_id)
+    previous_status = dossier.status
+    try:
+        version = proposal_service.record_decision(
+            db, dossier,
+            status=payload.status,
+            decision_comment=payload.decision_comment,
+            internal_note=payload.internal_note,
+            reviewer_id=current_user.id,
+        )
+    except (InvalidProposalStatus, DecisionCommentRequired) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ProposalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    logger.info("Proposal #%s status → %s by %s", dossier.id, dossier.status, current_user.email)
+
+    if previous_status != dossier.status:
+        _notify_decision(dossier, version)
+
+    return proposal_service.serialize_for_admin(dossier, version, db=db)
+
+
+def _notify_decision(dossier: ProjectProposal, version: ProposalVersion) -> None:
+    """Queue the one email that matches the new status. Never raises."""
+    senders = {
+        "approved": email_service.send_proposal_approved,
+        "rejected": email_service.send_proposal_rejected,
+        "changes_requested": email_service.send_proposal_changes_requested,
+    }
+    send = senders.get(dossier.status)
+    if send is None:
+        return  # 'submitted' / 'under_review' are not worth an email
+    try:
+        send(
+            email=dossier.email,
+            name=version.full_name,
+            proposal_id=dossier.id,
+            version_no=version.version_no,
+            project_name=version.project_name,
+            comment=version.decision_comment or "",
+        )
+    except Exception:
+        # A queueing failure must not roll back a decision the reviewer just made.
+        logger.exception("Could not queue the decision email for proposal #%s", dossier.id)
 
 
 @router.delete("/{proposal_id}")
@@ -237,16 +302,13 @@ async def delete_proposal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    db.delete(p)
-    db.commit()
+    dossier = _load(db, proposal_id)
+    proposal_service.delete_proposal(db, dossier)
     logger.info("Proposal #%s deleted by %s", proposal_id, current_user.email)
     return {"deleted": True}
 
 
-# ── Admin: PDF export (reconstructs the original 4-section layout) ──
+# ── Admin: PDF export ────────────────────────────────────────────────
 
 @router.get("/{proposal_id}/pdf")
 async def download_proposal_pdf(
@@ -254,304 +316,48 @@ async def download_proposal_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_manager_or_admin),
 ):
-    p = db.query(ProjectProposal).filter(ProjectProposal.id == proposal_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    dossier = _load(db, proposal_id)
+    version = proposal_service.current_version(db, dossier)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Proposal has no content to export")
+    return _pdf_response(dossier, version)
 
-    pdf_bytes = _render_proposal_pdf(p)
-    filename = f"proposal-{p.id}-{_safe_slug(p.project_name)}.pdf"
+
+@router.get("/{proposal_id}/versions/{version_no}/pdf")
+async def download_proposal_version_pdf(
+    proposal_id: int,
+    version_no: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    dossier = _load(db, proposal_id)
+    return _pdf_response(dossier, _load_version(db, dossier, version_no))
+
+
+def _pdf_response(dossier: ProjectProposal, version: ProposalVersion) -> StreamingResponse:
+    """Render one version, stamped with the dossier's reference and status.
+
+    The renderer takes a single duck-typed object, so the dossier's identity has
+    to travel with the version's content. That is done by copying both into a
+    throwaway namespace rather than by assigning onto the ProposalVersion: its
+    `id` is a mapped primary key, and setting it would leave a persisted row's
+    PK dirty in the identity map, one stray flush away from an UPDATE that
+    rewrites the wrong row.
+
+    The footer therefore shows the dossier's CURRENT status even on an exported
+    older version, while that version's own verdict stays in its `decision`
+    field. That is deliberate: the reader needs to know where the file stands
+    now, not only what was decided about this particular draft.
+    """
+    view = SimpleNamespace(
+        **{column.name: getattr(version, column.name) for column in version.__table__.columns}
+    )
+    view.id = dossier.id
+    view.status = dossier.status
+    pdf_bytes = render_proposal_pdf(view)
+    filename = f"proposal-{dossier.id}-v{version.version_no}-{safe_slug(version.project_name)}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-# ── PDF renderer (reportlab platypus) ────────────────────────────────
-
-def _safe_slug(text: str) -> str:
-    import re
-    return re.sub(r"[^a-zA-Z0-9]+", "-", text or "proposal").strip("-").lower()[:40] or "proposal"
-
-
-def _render_proposal_pdf(p: ProjectProposal) -> bytes:
-    """Render the proposal as a polished funding-request document.
-
-    Layout mirrors a formal letter of request:
-      • Page 1 — cover letter (bold labeled header, justified body,
-        signature block).
-      • Following pages — the four review-packet sections with clear
-        underlined headings and bold question labels.
-    """
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
-    from reportlab.lib.pagesizes import LETTER
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch
-    from reportlab.platypus import (
-        HRFlowable, ListFlowable, ListItem, PageBreak, Paragraph,
-        SimpleDocTemplate, Spacer, Table, TableStyle,
-    )
-
-    buf = io.BytesIO()
-
-    # Slightly larger margins + running footer with page number make the
-    # document feel like a real word-processed letter.
-    def _footer(canvas, doc_):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.setFillColor(colors.HexColor("#9ca3af"))
-        canvas.drawRightString(
-            LETTER[0] - 0.75 * inch, 0.5 * inch,
-            f"Page {doc_.page}",
-        )
-        canvas.drawString(
-            0.75 * inch, 0.5 * inch,
-            f"Ref #{p.id} · myzakat.org",
-        )
-        canvas.restoreState()
-
-    doc = SimpleDocTemplate(
-        buf, pagesize=LETTER,
-        leftMargin=1.0 * inch, rightMargin=1.0 * inch,
-        topMargin=0.9 * inch, bottomMargin=0.9 * inch,
-        title=f"Project Proposal — {p.project_name}",
-        author=p.full_name,
-    )
-
-    styles = getSampleStyleSheet()
-
-    # ── Type scale ────────────────────────────────────────────────────
-    title_style = ParagraphStyle(
-        "Title", parent=styles["Heading1"],
-        fontName="Helvetica-Bold", fontSize=18, leading=22,
-        textColor=colors.HexColor("#111827"),
-        spaceAfter=14, spaceBefore=0, alignment=TA_LEFT,
-    )
-    section_h = ParagraphStyle(
-        "SectionH", parent=styles["Heading1"],
-        fontName="Helvetica-Bold", fontSize=14, leading=18,
-        textColor=colors.HexColor("#111827"),
-        spaceAfter=4, spaceBefore=18, alignment=TA_LEFT,
-    )
-    sub_h = ParagraphStyle(
-        "SubH", parent=styles["Heading2"],
-        fontName="Helvetica-Bold", fontSize=11, leading=14,
-        textColor=colors.HexColor("#1f2937"),
-        spaceAfter=4, spaceBefore=12,
-    )
-    body = ParagraphStyle(
-        "Body", parent=styles["BodyText"],
-        fontName="Helvetica", fontSize=11, leading=16,
-        alignment=TA_JUSTIFY, spaceAfter=10,
-        textColor=colors.HexColor("#1f2937"),
-    )
-    body_left = ParagraphStyle("BodyLeft", parent=body, alignment=TA_LEFT)
-    label_line = ParagraphStyle(
-        "LabelLine", parent=body_left,
-        spaceAfter=4, leading=15,
-    )
-    meta = ParagraphStyle(
-        "Meta", parent=body_left,
-        textColor=colors.HexColor("#6b7280"), fontSize=9, leading=12,
-        spaceAfter=0,
-    )
-
-    def esc(text: str) -> str:
-        return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    def para(text: str, style=body):
-        safe = esc(text).replace("\n", "<br/>")
-        return Paragraph(safe, style)
-
-    def rule():
-        return HRFlowable(
-            width="100%", thickness=0.7,
-            color=colors.HexColor("#111827"),
-            spaceBefore=0, spaceAfter=10,
-        )
-
-    def bullet_list(text: str):
-        lines = [ln.strip().lstrip("-•*").strip() for ln in (text or "").split("\n") if ln.strip()]
-        if len(lines) <= 1:
-            return para(text)
-        return ListFlowable(
-            [ListItem(para(ln, style=body_left), leftIndent=10, spaceAfter=4) for ln in lines],
-            bulletType="bullet", start="•", leftIndent=18, bulletFontSize=10,
-        )
-
-    def kv_table(rows):
-        data = [[Paragraph(f"<b>{esc(k)}</b>", label_line), para(v or "—", style=body_left)] for k, v in rows]
-        t = Table(data, colWidths=[2.0 * inch, 4.0 * inch])
-        t.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#e5e7eb")),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        return t
-
-    # ── Compose the cover letter (page 1) ────────────────────────────
-    story = []
-    story.append(Paragraph("TO: ZAKAT DISTRIBUTION FOUNDATION", title_style))
-
-    story.append(Paragraph(
-        f"<b>Subject:</b> Request for Funding Support for {esc(p.project_name)} "
-        f"&mdash; ${p.total_amount_usd:,.0f} USD",
-        label_line,
-    ))
-    story.append(Paragraph(
-        f"<b>Date:</b> {p.submitted_at.strftime('%B %d, %Y')}",
-        label_line,
-    ))
-    story.append(Spacer(1, 14))
-
-    story.append(para("Dear Sir/Madam,", style=body_left))
-
-    # Opening paragraph — introduce the request in the letter voice.
-    story.append(para(
-        f"I hope this message finds you well. I am writing to request your kind support and "
-        f"funding for a humanitarian initiative titled &ldquo;{esc(p.project_name)}.&rdquo; "
-        f"{esc(p.project_description)}"
-    ))
-
-    # Problem paragraph.
-    story.append(para(p.problem_solved))
-
-    # Beneficiaries + budget paragraph.
-    story.append(para(
-        f"This project seeks to serve {esc(p.target_beneficiaries)}. "
-        f"The total required budget for the project is ${p.total_amount_usd:,.2f} USD, which "
-        f"will cover the purchase, transportation, packaging, and distribution to the targeted "
-        f"beneficiaries. The implementation will be carried out in coordination with local "
-        f"community committees to ensure efficient, transparent, and equitable distribution to "
-        f"those most in need."
-    ))
-
-    # Impact paragraph.
-    story.append(para(
-        f"{esc(p.expected_impact)} {esc(p.community_impact)}"
-    ))
-
-    # Closing.
-    story.append(para(
-        "We deeply appreciate your consideration of this request and your continued commitment "
-        "to humanitarian work. May your generous support bring relief and hope to those most in "
-        "need."
-    ))
-
-    story.append(Spacer(1, 18))
-    story.append(para("Sincerely,", style=body_left))
-    story.append(Spacer(1, 22))
-    story.append(Paragraph(f"<b>{esc(p.full_name)}</b>", label_line))
-    story.append(Paragraph(esc(p.place_of_residence), label_line))
-    story.append(Paragraph(f"Mobile: {esc(p.mobile_number)}", label_line))
-    story.append(Paragraph(f"Email: {esc(p.email)}", label_line))
-
-    story.append(PageBreak())
-
-    # ── Review packet (page 2+) ──────────────────────────────────────
-    story.append(Paragraph("Project Proposal — Full Details", title_style))
-    story.append(para(
-        f"The pages that follow contain the full project proposal for "
-        f"&ldquo;<b>{esc(p.project_name)}</b>&rdquo; as submitted through the online proposal "
-        f"form, structured to mirror the four sections of the funding request template.",
-        style=body,
-    ))
-
-    # ── Section 1 ────────────────────────────────────────────────────
-    story.append(Paragraph("Section 1 &mdash; Personal Information", section_h))
-    story.append(rule())
-    story.append(kv_table([
-        ("Full Name",           p.full_name),
-        ("National ID Number",  p.national_id),
-        ("Date of Birth",       str(p.date_of_birth_year)),
-        ("Place of Residence",  p.place_of_residence),
-        ("Mobile Number",       p.mobile_number),
-        ("Email",               p.email),
-        ("Educational Level",   p.educational_level),
-    ]))
-
-    # ── Section 2 ────────────────────────────────────────────────────
-    story.append(Paragraph("Section 2 &mdash; Project Information", section_h))
-    story.append(rule())
-    story.append(Paragraph("Project Name", sub_h));                                         story.append(para(p.project_name))
-    story.append(Paragraph("Project Idea Description", sub_h));                             story.append(para(p.project_description))
-    story.append(Paragraph("What problem does the project solve?", sub_h));                 story.append(para(p.problem_solved))
-    story.append(Paragraph("Target Beneficiaries", sub_h));                                 story.append(para(p.target_beneficiaries))
-    story.append(Paragraph("How will the project serve the community?", sub_h));            story.append(para(p.community_impact))
-    story.append(Paragraph("Expected Economic or Social Impact", sub_h));                   story.append(para(p.expected_impact))
-
-    # ── Section 3 ────────────────────────────────────────────────────
-    story.append(Paragraph("Section 3 &mdash; Project Plan", section_h))
-    story.append(rule())
-    story.append(Paragraph("Steps for implementing the project", sub_h))
-    story.append(bullet_list(p.implementation_steps))
-    story.append(Paragraph("Where will the project be implemented?", sub_h));               story.append(para(p.implementation_location))
-    story.append(Paragraph("Required materials or equipment", sub_h))
-    story.append(bullet_list(p.required_materials))
-    story.append(Paragraph("Expected duration to start implementation", sub_h));            story.append(para(p.expected_duration))
-    story.append(Paragraph("How will the project continue after funding?", sub_h));         story.append(para(p.continuity_plan))
-    story.append(Paragraph("Why is it feasible under current conditions?", sub_h));         story.append(para(p.feasibility))
-    story.append(Paragraph("Expected challenges and how to address them", sub_h))
-    story.append(bullet_list(p.expected_challenges))
-
-    # ── Section 4 ────────────────────────────────────────────────────
-    story.append(Paragraph("Section 4 &mdash; Required Budget", section_h))
-    story.append(rule())
-
-    subtotal = float(p.number_of_beneficiaries) * float(p.cost_per_unit_usd)
-    extra = float(p.additional_expenses_usd or 0)
-
-    budget_rows = [
-        [Paragraph("<b>Item</b>", label_line),
-         Paragraph("<b>Quantity</b>", label_line),
-         Paragraph("<b>Unit cost</b>", label_line),
-         Paragraph("<b>Amount</b>", label_line)],
-        [para(f"{esc(p.unit_type).title()}s served", style=body_left),
-         para(f"{p.number_of_beneficiaries:,}", style=body_left),
-         para(f"${p.cost_per_unit_usd:,.2f}", style=body_left),
-         para(f"${subtotal:,.2f}", style=body_left)],
-    ]
-    if extra > 0:
-        budget_rows.append([
-            para(esc(p.additional_expenses_description) or "Additional expenses", style=body_left),
-            para("—", style=body_left),
-            para("—", style=body_left),
-            para(f"${extra:,.2f}", style=body_left),
-        ])
-    budget_rows.append([
-        Paragraph("<b>Total</b>", label_line),
-        para("", style=body_left),
-        para("", style=body_left),
-        Paragraph(f"<b>${p.total_amount_usd:,.2f} USD</b>", label_line),
-    ])
-
-    budget_table = Table(budget_rows, colWidths=[2.6 * inch, 1.0 * inch, 1.2 * inch, 1.2 * inch])
-    budget_table.setStyle(TableStyle([
-        ("VALIGN",       (0, 0), (-1, -1), "TOP"),
-        ("BACKGROUND",   (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
-        ("LINEBELOW",    (0, 0), (-1, 0), 0.6, colors.HexColor("#111827")),
-        ("LINEBELOW",    (0, 1), (-1, -2), 0.3, colors.HexColor("#e5e7eb")),
-        ("LINEABOVE",    (0, -1), (-1, -1), 0.6, colors.HexColor("#111827")),
-        ("TOPPADDING",   (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 8),
-        ("LEFTPADDING",  (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    story.append(budget_table)
-
-    # ── Footer note ──────────────────────────────────────────────────
-    story.append(Spacer(1, 24))
-    story.append(HRFlowable(width="100%", thickness=0.3, color=colors.HexColor("#e5e7eb"),
-                            spaceBefore=0, spaceAfter=6))
-    story.append(Paragraph(
-        f"Submitted via myzakat.org on {p.submitted_at.strftime('%B %d, %Y at %H:%M UTC')} "
-        f"&nbsp;·&nbsp; reference #{p.id} &nbsp;·&nbsp; status: {p.status.replace('_', ' ')}",
-        meta,
-    ))
-
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
-    return buf.getvalue()

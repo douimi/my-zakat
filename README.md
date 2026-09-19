@@ -24,13 +24,14 @@ foundation that facilitates Zakat, Sadaqa, and other Islamic charitable giving.
 
 ## What this is
 
-MyZakat is a donation platform with four core capabilities:
+MyZakat is a donation platform with five core capabilities:
 
 | Capability | Summary |
 |---|---|
 | **Secure donations** | One-time + recurring (monthly/annual) donations via Stripe Checkout. PDF certificates auto-emailed on success. |
 | **Zakat calculators** | Zakat (wealth, gold, silver, business, agriculture), Kaffarah, Zakat Al-Fitr, Zakat on Gold. |
 | **Content management** | Full admin console for stories, events, testimonials, programs, urgent needs, gallery, slideshow, settings, users. |
+| **Project proposals** | Public funding-request intake with versioned review, and a passwordless submitter portal for revising an application. |
 | **Observability** | All admin actions audited; live Grafana dashboard for activity, payments, and errors. |
 
 A complete functional specification lives in [docs/SPECIFICATIONS.md](docs/SPECIFICATIONS.md).

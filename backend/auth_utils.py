@@ -80,10 +80,25 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
+# Claim value marking a token as a submitter-portal session rather than a staff
+# session. Staff tokens carry no `typ` at all, which reads as "user" below, so
+# existing sessions keep working untouched.
+PORTAL_TOKEN_TYPE = "proposal_portal"
+PORTAL_TOKEN_MINUTES = 30
+
+
 def verify_token(token: str):
-    """Verify JWT token and extract user email"""
+    """Verify a STAFF JWT and return its subject email.
+
+    Scoped tokens are refused here even though their signature is valid.
+    Without this check, a proposal-portal token minted for an address that also
+    belongs to a staff account would resolve to that User in get_current_user,
+    and a six-digit emailed code would be enough to reach the admin console.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("typ", "user") != "user":
+            return None
         email: str = payload.get("sub")
         if email is None:
             return None
@@ -93,6 +108,43 @@ def verify_token(token: str):
         import logging
         logging.error(f"JWT verification failed: {str(e)}")
         return None
+
+
+def create_portal_token(email: str, expires_delta: Optional[timedelta] = None) -> str:
+    """Mint a submitter-portal token: short-lived, and not a user session."""
+    return create_access_token(
+        {"sub": email, "typ": PORTAL_TOKEN_TYPE},
+        expires_delta=expires_delta or timedelta(minutes=PORTAL_TOKEN_MINUTES),
+    )
+
+
+def verify_portal_token(token: str) -> Optional[str]:
+    """The mirror of verify_token: only a portal token resolves, to its email."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("typ") != PORTAL_TOKEN_TYPE:
+        return None
+    return payload.get("sub")
+
+
+def get_portal_email(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
+    """FastAPI dependency for portal routes. Yields the verified email.
+
+    No database lookup: a submitter has no row anywhere. The email in the token
+    IS the identity, and every portal query filters on it.
+    """
+    email = verify_portal_token(credentials.credentials)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in again to continue.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return email
 
 
 def get_current_user(

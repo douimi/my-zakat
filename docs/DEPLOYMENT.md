@@ -37,6 +37,50 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
+## Database Migrations
+
+`migrations/init.sql` is mounted into the database container and only runs on a
+fresh volume. Every numbered file in `migrations/` after that is applied by
+hand — neither `deploy.sh` nor the GitHub Actions deploy job runs them:
+
+```bash
+docker-compose -f docker-compose.traefik.yml exec -T db \
+  psql -U myzakat_user -d myzakat < migrations/NN_name.sql
+```
+
+Most migrations are additive and can go before or after the deploy they belong
+to. **Proposal versioning (32 and 33) cannot.** Apply them around the deploy, in
+this order:
+
+### 1. `32_proposal_versioning.sql` — BEFORE deploying the new backend
+
+Creates `proposal_versions` and `proposal_access_codes`, adds
+`project_proposals.current_version_id`, backfills a version 1 for every existing
+proposal, and drops the NOT NULL constraints on the legacy content columns.
+Additive and idempotent; the running image keeps working after it.
+
+It must come first: the new code inserts dossier rows that carry no content, and
+against the un-relaxed schema those inserts fail.
+
+### 2. Deploy the new backend
+
+Push to `main`, or run `./deploy.sh`.
+
+### 3. `33_drop_proposal_content_columns.sql` — AFTER the deploy
+
+Drops the content columns (and `admin_notes`) from `project_proposals`.
+
+It must come last: the previous image still writes those columns, so running it
+while the old image is live breaks every submission. Destructive and with no
+down script — take a dump first, and confirm the backfill:
+
+```bash
+docker-compose -f docker-compose.traefik.yml exec -T db \
+  psql -U myzakat_user -d myzakat \
+  -c "SELECT count(*) FROM project_proposals WHERE current_version_id IS NULL;"
+# must return 0
+```
+
 ## Services
 - **Frontend**: https://myzakat.org
 - **Backend API**: https://myzakat.org/api
@@ -48,6 +92,7 @@ chmod +x deploy.sh
 - `env.production` - Production environment variables
 - `deploy.sh` - Deployment script
 - `setup-vps.sh` - VPS setup script
+- `migrations/` - Numbered SQL migrations, applied by hand (see above)
 
 ## Security Notes
 1. Change default Traefik dashboard password

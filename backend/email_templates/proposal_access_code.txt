@@ -1,0 +1,12 @@
+Your sign-in code
+
+Use this code to see the project proposals submitted with this email address:
+
+    {{ code }}
+
+The code expires in {{ ttl_minutes }} minutes and can be used once.
+
+If you did not ask for this code, you can ignore this email — nothing has been shared and no account has been created.
+
+With gratitude,
+The MyZakat Team

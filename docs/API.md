@@ -209,6 +209,236 @@ All these endpoints follow a standard CRUD pattern: `GET /` (list),
 
 ---
 
+## Project proposals
+
+A funding request is a **dossier** plus an append-only chain of **versions**.
+The dossier holds the applicant's email — the identity key — and the review
+status; every submission writes one immutable version carrying the 26 form
+fields and the reviewer's verdict on that version.
+
+Endpoints marked *admin* accept an **admin or manager** JWT. The portal
+endpoints take a portal token instead, which is a different credential
+(see [Submitter portal](#submitter-portal) below).
+
+### `POST /api/project-proposals/` — public
+
+Submits a proposal. Always opens a **new** dossier at version 1 — one email may
+own several. A revision of an existing dossier goes through the portal, never
+through here.
+
+```json
+Request: {
+  "full_name": "Jane Doe", "national_id": "A1234567", "date_of_birth_year": 1990,
+  "place_of_residence": "Casablanca", "mobile_number": "+212600000000",
+  "email": "jane@example.com", "educational_level": "Bachelor degree",
+
+  "project_name": "Clean water for Ait Ourir",
+  "project_description": "...", "problem_solved": "...",
+  "target_beneficiaries": "...", "community_impact": "...",
+  "expected_impact": "...",
+
+  "implementation_steps": "...", "implementation_location": "...",
+  "required_materials": "...", "expected_duration": "6 months",
+  "continuity_plan": "...", "feasibility": "...", "expected_challenges": "...",
+
+  "number_of_beneficiaries": 50, "cost_per_unit_usd": 20,
+  "unit_type": "household", "additional_expenses_usd": 100,
+  "additional_expenses_description": "Transport", "total_amount_usd": 1100,
+
+  "sms_consent": false, "sms_consent_text": null
+}
+Response (201): {
+  "id": 7,
+  "version_no": 1,
+  "message": "Your proposal has been submitted. Our team will review it and get back to you.",
+  "submitted_at": "2026-09-18T10:22:04"
+}
+```
+
+**Validation:** `total_amount_usd` must agree with
+`number_of_beneficiaries × cost_per_unit_usd + additional_expenses_usd` to
+within $1 (`422` otherwise). SMS consent is optional and off by default; the
+wording the applicant agreed to is stored only when `sms_consent` is `true`.
+
+Queues the `proposal_received` email.
+
+### `GET /api/project-proposals/` — admin
+
+Lists dossiers, most recently touched first (`updated_at DESC`).
+
+Query params: `status_filter` (`submitted` | `under_review` |
+`changes_requested` | `approved` | `rejected` — an unrecognized value is
+ignored rather than rejected, and no filter is applied), `skip` (default 0),
+`limit` (default 100, capped at 500).
+
+```json
+{
+  "total": 12,
+  "items": [{
+    "id": 7, "email": "jane@example.com", "status": "changes_requested",
+    "submitted_at": "...", "updated_at": "...",
+    "reviewed_at": "...", "reviewed_by": 3,
+    "version_count": 2, "current_version_no": 2,
+    "decision_comment": "Please break the budget down per village.",
+    "internal_note": "Second time we have asked.",
+    "submitted_ip": "41.0.0.0",
+    "sms_consent": false, "sms_consent_at": null, "sms_consent_text": null,
+    "full_name": "Jane Doe", "project_name": "...",
+    // ...all 26 content fields of the current version, flattened
+    "versions": [{
+      "id": 14, "version_no": 1,
+      "submitted_at": "...", "submitted_ip": "41.0.0.0",
+      "decision": "changes_requested",
+      "decision_comment": "...", "internal_note": "...",
+      "decided_at": "...", "decided_by": 3
+    }]
+  }]
+}
+```
+
+The current version's content is flattened at the top level so the admin table
+reads it unchanged; `versions[]` is the whole chain, oldest first, each entry
+carrying its own verdict. `internal_note` is staff-only — the portal uses a
+separate serializer that cannot emit it.
+
+### `GET /api/project-proposals/{id}` — admin
+
+The same object for a single dossier, `versions[]` included. `404` if unknown.
+
+### `GET /api/project-proposals/{id}/versions/{n}` — admin
+
+One frozen version in full: its content exactly as submitted, its decision
+fields, `proposal_id`, and the dossier's current `status`. `404` if either the
+dossier or that version number is unknown.
+
+### `PATCH /api/project-proposals/{id}/status` — admin
+
+Records the reviewer's verdict on the dossier's **current** version.
+
+```json
+Request: {
+  "status": "changes_requested",   // submitted | under_review |
+                                   // changes_requested | approved | rejected
+  "decision_comment": "Please break the budget down per village.",
+  "internal_note": "Second time we have asked."   // staff only, never shown
+}
+Response: the same object as `GET /api/project-proposals/{id}`
+```
+
+- `decision_comment` is **required and non-blank** for `rejected` and
+  `changes_requested` — `400` otherwise. Omitting it (`null`) leaves the
+  existing comment untouched, which is how the console saves an internal note
+  on its own.
+- `approved`, `rejected` and `changes_requested` stamp `decision`, `decided_at`
+  and `decided_by` on the current version. Moving back to `submitted` or
+  `under_review` changes the dossier's status only: a verdict already recorded
+  on a version is never erased.
+- An unknown status → `400`. A dossier with no version to decide on → `409`.
+- The applicant is emailed only when the status actually **changes**, so
+  re-saving a note on an already-rejected dossier re-notifies nobody.
+  `submitted` and `under_review` send no email at all.
+
+### `DELETE /api/project-proposals/{id}` — admin
+
+Deletes the dossier and its entire version chain.
+
+```json
+Response: { "deleted": true }
+```
+
+### `GET /api/project-proposals/{id}/pdf` — admin
+
+PDF of the current version. `404` when the dossier has no content to export.
+
+### `GET /api/project-proposals/{id}/versions/{n}/pdf` — admin
+
+PDF of that one version. Both stream `application/pdf` as
+`proposal-{id}-v{n}-{slug}.pdf`. The footer shows the dossier's *current*
+status even on an exported older version; that version's own verdict stays in
+its `decision` field.
+
+### Submitter portal
+
+Applicants have no account. They prove control of the address on their dossier
+with a six-digit code emailed to it, and receive a **portal token** valid for
+30 minutes.
+
+That token is not a staff session. `verify_token()` refuses any JWT whose `typ`
+claim is anything other than `"user"`, so a portal token minted for an address
+that also owns a staff account cannot reach the admin console. The audit
+middleware refuses it as well, so such a request is never logged under a staff
+member's name.
+
+#### `POST /api/project-proposals/portal/request-code` — public
+
+```json
+Request:  { "email": "jane@example.com" }
+Response (202): {
+  "message": "If that address has a proposal with us, a sign-in code is on its way."
+}
+```
+
+The `202` and its body are identical whether or not the address is known — the
+endpoint must not let anyone discover who has applied for funding. A code is
+only actually sent when a dossier exists, and issuing one consumes any earlier
+unconsumed code for that address, so only the newest one ever works.
+
+The answer is **always `202`**, never `429`. Once the address has requested 3
+codes in 15 minutes, or the caller's IP 10 in an hour, the limit takes effect
+silently: the reply is byte-for-byte the one above and no email is sent. A
+distinct status would only ever have been returned to addresses that do have a
+dossier, which would have made three unauthenticated requests enough to reveal
+who has applied for funding.
+
+#### `POST /api/project-proposals/portal/verify-code` — public
+
+```json
+Request:  { "email": "jane@example.com", "code": "048213" }
+Response: { "token": "eyJ...", "expires_in": 1800 }
+```
+
+Codes are bcrypt-hashed at rest, live 10 minutes, are single-use, and are burned
+after 5 wrong guesses. Every failure mode — no code on file, expired, already
+used, attempts exhausted, wrong digits — returns the same `401`, so they cannot
+be told apart.
+
+#### `GET /api/project-proposals/portal/me` — portal token
+
+Every dossier submitted from the token's address, newest first.
+
+```json
+{
+  "email": "jane@example.com",
+  "items": [{
+    "id": 7, "project_name": "Clean water for Ait Ourir",
+    "status": "changes_requested", "editable": true,
+    "submitted_at": "...", "updated_at": "...", "version_no": 2,
+    "decision_comment": "Please break the budget down per village.",
+    "content": { }   // the 26 content fields of the current version
+  }]
+}
+```
+
+`editable` is true only in `changes_requested`. `internal_note`, `submitted_ip`,
+`reviewed_by` and `decided_by` are absent by construction: the portal has its
+own serializer rather than a flag on the admin one.
+
+#### `PUT /api/project-proposals/portal/{id}` — portal token
+
+Appends the next version of one of this address's dossiers and returns the
+dossier to `submitted`. The body is the same schema as a first submission, so a
+revision can never be less complete than the original; its `email` field is
+ignored — the dossier's address always wins. Responds with one `/portal/me`
+item and queues `proposal_received`.
+
+| HTTP | When |
+|---|---|
+| `401` | Missing, expired, or non-portal token |
+| `404` | No such dossier — **or** it belongs to another address. Never `403`, which would confirm it exists |
+| `409` | The dossier is not in `changes_requested`, the only status a submitter may revise from |
+
+---
+
 ## Media & uploads
 
 ### `POST /api/admin/upload-media` — admin
@@ -263,7 +493,14 @@ Returns environment + Stripe configuration status. For local debugging.
 
 ## Rate limiting
 
-Currently unimplemented. Tracked in
+There is no rate-limiting middleware. The one limited endpoint is
+`POST /api/project-proposals/portal/request-code`, which enforces its own caps
+by counting rows in `proposal_access_codes` — 3 codes per address per 15
+minutes and 10 per IP per hour. Neither answers `429`: a capped caller still
+receives the ordinary `202` and simply gets no email, so the endpoint cannot be
+used to tell a known address from an unknown one.
+
+Site-wide rate limiting is still unimplemented. Tracked in
 [PRODUCTION_READINESS_REPORT.md](PRODUCTION_READINESS_REPORT.md) as a
 hardening item.
 
@@ -274,11 +511,15 @@ hardening item.
 | HTTP | Meaning |
 |---|---|
 | 200 | Success |
+| 201 | Created (e.g. a new proposal dossier) |
+| 202 | Accepted — deliberately says nothing about the outcome (portal code request) |
 | 400 | Bad request (validation, business rule) |
 | 401 | Missing/invalid JWT |
 | 403 | Authenticated but not authorized (e.g. non-admin hitting admin endpoint) |
-| 404 | Resource not found |
+| 404 | Resource not found — also used where a 403 would leak the existence of someone else's record |
+| 409 | Conflict with the resource's current state (e.g. revising a proposal that is not awaiting changes) |
 | 422 | Pydantic validation error (malformed body) |
+| 429 | Rate limited — reserved; no endpoint returns it today (the portal's code request stays `202` when capped, so it cannot be used to enumerate applicants) |
 | 500 | Server error (logged with traceback) |
 
 Error responses are always JSON: `{ "detail": "human-readable message" }`.

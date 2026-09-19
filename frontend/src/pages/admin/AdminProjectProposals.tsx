@@ -2,7 +2,8 @@
  * Admin review of incoming project proposals.
  *
  * List with status filter → detail modal showing every field in the same
- * order as the PDF → change status, add admin notes, download PDF, delete.
+ * order as the PDF → walk the dossier's version history, change status,
+ * write the applicant's message and the internal note, download PDFs, delete.
  */
 import { useEffect, useState } from 'react'
 import {
@@ -11,6 +12,18 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+
+interface ProposalVersionSummary {
+  id: number
+  version_no: number
+  submitted_at: string
+  submitted_ip: string | null
+  decision: string | null
+  decision_comment: string | null
+  internal_note: string | null
+  decided_at: string | null
+  decided_by: number | null
+}
 
 interface Proposal {
   id: number
@@ -41,7 +54,11 @@ interface Proposal {
   additional_expenses_description: string | null
   total_amount_usd: number
   status: string
-  admin_notes: string | null
+  decision_comment: string | null
+  internal_note: string | null
+  version_count: number
+  current_version_no: number | null
+  versions: ProposalVersionSummary[]
   reviewed_at: string | null
   reviewed_by: number | null
   submitted_ip: string | null
@@ -50,17 +67,26 @@ interface Proposal {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  submitted:    'bg-blue-100 text-blue-800',
-  under_review: 'bg-amber-100 text-amber-800',
-  approved:     'bg-green-100 text-green-800',
-  rejected:     'bg-red-100 text-red-800',
+  submitted:         'bg-blue-100 text-blue-800',
+  under_review:      'bg-amber-100 text-amber-800',
+  changes_requested: 'bg-orange-100 text-orange-900',
+  approved:          'bg-green-100 text-green-800',
+  rejected:          'bg-red-100 text-red-800',
 }
 const STATUS_LABEL: Record<string, string> = {
   submitted: 'Submitted',
   under_review: 'Under review',
+  changes_requested: 'Changes requested',
   approved: 'Approved',
   rejected: 'Rejected',
 }
+
+// Statuses the applicant must be given a reason for — the backend enforces
+// this too (400 without a comment); mirroring it here keeps the reviewer from
+// losing a click.
+const COMMENT_REQUIRED = new Set(['rejected', 'changes_requested'])
+// Statuses that decide the current version, and so email the applicant.
+const DECISION_STATUSES = new Set(['approved', 'rejected', 'changes_requested'])
 
 const AdminProjectProposals = () => {
   const [rows, setRows] = useState<Proposal[]>([])
@@ -70,7 +96,10 @@ const AdminProjectProposals = () => {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [deleting, setDeleting] = useState<Proposal | null>(null)
-  const [notesDraft, setNotesDraft] = useState('')
+  const [commentDraft, setCommentDraft] = useState('')
+  const [noteDraft, setNoteDraft] = useState('')
+  const [openVersion, setOpenVersion] = useState<number | null>(null)
+  const [versionDetail, setVersionDetail] = useState<Record<string, any> | null>(null)
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
@@ -92,38 +121,79 @@ const AdminProjectProposals = () => {
 
   const openDetail = (p: Proposal) => {
     setSelected(p)
-    setNotesDraft(p.admin_notes || '')
+    setCommentDraft(p.decision_comment || '')
+    setNoteDraft(p.internal_note || '')
+    setOpenVersion(null)
+    setVersionDetail(null)
   }
-  const closeDetail = () => { setSelected(null); setNotesDraft('') }
+  const closeDetail = () => {
+    setSelected(null)
+    setCommentDraft('')
+    setNoteDraft('')
+    setOpenVersion(null)
+    setVersionDetail(null)
+  }
 
-  const changeStatus = async (nextStatus: string) => {
+  /**
+   * The single write path: the same endpoint serves a decision and a
+   * notes-only save. The backend emails the applicant only when the status
+   * actually changes, so re-sending the current status saves both comments
+   * without notifying anyone.
+   */
+  const patchStatus = async (nextStatus: string, successMessage: string) => {
     if (!selected) return
+    if (COMMENT_REQUIRED.has(nextStatus) && !commentDraft.trim()) {
+      showError('A message is required', 'Tell the applicant why — it goes out in the email.')
+      return
+    }
     try {
       const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/status`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus, admin_notes: notesDraft || null }),
+        body: JSON.stringify({
+          status: nextStatus,
+          decision_comment: commentDraft.trim() || null,
+          internal_note: noteDraft.trim() || null,
+        }),
       })
       if (resp.ok) {
         const updated = await resp.json()
         setSelected(updated)
-        showSuccess('Updated', `Marked as ${STATUS_LABEL[nextStatus]}`)
+        setCommentDraft(updated.decision_comment || '')
+        setNoteDraft(updated.internal_note || '')
+        showSuccess('Updated', successMessage)
         fetchRows()
-      } else showError('Error', 'Failed to update status')
+      } else {
+        const body = await resp.json().catch(() => null)
+        showError('Error', body?.detail || 'Failed to update status')
+      }
     } catch { showError('Error', 'Network error') }
   }
 
-  const saveNotes = async () => {
+  const changeStatus = (nextStatus: string) => {
+    const label = STATUS_LABEL[nextStatus] || nextStatus
+    const notifies = DECISION_STATUSES.has(nextStatus) && nextStatus !== selected?.status
+    patchStatus(nextStatus, notifies ? `Marked as ${label} — the applicant has been emailed.` : `Marked as ${label}`)
+  }
+
+  const saveNotes = () => {
     if (!selected) return
+    patchStatus(selected.status, 'Notes saved')
+  }
+
+  const loadVersion = async (versionNo: number) => {
+    if (!selected) return
+    if (openVersion === versionNo) { setOpenVersion(null); setVersionDetail(null); return }
+    setOpenVersion(versionNo)
+    setVersionDetail(null)
     try {
-      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/status`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: selected.status, admin_notes: notesDraft || null }),
-      })
-      if (resp.ok) { showSuccess('Saved', 'Admin notes updated'); fetchRows() }
-      else showError('Error', 'Failed to save notes')
-    } catch { showError('Error', 'Network error') }
+      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/versions/${versionNo}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) throw new Error('fetch failed')
+      setVersionDetail(await resp.json())
+    } catch {
+      setOpenVersion(null)
+      showError('Error', 'Could not load that version')
+    }
   }
 
   const downloadPdf = async (p: Proposal) => {
@@ -135,6 +205,20 @@ const AdminProjectProposals = () => {
       const a = document.createElement('a')
       a.href = url
       a.download = `proposal-${p.id}-${p.project_name.replace(/[^a-z0-9]+/gi, '-').slice(0, 40).toLowerCase()}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch { showError('Error', 'Could not download PDF') }
+  }
+
+  const downloadVersionPdf = async (p: Proposal, versionNo: number) => {
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${p.id}/versions/${versionNo}/pdf`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) throw new Error('PDF fetch failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `proposal-${p.id}-v${versionNo}.pdf`
       document.body.appendChild(a); a.click(); a.remove()
       URL.revokeObjectURL(url)
     } catch { showError('Error', 'Could not download PDF') }
@@ -172,6 +256,7 @@ const AdminProjectProposals = () => {
             <option value="">All statuses</option>
             <option value="submitted">Submitted</option>
             <option value="under_review">Under review</option>
+            <option value="changes_requested">Changes requested</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
@@ -183,7 +268,7 @@ const AdminProjectProposals = () => {
 
       <p className="text-sm text-gray-600">
         Funding requests submitted through the public <code>/submit-proposal</code> form. Click a row to review
-        every section of the application, change its status, add reviewer notes, or download the reconstructed PDF.
+        every section of the application, read its version history, change its status, or download the reconstructed PDF.
       </p>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
@@ -214,6 +299,11 @@ const AdminProjectProposals = () => {
                   <td className="px-4 py-3 text-sm">
                     <div className="font-medium text-gray-900 max-w-[280px] truncate" title={r.project_name}>{r.project_name}</div>
                     <div className="text-xs text-gray-500">Ref #{r.id}</div>
+                    {r.version_count > 1 && (
+                      <span className="inline-flex mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                        v{r.current_version_no} · {r.version_count} versions
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700 hidden md:table-cell">
                     <div>{r.full_name}</div>
@@ -314,16 +404,92 @@ const AdminProjectProposals = () => {
                 </div>
               </Section>
 
-              {/* Admin notes */}
-              <Section title="Admin notes">
-                <textarea rows={4} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)}
-                  placeholder="Internal notes about this proposal — visible only to admins/managers."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
-                <div className="flex justify-end mt-2">
-                  <button onClick={saveNotes} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded">Save notes</button>
+              {/* Version history */}
+              <Section title={`Version history (${selected.version_count})`}>
+                {[...selected.versions].reverse().map((v) => (
+                  <div key={v.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">Version {v.version_no}</span>
+                      {v.version_no === selected.current_version_no && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-800">current</span>
+                      )}
+                      <span className="text-xs text-gray-500">{formatDate(v.submitted_at)}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v.decision ? (STATUS_BADGE[v.decision] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600'}`}>
+                        {v.decision ? (STATUS_LABEL[v.decision] || v.decision) : 'Awaiting review'}
+                      </span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <button onClick={() => loadVersion(v.version_no)} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded">
+                          {openVersion === v.version_no ? 'Hide' : 'View content'}
+                        </button>
+                        <button onClick={() => downloadVersionPdf(selected, v.version_no)} className="text-xs inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded"><Download className="w-3.5 h-3.5" /> PDF</button>
+                      </div>
+                    </div>
+
+                    {v.decision_comment && (
+                      <div className="mt-3">
+                        <div className="text-xs text-gray-500 mb-1">Sent to the applicant{v.decided_at ? ` on ${formatDate(v.decided_at)}` : ''}</div>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{v.decision_comment}</p>
+                      </div>
+                    )}
+                    {v.internal_note && (
+                      <div className="mt-3">
+                        <div className="text-xs text-gray-500 mb-1">Internal note</div>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{v.internal_note}</p>
+                      </div>
+                    )}
+
+                    {openVersion === v.version_no && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+                        {!versionDetail ? (
+                          <p className="text-sm text-gray-500">Loading…</p>
+                        ) : (
+                          <>
+                            <Paragraph label="Project name" text={versionDetail.project_name} />
+                            <Paragraph label="Description" text={versionDetail.project_description} />
+                            <Paragraph label="Problem solved" text={versionDetail.problem_solved} />
+                            <Paragraph label="Target beneficiaries" text={versionDetail.target_beneficiaries} />
+                            <Paragraph label="Community impact" text={versionDetail.community_impact} />
+                            <Paragraph label="Expected impact" text={versionDetail.expected_impact} />
+                            <Paragraph label="Implementation steps" text={versionDetail.implementation_steps} bullets />
+                            <Paragraph label="Location" text={versionDetail.implementation_location} />
+                            <Paragraph label="Required materials" text={versionDetail.required_materials} bullets />
+                            <Paragraph label="Expected duration" text={versionDetail.expected_duration} />
+                            <Paragraph label="Continuity plan" text={versionDetail.continuity_plan} />
+                            <Paragraph label="Feasibility" text={versionDetail.feasibility} />
+                            <Paragraph label="Expected challenges" text={versionDetail.expected_challenges} bullets />
+                            <Paragraph label="Total" text={`$${Number(versionDetail.total_amount_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} USD`} />
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </Section>
+
+              {/* Decision */}
+              <Section title="Decision">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Message to the applicant <span className="text-gray-400">— goes out in the email</span>
+                  </label>
+                  <textarea rows={4} value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)}
+                    placeholder="What the applicant will read — the reason for the decision, or what to change."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+                  <p className="text-xs text-gray-500 mt-1">Required to reject or request changes.</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Internal note <span className="text-gray-400">— staff only, never sent</span>
+                  </label>
+                  <textarea rows={3} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Notes for admins and managers. The applicant never sees this."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={saveNotes} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded">Save without notifying</button>
                 </div>
                 {selected.reviewed_at && (
-                  <p className="text-xs text-gray-500 mt-2">Last reviewed on {formatDate(selected.reviewed_at)}</p>
+                  <p className="text-xs text-gray-500">Last reviewed on {formatDate(selected.reviewed_at)}</p>
                 )}
               </Section>
             </div>
@@ -332,6 +498,7 @@ const AdminProjectProposals = () => {
             <div className="border-t border-gray-200 p-4 flex flex-wrap items-center justify-end gap-2">
               <button onClick={() => changeStatus('submitted')} className="text-sm px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded inline-flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Mark submitted</button>
               <button onClick={() => changeStatus('under_review')} className="text-sm px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded inline-flex items-center gap-1">Mark under review</button>
+              <button onClick={() => changeStatus('changes_requested')} className="text-sm px-3 py-2 bg-orange-100 hover:bg-orange-200 text-orange-900 rounded inline-flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Request changes</button>
               <button onClick={() => changeStatus('rejected')} className="text-sm px-3 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded inline-flex items-center gap-1"><XCircle className="w-4 h-4" /> Reject</button>
               <button onClick={() => changeStatus('approved')} className="text-sm px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded inline-flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Approve</button>
             </div>

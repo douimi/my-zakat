@@ -592,26 +592,77 @@ class FundraisingProject(Base):
 # ─────────────────────────────────────────────────────────────────────
 
 class ProjectProposal(Base):
-    """One row per funding-request submission.
+    """One dossier per funding request.
 
-    Every field mirrors the four-section paper form applicants used to send in.
-    Public submitters create rows; admins / managers review, change status,
-    add notes, and download the reconstructed PDF.
+    The dossier holds identity and review state; the submitted content lives in
+    `proposal_versions`, one immutable row per submission. `email` is the
+    identity key — it is set at first submission and never changed by the
+    application.
     """
     __tablename__ = "project_proposals"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Section 1: Personal
+    # ── Identity (stable across versions) ──────────────────
+    email = Column(String(200), nullable=False, index=True)
+    full_name = Column(String(200), nullable=False)
+
+    # ── Review state ───────────────────────────────────────
+    # submitted | under_review | changes_requested | approved | rejected
+    status = Column(String(20), nullable=False, default="submitted", index=True)
+    current_version_id = Column(
+        Integer,
+        # use_alter breaks the metadata-level cycle with proposal_versions
+        # (which points back at this table). Without it SQLAlchemy cannot sort
+        # the two tables for create/drop and warns on every test run, which
+        # would mask a genuinely new warning later. Production DDL comes from
+        # migrations/, not create_all, so this is purely a metadata concern.
+        ForeignKey(
+            "proposal_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_project_proposals_current_version_id",
+        ),
+        nullable=True,
+    )
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class ProposalVersion(Base):
+    """One submission of a proposal's content. Written once, never rewritten.
+
+    A decision is recorded on the version it judges. Once a newer version
+    exists, the older one is unreachable for writing — no endpoint addresses a
+    non-current version for anything but reading.
+
+    Two FKs point at users.id / project_proposals.id but this model declares no
+    relationship(); like the rest of models.py, callers query explicitly. Note
+    that `ON DELETE CASCADE` below does NOT fire under the SQLite test runner,
+    which leaves foreign keys unenforced — the delete endpoint removes versions
+    itself rather than trusting the database.
+    """
+    __tablename__ = "proposal_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_id = Column(
+        Integer, ForeignKey("project_proposals.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    version_no = Column(Integer, nullable=False)
+
+    # ── Section 1: Personal ────────────────────────────────
     full_name = Column(String(200), nullable=False)
     national_id = Column(String(50), nullable=False)
     date_of_birth_year = Column(Integer, nullable=False)
     place_of_residence = Column(String(300), nullable=False)
     mobile_number = Column(String(50), nullable=False)
-    email = Column(String(200), nullable=False, index=True)
+    email = Column(String(200), nullable=False)
     educational_level = Column(String(200), nullable=False)
 
-    # Section 2: Project
+    # ── Section 2: Project ─────────────────────────────────
     project_name = Column(String(300), nullable=False)
     project_description = Column(Text, nullable=False)
     problem_solved = Column(Text, nullable=False)
@@ -619,7 +670,7 @@ class ProjectProposal(Base):
     community_impact = Column(Text, nullable=False)
     expected_impact = Column(Text, nullable=False)
 
-    # Section 3: Plan
+    # ── Section 3: Plan ────────────────────────────────────
     implementation_steps = Column(Text, nullable=False)
     implementation_location = Column(Text, nullable=False)
     required_materials = Column(Text, nullable=False)
@@ -628,7 +679,7 @@ class ProjectProposal(Base):
     feasibility = Column(Text, nullable=False)
     expected_challenges = Column(Text, nullable=False)
 
-    # Section 4: Budget
+    # ── Section 4: Budget ──────────────────────────────────
     number_of_beneficiaries = Column(Integer, nullable=False)
     cost_per_unit_usd = Column(Float, nullable=False)
     unit_type = Column(String(50), nullable=False)
@@ -636,21 +687,45 @@ class ProjectProposal(Base):
     additional_expenses_description = Column(Text, nullable=True)
     total_amount_usd = Column(Float, nullable=False)
 
-    # Metadata
-    status = Column(String(20), nullable=False, default="submitted", index=True)
-    admin_notes = Column(Text, nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # ── This submission's own metadata ─────────────────────
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     submitted_ip = Column(String(45), nullable=True)
-    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # 10DLC / TCR proof-of-consent for the optional SMS opt-in checkbox on
-    # the proposal form. Populated only when the applicant ticks the box;
-    # blank rows here mean they submitted without opting in.
+    # 10DLC / TCR proof-of-consent belongs to the submission act, not to the
+    # dossier: it records what this applicant agreed to, at this moment.
     sms_consent = Column(Boolean, nullable=False, default=False)
     sms_consent_at = Column(DateTime, nullable=True)
     sms_consent_text = Column(Text, nullable=True)
+
+    # ── The decision on this version ───────────────────────
+    # NULL = awaiting review | approved | rejected | changes_requested
+    decision = Column(String(20), nullable=True)
+    decision_comment = Column(Text, nullable=True)   # shown to the submitter
+    internal_note = Column(Text, nullable=True)      # staff only
+    decided_at = Column(DateTime, nullable=True)
+    decided_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "version_no", name="uq_proposal_version_no"),
+    )
+
+
+class ProposalAccessCode(Base):
+    """A one-time six-digit code granting a submitter access to their dossiers.
+
+    The code itself is never stored: only its bcrypt hash. A row is consumed on
+    first successful use, and burned once `attempts` reaches the cap.
+    """
+    __tablename__ = "proposal_access_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(200), nullable=False, index=True)
+    code_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    request_ip = Column(String(45), nullable=True)
 
 
 # ─────────────────────────────────────────────────────────────────────

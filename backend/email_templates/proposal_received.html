@@ -1,0 +1,9 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #2563eb; margin: 0 0 18px 0; font-size: 20px;">We received your proposal</h2>
+<p>Assalamu alaikum {{ name }},</p>
+<p>Thank you for submitting <strong>{{ project_name }}</strong> to the Zakat Distribution Foundation. It is now with our review team.</p>
+<p>Your reference number is <strong>#{{ proposal_id }}</strong>{% if version_no > 1 %}, and this is version <strong>{{ version_no }}</strong> of your application{% endif %}. Please quote it in any correspondence.</p>
+<p>You can check the status of your proposal at any time at <a href="{{ portal_url }}">{{ portal_url }}</a> — enter this email address and we will send you a six-digit code to sign in.</p>
+<p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+{% endblock %}

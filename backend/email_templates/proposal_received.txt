@@ -1,0 +1,10 @@
+Assalamu alaikum {{ name }},
+
+Thank you for submitting '{{ project_name }}' to the Zakat Distribution Foundation. It is now with our review team.
+
+Your reference number is #{{ proposal_id }}{% if version_no > 1 %}, and this is version {{ version_no }} of your application{% endif %}. Please quote it in any correspondence.
+
+You can check the status of your proposal at any time at {{ portal_url }} — enter this email address and we will send you a six-digit code to sign in.
+
+With gratitude,
+The MyZakat Team

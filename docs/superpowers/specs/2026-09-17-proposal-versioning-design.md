@@ -204,7 +204,7 @@ All paths under `/api/project-proposals`.
 | Route | Behaviour |
 |---|---|
 | `POST /` | Unchanged request contract. Creates the dossier and version 1. Response gains `version_no`. One email may own several dossiers: this route always opens a new one, never a version of an existing dossier. |
-| `POST /portal/request-code` | `{email}` → always `202` with an identical body whether or not a dossier exists, so the endpoint cannot be used to enumerate applicants. Invalidates that email's unconsumed codes. `429` past the rate limit. |
+| `POST /portal/request-code` | `{email}` → always `202` with an identical body whether or not a dossier exists, so the endpoint cannot be used to enumerate applicants. Invalidates that email's unconsumed codes. Past the rate limit the reply is that same `202` — no email is sent, and nothing distinguishes the case. |
 | `POST /portal/verify-code` | `{email, code}` → `{token, expires_in}`. Increments `attempts`; burns the code at 5. |
 | `GET /portal/me` | Portal token. The dossiers for that email: `id`, `project_name`, `status`, `submitted_at`, `updated_at`, latest `decision_comment`, `editable`, and the current version's content for form prefill. |
 | `PUT /portal/{id}` | Portal token. Creates version N+1 and returns the dossier to `submitted`. `409` if the status is not `changes_requested`. Any `email` in the payload is ignored in favour of the dossier's. |
@@ -228,8 +228,12 @@ single use, five attempts. Requesting a new code invalidates the previous
 unconsumed ones for that email.
 
 **Rate limits**, enforced in the database against `proposal_access_codes`:
-three codes per email per 15 minutes, ten per IP per hour. Over the limit is
-`429` with the same opaque body as the success case.
+three codes per email per 15 minutes, ten per IP per hour. Over the limit the
+response is indistinguishable from every other: the same `202` and the same
+opaque body, with no email sent. A `429` was considered and rejected — it could
+only ever be served to an address that has a dossier, so it would have turned
+three unauthenticated posts into a test for "has this person applied for
+funding?", defeating the opaque reply this endpoint is built around.
 
 **Token.** `{sub: <email>, typ: "proposal_portal", exp: +30 min}`, signed with
 the existing secret.
