@@ -37,3 +37,6 @@ test-results/
 backend/certificates/
 # Git worktrees (isolated workspaces)
 .worktrees/
+
+# Visual brainstorming companion session files
+.superpowers/
