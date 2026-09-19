@@ -123,16 +123,6 @@ def _submit_and_request_changes(client, auth_headers, **content_overrides) -> in
 
 # ── Request / verify ─────────────────────────────────────────────────
 
-def test_requesting_a_code_answers_identically_for_an_unknown_address(client):
-    resp = client.post("/api/project-proposals/portal/request-code",
-                       json={"email": "nobody-here@example.com"})
-
-    assert resp.status_code == 202
-    assert resp.json() == {
-        "message": "If that address has a proposal with us, a sign-in code is on its way."
-    }
-
-
 def test_no_code_is_emailed_to_an_address_with_no_proposal(client, db_session, monkeypatch):
     import routers.proposal_portal as portal_module
 
@@ -145,18 +135,6 @@ def test_no_code_is_emailed_to_an_address_with_no_proposal(client, db_session, m
 
     assert sent == []
     assert db_session.query(ProposalAccessCode).count() == 0
-
-
-def test_a_known_address_gets_the_same_reply_as_an_unknown_one(client, db_session):
-    client.post("/api/project-proposals/", json=_payload())
-
-    resp = client.post("/api/project-proposals/portal/request-code",
-                       json={"email": "amina@example.com"})
-
-    assert resp.status_code == 202
-    assert resp.json() == {
-        "message": "If that address has a proposal with us, a sign-in code is on its way."
-    }
 
 
 def test_a_wrong_code_is_401(client, db_session):
@@ -327,36 +305,51 @@ def test_an_incomplete_revision_is_refused(client, auth_headers):
     assert resp.status_code == 422
 
 
-def test_request_code_is_indistinguishable_for_known_and_unknown_addresses(client, db_session):
-    """Three posts must not reveal whether an address has applied for funding."""
+def test_an_unknown_address_is_told_so_plainly(client, db_session):
+    """The opaque reply sent a mistyped address to a code screen for a code
+    that was never coming. Applicant enumeration was weighed against that and
+    judged the smaller harm -- see the 2026-09-19 spec."""
+    resp = client.post("/api/project-proposals/portal/request-code",
+                       json={"email": "nobody-here@example.com"})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "We have no proposal filed under this address."
+    assert db_session.query(ProposalAccessCode).count() == 0
+
+
+def test_a_known_address_is_told_a_code_is_coming(client, db_session):
+    client.post("/api/project-proposals/", json=_payload())
+
+    resp = client.post("/api/project-proposals/portal/request-code",
+                       json={"email": "amina@example.com"})
+
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["sent"] is True
+    assert "amina@example.com" in body["message"]
+    assert db_session.query(ProposalAccessCode).count() == 1
+
+
+def test_the_lookup_is_case_insensitive(client, db_session):
+    client.post("/api/project-proposals/", json=_payload())
+
+    resp = client.post("/api/project-proposals/portal/request-code",
+                       json={"email": "AMINA@Example.com"})
+
+    assert resp.status_code == 202
+
+
+def test_a_capped_address_is_told_to_wait(client, db_session):
     from proposal_otp import MAX_CODES_PER_EMAIL
 
     client.post("/api/project-proposals/", json=_payload())
+    for _ in range(MAX_CODES_PER_EMAIL):
+        assert client.post("/api/project-proposals/portal/request-code",
+                           json={"email": "amina@example.com"}).status_code == 202
 
-    known, unknown = [], []
-    for _ in range(MAX_CODES_PER_EMAIL + 2):
-        known.append(client.post("/api/project-proposals/portal/request-code",
-                                 json={"email": "amina@example.com"}))
-        unknown.append(client.post("/api/project-proposals/portal/request-code",
-                                   json={"email": "nobody-here@example.com"}))
+    resp = client.post("/api/project-proposals/portal/request-code",
+                       json={"email": "amina@example.com"})
 
-    assert [r.status_code for r in known] == [r.status_code for r in unknown]
-    assert {r.status_code for r in known} == {202}
-    assert [r.json() for r in known] == [r.json() for r in unknown]
-
-
-def test_a_rate_limited_address_is_told_nothing_and_emailed_nothing(client, db_session, monkeypatch):
-    import routers.proposal_portal as portal_module
-    from proposal_otp import MAX_CODES_PER_EMAIL
-
-    sent = []
-    monkeypatch.setattr(portal_module.email_service, "send_proposal_access_code",
-                        lambda **kwargs: sent.append(kwargs) or True)
-    client.post("/api/project-proposals/", json=_payload())
-
-    for _ in range(MAX_CODES_PER_EMAIL + 1):
-        resp = client.post("/api/project-proposals/portal/request-code",
-                           json={"email": "amina@example.com"})
-        assert resp.status_code == 202
-
-    assert len(sent) == MAX_CODES_PER_EMAIL, "the capped request must not send a code"
+    assert resp.status_code == 429
+    assert "wait" in resp.json()["detail"].lower()
+    assert db_session.query(ProposalAccessCode).count() == MAX_CODES_PER_EMAIL
