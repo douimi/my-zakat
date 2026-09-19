@@ -68,7 +68,8 @@ def test_the_access_code_email_names_no_applicant_or_project():
     """It is sent before we know the requester controls the address.
 
     Confirming "yes, Amina Yusuf has a proposal here" to whoever typed the
-    address would leak exactly what /portal/request-code refuses to leak. The
+    address would hand an unverified requester the applicant's name and
+    project -- far more than the 404 on /portal/request-code discloses. The
     values below are deliberately IN the context: the guarantee is that the
     template does not reference them, not that the caller withholds them.
     """

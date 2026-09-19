@@ -215,13 +215,21 @@ const MyProposals = () => {
       await askForCode(email.trim())
     } catch (exc: any) {
       if (isNoProposalForAddress(exc)) {
+        if (pendingPayload) {
+          // Mid-revision: the dossier vanished under us. Do not swap the view
+          // out from under a form that still holds the applicant's edits --
+          // keep them where they are and say what happened.
+          setError('We can no longer find a proposal under this address. Your changes are still on screen — copy anything you need before leaving this page.')
+          return
+        }
         // Not an error the applicant caused -- most often they used a
         // different address than the one on the application. Say so, and
         // give them somewhere to go.
         setView('not-found')
       } else if (statusOf(exc) === 429) {
         setError(exc?.response?.data?.detail
-          ?? 'Too many codes requested. Please wait a few minutes and try again.')
+          ?? 'Too many sign-in codes requested. Please wait and try again later. '
+            + 'This usually clears within 15 minutes, or up to an hour if you share a network connection with other applicants.')
       } else {
         setError('We could not send the code. Please check the address and try again.')
       }
@@ -267,6 +275,17 @@ const MyProposals = () => {
               'Your sign-in session expired and this tab no longer knows which address to email a code to. '
               + 'Everything you typed is still here — please do not reload this tab. '
               + 'Open My Proposals in a new tab, sign in there, and copy your answers across from here.',
+            )
+            return
+          }
+          if (isNoProposalForAddress(codeExc)) {
+            // The dossier is gone from under the applicant. The code panel
+            // would promise "enter the six-digit code we sent to ..." when
+            // nothing was sent, so stay on the form -- it is still mounted and
+            // still holds the only copy of what they wrote.
+            setGenericError(
+              'We can no longer find a proposal under this address. '
+              + 'Your changes are still on screen — copy anything you need before leaving this page.',
             )
             return
           }

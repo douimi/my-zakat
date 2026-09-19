@@ -84,7 +84,14 @@ async def request_code(payload: CodeRequest, request: Request, db: Session = Dep
     if code is None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many sign-in codes requested. Please wait a few minutes and try again.",
+            # Both caps feed this one message, so it has to be true of the
+            # longer: EMAIL_WINDOW_MINUTES is 15, but IP_WINDOW_MINUTES is 60
+            # and a shared office IP or NAT is what usually trips it.
+            detail=(
+                "Too many sign-in codes requested. Please wait and try again later. "
+                "This usually clears within 15 minutes, or up to an hour if you "
+                "share a network connection with other applicants."
+            ),
         )
 
     email_service.send_proposal_access_code(

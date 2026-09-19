@@ -165,7 +165,13 @@ const Header = () => {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center flex-1 justify-between min-w-0 px-2 xl:px-4 2xl:px-6 gap-0.5">
+            {/* The roomy spacing lives behind min-[1700px] rather than 2xl. Ten
+                items at 2xl's padding need about 1700px of header; switching to
+                them at 1536 put Contact and the account button on top of each
+                other between 1536 and 1700. Below 1700 the nav keeps the
+                compact padding and gives up its own px/gap, which is what buys
+                the Apply for Funding entry its room at 1024-1440. */}
+            <nav className="hidden md:flex items-center flex-1 justify-between min-w-0 min-[1700px]:px-6 gap-0 min-[1700px]:gap-0.5">
               {/* Urgent Needs Dropdown */}
               {urgentNeeds && urgentNeeds.length > 0 && (
                 <div className="relative" ref={urgentNeedsRef}>
@@ -176,20 +182,20 @@ const Header = () => {
                       setIsToolsDropdownOpen(false)
                     }}
                     className={clsx(
-                      'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                      'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                       isUrgentNeedsActive()
                         ? 'text-primary-600 bg-primary-50 shadow-sm'
                         : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                     )}
                   >
                     <AlertCircle className={clsx(
-                      'w-3.5 xl:w-4 h-3.5 xl:h-4 transition-transform duration-300 flex-shrink-0',
+                      'w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 transition-transform duration-300 flex-shrink-0',
                       isUrgentNeedsActive() && 'text-primary-600'
                     )} />
                     <span className="hidden xl:inline">Urgent Needs</span>
                     <span className="xl:hidden">Urgent</span>
                     <ChevronDown className={clsx(
-                      'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
+                      'w-2.5 xl:w-3.5 h-2.5 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                       isUrgentNeedsDropdownOpen && 'transform rotate-180'
                     )} />
                   </button>
@@ -231,13 +237,13 @@ const Header = () => {
               <Link
                 to="/stories"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/stories')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <BookOpen className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <BookOpen className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span>Our Impact</span>
               </Link>
 
@@ -245,13 +251,13 @@ const Header = () => {
               <Link
                 to="/programs"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/programs')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Heart className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Heart className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span>Our Work</span>
               </Link>
 
@@ -259,13 +265,13 @@ const Header = () => {
               <Link
                 to="/events"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/events')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Calendar className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Calendar className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span className="hidden xl:inline">Events</span>
                 <span className="xl:hidden">Events</span>
               </Link>
@@ -274,13 +280,13 @@ const Header = () => {
               <Link
                 to="/volunteer"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/volunteer')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Users className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Users className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span className="hidden xl:inline">Get Involved</span>
                 <span className="xl:hidden">Involved</span>
               </Link>
@@ -294,17 +300,17 @@ const Header = () => {
                     setIsQuickLinksDropdownOpen(false)
                   }}
                   className={clsx(
-                    'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                    'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isCalculatorActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
-                  <Calculator className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                  <Calculator className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                   <span className="hidden xl:inline">Calculators</span>
                   <span className="xl:hidden">Calc</span>
                   <ChevronDown className={clsx(
-                    'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
+                    'w-2.5 xl:w-3.5 h-2.5 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                     isToolsDropdownOpen && 'transform rotate-180'
                   )} />
                 </button>
@@ -366,17 +372,17 @@ const Header = () => {
                     setIsToolsDropdownOpen(false)
                   }}
                   className={clsx(
-                    'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                    'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                     isQuickLinksActive()
                       ? 'text-primary-600 bg-primary-50 shadow-sm'
                       : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                   )}
                 >
-                  <Link2 className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                  <Link2 className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                   <span className="hidden xl:inline">Quick Links</span>
                   <span className="xl:hidden">Links</span>
                   <ChevronDown className={clsx(
-                    'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
+                    'w-2.5 xl:w-3.5 h-2.5 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
                     isQuickLinksDropdownOpen && 'transform rotate-180'
                   )} />
                 </button>
@@ -482,13 +488,13 @@ const Header = () => {
               <Link
                 to="/about"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/about')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Info className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Info className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span>About</span>
               </Link>
 
@@ -496,13 +502,13 @@ const Header = () => {
               <Link
                 to="/contact"
                 className={clsx(
-                  'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
+                  'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0',
                   isActive('/contact')
                     ? 'text-primary-600 bg-primary-50 shadow-sm'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50'
                 )}
               >
-                <Mail className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
+                <Mail className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
                 <span>Contact</span>
               </Link>
             </nav>

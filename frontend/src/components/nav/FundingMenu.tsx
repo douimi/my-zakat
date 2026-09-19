@@ -98,17 +98,22 @@ const FundingMenu = () => {
         aria-expanded={isOpen}
         data-active={isActive}
         className={clsx(
-          'flex items-center space-x-1.5 xl:space-x-2 px-1.5 xl:px-2.5 2xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+          'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
           isActive
             ? 'text-primary-600 bg-primary-50 shadow-sm'
             : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50',
         )}
       >
-        <HeartHandshake className="w-3.5 xl:w-4 h-3.5 xl:h-4 flex-shrink-0" />
-        <span className="hidden xl:inline">Apply for Funding</span>
-        <span className="xl:hidden">Funding</span>
+        <HeartHandshake className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
+        {/* The full label only appears from 1700px up. The header had no horizontal
+            slack left before this entry existed, so below 1700px it wears the
+            short one -- "Apply for Funding" is ~187px against ~97px, and that
+            difference is most of what kept Contact and the account control on
+            screen at 1366 and 1440. */}
+        <span className="hidden min-[1700px]:inline">Apply for Funding</span>
+        <span className="min-[1700px]:hidden">Funding</span>
         <ChevronDown className={clsx(
-          'w-3 xl:w-3.5 h-3 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
+          'w-2.5 xl:w-3.5 h-2.5 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
           isOpen && 'transform rotate-180',
         )} />
       </button>

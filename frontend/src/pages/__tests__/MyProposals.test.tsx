@@ -329,14 +329,14 @@ describe('MyProposals — an address with no dossier', () => {
   it('says how long to wait when the address is capped', async () => {
     const user = userEvent.setup()
     vi.mocked(requestPortalCode).mockRejectedValue(
-      httpError(429, 'Too many sign-in codes requested. Please wait a few minutes and try again.'),
+      httpError(429, 'Too many sign-in codes requested. Please wait and try again later. This usually clears within 15 minutes, or up to an hour if you share a network connection with other applicants.'),
     )
     renderPortal()
 
     await user.type(screen.getByLabelText(/email address you applied with/i), 'amina@example.com')
     await user.click(screen.getByRole('button', { name: /email me a code/i }))
 
-    expect(await screen.findByText(/wait a few minutes/i)).toBeInTheDocument()
+    expect(await screen.findByText(/up to an hour if you share a network connection/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/six-digit code/i)).not.toBeInTheDocument()
   })
 })
