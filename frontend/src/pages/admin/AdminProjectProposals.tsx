@@ -25,34 +25,42 @@ interface ProposalVersionSummary {
   decided_by: number | null
 }
 
+/**
+ * A dossier as the admin API returns it.
+ *
+ * Every field below the dossier's own identity comes from the CURRENT VERSION's
+ * content, and the backend's `serialize_for_admin` deliberately returns all of
+ * them as null when a dossier has no version yet. That is why they are nullable
+ * here: the type is the contract, and the page has to render it.
+ */
 interface Proposal {
   id: number
-  full_name: string
-  national_id: string
-  date_of_birth_year: number
-  place_of_residence: string
-  mobile_number: string
+  full_name: string | null
+  national_id: string | null
+  date_of_birth_year: number | null
+  place_of_residence: string | null
+  mobile_number: string | null
   email: string
-  educational_level: string
-  project_name: string
-  project_description: string
-  problem_solved: string
-  target_beneficiaries: string
-  community_impact: string
-  expected_impact: string
-  implementation_steps: string
-  implementation_location: string
-  required_materials: string
-  expected_duration: string
-  continuity_plan: string
-  feasibility: string
-  expected_challenges: string
-  number_of_beneficiaries: number
-  cost_per_unit_usd: number
-  unit_type: string
-  additional_expenses_usd: number
+  educational_level: string | null
+  project_name: string | null
+  project_description: string | null
+  problem_solved: string | null
+  target_beneficiaries: string | null
+  community_impact: string | null
+  expected_impact: string | null
+  implementation_steps: string | null
+  implementation_location: string | null
+  required_materials: string | null
+  expected_duration: string | null
+  continuity_plan: string | null
+  feasibility: string | null
+  expected_challenges: string | null
+  number_of_beneficiaries: number | null
+  cost_per_unit_usd: number | null
+  unit_type: string | null
+  additional_expenses_usd: number | null
   additional_expenses_description: string | null
-  total_amount_usd: number
+  total_amount_usd: number | null
   status: string
   decision_comment: string | null
   internal_note: string | null
@@ -204,7 +212,7 @@ const AdminProjectProposals = () => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `proposal-${p.id}-${p.project_name.replace(/[^a-z0-9]+/gi, '-').slice(0, 40).toLowerCase()}.pdf`
+      a.download = `proposal-${p.id}-${(p.project_name || 'untitled').replace(/[^a-z0-9]+/gi, '-').slice(0, 40).toLowerCase()}.pdf`
       document.body.appendChild(a); a.click(); a.remove()
       URL.revokeObjectURL(url)
     } catch { showError('Error', 'Could not download PDF') }
@@ -236,11 +244,23 @@ const AdminProjectProposals = () => {
   const filtered = rows.filter((r) => {
     if (!search.trim()) return true
     const s = search.toLowerCase()
-    return r.project_name.toLowerCase().includes(s) || r.full_name.toLowerCase().includes(s) || r.email.toLowerCase().includes(s)
+    return (r.project_name || '').toLowerCase().includes(s)
+      || (r.full_name || '').toLowerCase().includes(s)
+      || r.email.toLowerCase().includes(s)
   })
 
   const formatDate = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
-  const formatMoney = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  /**
+   * The null check is load-bearing — do not simplify it away.
+   *
+   * `serialize_for_admin` returns every content field as null for a dossier
+   * that has no version yet (the migration-32 deployment window, and any
+   * dossier awaiting backfill). Calling .toLocaleString() straight on that null
+   * threw inside render and took the whole admin console down with an error
+   * boundary. An absent amount is an em dash, like every other absent field.
+   */
+  const formatMoney = (n: number | null | undefined, maximumFractionDigits = 0) =>
+    n == null ? '—' : `$${n.toLocaleString(undefined, { maximumFractionDigits })}`
 
   return (
     <div className="space-y-6 px-4 sm:px-0">
@@ -297,7 +317,7 @@ const AdminProjectProposals = () => {
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm">
-                    <div className="font-medium text-gray-900 max-w-[280px] truncate" title={r.project_name}>{r.project_name}</div>
+                    <div className="font-medium text-gray-900 max-w-[280px] truncate" title={r.project_name || undefined}>{r.project_name || '—'}</div>
                     <div className="text-xs text-gray-500">Ref #{r.id}</div>
                     {r.version_count > 1 && (
                       <span className="inline-flex mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
@@ -306,7 +326,7 @@ const AdminProjectProposals = () => {
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700 hidden md:table-cell">
-                    <div>{r.full_name}</div>
+                    <div>{r.full_name || '—'}</div>
                     <div className="text-xs text-gray-500 truncate max-w-[200px]" title={r.email}>{r.email}</div>
                   </td>
                   <td className="px-4 py-3 text-sm font-semibold text-primary-700 text-right whitespace-nowrap">{formatMoney(r.total_amount_usd)}</td>
@@ -339,8 +359,8 @@ const AdminProjectProposals = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="min-w-0">
-                <h3 className="text-lg font-bold text-gray-900 truncate">{selected.project_name}</h3>
-                <p className="text-xs text-gray-500 truncate">Ref #{selected.id} · {selected.full_name} · <a href={`mailto:${selected.email}`} className="text-primary-600 hover:underline">{selected.email}</a></p>
+                <h3 className="text-lg font-bold text-gray-900 truncate">{selected.project_name || '—'}</h3>
+                <p className="text-xs text-gray-500 truncate">Ref #{selected.id} · {selected.full_name || '—'} · <a href={`mailto:${selected.email}`} className="text-primary-600 hover:underline">{selected.email}</a></p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[selected.status]}`}>{STATUS_LABEL[selected.status]}</span>
@@ -355,7 +375,7 @@ const AdminProjectProposals = () => {
                 <KV rows={[
                   ['Full name', selected.full_name],
                   ['National ID', selected.national_id],
-                  ['Year of birth', String(selected.date_of_birth_year)],
+                  ['Year of birth', selected.date_of_birth_year ? String(selected.date_of_birth_year) : null],
                   ['Residence', selected.place_of_residence],
                   ['Mobile', selected.mobile_number],
                   ['Email', selected.email],
@@ -388,18 +408,25 @@ const AdminProjectProposals = () => {
               <Section title="4. Required budget">
                 <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 space-y-2">
                   <div className="flex justify-between text-sm text-primary-900">
-                    <span>{selected.number_of_beneficiaries} {selected.unit_type}s × ${selected.cost_per_unit_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                    <span className="font-semibold">${(selected.number_of_beneficiaries * selected.cost_per_unit_usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <span>{selected.number_of_beneficiaries ?? '—'} {selected.unit_type || 'unit'}s × {formatMoney(selected.cost_per_unit_usd, 2)}</span>
+                    <span className="font-semibold">
+                      {formatMoney(
+                        selected.number_of_beneficiaries != null && selected.cost_per_unit_usd != null
+                          ? selected.number_of_beneficiaries * selected.cost_per_unit_usd
+                          : null,
+                        2,
+                      )}
+                    </span>
                   </div>
-                  {selected.additional_expenses_usd > 0 && (
+                  {(selected.additional_expenses_usd ?? 0) > 0 && (
                     <div className="flex justify-between text-sm text-primary-900">
                       <span>Additional {selected.additional_expenses_description ? `— ${selected.additional_expenses_description}` : ''}</span>
-                      <span className="font-semibold">${selected.additional_expenses_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      <span className="font-semibold">{formatMoney(selected.additional_expenses_usd, 2)}</span>
                     </div>
                   )}
                   <div className="border-t border-primary-300 pt-2 flex justify-between items-center">
                     <span className="text-primary-900 font-semibold">Total</span>
-                    <span className="text-2xl font-bold text-primary-900">${selected.total_amount_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal">USD</span></span>
+                    <span className="text-2xl font-bold text-primary-900">{formatMoney(selected.total_amount_usd, 2)} <span className="text-sm font-normal">USD</span></span>
                   </div>
                 </div>
               </Section>
@@ -511,7 +538,7 @@ const AdminProjectProposals = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="flex items-start mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
-              <div><h3 className="text-lg font-bold text-gray-900">Delete proposal?</h3><p className="text-sm text-gray-500 mt-1">"{deleting.project_name}" from {deleting.full_name}. This cannot be undone.</p></div>
+              <div><h3 className="text-lg font-bold text-gray-900">Delete proposal?</h3><p className="text-sm text-gray-500 mt-1">"{deleting.project_name || `Ref #${deleting.id}`}" from {deleting.full_name || deleting.email}. This cannot be undone.</p></div>
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => setDeleting(null)} className="px-4 py-2 text-gray-600">Cancel</button>
@@ -531,7 +558,7 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </div>
 )
 
-const KV = ({ rows }: { rows: [string, string][] }) => (
+const KV = ({ rows }: { rows: [string, string | null | undefined][] }) => (
   <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
     {rows.map(([k, v]) => (
       <div key={k}>
@@ -542,8 +569,11 @@ const KV = ({ rows }: { rows: [string, string][] }) => (
   </dl>
 )
 
-const Paragraph = ({ label, text, bullets }: { label: string; text: string; bullets?: boolean }) => {
-  const lines = bullets ? text.split('\n').map((l) => l.trim().replace(/^[-•*]\s*/, '')).filter(Boolean) : []
+// `text` is nullable for the same reason the Proposal fields are: a dossier
+// without a version has no content to show, and a null must render as an em
+// dash rather than throw on .split().
+const Paragraph = ({ label, text, bullets }: { label: string; text: string | null | undefined; bullets?: boolean }) => {
+  const lines = bullets ? (text || '').split('\n').map((l) => l.trim().replace(/^[-•*]\s*/, '')).filter(Boolean) : []
   return (
     <div>
       <div className="text-xs text-gray-500 mb-1">{label}</div>
