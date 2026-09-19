@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2, FileText } from 'lucide-react'
+import { Menu, X, Heart, User, ChevronDown, Shield, Gift, AlertCircle, BookOpen, Calendar, Users, Info, Mail, Calculator, Coins, CreditCard, BookMarked, Sparkles, Link2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../store/authStore'
 import { useQuery } from 'react-query'
 import { urgentNeedsAPI, settingsAPI, getStaticFileUrl } from '../utils/api'
+import FundingMenu, { FundingMenuMobile } from './nav/FundingMenu'
 
 // Component for urgent need menu item with image fallback
 const UrgentNeedMenuItem = ({ need, imageUrl, isActive, onClick, className = '' }: { need: any, imageUrl: string | null, isActive: boolean, onClick: () => void, className?: string }) => {
@@ -126,7 +127,6 @@ const Header = () => {
            location.pathname.startsWith('/book-of-duas') ||
            location.pathname.startsWith('/charity-in-islam') ||
            location.pathname.startsWith('/umrah-guidelines') ||
-           location.pathname.startsWith('/submit-proposal') ||
            location.pathname.startsWith('/quick-links')
   }
 
@@ -354,6 +354,9 @@ const Header = () => {
                 )}
               </div>
 
+              {/* Apply for Funding */}
+              <FundingMenu />
+
               {/* Quick Links Dropdown */}
               <div className="relative" ref={quickLinksRef}>
                 <button
@@ -468,19 +471,6 @@ const Header = () => {
                         >
                           <Info className="w-4 h-4 flex-shrink-0" />
                           <span>Umrah Guidelines</span>
-                        </Link>
-                        <Link
-                          to="/submit-proposal"
-                          onClick={() => setIsQuickLinksDropdownOpen(false)}
-                          className={clsx(
-                            'flex items-center space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1',
-                            location.pathname === '/submit-proposal'
-                              ? 'text-primary-600 bg-primary-50 font-semibold'
-                              : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                          )}
-                        >
-                          <FileText className="w-4 h-4 flex-shrink-0" />
-                          <span>Submit a Proposal</span>
                         </Link>
                       </div>
                     </div>
@@ -597,6 +587,8 @@ const Header = () => {
           <div className="md:hidden border-t border-gray-100 bg-white shadow-lg max-h-[calc(100vh-6rem)] overflow-y-auto">
             <div className="w-full px-2 sm:px-4 lg:px-6 py-6">
               <nav className="flex flex-col space-y-3">
+                <FundingMenuMobile onNavigate={() => setIsMobileMenuOpen(false)} />
+
                 {/* Urgent Needs in mobile menu */}
                 {urgentNeeds && urgentNeeds.length > 0 && (
                   <div className="space-y-2 bg-primary-50/30 rounded-xl p-4">
@@ -811,19 +803,6 @@ const Header = () => {
                     >
                       <Info className="w-4 h-4 flex-shrink-0" />
                       <span>Umrah Guidelines</span>
-                    </Link>
-                    <Link
-                      to="/submit-proposal"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={clsx(
-                        'flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                        location.pathname === '/submit-proposal'
-                          ? 'text-primary-600 bg-white shadow-sm'
-                          : 'text-gray-700 hover:text-primary-600 hover:bg-white/80'
-                      )}
-                    >
-                      <FileText className="w-4 h-4 flex-shrink-0" />
-                      <span>Submit a Proposal</span>
                     </Link>
                   </div>
                 </div>
