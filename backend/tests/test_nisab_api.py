@@ -4,18 +4,25 @@ It matters more than most endpoints: it needs no JavaScript, so it is the one
 current, citable fact on this domain that an LLM crawler can actually read
 while the pages themselves are client-rendered.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from models import Setting
 
 
-def _seed(db, gold="100.00", silver="2.00"):
-    now = datetime.utcnow().isoformat()
+def _seed(db, gold="100.00", silver="2.00", fetched_hours_ago=0.0):
+    """Seed a usable cache.
+
+    `fetched_hours_ago` is separate from the price timestamp on purpose: a test
+    that wants to exercise the refresh path needs `fetched_at` old enough to be
+    due while `as_of` is still fresh enough to be trusted.
+    """
+    now = datetime.utcnow()
+    fetched = (now - timedelta(hours=fetched_hours_ago)).isoformat()
     for key, value in (
         ("nisab.gold_price_per_gram_usd", gold),
         ("nisab.silver_price_per_gram_usd", silver),
-        ("nisab.as_of", now),
-        ("nisab.fetched_at", now),
+        ("nisab.as_of", now.isoformat()),
+        ("nisab.fetched_at", fetched),
         ("nisab.source", "test-source"),
     ):
         db.add(Setting(key=key, value=value))
@@ -58,13 +65,39 @@ def test_with_no_prices_it_reports_the_method_and_no_figure(client, db_session):
 
 
 def test_a_broken_upstream_does_not_break_the_endpoint(client, db_session, monkeypatch):
+    """The refresh must be attempted and must fail, leaving the cache intact.
+
+    Seeding `fetched_at` a day old is what makes the refresh due; without it
+    the freshness check short-circuits and this test proves nothing.
+    """
     import nisab_service
 
-    _seed(db_session)
-    monkeypatch.setattr(nisab_service, "_fetch_prices",
-                        lambda: (_ for _ in ()).throw(RuntimeError("down")))
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("down")
+
+    _seed(db_session, fetched_hours_ago=nisab_service.REFRESH_AFTER_HOURS + 1)
+    monkeypatch.setattr(nisab_service, "_fetch_prices", boom)
 
     resp = client.get("/api/nisab")
 
+    assert calls == [1], "the refresh must actually have been attempted"
     assert resp.status_code == 200
     assert resp.json()["nisab_gold_usd"] == 8500.0
+    assert resp.json()["is_stale"] is False
+
+
+def test_a_due_refresh_that_succeeds_updates_what_the_endpoint_reports(client, db_session, monkeypatch):
+    import nisab_service
+
+    _seed(db_session, fetched_hours_ago=nisab_service.REFRESH_AFTER_HOURS + 1)
+    monkeypatch.setattr(nisab_service, "_fetch_prices",
+                        lambda: {"gold": 200.0, "silver": 4.0, "source": "fresh-source"})
+
+    body = client.get("/api/nisab").json()
+
+    assert body["nisab_gold_usd"] == 17000.0
+    assert body["nisab_silver_usd"] == 2380.0
+    assert body["source"] == "fresh-source"
