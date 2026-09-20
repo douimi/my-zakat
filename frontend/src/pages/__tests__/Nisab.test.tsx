@@ -21,23 +21,23 @@ vi.mock('../../utils/nisabApi', async (importActual) => ({
 
 /** A payload the backend is willing to stand behind. */
 const freshNisab = (): NisabData => ({
-  gold_grams: 85,
-  silver_grams: 595,
+  gold_grams: 87.48,
+  silver_grams: 612.36,
   stale_after_days: 7,
   is_stale: false,
   as_of: '2026-09-20T06:00:00Z',
   source: 'metals-api',
   gold_price_per_gram_usd: 95.12,
   silver_price_per_gram_usd: 1.08,
-  nisab_gold_usd: 8085.2,
-  nisab_silver_usd: 642.6,
+  nisab_gold_usd: 8321.1,
+  nisab_silver_usd: 661.35,
 })
 
 /** What the backend sends once the price behind the figure has aged out: the
  *  method survives, every monetary field is withheld. */
 const staleNisab = (): NisabData => ({
-  gold_grams: 85,
-  silver_grams: 595,
+  gold_grams: 87.48,
+  silver_grams: 612.36,
   stale_after_days: 7,
   is_stale: true,
   as_of: '2026-01-05T06:00:00Z',
@@ -66,8 +66,8 @@ describe('Nisab page', () => {
     vi.mocked(fetchNisab).mockResolvedValue(freshNisab())
     renderPage()
 
-    expect(await screen.findByText(/\$8,085/)).toBeInTheDocument()
-    expect(screen.getByText(/\$643/)).toBeInTheDocument()
+    expect(await screen.findByText(/\$8,321/)).toBeInTheDocument()
+    expect(screen.getByText(/\$661/)).toBeInTheDocument()
     expect(screen.getByText(/September 20, 2026/)).toBeInTheDocument()
   })
 
@@ -75,8 +75,8 @@ describe('Nisab page', () => {
     vi.mocked(fetchNisab).mockResolvedValue(staleNisab())
     renderPage()
 
-    expect(await screen.findByText(/85 grams of gold/i)).toBeInTheDocument()
-    expect(screen.getByText(/595 grams of silver/i)).toBeInTheDocument()
+    expect(await screen.findByText(/87\.48 grams of gold/i)).toBeInTheDocument()
+    expect(screen.getByText(/612\.36 grams of silver/i)).toBeInTheDocument()
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
   })
 
@@ -84,7 +84,7 @@ describe('Nisab page', () => {
     vi.mocked(fetchNisab).mockResolvedValue(null)
     renderPage()
 
-    expect(await screen.findByText(/85 grams of gold/i)).toBeInTheDocument()
+    expect(await screen.findByText(/87\.48 grams of gold/i)).toBeInTheDocument()
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
   })
 
@@ -92,8 +92,13 @@ describe('Nisab page', () => {
     vi.mocked(fetchNisab).mockResolvedValue(freshNisab())
     renderPage()
 
-    expect(await screen.findByText(/87\.48/)).toBeInTheDocument()
-    expect(screen.getByText(/612\.36/)).toBeInTheDocument()
+    // Ours, named as ours...
+    expect(
+      await screen.findByText(/we use 87\.48 grams of gold and 612\.36 grams of silver/i),
+    ).toBeInTheDocument()
+    // ...and the other convention, named as the other convention. The page
+    // reports the disagreement; it does not settle it.
+    expect(screen.getByText(/85 grams and 595 grams/i)).toBeInTheDocument()
   })
 
   it('presents both thresholds without ruling between them', async () => {

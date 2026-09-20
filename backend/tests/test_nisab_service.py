@@ -31,28 +31,30 @@ def test_the_thresholds_are_mass_times_price(db_session):
 
     snap = build_snapshot(db_session)
 
-    assert snap["gold_grams"] == 85
-    assert snap["silver_grams"] == 595
-    assert snap["nisab_gold_usd"] == pytest.approx(8500.00)
-    assert snap["nisab_silver_usd"] == pytest.approx(1190.00)
+    assert snap["gold_grams"] == pytest.approx(87.48)
+    assert snap["silver_grams"] == pytest.approx(612.36)
+    assert snap["nisab_gold_usd"] == pytest.approx(8748.00)
+    assert snap["nisab_silver_usd"] == pytest.approx(1224.72)
     assert snap["is_stale"] is False
     assert snap["source"] == "test-source"
 
 
 def test_the_masses_are_configurable_because_the_schools_differ(db_session):
-    """85 g / 595 g are the common figures; the Hanafi convention gives
-    87.48 g / 612.36 g. The foundation must be able to adopt either."""
+    """We default to 87.48 g / 612.36 g, from 20 mithqal and 200 dirhams; the
+    other convention in common use gives 85 g / 595 g. The foundation must be
+    able to adopt either, so here settings override the defaults."""
     from nisab_service import build_snapshot
 
     _seed_prices(db_session, gold="100.00", silver="2.00")
-    _set(db_session, "nisab.gold_grams", "87.48")
-    _set(db_session, "nisab.silver_grams", "612.36")
+    _set(db_session, "nisab.gold_grams", "85")
+    _set(db_session, "nisab.silver_grams", "595")
 
     snap = build_snapshot(db_session)
 
-    assert snap["gold_grams"] == pytest.approx(87.48)
-    assert snap["nisab_gold_usd"] == pytest.approx(8748.00)
-    assert snap["nisab_silver_usd"] == pytest.approx(1224.72)
+    assert snap["gold_grams"] == pytest.approx(85)
+    assert snap["silver_grams"] == pytest.approx(595)
+    assert snap["nisab_gold_usd"] == pytest.approx(8500.00)
+    assert snap["nisab_silver_usd"] == pytest.approx(1190.00)
 
 
 def test_a_figure_older_than_the_limit_is_withheld_not_shown(db_session):
@@ -69,8 +71,8 @@ def test_a_figure_older_than_the_limit_is_withheld_not_shown(db_session):
     assert snap["gold_price_per_gram_usd"] is None
     assert snap["silver_price_per_gram_usd"] is None
     # The method never expires, so it is always present.
-    assert snap["gold_grams"] == 85
-    assert snap["silver_grams"] == 595
+    assert snap["gold_grams"] == pytest.approx(87.48)
+    assert snap["silver_grams"] == pytest.approx(612.36)
 
 
 def test_a_database_with_no_prices_at_all_is_stale_not_broken(db_session):
@@ -81,7 +83,7 @@ def test_a_database_with_no_prices_at_all_is_stale_not_broken(db_session):
     assert snap["is_stale"] is True
     assert snap["nisab_gold_usd"] is None
     assert snap["as_of"] is None
-    assert snap["gold_grams"] == 85
+    assert snap["gold_grams"] == pytest.approx(87.48)
 
 
 def test_a_successful_fetch_updates_the_cache(db_session, monkeypatch):
@@ -94,7 +96,7 @@ def test_a_successful_fetch_updates_the_cache(db_session, monkeypatch):
 
     snap = nisab_service.build_snapshot(db_session)
     assert snap["gold_price_per_gram_usd"] == pytest.approx(120.0)
-    assert snap["nisab_gold_usd"] == pytest.approx(10200.0)
+    assert snap["nisab_gold_usd"] == pytest.approx(10497.6)
     assert snap["is_stale"] is False
     assert snap["source"] == "fake"
 

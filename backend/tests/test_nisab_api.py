@@ -43,10 +43,10 @@ def test_it_reports_the_thresholds_and_the_method(client, db_session):
     body = client.get("/api/nisab").json()
 
     assert body["is_stale"] is False
-    assert body["nisab_gold_usd"] == 8500.0
-    assert body["nisab_silver_usd"] == 1190.0
-    assert body["gold_grams"] == 85
-    assert body["silver_grams"] == 595
+    assert body["nisab_gold_usd"] == 8748.0
+    assert body["nisab_silver_usd"] == 1224.72
+    assert body["gold_grams"] == 87.48
+    assert body["silver_grams"] == 612.36
     assert body["as_of"] is not None
     assert body["source"] == "test-source"
 
@@ -59,8 +59,8 @@ def test_with_no_prices_it_reports_the_method_and_no_figure(client, db_session):
     assert body["nisab_silver_usd"] is None
     assert body["as_of"] is None
     # Still usable: the method is what a reader needs when the figure is absent.
-    assert body["gold_grams"] == 85
-    assert body["silver_grams"] == 595
+    assert body["gold_grams"] == 87.48
+    assert body["silver_grams"] == 612.36
     assert body["stale_after_days"] == 7
 
 
@@ -85,7 +85,7 @@ def test_a_broken_upstream_does_not_break_the_endpoint(client, db_session, monke
 
     assert calls == [1], "the refresh must actually have been attempted"
     assert resp.status_code == 200
-    assert resp.json()["nisab_gold_usd"] == 8500.0
+    assert resp.json()["nisab_gold_usd"] == 8748.0
     assert resp.json()["is_stale"] is False
 
 
@@ -98,6 +98,6 @@ def test_a_due_refresh_that_succeeds_updates_what_the_endpoint_reports(client, d
 
     body = client.get("/api/nisab").json()
 
-    assert body["nisab_gold_usd"] == 17000.0
-    assert body["nisab_silver_usd"] == 2380.0
+    assert body["nisab_gold_usd"] == 17496.0
+    assert body["nisab_silver_usd"] == 2449.44
     assert body["source"] == "fresh-source"

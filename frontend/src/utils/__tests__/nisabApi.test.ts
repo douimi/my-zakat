@@ -3,16 +3,16 @@ import { fetchNisab, formatNisabDate, hasUsableFigure } from '../nisabApi'
 import type { Nisab } from '../nisabApi'
 
 const fresh: Nisab = {
-  gold_grams: 85,
-  silver_grams: 595,
+  gold_grams: 87.48,
+  silver_grams: 612.36,
   stale_after_days: 7,
   is_stale: false,
   as_of: '2026-09-20T06:00:00Z',
   source: 'https://api.metals.dev/v1/latest',
   gold_price_per_gram_usd: 95.12,
   silver_price_per_gram_usd: 1.08,
-  nisab_gold_usd: 8085.2,
-  nisab_silver_usd: 642.6,
+  nisab_gold_usd: 8321.1,
+  nisab_silver_usd: 661.35,
 }
 
 const stale: Nisab = {

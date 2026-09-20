@@ -18,6 +18,10 @@ from pdf_service import generate_donation_certificate, generate_donation_certifi
 from email_service import send_donation_certificate_email
 from logging_config import get_logger
 from s3_service import upload_file, download_file, generate_object_key, file_exists
+# One definition of the nisab mass for the whole codebase: the figure this
+# calculation compares against is the same object the /api/nisab snapshot and
+# the /nisab page publish, so the two can never drift apart.
+from nisab_service import DEFAULT_GOLD_GRAMS
 
 load_dotenv()
 
@@ -601,10 +605,11 @@ async def calculate_zakat(calculation: ZakatCalculation):
     zakatable_for_nisab = wealth_bucket + gold_value + silver_value + business_bucket
     net_zakatable = max(zakatable_for_nisab - calculation.liabilities, 0)
 
-    # 3. Nisab threshold — 87.48g of gold (the standard scholarly value)
-    NISAB_GOLD_GRAMS = 87.48
+    # 3. Nisab threshold — DEFAULT_GOLD_GRAMS (87.48 g) of gold, imported from
+    # nisab_service so the threshold applied here and the one published on
+    # /nisab are one value, not two that can drift.
     gold_price = calculation.gold_price_per_gram if calculation.gold_price_per_gram > 0 else 65.0
-    nisab_threshold = NISAB_GOLD_GRAMS * gold_price
+    nisab_threshold = DEFAULT_GOLD_GRAMS * gold_price
 
     meets_nisab = net_zakatable >= nisab_threshold
 

@@ -6,7 +6,7 @@
  *     lookup must never take down a page;
  *   - `hasUsableFigure` is the only sanctioned way to decide whether to print
  *     an amount. A stale or absent figure means the page shows the method --
- *     85 g of gold, 595 g of silver, at today's price -- and no dollars. A
+ *     87.48 g of gold, 612.36 g of silver, at today's price -- and no dollars. A
  *     wrong number carrying a date reads as authoritative, which is worse than
  *     no number at all.
  */

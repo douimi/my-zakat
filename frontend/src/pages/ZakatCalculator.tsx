@@ -31,10 +31,6 @@ import {
   getHowToJsonLd,
 } from '../utils/seo'
 
-// Nisab gold weight in grams — the Hanafi conversion of 20 mithqal, and the
-// figure the backend compares against. /nisab sets out the other convention.
-const NISAB_GOLD_GRAMS = 87.48
-
 const PRICE_HINT = "Enter today's price per gram"
 
 const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
@@ -101,7 +97,14 @@ const ZakatCalculator = () => {
 
   const goldPrice = watch('gold_price_per_gram')
   const hasGoldPrice = typeof goldPrice === 'number' && Number.isFinite(goldPrice) && goldPrice > 0
-  const currentNisab = hasGoldPrice ? NISAB_GOLD_GRAMS * goldPrice : null
+
+  // The weights come from the /api/nisab snapshot, which is the one definition
+  // of them; they survive staleness, because the method never expires. Only an
+  // unreachable endpoint leaves us without them, and then the page says the
+  // method in words rather than falling back on a constant of its own.
+  const goldGrams = nisab?.gold_grams ?? null
+  const silverGrams = nisab?.silver_grams ?? null
+  const currentNisab = hasGoldPrice && goldGrams !== null ? goldGrams * goldPrice : null
   const usingLivePrice =
     showFigure && Boolean(nisab) && goldPrice === nisab?.gold_price_per_gram_usd
 
@@ -268,7 +271,7 @@ const ZakatCalculator = () => {
         },
         {
           name: 'Compare the total against the nisab',
-          text: 'The threshold set by 85 g of gold or 595 g of silver at today’s price.',
+          text: 'The threshold set by 87.48 g of gold or 612.36 g of silver at today’s price.',
         },
         {
           name: 'Pay 2.5% if you are at or above it',
@@ -409,14 +412,20 @@ const ZakatCalculator = () => {
                 <div className="space-y-3 text-sm text-gray-700">
                   {currentNisab !== null ? (
                     <p>
-                      Compared against the gold nisab of {formatUSD(currentNisab)} — {NISAB_GOLD_GRAMS} grams
+                      Compared against the gold nisab of {formatUSD(currentNisab)} — {goldGrams} grams
                       of gold at {formatUSD(goldPrice)} a gram.
+                    </p>
+                  ) : goldGrams !== null ? (
+                    <p>
+                      We hold no gold price we can vouch for, so there is no threshold to show yet. The
+                      nisab is {goldGrams} grams of gold, or {silverGrams} grams of silver, valued at the
+                      market price on the day you work it out.
                     </p>
                   ) : (
                     <p>
-                      We hold no gold price we can vouch for, so there is no threshold to show yet. The
-                      nisab is {NISAB_GOLD_GRAMS} grams of gold, or 595 grams of silver, valued at the
-                      market price on the day you work it out.
+                      We could not reach the figures behind the threshold, so there is none to show
+                      here. The nisab is a set weight of gold — or of silver — valued at the market
+                      price on the day you work it out; the nisab page sets out both weights.
                     </p>
                   )}
 
@@ -431,7 +440,7 @@ const ZakatCalculator = () => {
                   {showFigure && nisab && (
                     <p>
                       Many scholars use the silver threshold instead, which is the lower of the two:{' '}
-                      {formatUsd(nisab.nisab_silver_usd as number)} for 595 grams of silver. Which
+                      {formatUsd(nisab.nisab_silver_usd as number)} for {nisab.silver_grams} grams of silver. Which
                       threshold applies to you is a point on which scholars differ.
                     </p>
                   )}
@@ -632,7 +641,7 @@ const ZakatCalculator = () => {
               the method is shown instead.
             </p>
             <p className={`${PROSE} mt-4`}>
-              This calculator uses the gold threshold, at 87.48 grams. The silver threshold, 595 grams,
+              This calculator uses the gold threshold, at 87.48 grams. The silver threshold, 612.36 grams,
               works out much lower, so it brings more people into zakat, and many scholars prefer it
               for that reason. The{' '}
               <Link to="/nisab" className="text-primary-700 underline hover:text-primary-800">

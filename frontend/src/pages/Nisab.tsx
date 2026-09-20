@@ -75,7 +75,7 @@ const Nisab = () => {
 
   const howMuchAnswer = showFigure
     ? 'There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. The current thresholds, together with the date the prices behind them were taken, are shown at the top of this page. We publish them only while the underlying price is recent enough for us to vouch for.'
-    : 'There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. We are not showing a dollar amount right now because we do not hold a price recent enough to vouch for. To work it out yourself, multiply 85 g of gold — or 595 g of silver — by today’s price per gram.'
+    : 'There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. We are not showing a dollar amount right now because we do not hold a price recent enough to vouch for. To work it out yourself, multiply 87.48 g of gold — or 612.36 g of silver — by today’s price per gram.'
 
   const faqs = [
     {
@@ -165,7 +165,7 @@ const Nisab = () => {
                     <p className="text-3xl font-bold text-gray-900">
                       {formatUsd(nisab.nisab_gold_usd as number)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">85 g of gold</p>
+                    <p className="text-sm text-gray-500 mt-1">87.48 g of gold</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-5">
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
@@ -174,7 +174,7 @@ const Nisab = () => {
                     <p className="text-3xl font-bold text-gray-900">
                       {formatUsd(nisab.nisab_silver_usd as number)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">595 g of silver</p>
+                    <p className="text-sm text-gray-500 mt-1">612.36 g of silver</p>
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mt-4">
@@ -195,13 +195,13 @@ const Nisab = () => {
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Gold nisab
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">85 g of gold</p>
+                    <p className="text-2xl font-bold text-gray-900">87.48 g of gold</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-5">
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Silver nisab
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">595 g of silver</p>
+                    <p className="text-2xl font-bold text-gray-900">612.36 g of silver</p>
                   </div>
                 </div>
               </>
@@ -226,16 +226,16 @@ const Nisab = () => {
           <section className={CARD}>
             <h2 className={HEADING}>How it is worked out</h2>
             <p className={PROSE}>
-              We use 85 grams of gold and 595 grams of silver, the figures in widest contemporary
-              use. Multiply the weight by today’s price per gram and you have the threshold in your
-              own currency.
+              We use 87.48 grams of gold and 612.36 grams of silver — the same threshold our zakat
+              calculator measures against. Multiply the weight by today’s price per gram and you have
+              the threshold in your own currency.
             </p>
             <p className={`${PROSE} mt-4`}>
-              These weights are not the only ones in circulation. They derive from 20 mithqal of gold
-              and 200 dirhams of silver, and the Hanafi convention converts those to 87.48 grams and
-              612.36 grams respectively. The difference is small in practice, but it is real, and a
-              site that showed one figure without mentioning the other would be hiding a genuine
-              disagreement.
+              These weights are not the only ones in circulation. They are the Hanafi conversion of
+              20 mithqal of gold and 200 dirhams of silver; another convention in common use rounds
+              the same measures to 85 grams and 595 grams respectively. The difference is small in
+              practice, but it is real, and a site that showed one figure without mentioning the
+              other would be hiding a genuine disagreement.
             </p>
           </section>
 

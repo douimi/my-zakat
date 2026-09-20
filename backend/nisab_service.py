@@ -8,12 +8,13 @@ one than publish one it cannot vouch for: past STALE_AFTER_DAYS without a
 successful refresh, the monetary fields come back as None and only the method
 survives. The method -- a mass of gold, a mass of silver -- never expires.
 
-The second is that the masses themselves are not settled. 85 g of gold and
-595 g of silver are the figures in widest contemporary use; the Hanafi
-convention gives 87.48 g and 612.36 g, from 20 mithqal and 200 dirhams. They
-are therefore read from settings, not hardcoded, so the foundation can follow
-whichever convention it holds without a code change -- and the page that
-displays them says which one is in use.
+The second is that the masses themselves are not settled. This site uses
+87.48 g of gold and 612.36 g of silver, from 20 mithqal and 200 dirhams --
+the same threshold its zakat calculation has always applied, so the published
+figure and the calculated one cannot disagree. 85 g and 595 g are the other
+figures in common use. The masses are therefore read from settings, not
+hardcoded, so the foundation can follow whichever convention it holds without
+a code change -- and the page that displays them says which one is in use.
 
 Refreshing is lazy: the endpoint serves the cache and refreshes it when it is
 older than REFRESH_AFTER_HOURS. No scheduler, nothing to notice has died, and
@@ -33,10 +34,12 @@ from models import Setting
 
 logger = get_logger(__name__)
 
-# The two masses, in grams. Defaults are the figures in widest use; both are
+# The two masses, in grams, and the single definition of them for the whole
+# codebase -- the zakat calculation in routers/donations.py imports
+# DEFAULT_GOLD_GRAMS from here rather than keeping its own copy. Both are
 # overridable in settings because the schools differ (see the module docstring).
-DEFAULT_GOLD_GRAMS = 85.0
-DEFAULT_SILVER_GRAMS = 595.0
+DEFAULT_GOLD_GRAMS = 87.48
+DEFAULT_SILVER_GRAMS = 612.36
 
 REFRESH_AFTER_HOURS = 24
 STALE_AFTER_DAYS = 7
