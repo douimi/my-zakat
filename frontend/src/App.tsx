@@ -60,6 +60,7 @@ const CharityInIslam = lazy(() => import('./pages/CharityInIslam'))
 const KaffarahCalculator = lazy(() => import('./pages/KaffarahCalculator'))
 const ZakatAlFitrCalculator = lazy(() => import('./pages/ZakatAlFitrCalculator'))
 const ZakatOnGold = lazy(() => import('./pages/ZakatOnGold'))
+const Nisab = lazy(() => import('./pages/Nisab'))
 const UmrahGuidelines = lazy(() => import('./pages/UmrahGuidelines'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
@@ -146,6 +147,7 @@ function App() {
                 <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
                 <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
                 <Route path="zakat-on-gold" element={<ZakatOnGold />} />
+                <Route path="nisab" element={<Nisab />} />
                 <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
                 <Route path="privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="donation-policy" element={<DonationPolicy />} />

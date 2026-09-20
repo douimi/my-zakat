@@ -372,8 +372,12 @@ class ZakatResult(BaseModel):
     # Nisab status
     total_assets: float = 0          # sum of all zakatable assets in USD
     net_zakatable: float = 0          # total_assets - liabilities
-    nisab_threshold: float = 0        # current Nisab in USD (gold-based)
-    meets_nisab: bool = False         # whether net_zakatable >= nisab_threshold
+    # Both are null when no gold price could be vouched for: there is then no
+    # threshold to publish and no verdict to reach, and the caller shows the
+    # method instead. A fabricated threshold carrying an air of authority is
+    # worse than none, so these are deliberately nullable rather than zeroed.
+    nisab_threshold: Optional[float] = None   # current Nisab in USD (gold-based)
+    meets_nisab: Optional[bool] = None        # whether net_zakatable >= nisab_threshold
 
 class SubscriptionCreate(BaseModel):
     name: str

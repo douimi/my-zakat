@@ -55,29 +55,44 @@ The donation system accepts one-time and recurring (monthly/annual) contribution
 ### 2. Zakat Calculator Suite
 
 #### Zakat Calculator (Primary)
-A comprehensive tool that calculates annual Zakat obligations. Users enter their assets across multiple categories:
-- Cash and bank balances
-- Gold and silver holdings (with current market rates)
-- Investment portfolios (stocks, bonds, mutual funds)
-- Business inventory and assets
-- Agricultural produce
-- Rental income properties
-- Debts owed to the individual
-The calculator subtracts eligible deductions (personal debts, living expenses) and applies the 2.5% Zakat rate if the total exceeds the Nisab threshold.
+Totals a user's zakatable wealth — cash and bank balances, savings, gold and silver by weight, investment portfolios, business inventory and assets, and agricultural produce and livestock value — then subtracts immediate liabilities (debts currently due). The result is compared against the nisab (the gold or silver threshold; see the Nisab section below) and, if it meets or exceeds it, 2.5% of the total is due. Scholars differ on whether long-term debts such as a mortgage should be deducted in full or only by the instalments due within the year; the calculator leaves that entry to the user rather than deciding for them.
 
-#### Kaffarah Calculator
-Calculates Kaffarah (expiation) amounts for:
-- Missed obligatory fasts during Ramadan
-- Broken oaths
-Based on the cost of feeding 60 people or fasting 60 consecutive days, as prescribed in Islamic law.
+#### Zakat on Gold (guide, not a calculator)
+A written guide with a karat reference table; it has no input fields and computes nothing. It explains how to value gold bullion, coins, and jewellery from their weight in grams and karat (purity), either priced per karat or converted to pure gold content and priced at the fine gold rate. The total is compared against the gold nisab (87.48 grams), and 2.5% is due once it is met. To work out an amount, use the Zakat Calculator. The contested point named on the page: whether gold jewellery in regular personal use is exempt as a personal effect, or zakatable regardless of use like any other gold — both positions are held by serious scholars, and the page does not choose between them.
 
 #### Zakat Al-Fitr Calculator
-Determines the Zakat Al-Fitr amount due before Eid Al-Fitr prayer at the end of Ramadan. Calculated per household member based on the local cost of a staple food (approximately one Sa' of food, roughly 2.5–3 kg).
+Computes the per-person charity due before the Eid al-Fitr prayer at the end of Ramadan: one sa' per household member, taken as roughly 2.5-3 kg of local staple food (the calculator uses 2.75 kg), multiplied by a local food price the user supplies. It is a fixed per-person measure, not a percentage of wealth, and is not tested against the nisab. The contested point named on the page: whether the obligation may be discharged as its cash value rather than as food itself — many scholars, including the position most charities operate on, permit cash; others hold it must be given as food. The page states both and does not adjudicate.
 
-#### Zakat on Gold Calculator
-Specialized calculator for determining Zakat on gold holdings, using current gold prices to assess whether the Nisab threshold is met and calculating the 2.5% due.
+#### Kaffarah Calculator
+Computes expiation (kaffarah) for a deliberately broken Ramadan fast or a broken oath. For a broken fast, the sources give graded options — freeing a slave, fasting two consecutive months, or feeding 60 poor people per day deliberately broken — and the calculator costs the feeding option from a local per-person food cost the user supplies. A broken oath carries a lighter expiation: feeding 10 poor people, clothing them, freeing a slave, or (if none of those is possible) fasting three days. The contested points named on the page: whether the three options for a broken fast are strictly ordered or freely chosen, and whether the value may be paid in cash rather than as food. Critically, the page distinguishes kaffarah from qada (simply making up a missed fast): a fast missed through illness, travel, or another recognised excuse is made up with no expiation owed; kaffarah applies only to a fast broken deliberately without a valid excuse.
 
-### 3. Community Programs
+### 3. Nisab (the threshold at which zakat becomes due)
+
+Nisab is defined as the value of a fixed weight of gold or silver, so it moves
+with metal prices and has no fixed dollar value.
+
+- Gold: 87.48 grams (85 grams is the other convention in common use)
+- Silver: 612.36 grams (595 grams is the other convention in common use)
+- Zakat rate above the threshold: 2.5%
+
+Scholars differ on which of the two thresholds to apply. The silver threshold
+is lower, so it brings more payers into zakat; others hold gold is the sounder
+benchmark today, since silver has lost much of its value against everyday
+goods since the two were set as equivalents.
+
+Current figures in USD, updated daily and machine-readable:
+https://myzakat.org/api/nisab
+
+That endpoint reports `is_stale: true` and withholds the dollar amounts when
+the underlying price is more than seven days old, rather than publishing a
+figure it cannot vouch for. The method itself — the two masses above — never
+expires and is always reported.
+
+The `/nisab` page on the site presents this same figure and method, dated,
+alongside a worked example (withheld whenever the underlying figure is
+stale) and links to each calculator above.
+
+### 4. Community Programs
 
 The platform hosts categorized charitable programs:
 - Each program has a dedicated page with description, goals, and impact metrics
@@ -85,7 +100,7 @@ The platform hosts categorized charitable programs:
 - Urgent needs campaigns highlight time-sensitive emergency relief efforts
 - Donors can contribute directly to specific programs
 
-### 4. Impact Stories
+### 5. Impact Stories
 
 Real stories from beneficiaries and program outcomes:
 - Featured stories on the homepage
@@ -93,7 +108,7 @@ Real stories from beneficiaries and program outcomes:
 - Stories demonstrate tangible impact of donations
 - Builds trust and encourages continued giving
 
-### 5. Events
+### 6. Events
 
 Community events management:
 - Upcoming events listed with dates, times, and locations
@@ -101,14 +116,14 @@ Community events management:
 - Events can include images and multimedia
 - Community gathering and engagement opportunities
 
-### 6. Volunteer Program
+### 7. Volunteer Program
 
 Volunteer coordination system:
 - Online volunteer registration form
 - Collects skills, availability, and interests
 - Connects willing volunteers with active programs
 
-### 7. Islamic Education Section
+### 8. Islamic Education Section
 
 Comprehensive educational resources:
 
@@ -118,7 +133,7 @@ Comprehensive educational resources:
 - **Charity in Islam**: Educational content about the role and importance of charity in Islamic tradition
 - **Umrah Guidelines**: Practical guide for performing Umrah pilgrimage
 
-### 8. User Accounts
+### 9. User Accounts
 
 Registered user features:
 - Secure registration with email verification
@@ -127,7 +142,7 @@ Registered user features:
 - Manage recurring donations
 - Track contribution totals and impact
 
-### 9. Newsletter
+### 10. Newsletter
 
 - Email subscription for regular updates
 - News about programs, events, and impact
@@ -198,10 +213,11 @@ A: Zakat is 2.5% of your qualifying wealth (savings, gold, silver, investments, 
 | About | /about | Foundation history, mission, values, team information |
 | Donate | /donate | Secure donation form with amount selection and payment |
 | Zakat Calculator | /zakat-calculator | Full Zakat calculation tool for all asset types |
+| Nisab | /nisab | The current gold and silver zakat threshold, dated, with the method behind it |
 | Zakat Education | /zakat-education | Educational content about Zakat rules and obligations |
 | Kaffarah Calculator | /kaffarah-calculator | Kaffarah expiation amount calculator |
 | Zakat Al-Fitr Calculator | /zakat-al-fitr-calculator | End-of-Ramadan Zakat calculator |
-| Zakat on Gold | /zakat-on-gold | Gold-specific Zakat calculation tool |
+| Zakat on Gold | /zakat-on-gold | Guide to valuing gold for Zakat by weight and karat (no calculator on this page) |
 | Stories | /stories | Impact stories from beneficiaries and programs |
 | Events | /events | Community events listing with dates and locations |
 | Programs | /programs | Charitable program categories and details |

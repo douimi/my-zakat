@@ -111,3 +111,48 @@ export function getFaqJsonLd(faqs: { question: string; answer: string }[]) {
     })),
   }
 }
+
+/** The year to stamp on a title. Derived, never hardcoded: a page whose title
+ *  says 2026 in January 2027 looks abandoned, which is exactly the opposite of
+ *  what a year in a title is for. */
+export const currentYear = (): number => new Date().getFullYear()
+
+/** A calculator, described as the free browser tool it is. */
+export function getWebApplicationJsonLd(params: {
+  name: string
+  description: string
+  path: string
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: params.name,
+    description: params.description,
+    url: `https://myzakat.org${params.path}`,
+    applicationCategory: 'FinanceApplication',
+    operatingSystem: 'Any',
+    browserRequirements: 'Requires JavaScript',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  }
+}
+
+/** The steps of a calculation, for the "how to" surfaces. */
+export function getHowToJsonLd(params: {
+  name: string
+  description: string
+  steps: { name: string; text: string }[]
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: params.name,
+    description: params.description,
+    step: params.steps.map((step, index) => ({
+      '@type': 'HowToStep',
+      position: index + 1,
+      name: step.name,
+      text: step.text,
+    })),
+  }
+}

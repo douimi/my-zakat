@@ -15,10 +15,10 @@ MyZakat Zakat Distribution Foundation emerged from a personal commitment to serv
 - Donation receipts and history for donors
 
 ### Zakat Calculators
-- **Zakat Calculator**: Comprehensive tool to calculate annual Zakat obligations based on savings, investments, gold, silver, business assets, and agricultural holdings
-- **Kaffarah Calculator**: Calculate Kaffarah obligations for missed fasts or broken oaths
-- **Zakat Al-Fitr Calculator**: Determine Zakat Al-Fitr amount due at the end of Ramadan
-- **Zakat on Gold Calculator**: Specialized calculator for gold-based Zakat assessment
+- **Zakat Calculator**: Totals cash, savings, gold, silver, investments, and business assets, subtracts immediate liabilities, compares the result to the nisab, and applies the 2.5% zakat rate to what remains
+- **Zakat on Gold** (/zakat-on-gold): A guide, not a calculator — how to value gold bullion, coins and jewellery by weight and karat, when the 2.5% rate applies once the gold nisab is met, and where scholars differ on jewellery in personal use. Use the Zakat Calculator to work out an amount
+- **Zakat Al-Fitr Calculator**: Computes one sa' (about 2.5-3 kg) of staple food per household member, due before the Eid al-Fitr prayer, either as food or its cash value
+- **Kaffarah Calculator**: Computes expiation for a deliberately broken Ramadan fast (feeding 60 people per day, or fasting) or a broken oath (feeding 10 people), based on a local food cost the user supplies
 
 ### Community Programs
 - Active charitable programs categorized by area of impact
@@ -52,6 +52,25 @@ MyZakat Zakat Distribution Foundation emerged from a personal commitment to serv
 - Volunteers interested in contributing their time to charitable causes
 - Anyone interested in learning about Islamic charitable giving principles
 
+## Nisab (the threshold at which zakat becomes due)
+
+Nisab is defined as the value of a fixed weight of gold or silver, so it moves
+with metal prices and has no fixed dollar value.
+
+- Gold: 87.48 grams (85 grams is the other convention in common use)
+- Silver: 612.36 grams (595 grams is the other convention in common use)
+- Zakat rate above the threshold: 2.5%
+
+Scholars differ on which of the two thresholds to apply. The silver threshold
+is lower, so it brings more payers into zakat.
+
+Current figures in USD, updated daily and machine-readable:
+https://myzakat.org/api/nisab
+
+That endpoint reports `is_stale: true` and withholds the dollar amounts when
+the underlying price is more than seven days old, rather than publishing a
+figure it cannot vouch for.
+
 ## Contact Information
 
 - **Website**: https://myzakat.org
@@ -73,6 +92,7 @@ MyZakat Zakat Distribution Foundation emerged from a personal commitment to serv
 - [About](https://myzakat.org/about)
 - [Donate](https://myzakat.org/donate)
 - [Zakat Calculator](https://myzakat.org/zakat-calculator)
+- [Nisab](https://myzakat.org/nisab) — the current zakat threshold, with its date and method
 - [Programs](https://myzakat.org/programs)
 - [Stories](https://myzakat.org/stories)
 - [Events](https://myzakat.org/events)

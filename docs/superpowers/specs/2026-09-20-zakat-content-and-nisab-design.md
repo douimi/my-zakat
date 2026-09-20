@@ -241,3 +241,35 @@ same. Neither carries a dollar amount.
   public endpoint. It is called at most once per interval, never blocks on
   failure, and the site degrades to the method — but it is a dependency that did
   not exist before.
+
+---
+
+## Amendment, 2026-09-20 — the default masses are 87.48 g / 612.36 g
+
+Everything above that names **85 g and 595 g** as the service defaults (the
+`backend/nisab_service.py` section, the `nisab_gold_usd` / `nisab_silver_usd`
+formulas and their comments, the sample `GET /api/nisab` body, and the
+`llms.txt` section) was corrected during implementation. The shipped defaults
+are **87.48 g of gold and 612.36 g of silver**.
+
+The history above is left as written; this note is the correction.
+
+**Why.** The design chose 85 / 595 on the grounds that they are the figures in
+widest contemporary use, and treated the choice as free because the masses are
+read from settings. It is not free. `POST /api/donations/calculate-zakat` has
+always measured against 87.48 g, and that endpoint is what the calculator page
+reports to a user. Shipping 85 g as the service default would have put a
+published threshold on `/nisab` roughly 2.9% below the one the calculator
+applied on the next click — two figures on one site, disagreeing, neither
+marked as the other's alternative. Choosing the mass the existing calculation
+already used costs nothing the design cared about and removes that
+contradiction at the source.
+
+Nothing else in the design changes. Both conventions are still named on every
+page that states a mass, the masses remain settings-backed (`nisab.gold_grams`,
+`nisab.silver_grams`) so the foundation can adopt 85 / 595 without a code
+change, and no page adjudicates between them. `DEFAULT_GOLD_GRAMS` in
+`nisab_service` is the single definition for the whole codebase: the calculation
+endpoint imports it rather than keeping a copy, and every page reads the mass
+from the `/api/nisab` snapshot rather than writing it into its prose, so the two
+cannot drift apart again.
