@@ -1,8 +1,49 @@
+/**
+ * /zakat-education — the overview page, and the last place the old hardcoded
+ * nisab survived.
+ *
+ * This page is in the sitemap, in the llms files and in the header nav, and it
+ * used to publish "Current Nisab (Gold Standard): ~$4,000 USD — *Based on 85g
+ * of gold": an undated figure roughly half the real threshold, resting on a
+ * mass that contradicted the one /nisab and the calculator use. It now takes
+ * the same treatment as those pages — the figure and the mass both come from
+ * /api/nisab, and no dollar amount is printed unless `hasUsableFigure` says we
+ * hold a price we can vouch for.
+ */
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Book, Calculator, Heart, Users, Coins, Scale, CheckCircle, ArrowRight } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
+import {
+  fetchNisab,
+  hasUsableFigure,
+  formatNisabDate,
+  formatUsd,
+  type Nisab as NisabData,
+} from '../utils/nisabApi'
 
 const ZakatEducation = () => {
+  const [nisab, setNisab] = useState<NisabData | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void fetchNisab().then((data) => {
+      if (!active) return
+      setNisab(data)
+      setLoaded(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // The single gate on printing money on this page.
+  const showFigure = loaded && hasUsableFigure(nisab)
+  // The mass is stated as ours, so it is read from the snapshot, never written
+  // into the markup. It survives staleness: the method never expires.
+  const goldGrams = nisab?.gold_grams ?? null
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SEOHead
@@ -114,10 +155,36 @@ const ZakatEducation = () => {
                 Nisab is the minimum amount of wealth a Muslim must possess before Zakat becomes obligatory.
               </p>
               <div className="bg-primary-50 p-4 rounded-lg">
-                <div className="text-sm text-gray-600 mb-2">Current Nisab (Gold Standard):</div>
-                <div className="text-2xl font-bold text-primary-600">~$4,000 USD</div>
-                <div className="text-xs text-gray-500 mt-1">*Based on 85g of gold</div>
+                {showFigure && nisab ? (
+                  <>
+                    <div className="text-sm text-gray-600 mb-2">Current Nisab (gold):</div>
+                    <div className="text-2xl font-bold text-primary-600">
+                      {formatUsd(nisab.nisab_gold_usd as number)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {goldGrams} g of gold, as of {formatNisabDate(nisab.as_of)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm text-gray-600 mb-2">Current Nisab (gold):</div>
+                    <div className="text-lg font-bold text-primary-600">
+                      {goldGrams !== null ? `${goldGrams} g of gold` : 'a set weight of gold'}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      We show a dollar figure only while we hold a price we can vouch for. Multiply
+                      the weight by today’s price per gram.
+                    </div>
+                  </>
+                )}
               </div>
+              <Link
+                to="/nisab"
+                className="text-primary-600 hover:text-primary-700 font-medium inline-flex items-center mt-4"
+              >
+                The current nisab, and how it is worked out
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
             </div>
           </div>
         </div>

@@ -80,12 +80,44 @@ describe('Nisab page', () => {
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
   })
 
-  it('shows the method and no figure when the endpoint is unreachable', async () => {
+  it('states the method in words, and no figure, when the endpoint is unreachable', async () => {
+    // With no snapshot there is no mass either, and the page will not fall back
+    // on a constant of its own: nisab.gold_grams is configurable, so a hardcoded
+    // 87.48 here would state as ours a weight the foundation may not use.
     vi.mocked(fetchNisab).mockResolvedValue(null)
     renderPage()
 
-    expect(await screen.findByText(/87\.48 grams of gold/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/a set weight of gold/i)).length).toBeGreaterThan(0)
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
+  })
+
+  it('takes the mass it calls ours from the snapshot, not from the markup', async () => {
+    // nisab.gold_grams is a setting so the foundation can adopt the other
+    // convention without a code change. When it does, every sentence that
+    // states the mass as ours must move with it -- otherwise the page prints a
+    // dollar figure computed from 85 g under a caption reading 87.48 g.
+    vi.mocked(fetchNisab).mockResolvedValue({
+      ...freshNisab(),
+      gold_grams: 85,
+      silver_grams: 595,
+      nisab_gold_usd: 8085.2,
+      nisab_silver_usd: 642.6,
+    })
+    renderPage()
+
+    expect(await screen.findByText(/we use 85 grams of gold and 595 grams of silver/i))
+      .toBeInTheDocument()
+    expect(screen.getByText(/85 g of gold/i)).toBeInTheDocument()
+    expect(screen.queryByText(/87\.48/)).not.toBeInTheDocument()
+  })
+
+  it('names where the figure came from, not only when it was taken', async () => {
+    // /nisab is meant to be the canonical, citable statement; a citation needs
+    // its provenance.
+    vi.mocked(fetchNisab).mockResolvedValue(freshNisab())
+    renderPage()
+
+    expect(await screen.findByText(/metals-api/i)).toBeInTheDocument()
   })
 
   it('names the other convention rather than pretending the masses are settled', async () => {

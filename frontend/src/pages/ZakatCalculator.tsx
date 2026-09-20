@@ -33,6 +33,17 @@ import {
 
 const PRICE_HINT = "Enter today's price per gram"
 
+/**
+ * The price fields are `<input type="number" step="0.01">`, and the snapshot
+ * carries four decimals. A value like 95.1234 is a stepMismatch, so the browser
+ * refuses to submit the form and the handler never runs — on the one path that
+ * only exists when we *do* hold a live price. Rounding to cents rather than
+ * loosening the step keeps the field validating what it is there to validate;
+ * a hundredth of a cent per gram is far below the precision anyone reads off
+ * this form, and the user can still type a finer figure if they want one.
+ */
+const toCents = (price: number) => Math.round(price * 100) / 100
+
 const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
 const HEADING = 'text-2xl font-heading font-bold text-gray-900 mb-4'
 const PROSE = 'text-gray-700 leading-relaxed'
@@ -83,8 +94,8 @@ const ZakatCalculator = () => {
       // back to a hardcoded price is how this page used to produce confident
       // numbers from a guess.
       if (hasUsableFigure(snapshot) && snapshot) {
-        setValue('gold_price_per_gram', snapshot.gold_price_per_gram_usd as number)
-        setValue('silver_price_per_gram', snapshot.silver_price_per_gram_usd as number)
+        setValue('gold_price_per_gram', toCents(snapshot.gold_price_per_gram_usd as number))
+        setValue('silver_price_per_gram', toCents(snapshot.silver_price_per_gram_usd as number))
       }
     })
     return () => {
@@ -110,10 +121,22 @@ const ZakatCalculator = () => {
 
   const year = currentYear()
 
+  // The masses are stated as ours, so they are read from the snapshot rather
+  // than written into the prose: nisab.gold_grams is a setting precisely so the
+  // foundation can follow the other convention without a code change, and a
+  // hardcoded "87.48" here would contradict the figure the moment it did. They
+  // survive staleness — the method never expires — so nothing gates them.
+  const goldGramsText = goldGrams !== null ? `${goldGrams} grams` : 'a set weight of gold'
+  const silverGramsText = silverGrams !== null ? `${silverGrams} grams` : 'a set weight of silver'
+  const massSentence =
+    goldGrams !== null && silverGrams !== null
+      ? `The threshold set by ${goldGrams} g of gold or ${silverGrams} g of silver at today’s price.`
+      : 'The threshold set by a fixed weight of gold — or of silver — at today’s price.'
+
   const reseedPrices = () => {
     if (hasUsableFigure(nisab) && nisab) {
-      setValue('gold_price_per_gram', nisab.gold_price_per_gram_usd as number)
-      setValue('silver_price_per_gram', nisab.silver_price_per_gram_usd as number)
+      setValue('gold_price_per_gram', toCents(nisab.gold_price_per_gram_usd as number))
+      setValue('silver_price_per_gram', toCents(nisab.silver_price_per_gram_usd as number))
     }
   }
 
@@ -209,7 +232,20 @@ const ZakatCalculator = () => {
     },
   ]
 
-  const showDonateButton = result && result.meets_nisab && result.total >= 1
+  const showDonateButton = result && result.meets_nisab === true && result.total >= 1
+
+  /**
+   * The gate on printing a threshold beside a result.
+   *
+   * `showFigure` governs the figures this page sources itself; a result is
+   * gated on the result's own field instead, because the threshold there may
+   * rest on a price the user typed — a price we can attribute, even though it
+   * is not ours. What it can never rest on is a price nobody supplied: the
+   * backend returns a null threshold and a null verdict for that, and the two
+   * branches below become three so the page states the method rather than an
+   * invented number.
+   */
+  const resultThreshold = result != null && result.nisab_threshold != null ? result.nisab_threshold : null
 
   const faqs = [
     {
@@ -271,7 +307,7 @@ const ZakatCalculator = () => {
         },
         {
           name: 'Compare the total against the nisab',
-          text: 'The threshold set by 87.48 g of gold or 612.36 g of silver at today’s price.',
+          text: massSentence,
         },
         {
           name: 'Pay 2.5% if you are at or above it',
@@ -465,7 +501,23 @@ const ZakatCalculator = () => {
                 </div>
 
                 {/* Nisab status banner */}
-                {!result.meets_nisab ? (
+                {resultThreshold === null ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start">
+                      <AlertCircle className="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-semibold text-amber-900 mb-1">No threshold to compare against</p>
+                        <p className="text-amber-900">
+                          Your net zakatable wealth is {formatUSD(result.net_zakatable)}. We are not
+                          showing a threshold because no gold price was entered and we hold none we
+                          can vouch for — we will not invent one. The nisab is {goldGramsText} of
+                          gold, or {silverGramsText} of silver, at the market price on the day you
+                          work it out.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : !result.meets_nisab ? (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                     <div className="flex items-start">
                       <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
@@ -473,7 +525,7 @@ const ZakatCalculator = () => {
                         <p className="font-semibold text-yellow-900 mb-1">Below Nisab — no Zakat is due</p>
                         <p className="text-yellow-800">
                           Your net zakatable wealth ({formatUSD(result.net_zakatable)}) is below the
-                          current Nisab threshold of {formatUSD(result.nisab_threshold)}.
+                          current Nisab threshold of {formatUSD(resultThreshold)}.
                         </p>
                       </div>
                     </div>
@@ -485,7 +537,7 @@ const ZakatCalculator = () => {
                       <div className="text-sm">
                         <p className="font-semibold text-green-900 mb-1">Above Nisab — Zakat is due</p>
                         <p className="text-green-800">
-                          Net zakatable: {formatUSD(result.net_zakatable)} • Nisab: {formatUSD(result.nisab_threshold)}
+                          Net zakatable: {formatUSD(result.net_zakatable)} • Nisab: {formatUSD(resultThreshold)}
                         </p>
                       </div>
                     </div>
@@ -641,9 +693,9 @@ const ZakatCalculator = () => {
               the method is shown instead.
             </p>
             <p className={`${PROSE} mt-4`}>
-              This calculator uses the gold threshold, at 87.48 grams. The silver threshold, 612.36 grams,
-              works out much lower, so it brings more people into zakat, and many scholars prefer it
-              for that reason. The{' '}
+              This calculator uses the gold threshold, at {goldGramsText}. The silver threshold,{' '}
+              {silverGramsText}, works out much lower, so it brings more people into zakat, and many
+              scholars prefer it for that reason. The{' '}
               <Link to="/nisab" className="text-primary-700 underline hover:text-primary-800">
                 nisab page
               </Link>{' '}
@@ -723,7 +775,59 @@ const ZakatCalculator = () => {
             </div>
 
             <div className="px-6 pb-6 -mt-4">
-              {result.meets_nisab && result.total >= 1 ? (
+              {/* Three states, not two. Without a price there is no threshold,
+                  and "No Zakat Due" would be a verdict we have not reached. */}
+              {resultThreshold === null ? (
+                <>
+                  <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-100 rounded-full mb-4">
+                      <Scale className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                      We cannot tell you yet
+                    </h2>
+                    <p className="text-sm text-gray-600">
+                      There is no threshold to measure your total against.
+                    </p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-amber-900 font-medium">Your net zakatable:</span>
+                      <span className="text-amber-900 font-semibold">{formatUSD(result.net_zakatable)}</span>
+                    </div>
+                    <p className="text-amber-900 mt-3">
+                      No gold price was entered, and we hold none recent enough to vouch for. Rather
+                      than substitute a price of our own and hand you a confident figure built on it,
+                      we are showing you none. Enter today’s gold price per gram above and the
+                      threshold will appear with your result.
+                    </p>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-6">
+                    The nisab is {goldGramsText} of gold, or {silverGramsText} of silver, at the
+                    market price on the day you work it out.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => setShowResultModal(false)}
+                      className="btn-primary flex-1 flex items-center justify-center py-3"
+                    >
+                      <RotateCcw className="w-5 h-5 mr-2" />
+                      Add a price and recalculate
+                    </button>
+                    <Link
+                      to="/nisab"
+                      onClick={() => setShowResultModal(false)}
+                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                    >
+                      How the nisab is worked out
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Link>
+                  </div>
+                </>
+              ) : result.meets_nisab && result.total >= 1 ? (
                 <>
                   {/* Header — celebrates the calculation */}
                   <div className="text-center mb-6">
@@ -832,7 +936,7 @@ const ZakatCalculator = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-yellow-900 font-medium">Nisab threshold:</span>
-                      <span className="text-yellow-900 font-semibold">{formatUSD(result.nisab_threshold)}</span>
+                      <span className="text-yellow-900 font-semibold">{formatUSD(resultThreshold)}</span>
                     </div>
                   </div>
 

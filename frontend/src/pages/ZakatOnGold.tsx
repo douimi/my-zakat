@@ -19,7 +19,6 @@ import {
   currentYear,
   getBreadcrumbJsonLd,
   getFaqJsonLd,
-  getWebApplicationJsonLd,
   getHowToJsonLd,
 } from '../utils/seo'
 
@@ -105,12 +104,11 @@ const ZakatOnGold = () => {
       { name: 'Zakat on Gold', path: '/zakat-on-gold' },
     ]),
     getFaqJsonLd(faqs),
-    getWebApplicationJsonLd({
-      name: 'Zakat on Gold Calculator',
-      description:
-        'Work out the zakat due on gold bullion, coins and jewellery from its weight and karat, measured against the current gold nisab.',
-      path: '/zakat-on-gold',
-    }),
+    // No WebApplication here. This page is prose and a karat table — it has no
+    // inputs and nothing to run — so declaring one, with browserRequirements
+    // and all, told search engines and crawlers about a calculator that does
+    // not exist on it. HowTo describes what the page actually does: it explains
+    // the method. The calculator itself lives at /zakat-calculator.
     getHowToJsonLd({
       name: 'How to calculate zakat on gold',
       description: 'Four steps from the gold in your drawer to the amount of zakat due on it.',

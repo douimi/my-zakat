@@ -71,11 +71,25 @@ const Nisab = () => {
   // The single gate on printing money. Nothing else on this page may decide it.
   const showFigure = loaded && hasUsableFigure(nisab)
 
+  // The masses come from the snapshot wherever the page states them as ours.
+  // nisab.gold_grams is a setting precisely so the foundation can follow the
+  // other convention without a code change; a hardcoded "87.48" in the prose
+  // would contradict the dollar figure the moment it did. They survive
+  // staleness — the method never expires — so they need no gate of their own.
+  // The 85 g / 595 g sentence further down stays literal: that is a fact about
+  // other schools, not about our configuration.
+  const goldGrams = nisab?.gold_grams ?? null
+  const silverGrams = nisab?.silver_grams ?? null
+  const goldMass = goldGrams !== null ? `${goldGrams} g of gold` : 'a set weight of gold'
+  const silverMass = silverGrams !== null ? `${silverGrams} g of silver` : 'a set weight of silver'
+  const goldGramsWord = goldGrams !== null ? `${goldGrams} grams` : 'a set weight'
+  const silverGramsWord = silverGrams !== null ? `${silverGrams} grams` : 'a set weight'
+
   const year = currentYear()
 
   const howMuchAnswer = showFigure
     ? 'There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. The current thresholds, together with the date the prices behind them were taken, are shown at the top of this page. We publish them only while the underlying price is recent enough for us to vouch for.'
-    : 'There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. We are not showing a dollar amount right now because we do not hold a price recent enough to vouch for. To work it out yourself, multiply 87.48 g of gold — or 612.36 g of silver — by today’s price per gram.'
+    : `There is no fixed figure for the year: the nisab tracks the gold and silver markets, so it moves whenever they do. We are not showing a dollar amount right now because we do not hold a price recent enough to vouch for. To work it out yourself, multiply ${goldMass} — or ${silverMass} — by today’s price per gram.`
 
   const faqs = [
     {
@@ -165,7 +179,7 @@ const Nisab = () => {
                     <p className="text-3xl font-bold text-gray-900">
                       {formatUsd(nisab.nisab_gold_usd as number)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">87.48 g of gold</p>
+                    <p className="text-sm text-gray-500 mt-1">{goldMass}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-5">
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
@@ -174,11 +188,16 @@ const Nisab = () => {
                     <p className="text-3xl font-bold text-gray-900">
                       {formatUsd(nisab.nisab_silver_usd as number)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">612.36 g of silver</p>
+                    <p className="text-sm text-gray-500 mt-1">{silverMass}</p>
                   </div>
                 </div>
+                {/* A citable statement has to say where it came from, not
+                    only when it was taken. The source is withheld with the
+                    money, because it is only a provenance while there is
+                    something to have provenance for. */}
                 <p className="text-sm text-gray-600 mt-4">
                   as of {formatNisabDate(nisab.as_of)}
+                  {nisab.source ? <> · source: {nisab.source}</> : null}
                 </p>
               </>
             )}
@@ -195,13 +214,13 @@ const Nisab = () => {
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Gold nisab
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">87.48 g of gold</p>
+                    <p className="text-2xl font-bold text-gray-900">{goldMass}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-5">
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Silver nisab
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">612.36 g of silver</p>
+                    <p className="text-2xl font-bold text-gray-900">{silverMass}</p>
                   </div>
                 </div>
               </>
@@ -226,9 +245,9 @@ const Nisab = () => {
           <section className={CARD}>
             <h2 className={HEADING}>How it is worked out</h2>
             <p className={PROSE}>
-              We use 87.48 grams of gold and 612.36 grams of silver — the same threshold our zakat
-              calculator measures against. Multiply the weight by today’s price per gram and you have
-              the threshold in your own currency.
+              We use {goldGramsWord} of gold and {silverGramsWord} of silver — the same threshold
+              our zakat calculator measures against. Multiply the weight by today’s price per gram
+              and you have the threshold in your own currency.
             </p>
             <p className={`${PROSE} mt-4`}>
               These weights are not the only ones in circulation. They are the Hanafi conversion of
@@ -250,7 +269,7 @@ const Nisab = () => {
               thresholds were set as equivalents.
             </p>
             <p className={`${PROSE} mt-4`}>
-              If you want to be cautious, use the silver threshold: it is the lower of the two, so it
+              Some prefer the silver threshold for that reason: it is the lower of the two, so it
               errs towards paying zakat rather than withholding it. If you follow a particular school
               or teacher, follow their position.
             </p>

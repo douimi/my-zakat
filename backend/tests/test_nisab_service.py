@@ -149,3 +149,150 @@ def test_no_api_key_behaves_as_stale_rather_than_crashing(db_session, monkeypatc
 
     assert nisab_service.refresh_if_due(db_session) is False
     assert nisab_service.build_snapshot(db_session)["is_stale"] is True
+
+
+# ---------------------------------------------------------------------------
+# Unusable values. "Absent" is not the only way a price can fail to be a price:
+# a settings row can be written by an upstream incident or by hand through
+# PUT /api/settings/{key}, and zero or negative multiplies out to a figure
+# rather than to no figure. A figure carrying a date reads as authoritative.
+# ---------------------------------------------------------------------------
+
+
+def test_a_zero_price_is_withheld_rather_than_published_as_a_zero_threshold(db_session):
+    from nisab_service import build_snapshot
+
+    _seed_prices(db_session, gold="0", silver="0")
+
+    snap = build_snapshot(db_session)
+
+    assert snap["is_stale"] is True
+    assert snap["nisab_gold_usd"] is None
+    assert snap["nisab_silver_usd"] is None
+    assert snap["gold_price_per_gram_usd"] is None
+    assert snap["as_of"] is None
+
+
+def test_a_negative_price_is_withheld_too(db_session):
+    from nisab_service import build_snapshot
+
+    _seed_prices(db_session, gold="-5.00", silver="1.10")
+
+    snap = build_snapshot(db_session)
+
+    assert snap["is_stale"] is True
+    assert snap["nisab_gold_usd"] is None
+    # One bad metal withholds both: the page prints money or it does not.
+    assert snap["nisab_silver_usd"] is None
+
+
+def test_a_zero_mass_yields_no_threshold_and_still_states_the_method(db_session):
+    """A non-positive mass is a broken setting, not a convention.
+
+    It must not multiply out to a zero threshold, and the method it leaves
+    behind must still be a mass a reader can use, not "0 grams of gold".
+    """
+    from nisab_service import DEFAULT_GOLD_GRAMS, build_snapshot
+
+    _seed_prices(db_session, gold="100.00", silver="2.00")
+    _set(db_session, "nisab.gold_grams", "0")
+
+    snap = build_snapshot(db_session)
+
+    assert snap["is_stale"] is True
+    assert snap["nisab_gold_usd"] is None
+    assert snap["gold_grams"] == pytest.approx(DEFAULT_GOLD_GRAMS)
+
+
+def test_a_negative_mass_is_treated_the_same_way(db_session):
+    from nisab_service import DEFAULT_SILVER_GRAMS, build_snapshot
+
+    _seed_prices(db_session, gold="100.00", silver="2.00")
+    _set(db_session, "nisab.silver_grams", "-612.36")
+
+    snap = build_snapshot(db_session)
+
+    assert snap["is_stale"] is True
+    assert snap["nisab_silver_usd"] is None
+    assert snap["silver_grams"] == pytest.approx(DEFAULT_SILVER_GRAMS)
+
+
+def test_a_non_positive_upstream_price_is_rejected_before_it_is_cached(db_session, monkeypatch):
+    """The guard belongs at the door as well as at the window.
+
+    A zero from the upstream must not become a cached zero; it is an unusable
+    payload like any other, so the previous good value survives it.
+    """
+    import nisab_service
+
+    _seed_prices(db_session, gold="100.00", silver="2.00")
+    _set(db_session, "nisab.fetched_at",
+         (datetime.utcnow() - timedelta(hours=nisab_service.REFRESH_AFTER_HOURS + 1)).isoformat())
+
+    monkeypatch.setattr(nisab_service, "METALS_API_KEY", "test-key")
+    monkeypatch.setattr(
+        nisab_service.httpx,
+        "get",
+        lambda *a, **k: _FakeResponse({"metals": {"gold": 0, "silver": 1.5}, "unit": "g"}),
+    )
+
+    assert nisab_service.refresh_if_due(db_session) is False
+
+    snap = nisab_service.build_snapshot(db_session)
+    assert snap["gold_price_per_gram_usd"] == pytest.approx(100.0), "the cache must be untouched"
+    assert snap["is_stale"] is False
+
+
+def test_a_negative_upstream_price_is_rejected_too(monkeypatch):
+    import nisab_service
+
+    monkeypatch.setattr(nisab_service, "METALS_API_KEY", "test-key")
+    monkeypatch.setattr(
+        nisab_service.httpx,
+        "get",
+        lambda *a, **k: _FakeResponse({"metals": {"gold": 95.0, "silver": -1.0}, "unit": "g"}),
+    )
+
+    with pytest.raises(ValueError, match="non-positive"):
+        nisab_service._fetch_prices()
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+# ---------------------------------------------------------------------------
+# Timestamps. Everything this module writes is naive UTC, but /admin/settings
+# lets a human write whatever they like into nisab.as_of.
+# ---------------------------------------------------------------------------
+
+
+def test_an_offset_bearing_timestamp_does_not_break_the_arithmetic(db_session):
+    """An offset-aware `as_of` used to raise TypeError out of build_snapshot,
+    which surfaced as a 500 on the one URL the llms files point a crawler at."""
+    from nisab_service import build_snapshot
+
+    _seed_prices(db_session, gold="100.00", silver="2.00")
+    _set(db_session, "nisab.as_of", datetime.utcnow().isoformat() + "+00:00")
+
+    snap = build_snapshot(db_session)
+
+    assert snap["is_stale"] is False
+    assert snap["nisab_gold_usd"] == pytest.approx(8748.00)
+
+
+def test_an_offset_bearing_timestamp_can_still_be_stale(db_session):
+    from nisab_service import STALE_AFTER_DAYS, build_snapshot
+
+    _seed_prices(db_session, gold="100.00", silver="2.00")
+    old = datetime.utcnow() - timedelta(days=STALE_AFTER_DAYS + 1)
+    _set(db_session, "nisab.as_of", old.isoformat() + "+00:00")
+
+    assert build_snapshot(db_session)["is_stale"] is True

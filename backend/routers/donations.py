@@ -21,6 +21,7 @@ from s3_service import upload_file, download_file, generate_object_key, file_exi
 # One definition of the nisab mass for the whole codebase: the figure this
 # calculation compares against is the same object the /api/nisab snapshot and
 # the /nisab page publish, so the two can never drift apart.
+import nisab_service
 from nisab_service import DEFAULT_GOLD_GRAMS
 
 load_dotenv()
@@ -567,18 +568,27 @@ async def get_recent_public_donations(limit: int = 5, db: Session = Depends(get_
 
 
 @router.post("/calculate-zakat", response_model=ZakatResult)
-async def calculate_zakat(calculation: ZakatCalculation):
+async def calculate_zakat(calculation: ZakatCalculation, db: Session = Depends(get_db)):
     """Calculate Zakat with Nisab threshold check and proper liability deduction.
 
     Methodology:
       1. Compute total zakatable assets (cash + gold + silver + business + ...).
       2. Subtract liabilities to get the net zakatable amount.
-      3. Determine Nisab threshold: equivalent of 87.48 g of gold using the
-         user-provided gold price (falls back to $65/g if not provided).
+      3. Determine the Nisab threshold from the nisab mass and a gold price:
+         the caller's price when they supplied one, otherwise the cached price
+         from nisab_service — the same figure /api/nisab publishes.
       4. If net zakatable < Nisab → no Zakat due (return zeros + meets_nisab=False).
       5. Otherwise apply the standard 2.5% rate to wealth/gold/silver/business
          and 5% to agriculture (agriculture is per-harvest and not subject to
          the wealth Nisab check in classical jurisprudence — kept separate).
+
+    There is no fallback price. This endpoint used to substitute $65/g when the
+    caller sent none, which was harmless only while the form always sent a
+    price of its own; once the form stopped inventing one, the fallback became
+    the default path and the page printed a threshold roughly a third below the
+    real one, undated and invented. When no price can be vouched for, the
+    threshold and the verdict both come back as null and the caller shows the
+    method instead. The zakatable total is still returned — it needs no price.
 
     Liabilities are deducted from the combined wealth pool (cash + investments
     + business + metals + other), prorated. This avoids the previous bug
@@ -605,15 +615,32 @@ async def calculate_zakat(calculation: ZakatCalculation):
     zakatable_for_nisab = wealth_bucket + gold_value + silver_value + business_bucket
     net_zakatable = max(zakatable_for_nisab - calculation.liabilities, 0)
 
-    # 3. Nisab threshold — DEFAULT_GOLD_GRAMS (87.48 g) of gold, imported from
-    # nisab_service so the threshold applied here and the one published on
-    # /nisab are one value, not two that can drift.
-    gold_price = calculation.gold_price_per_gram if calculation.gold_price_per_gram > 0 else 65.0
-    nisab_threshold = DEFAULT_GOLD_GRAMS * gold_price
+    # 3. Nisab threshold — a mass of gold times a price. The mass comes from
+    # the nisab snapshot, so the threshold applied here and the one published
+    # on /nisab are one value and cannot drift. The price is the caller's when
+    # they gave one; failing that, the cached price the site is willing to
+    # vouch for. Failing that too, there is no threshold: we return none and
+    # reach no verdict rather than multiply by a number we made up.
+    try:
+        snapshot = nisab_service.build_snapshot(db)
+    except Exception:
+        logger.exception("Zakat: could not read the nisab snapshot")
+        snapshot = {}
 
-    meets_nisab = net_zakatable >= nisab_threshold
+    gold_grams = snapshot.get("gold_grams") or DEFAULT_GOLD_GRAMS
+    gold_price = calculation.gold_price_per_gram
+    if not gold_price or gold_price <= 0:
+        gold_price = snapshot.get("gold_price_per_gram_usd")
 
-    # 4. If below Nisab, no Zakat is due on the wealth pool
+    if gold_price and gold_price > 0:
+        nisab_threshold = gold_grams * gold_price
+        meets_nisab = net_zakatable >= nisab_threshold
+    else:
+        nisab_threshold = None
+        meets_nisab = None
+
+    # 4. If below Nisab — or if there is no Nisab to compare against — no
+    # Zakat figure is asserted for the wealth pool.
     if not meets_nisab:
         wealth_zakat = 0.0
         gold_zakat = 0.0
@@ -659,7 +686,7 @@ async def calculate_zakat(calculation: ZakatCalculation):
         total=total_zakat,
         total_assets=total_assets,
         net_zakatable=round(net_zakatable, 2),
-        nisab_threshold=round(nisab_threshold, 2),
+        nisab_threshold=None if nisab_threshold is None else round(nisab_threshold, 2),
         meets_nisab=meets_nisab,
     )
 

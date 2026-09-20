@@ -16,7 +16,7 @@ MyZakat Zakat Distribution Foundation emerged from a personal commitment to serv
 
 ### Zakat Calculators
 - **Zakat Calculator**: Totals cash, savings, gold, silver, investments, and business assets, subtracts immediate liabilities, compares the result to the nisab, and applies the 2.5% zakat rate to what remains
-- **Zakat on Gold Calculator**: Values gold bullion, coins, and jewellery by weight and karat, and applies the 2.5% rate once the gold nisab is met
+- **Zakat on Gold** (/zakat-on-gold): A guide, not a calculator — how to value gold bullion, coins and jewellery by weight and karat, when the 2.5% rate applies once the gold nisab is met, and where scholars differ on jewellery in personal use. Use the Zakat Calculator to work out an amount
 - **Zakat Al-Fitr Calculator**: Computes one sa' (about 2.5-3 kg) of staple food per household member, due before the Eid al-Fitr prayer, either as food or its cash value
 - **Kaffarah Calculator**: Computes expiation for a deliberately broken Ramadan fast (feeding 60 people per day, or fasting) or a broken oath (feeding 10 people), based on a local food cost the user supplies
 

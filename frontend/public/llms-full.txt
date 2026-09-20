@@ -57,8 +57,8 @@ The donation system accepts one-time and recurring (monthly/annual) contribution
 #### Zakat Calculator (Primary)
 Totals a user's zakatable wealth — cash and bank balances, savings, gold and silver by weight, investment portfolios, business inventory and assets, and agricultural produce and livestock value — then subtracts immediate liabilities (debts currently due). The result is compared against the nisab (the gold or silver threshold; see the Nisab section below) and, if it meets or exceeds it, 2.5% of the total is due. Scholars differ on whether long-term debts such as a mortgage should be deducted in full or only by the instalments due within the year; the calculator leaves that entry to the user rather than deciding for them.
 
-#### Zakat on Gold Calculator
-Values gold bullion, coins, and jewellery from their weight in grams and karat (purity), either priced per karat or converted to pure gold content and priced at the fine gold rate. The total is compared against the gold nisab (87.48 grams), and 2.5% is due once it is met. The contested point named on the page: whether gold jewellery in regular personal use is exempt as a personal effect, or zakatable regardless of use like any other gold — both positions are held by serious scholars, and the page does not choose between them.
+#### Zakat on Gold (guide, not a calculator)
+A written guide with a karat reference table; it has no input fields and computes nothing. It explains how to value gold bullion, coins, and jewellery from their weight in grams and karat (purity), either priced per karat or converted to pure gold content and priced at the fine gold rate. The total is compared against the gold nisab (87.48 grams), and 2.5% is due once it is met. To work out an amount, use the Zakat Calculator. The contested point named on the page: whether gold jewellery in regular personal use is exempt as a personal effect, or zakatable regardless of use like any other gold — both positions are held by serious scholars, and the page does not choose between them.
 
 #### Zakat Al-Fitr Calculator
 Computes the per-person charity due before the Eid al-Fitr prayer at the end of Ramadan: one sa' per household member, taken as roughly 2.5-3 kg of local staple food (the calculator uses 2.75 kg), multiplied by a local food price the user supplies. It is a fixed per-person measure, not a percentage of wealth, and is not tested against the nisab. The contested point named on the page: whether the obligation may be discharged as its cash value rather than as food itself — many scholars, including the position most charities operate on, permit cash; others hold it must be given as food. The page states both and does not adjudicate.
@@ -217,7 +217,7 @@ A: Zakat is 2.5% of your qualifying wealth (savings, gold, silver, investments, 
 | Zakat Education | /zakat-education | Educational content about Zakat rules and obligations |
 | Kaffarah Calculator | /kaffarah-calculator | Kaffarah expiation amount calculator |
 | Zakat Al-Fitr Calculator | /zakat-al-fitr-calculator | End-of-Ramadan Zakat calculator |
-| Zakat on Gold | /zakat-on-gold | Gold-specific Zakat calculation tool |
+| Zakat on Gold | /zakat-on-gold | Guide to valuing gold for Zakat by weight and karat (no calculator on this page) |
 | Stories | /stories | Impact stories from beneficiaries and programs |
 | Events | /events | Community events listing with dates and locations |
 | Programs | /programs | Charitable program categories and details |

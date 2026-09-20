@@ -635,10 +635,15 @@ class TestZakatCalculation:
         assert resp.json()["total"] == 0
 
     def test_liabilities_reduce_wealth_zakat(self, client: TestClient):
-        """Liabilities should reduce wealth-based Zakat."""
+        """Liabilities should reduce wealth-based Zakat.
+
+        A gold price is supplied because there has to be a Nisab to be above
+        and below: without one the endpoint reaches no verdict at all, and the
+        comparison this test makes would be between two zeros.
+        """
         base = {
             "liabilities": 0, "cash": 10000, "receivables": 0, "stocks": 0,
-            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 70,
             "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
             "agriculture_value": 0, "investment_property": 0,
             "other_valuables": 0, "livestock": 0, "other_assets": 0,
@@ -711,10 +716,15 @@ class TestZakatCalculation:
         assert resp.status_code == 422
 
     def test_liabilities_exceed_assets_returns_zero(self, client: TestClient):
-        """If liabilities exceed assets, no Zakat is due."""
+        """If liabilities exceed assets, no Zakat is due.
+
+        A gold price is supplied so that `meets_nisab is False` means what the
+        assertion says -- below the threshold -- rather than "there was no
+        threshold to compare against", which is reported as None.
+        """
         data = {
             "liabilities": 100000, "cash": 50000, "receivables": 0, "stocks": 0,
-            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 70,
             "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
             "agriculture_value": 0, "investment_property": 0,
             "other_valuables": 0, "livestock": 0, "other_assets": 0,
@@ -740,6 +750,57 @@ class TestZakatCalculation:
         assert "net_zakatable" in result
         assert "total_assets" in result
         assert result["nisab_threshold"] == pytest.approx(87.48 * 70, rel=0.01)
+        assert result["meets_nisab"] is True
+
+    def test_no_price_anywhere_yields_no_threshold_and_no_verdict(self, client: TestClient):
+        """With no price from the caller and none cached, nothing is invented.
+
+        This is the live path today: there is no METALS_API_KEY in production,
+        so the cache is empty and the form sends blank price fields. The
+        endpoint used to substitute $65/g here and hand the page a confident
+        "current Nisab threshold of $5,686.20" that was undated, invented, and
+        roughly a third below the real figure.
+        """
+        data = {
+            "liabilities": 0, "cash": 100000, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        result = client.post("/api/donations/calculate-zakat", json=data).json()
+
+        assert result["nisab_threshold"] is None
+        assert result["meets_nisab"] is None
+        # The total needs no price, so it is still reported.
+        assert result["net_zakatable"] == pytest.approx(100000)
+
+    def test_the_cached_price_is_used_when_the_caller_sends_none(self, client: TestClient, db_session):
+        """A blank price field falls back to the figure /api/nisab publishes."""
+        from datetime import datetime
+
+        from models import Setting
+
+        now = datetime.utcnow().isoformat()
+        for key, value in (
+            ("nisab.gold_price_per_gram_usd", "100.0000"),
+            ("nisab.silver_price_per_gram_usd", "2.0000"),
+            ("nisab.as_of", now),
+            ("nisab.fetched_at", now),
+        ):
+            db_session.add(Setting(key=key, value=value))
+        db_session.commit()
+
+        data = {
+            "liabilities": 0, "cash": 100000, "receivables": 0, "stocks": 0,
+            "retirement": 0, "gold_weight": 0, "gold_price_per_gram": 0,
+            "silver_weight": 0, "silver_price_per_gram": 0, "business_goods": 0,
+            "agriculture_value": 0, "investment_property": 0,
+            "other_valuables": 0, "livestock": 0, "other_assets": 0,
+        }
+        result = client.post("/api/donations/calculate-zakat", json=data).json()
+
+        assert result["nisab_threshold"] == pytest.approx(87.48 * 100.0, rel=0.001)
         assert result["meets_nisab"] is True
 
 

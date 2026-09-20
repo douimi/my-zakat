@@ -101,3 +101,40 @@ def test_a_due_refresh_that_succeeds_updates_what_the_endpoint_reports(client, d
     assert body["nisab_gold_usd"] == 17496.0
     assert body["nisab_silver_usd"] == 2449.44
     assert body["source"] == "fresh-source"
+
+
+def test_an_offset_bearing_timestamp_does_not_500_the_endpoint(client, db_session):
+    """/admin/settings lets a human write nisab.as_of by hand.
+
+    An offset-bearing value used to raise TypeError inside build_snapshot,
+    which the router did not guard, and the one URL the llms files point a
+    crawler at answered 500.
+    """
+    _seed(db_session)
+    row = db_session.query(Setting).filter(Setting.key == "nisab.as_of").first()
+    row.value = datetime.utcnow().isoformat() + "+00:00"
+    db_session.commit()
+
+    resp = client.get("/api/nisab")
+
+    assert resp.status_code == 200
+    assert resp.json()["nisab_gold_usd"] == 8748.0
+
+
+def test_a_snapshot_that_cannot_be_built_serves_the_method_not_a_500(client, db_session, monkeypatch):
+    """Whatever goes wrong behind it, this endpoint answers in the stale shape."""
+    import nisab_service
+
+    def boom(_db):
+        raise TypeError("something unforeseen in a settings row")
+
+    monkeypatch.setattr(nisab_service, "build_snapshot", boom)
+
+    resp = client.get("/api/nisab")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_stale"] is True
+    assert body["nisab_gold_usd"] is None
+    assert body["gold_grams"] == 87.48
+    assert body["stale_after_days"] == 7

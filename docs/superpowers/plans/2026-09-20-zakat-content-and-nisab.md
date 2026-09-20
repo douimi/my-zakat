@@ -1394,3 +1394,23 @@ nothing in this plan conflicts with it.
 The foundation still needs to list itself on Charity Navigator and Candid /
 GuideStar and publish its EIN. That is administrative work, not code, and it
 matters more for LLM trust than several of the tasks above.
+
+---
+
+## Amendment, 2026-09-20 — the default masses are 87.48 g / 612.36 g
+
+The steps above that write **85 g / 595 g** — the `nisab_service` module
+docstring, `DEFAULT_GOLD_GRAMS = 85.0` / `DEFAULT_SILVER_GRAMS = 595.0`, and the
+`llms-full.txt` nisab section — were corrected mid-implementation. The shipped
+values are **87.48 g of gold and 612.36 g of silver**, with 85 g / 595 g named
+on every page as the other convention in common use.
+
+The plan is left as written; this note is the correction.
+
+**Why.** `POST /api/donations/calculate-zakat` already measured against 87.48 g.
+Defaulting the service to 85 g would have had `/nisab` publish one threshold
+while the calculator applied another about 2.9% higher — the exact
+contradiction this work set out to remove. The masses stay settings-backed, so
+the foundation can still adopt 85 / 595 without a code change; only the default
+changed, and the calculation endpoint now imports `DEFAULT_GOLD_GRAMS` from
+`nisab_service` so there is one definition rather than two.

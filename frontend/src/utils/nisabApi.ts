@@ -35,13 +35,23 @@ export const fetchNisab = async (): Promise<Nisab | null> => {
   }
 }
 
-/** Whether the page may print a dollar amount at all. */
+/**
+ * Whether the page may print a dollar amount at all.
+ *
+ * The `> 0` is not belt-and-braces. A settings row can be written by an
+ * upstream incident or by hand in the admin, and a zero or negative price
+ * multiplies out to a threshold that is wrong rather than missing — "$0",
+ * under an authoritative date. The backend now withholds those, and this
+ * repeats the judgement so a single bad payload cannot get past both.
+ */
 export const hasUsableFigure = (nisab: Nisab | null): boolean =>
   Boolean(
     nisab &&
       !nisab.is_stale &&
       typeof nisab.nisab_gold_usd === 'number' &&
-      typeof nisab.nisab_silver_usd === 'number',
+      nisab.nisab_gold_usd > 0 &&
+      typeof nisab.nisab_silver_usd === 'number' &&
+      nisab.nisab_silver_usd > 0,
   )
 
 export const formatNisabDate = (isoDate: string | null): string =>

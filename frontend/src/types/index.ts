@@ -107,8 +107,14 @@ export interface ZakatResult {
   total: number
   total_assets: number
   net_zakatable: number
-  nisab_threshold: number
-  meets_nisab: boolean
+  /**
+   * Both null when the backend held no gold price it could vouch for: there is
+   * then no threshold to print and no verdict to report, and the page shows the
+   * method instead. They are nullable so the compiler makes every caller say
+   * what it does in that case.
+   */
+  nisab_threshold: number | null
+  meets_nisab: boolean | null
 }
 
 export interface DonationStats {

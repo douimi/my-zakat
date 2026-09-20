@@ -23,7 +23,7 @@ no calls at all when nobody is visiting.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -83,14 +83,36 @@ def _as_float(raw: str | None, fallback: float | None = None) -> float | None:
         return fallback
 
 
+def _usable(value: float | None) -> bool:
+    """A quantity we are willing to multiply into a published threshold.
+
+    Absent is not the only unusable state: zero and negative are worse, because
+    they produce a figure rather than no figure, and a figure carrying a date
+    reads as authoritative.
+    """
+    return value is not None and value > 0
+
+
 def _as_datetime(raw: str | None) -> datetime | None:
+    """Parse a stored timestamp into a naive UTC datetime.
+
+    Everything this module writes is naive UTC, but a settings row is editable
+    by hand through /admin/settings, and `datetime.fromisoformat` will happily
+    return an offset-aware value from one. Subtracting that from a naive
+    `utcnow()` raises TypeError, which used to surface as a 500 on the one URL
+    the llms files point a crawler at. An offset is therefore converted to UTC
+    and dropped, so every comparison below has two naive operands.
+    """
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw)
+        parsed = datetime.fromisoformat(raw)
     except ValueError:
         logger.warning("Nisab: timestamp %r is not ISO-8601, treating as absent", raw)
         return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def _fetch_prices() -> dict[str, Any]:
@@ -121,7 +143,16 @@ def _fetch_prices() -> dict[str, Any]:
         gold = float(gold) / GRAMS_PER_TROY_OUNCE
         silver = float(silver) / GRAMS_PER_TROY_OUNCE
 
-    return {"gold": float(gold), "silver": float(silver), "source": METALS_API_URL}
+    gold = float(gold)
+    silver = float(silver)
+    # A zero or negative price is not a price. Caching one would publish a
+    # $0 threshold wearing today's date, which is exactly the authoritative
+    # wrong answer this module exists to avoid -- so it is rejected here,
+    # before it reaches the cache, like any other unusable payload.
+    if gold <= 0 or silver <= 0:
+        raise ValueError(f"upstream returned a non-positive price: gold={gold}, silver={silver}")
+
+    return {"gold": gold, "silver": silver, "source": METALS_API_URL}
 
 
 def refresh_if_due(db: Session) -> bool:
@@ -157,16 +188,30 @@ def refresh_if_due(db: Session) -> bool:
 
 def build_snapshot(db: Session) -> dict[str, Any]:
     """The current nisab, or the method alone when the figure cannot be trusted."""
-    gold_grams = _as_float(_get(db, _GOLD_GRAMS), DEFAULT_GOLD_GRAMS)
-    silver_grams = _as_float(_get(db, _SILVER_GRAMS), DEFAULT_SILVER_GRAMS)
+    configured_gold_grams = _as_float(_get(db, _GOLD_GRAMS), DEFAULT_GOLD_GRAMS)
+    configured_silver_grams = _as_float(_get(db, _SILVER_GRAMS), DEFAULT_SILVER_GRAMS)
+    # A non-positive configured mass is a broken setting, not a convention. The
+    # reported method falls back to the code default so no page ever prints
+    # "0 grams of gold", but the figure is withheld below all the same: we do
+    # not know which convention was intended, so we publish no dollar amount.
+    gold_grams = configured_gold_grams if _usable(configured_gold_grams) else DEFAULT_GOLD_GRAMS
+    silver_grams = configured_silver_grams if _usable(configured_silver_grams) else DEFAULT_SILVER_GRAMS
 
     gold_price = _as_float(_get(db, _GOLD_PRICE))
     silver_price = _as_float(_get(db, _SILVER_PRICE))
     as_of = _as_datetime(_get(db, _AS_OF))
 
+    # "Unusable" is wider than "absent". A settings row can be written by an
+    # upstream incident or by hand through /admin/settings, and a zero or
+    # negative price -- or a zero or negative mass -- multiplies out to a
+    # threshold that is wrong rather than missing. A wrong figure carrying a
+    # date reads as authoritative, so any of these withholds the money exactly
+    # as an expired price does.
     is_stale = (
-        gold_price is None
-        or silver_price is None
+        not _usable(gold_price)
+        or not _usable(silver_price)
+        or not _usable(configured_gold_grams)
+        or not _usable(configured_silver_grams)
         or as_of is None
         or datetime.utcnow() - as_of > timedelta(days=STALE_AFTER_DAYS)
     )

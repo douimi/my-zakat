@@ -14,10 +14,15 @@ import { HelmetProvider } from 'react-helmet-async'
 import ZakatCalculator from '../ZakatCalculator'
 import { fetchNisab } from '../../utils/nisabApi'
 import type { Nisab as NisabData } from '../../utils/nisabApi'
+import { donationsAPI } from '../../utils/api'
 
 vi.mock('../../utils/nisabApi', async (importActual) => ({
   ...(await importActual<typeof import('../../utils/nisabApi')>()),
   fetchNisab: vi.fn(),
+}))
+
+vi.mock('../../utils/api', () => ({
+  donationsAPI: { calculateZakat: vi.fn() },
 }))
 
 /** A payload the backend is willing to stand behind. */
@@ -84,6 +89,38 @@ describe('Zakat calculator page', () => {
     renderPage()
 
     expect(await screen.findByText(/September 20, 2026/)).toBeInTheDocument()
+  })
+
+  it('seeds a four-decimal price as something the field will accept', async () => {
+    // The price inputs are step="0.01". A seeded 95.1234 is a stepMismatch, so
+    // the browser blocks submission and the handler never runs -- on the one
+    // path that exists only when we do hold a live price.
+    vi.mocked(fetchNisab).mockResolvedValue({ ...freshNisab(), gold_price_per_gram_usd: 95.1234 })
+    renderPage()
+
+    expect(await screen.findByDisplayValue('95.12')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('95.1234')).not.toBeInTheDocument()
+  })
+
+  it('shows no threshold at all when the backend could not reach one', async () => {
+    // The live path today: no price from us, none from the user. The backend
+    // returns a null threshold and a null verdict rather than the $65/g guess
+    // it used to substitute, and the page must not print a figure or a verdict
+    // of its own on top of that.
+    const user = userEvent.setup()
+    vi.mocked(fetchNisab).mockResolvedValue(null)
+    vi.mocked(donationsAPI.calculateZakat).mockResolvedValue({
+      wealth: 0, gold: 0, silver: 0, business_goods: 0, agriculture: 0, total: 0,
+      total_assets: 100000, net_zakatable: 100000,
+      nisab_threshold: null, meets_nisab: null,
+    })
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /calculate/i }))
+
+    expect(await screen.findByText(/no threshold to compare against/i)).toBeInTheDocument()
+    expect(screen.queryByText(/\$5,686/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/No Zakat Due/i)).not.toBeInTheDocument()
   })
 
   it('titles itself with the current year', async () => {

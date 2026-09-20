@@ -37,6 +37,15 @@ describe('hasUsableFigure', () => {
     // Defence in depth: the page must never print "$null" or "$0" as a threshold.
     expect(hasUsableFigure({ ...fresh, nisab_gold_usd: null })).toBe(false)
   })
+
+  it('is false for a zero or negative amount, which is a figure and not a gap', () => {
+    // A bad settings row — an upstream incident, or an admin edit — used to
+    // reach the page as "Gold nisab $0" under an authoritative date.
+    expect(hasUsableFigure({ ...fresh, nisab_gold_usd: 0 })).toBe(false)
+    expect(hasUsableFigure({ ...fresh, nisab_silver_usd: 0 })).toBe(false)
+    expect(hasUsableFigure({ ...fresh, nisab_gold_usd: -437.4 })).toBe(false)
+    expect(hasUsableFigure({ ...fresh, nisab_silver_usd: -1 })).toBe(false)
+  })
 })
 
 describe('fetchNisab', () => {
