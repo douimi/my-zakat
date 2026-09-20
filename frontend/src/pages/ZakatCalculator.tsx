@@ -1,18 +1,45 @@
-import { useState } from 'react'
+/**
+ * /zakat-calculator — the calculator, plus the content that makes it findable.
+ *
+ * The page used to seed its gold and silver price fields from two hardcoded
+ * constants. Every figure it produced was therefore built on a guess wearing a
+ * comment that told the user to go and check the real rate elsewhere. The
+ * prices now come from /api/nisab at render time, and when we do not hold a
+ * price we can vouch for the fields start empty and say so. There is no
+ * fallback price, under any name: a made-up price produces a made-up zakat
+ * figure, and that is worse than an empty box.
+ */
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
-import { Calculator, DollarSign, TrendingUp, Info, ArrowRight, CheckCircle, AlertCircle, X, RotateCcw } from 'lucide-react'
+import { Calculator, DollarSign, TrendingUp, Info, ArrowRight, CheckCircle, AlertCircle, X, RotateCcw, Scale } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import type { ZakatCalculation, ZakatResult } from '../types'
 import SEOHead from '../components/SEOHead'
+import {
+  fetchNisab,
+  hasUsableFigure,
+  formatNisabDate,
+  formatUsd,
+  type Nisab as NisabData,
+} from '../utils/nisabApi'
+import {
+  currentYear,
+  getBreadcrumbJsonLd,
+  getFaqJsonLd,
+  getWebApplicationJsonLd,
+  getHowToJsonLd,
+} from '../utils/seo'
 
-// Default market prices — used as initial values, the user can override.
-// These are conservative reference values; users should check current rates.
-const DEFAULT_GOLD_PRICE_PER_GRAM = 95.00
-const DEFAULT_SILVER_PRICE_PER_GRAM = 1.10
-
-// Nisab gold weight in grams (standard scholarly value)
+// Nisab gold weight in grams — the Hanafi conversion of 20 mithqal, and the
+// figure the backend compares against. /nisab sets out the other convention.
 const NISAB_GOLD_GRAMS = 87.48
+
+const PRICE_HINT = "Enter today's price per gram"
+
+const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
+const HEADING = 'text-2xl font-heading font-bold text-gray-900 mb-4'
+const PROSE = 'text-gray-700 leading-relaxed'
 
 const formatUSD = (n: number) =>
   new Intl.NumberFormat('en-US', {
@@ -27,9 +54,12 @@ const ZakatCalculator = () => {
   const [isCalculating, setIsCalculating] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showResultModal, setShowResultModal] = useState(false)
+  const [nisab, setNisab] = useState<NisabData | null>(null)
+  const [nisabLoaded, setNisabLoaded] = useState(false)
   const navigate = useNavigate()
 
-  const { register, handleSubmit, watch, reset } = useForm<ZakatCalculation>({
+  // No price defaults. A field we cannot fill honestly starts empty.
+  const { register, handleSubmit, watch, reset, setValue } = useForm<ZakatCalculation>({
     defaultValues: {
       liabilities: 0,
       cash: 0,
@@ -37,9 +67,7 @@ const ZakatCalculator = () => {
       stocks: 0,
       retirement: 0,
       gold_weight: 0,
-      gold_price_per_gram: DEFAULT_GOLD_PRICE_PER_GRAM,
       silver_weight: 0,
-      silver_price_per_gram: DEFAULT_SILVER_PRICE_PER_GRAM,
       business_goods: 0,
       agriculture_value: 0,
       investment_property: 0,
@@ -49,15 +77,66 @@ const ZakatCalculator = () => {
     },
   })
 
-  const goldPrice = watch('gold_price_per_gram') || DEFAULT_GOLD_PRICE_PER_GRAM
-  const silverPrice = watch('silver_price_per_gram') || DEFAULT_SILVER_PRICE_PER_GRAM
-  const currentNisab = NISAB_GOLD_GRAMS * goldPrice
+  useEffect(() => {
+    let cancelled = false
+    void fetchNisab().then((snapshot) => {
+      if (cancelled) return
+      setNisab(snapshot)
+      setNisabLoaded(true)
+      // Seed the price inputs only from a figure we can vouch for. Falling
+      // back to a hardcoded price is how this page used to produce confident
+      // numbers from a guess.
+      if (hasUsableFigure(snapshot) && snapshot) {
+        setValue('gold_price_per_gram', snapshot.gold_price_per_gram_usd as number)
+        setValue('silver_price_per_gram', snapshot.silver_price_per_gram_usd as number)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [setValue])
+
+  // The single gate on printing money anywhere on this page.
+  const showFigure = nisabLoaded && hasUsableFigure(nisab)
+
+  const goldPrice = watch('gold_price_per_gram')
+  const hasGoldPrice = typeof goldPrice === 'number' && Number.isFinite(goldPrice) && goldPrice > 0
+  const currentNisab = hasGoldPrice ? NISAB_GOLD_GRAMS * goldPrice : null
+  const usingLivePrice =
+    showFigure && Boolean(nisab) && goldPrice === nisab?.gold_price_per_gram_usd
+
+  const year = currentYear()
+
+  const reseedPrices = () => {
+    if (hasUsableFigure(nisab) && nisab) {
+      setValue('gold_price_per_gram', nisab.gold_price_per_gram_usd as number)
+      setValue('silver_price_per_gram', nisab.silver_price_per_gram_usd as number)
+    }
+  }
 
   const onSubmit = async (data: ZakatCalculation) => {
     setSubmitError(null)
+
+    // An empty price field is not a price of zero. Holding metal but sending a
+    // blank price would silently drop it out of the total.
+    const missingGoldPrice = data.gold_weight > 0 && !(data.gold_price_per_gram > 0)
+    const missingSilverPrice = data.silver_weight > 0 && !(data.silver_price_per_gram > 0)
+    if (missingGoldPrice || missingSilverPrice) {
+      setSubmitError(
+        'Add a price per gram for the metal you hold. We will not substitute a price of our own.',
+      )
+      return
+    }
+
+    // Blank number inputs read back as NaN; send zero rather than null.
+    const payload: ZakatCalculation = { ...data }
+    ;(Object.keys(payload) as (keyof ZakatCalculation)[]).forEach((key) => {
+      if (!Number.isFinite(payload[key])) payload[key] = 0
+    })
+
     setIsCalculating(true)
     try {
-      const calculationResult = await donationsAPI.calculateZakat(data)
+      const calculationResult = await donationsAPI.calculateZakat(payload)
       setResult(calculationResult)
       setShowResultModal(true)
     } catch (error: any) {
@@ -75,7 +154,7 @@ const ZakatCalculator = () => {
   // Field definition: `unit` distinguishes USD ($) from grams (g)
   type FieldDef = { name: keyof ZakatCalculation; label: string; placeholder: string; unit: 'usd' | 'grams' }
 
-  const formSections: { title: string; icon: typeof TrendingUp; fields: FieldDef[] }[] = [
+  const formSections: { title: string; icon: typeof TrendingUp; note?: string | null; fields: FieldDef[] }[] = [
     {
       title: 'Liabilities & Debts',
       icon: TrendingUp,
@@ -96,11 +175,15 @@ const ZakatCalculator = () => {
     {
       title: 'Precious Metals',
       icon: Calculator,
+      note: showFigure
+        ? null
+        : 'Live gold and silver prices are temporarily unavailable, so these two fields have been left'
+          + " blank rather than filled with a guess — enter today's price per gram from a source you trust.",
       fields: [
         { name: 'gold_weight', label: 'Gold Weight (grams)', placeholder: '0', unit: 'grams' },
-        { name: 'gold_price_per_gram', label: 'Gold Price per Gram', placeholder: String(DEFAULT_GOLD_PRICE_PER_GRAM), unit: 'usd' },
+        { name: 'gold_price_per_gram', label: 'Gold Price per Gram', placeholder: showFigure ? '0.00' : PRICE_HINT, unit: 'usd' },
         { name: 'silver_weight', label: 'Silver Weight (grams)', placeholder: '0', unit: 'grams' },
-        { name: 'silver_price_per_gram', label: 'Silver Price per Gram', placeholder: String(DEFAULT_SILVER_PRICE_PER_GRAM), unit: 'usd' },
+        { name: 'silver_price_per_gram', label: 'Silver Price per Gram', placeholder: showFigure ? '0.00' : PRICE_HINT, unit: 'usd' },
       ],
     },
     {
@@ -125,12 +208,83 @@ const ZakatCalculator = () => {
 
   const showDonateButton = result && result.meets_nisab && result.total >= 1
 
+  const faqs = [
+    {
+      question: 'How much zakat do I pay?',
+      answer:
+        'The rate for zakat al-mal is 2.5% of the qualifying wealth you have held for a full lunar year, and it applies to the whole of that wealth rather than only to the part above the threshold. The arithmetic is simply your net qualifying total multiplied by 0.025. Produce from the land is treated differently, at 5% or 10% depending on how the crop was irrigated, and livestock is counted by head against its own tables rather than by value.',
+    },
+    {
+      question: 'What counts as zakatable wealth?',
+      answer:
+        'Broadly, wealth that grows or is held as a store of value: cash, money you have lent out and expect back, gold and silver in any form, shares and funds, accessible retirement balances, stock held for sale, and property bought to resell. Personal belongings are not counted, and neither is the home you live in, the car you drive or the tools you work with.',
+    },
+    {
+      question: 'Do I subtract my debts before calculating zakat?',
+      answer:
+        'Scholars differ on this, and the difference is real. Many hold that debts immediately due — this month’s rent, an overdue bill — come off your zakatable wealth before the 2.5% is applied. Others hold that a long-term debt such as a mortgage is not deducted in full, since setting a twenty-year liability against a single year’s wealth would remove almost everyone from zakat, and deduct only the instalments due within the year. We do not adjudicate between them; ask a scholar you trust.',
+    },
+    {
+      question: 'Does zakat apply to my house or my car?',
+      answer:
+        'Not where they are for your own use. The home you live in, the car you drive, your furniture and your clothes are personal necessities, and the common position is that no zakat is due on them however much they are worth. The picture changes when the same asset is held for gain: a second property bought to resell is trading stock and is zakatable at its value, and scholars differ over how a building held to rent out should be treated.',
+    },
+    {
+      question: 'When is zakat due?',
+      answer:
+        'Zakat falls due once a full lunar year — a hawl, roughly 354 days — has passed over wealth that has stayed at or above the nisab. The date is personal to you: the anniversary of the day your wealth first reached the threshold, not a fixed date in the calendar. Many people set that anniversary in Ramadan so it is easy to remember, and paying early is widely accepted.',
+    },
+    {
+      question: 'What if my wealth went up and down during the year?',
+      answer:
+        'Fluctuation during the year does not break the hawl, so long as your wealth did not fall below the nisab. The commonly taught approach is to compare against the threshold at the start and the end of the year, ignore the peaks and troughs between, and pay 2.5% of what you actually hold on your anniversary. If your wealth did drop below the nisab and later rose above it, many scholars hold that a new lunar year begins from the day it crossed back.',
+    },
+  ]
+
+  const jsonLd = [
+    getBreadcrumbJsonLd([
+      { name: 'Home', path: '/' },
+      { name: 'Zakat Calculator', path: '/zakat-calculator' },
+    ]),
+    getFaqJsonLd(faqs),
+    getWebApplicationJsonLd({
+      name: 'Zakat Calculator',
+      description:
+        'A free zakat calculator that totals your cash, gold, silver, investments and business assets, compares them against the current nisab, and works out the 2.5% due.',
+      path: '/zakat-calculator',
+    }),
+    getHowToJsonLd({
+      name: 'How to calculate your zakat',
+      description:
+        'Four steps from your assets to the amount of zakat due, using the current nisab threshold.',
+      steps: [
+        {
+          name: 'Add up your zakatable assets',
+          text: 'Cash, savings, gold, silver, investments held for resale, and business stock.',
+        },
+        {
+          name: 'Subtract what you owe',
+          text: 'Immediate debts that are due.',
+        },
+        {
+          name: 'Compare the total against the nisab',
+          text: 'The threshold set by 85 g of gold or 595 g of silver at today’s price.',
+        },
+        {
+          name: 'Pay 2.5% if you are at or above it',
+          text: 'And if you are below, no zakat is due this year.',
+        },
+      ],
+    }),
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <SEOHead
-        title="Zakat Calculator"
-        description="Calculate your Zakat obligation accurately with our comprehensive Zakat calculator. Enter your savings, gold, silver, investments, and business assets to determine your annual Zakat."
+        title={`Zakat Calculator ${year} — How Much Zakat Do I Owe?`}
+        description="Work out what zakat you owe. Enter your cash, savings, gold, silver, investments and business assets, and see them compared against the current nisab threshold."
         canonicalPath="/zakat-calculator"
+        jsonLd={jsonLd}
       />
       <div className="section-container">
         {/* Header */}
@@ -139,11 +293,11 @@ const ZakatCalculator = () => {
             <Calculator className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-4">
-            Zakat Calculator
+            Zakat Calculator {year} — How Much Zakat Do I Owe?
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Calculate your Zakat obligation accurately according to Islamic principles.
-            Our calculator follows traditional scholarly guidelines and applies the Nisab threshold.
+            Total your cash, gold, investments and business assets, see them measured against the
+            current nisab, and find the 2.5% that is due.
           </p>
         </div>
 
@@ -158,6 +312,13 @@ const ZakatCalculator = () => {
                       <section.icon className="w-6 h-6 text-primary-600 mr-3" />
                       <h3 className="text-xl font-semibold text-gray-900">{section.title}</h3>
                     </div>
+
+                    {section.note && (
+                      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                        <p className="text-sm text-amber-900">{section.note}</p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {section.fields.map((field) => (
@@ -216,6 +377,7 @@ const ZakatCalculator = () => {
                     type="button"
                     onClick={() => {
                       reset()
+                      reseedPrices()
                       setResult(null)
                       setSubmitError(null)
                       setShowResultModal(false)
@@ -231,6 +393,60 @@ const ZakatCalculator = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* What the total is being measured against — shown above the
+                result, so the threshold is never implicit. */}
+            <div className="card bg-primary-50 border-primary-200">
+              <div className="flex items-center mb-4">
+                <Scale className="w-6 h-6 text-primary-600 mr-3" aria-hidden="true" />
+                <h3 className="text-lg font-semibold text-gray-900">What your total is compared against</h3>
+              </div>
+
+              {!nisabLoaded && (
+                <p className="text-sm text-gray-700">Checking the latest gold and silver prices…</p>
+              )}
+
+              {nisabLoaded && (
+                <div className="space-y-3 text-sm text-gray-700">
+                  {currentNisab !== null ? (
+                    <p>
+                      Compared against the gold nisab of {formatUSD(currentNisab)} — {NISAB_GOLD_GRAMS} grams
+                      of gold at {formatUSD(goldPrice)} a gram.
+                    </p>
+                  ) : (
+                    <p>
+                      We hold no gold price we can vouch for, so there is no threshold to show yet. The
+                      nisab is {NISAB_GOLD_GRAMS} grams of gold, or 595 grams of silver, valued at the
+                      market price on the day you work it out.
+                    </p>
+                  )}
+
+                  {usingLivePrice && (
+                    <p>Live gold and silver prices, as of {formatNisabDate(nisab?.as_of ?? null)}.</p>
+                  )}
+
+                  {nisabLoaded && !usingLivePrice && hasGoldPrice && (
+                    <p>That uses the price you entered, not a live figure of ours.</p>
+                  )}
+
+                  {showFigure && nisab && (
+                    <p>
+                      Many scholars use the silver threshold instead, which is the lower of the two:{' '}
+                      {formatUsd(nisab.nisab_silver_usd as number)} for 595 grams of silver. Which
+                      threshold applies to you is a point on which scholars differ.
+                    </p>
+                  )}
+
+                  <Link
+                    to="/nisab"
+                    className="text-primary-700 hover:text-primary-800 font-medium inline-flex items-center"
+                  >
+                    How the nisab is worked out
+                    <ArrowRight className="ml-2 w-4 h-4" />
+                  </Link>
+                </div>
+              )}
+            </div>
+
             {/* Results */}
             {result && (
               <div className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-200">
@@ -320,13 +536,9 @@ const ZakatCalculator = () => {
                   wealth that has been in your possession for a full lunar year.
                 </p>
                 <p>
-                  <strong>Nisab threshold:</strong> Zakat is due only if your net zakatable wealth
-                  exceeds the Nisab (equivalent to {NISAB_GOLD_GRAMS} grams of gold).
-                </p>
-                <p>
-                  <strong>At your gold price ({formatUSD(goldPrice)}/g):</strong>
-                  <br />
-                  Current Nisab = {formatUSD(currentNisab)}
+                  <strong>Nisab threshold:</strong> Zakat is due only once your net zakatable wealth
+                  reaches the nisab. This calculator measures against the gold threshold; the silver
+                  one is lower.
                 </p>
               </div>
 
@@ -346,13 +558,137 @@ const ZakatCalculator = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">💡 Quick Tips</h3>
               <ul className="space-y-2 text-sm text-gray-700">
                 <li>• Include all cash, savings, and investments</li>
-                <li>• Liabilities are automatically deducted</li>
-                <li>• Update gold/silver prices to current market rates</li>
+                <li>• Liabilities are deducted from your total</li>
+                <li>• Check the metal prices against a source you trust</li>
                 <li>• Business inventory counts as zakatable wealth</li>
                 <li>• Personal residence is typically not included</li>
               </ul>
             </div>
           </div>
+        </div>
+
+        {/* ------------------------------------------------------------------
+            The content. Written to the editorial rules: it states what is
+            agreed, names what is not, and rules on nothing.
+           ------------------------------------------------------------------ */}
+        <div className="max-w-4xl mx-auto mt-12 sm:mt-16 space-y-6 sm:space-y-8">
+          <section className={CARD}>
+            <h2 className={HEADING}>What this calculator covers — and what it does not</h2>
+            <p className={PROSE}>
+              This works out zakat al-mal: the annual charge on wealth you have held for a full lunar
+              year. It takes cash, money owed to you, shares and funds, retirement savings, gold and
+              silver by weight, business stock, property bought to resell, agricultural produce and
+              livestock value, subtracts your liabilities, and applies the rate to what is left.
+            </p>
+            <p className={`${PROSE} mt-4`}>
+              It does not cover zakat al-fitr, the per-person amount due before the Eid prayer at the
+              end of Ramadan, and it does not apply the detailed livestock tables, which count animals
+              by head and species rather than by value. It also cannot know which school you follow, so
+              treat the number it gives as a starting point rather than a verdict.
+            </p>
+          </section>
+
+          <section className={CARD}>
+            <h2 className={HEADING}>The rule in plain language</h2>
+            <p className={PROSE}>
+              Zakat is due at 2.5% of qualifying wealth once two conditions are met. The first is time:
+              the wealth must have been yours for a full lunar year — a hawl, about 354 days, not 365.
+              The second is amount: it must sit at or above the nisab, the threshold defined by the
+              value of a set weight of gold or of silver.
+            </p>
+            <p className={`${PROSE} mt-4`}>
+              At or above the threshold, the 2.5% applies to the whole of that wealth, not only to the
+              part above the line. Below it, no zakat is due this year.
+            </p>
+          </section>
+
+          <section className={CARD}>
+            <h2 className={HEADING}>What counts, and what does not</h2>
+            <p className={PROSE}>
+              Zakatable wealth is broadly wealth that grows or is held as a store of value: cash,
+              savings, receivables, gold and silver in any form, shares, accessible retirement
+              balances, goods held for sale, and property bought to resell. What you hold for your own
+              use is not counted — your home, your car, your furniture, your clothes and the tools of
+              your trade.
+            </p>
+            <p className={`${PROSE} mt-4`}>
+              <strong>Debts are the point on which scholars differ.</strong> Many hold that debts
+              immediately due — this month&apos;s rent, an overdue bill — come off your
+              zakatable wealth before the rate is applied. Others hold that a long-term debt such as a
+              mortgage is not deducted in full, since setting a twenty-year liability against a single
+              year&apos;s wealth would remove almost everyone from zakat, and deduct only the
+              instalments falling due within the year. Both positions are held by serious scholars.
+              This page does not choose between them: the calculator subtracts whatever you enter in
+              the liabilities field, so that entry is yours to make.
+            </p>
+          </section>
+
+          <section className={CARD}>
+            <h2 className={HEADING}>The nisab this calculator uses</h2>
+            <p className={PROSE}>
+              The threshold your total is measured against is shown beside the result above, with the
+              date the price behind it was taken. We print a dollar figure only while that price is
+              recent enough for us to stand behind; when it is not, the price fields stay empty and
+              the method is shown instead.
+            </p>
+            <p className={`${PROSE} mt-4`}>
+              This calculator uses the gold threshold, at 87.48 grams. The silver threshold, 595 grams,
+              works out much lower, so it brings more people into zakat, and many scholars prefer it
+              for that reason. The{' '}
+              <Link to="/nisab" className="text-primary-700 underline hover:text-primary-800">
+                nisab page
+              </Link>{' '}
+              sets out both, along with the competing weight conventions, and carries the current
+              figures.
+            </p>
+          </section>
+
+          {/* A worked example, withheld whenever the page is withholding real
+              money. We do not show invented arithmetic on the same screen where
+              we have just declined to show a figure we could not vouch for. */}
+          {showFigure && (
+            <section className={CARD}>
+              <h2 className={HEADING}>A worked example</h2>
+              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
+                <p className="text-sm text-gray-600">
+                  Illustrative only. The round numbers below are invented to show the arithmetic, not
+                  market data. Use the dated threshold beside the result above.
+                </p>
+              </div>
+              <p className={PROSE}>
+                Suppose you hold $10,000 in savings that has been with you for a full lunar year and
+                owe $2,000 due immediately. On the view that immediately due debts are deducted, your
+                net zakatable wealth is $8,000. If the silver nisab works out at around $640 that day,
+                $8,000 is well above it, so zakat is due: 2.5% of $8,000 is $200.
+              </p>
+              <p className={`${PROSE} mt-4`}>
+                On the other view of that $2,000 — that a long-term liability is not set against
+                a single year&apos;s wealth — the base would be $10,000 and the amount due $250. That
+                $50 gap is why it is worth asking someone qualified which treatment applies to you.
+              </p>
+            </section>
+          )}
+
+          <section className={CARD}>
+            <h2 className={HEADING}>Common questions</h2>
+            <div className="divide-y divide-gray-200">
+              {faqs.map((faq) => (
+                <div key={faq.question} className="py-5 first:pt-0 last:pb-0">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
+                  <p className={PROSE}>{faq.answer}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 sm:p-8">
+            <p className="text-amber-900 leading-relaxed">
+              This page is general guidance, not a religious ruling. Zakat depends on your
+              circumstances — for anything specific to your situation, please ask a qualified
+              scholar.
+            </p>
+          </section>
         </div>
       </div>
 
