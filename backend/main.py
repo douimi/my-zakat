@@ -16,7 +16,7 @@ from models import User, Setting
 from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
 from audit_middleware import AuditMiddleware
-from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media, campaigns, marketing, marketing_templates, marketing_segments, marketing_campaigns, fundraising_projects, tracking, project_proposals, proposal_portal, media_library, media_library_files
+from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media, campaigns, marketing, marketing_templates, marketing_segments, marketing_campaigns, fundraising_projects, tracking, project_proposals, proposal_portal, media_library, media_library_files, nisab
 
 # Check if running in test mode
 TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
@@ -231,6 +231,7 @@ app.include_router(proposal_portal.router, prefix="/api/project-proposals/portal
 app.include_router(project_proposals.router, prefix="/api/project-proposals", tags=["project-proposals"])
 app.include_router(fundraising_projects.router, prefix="/api/fundraising-projects", tags=["fundraising-projects"])
 app.include_router(tracking.router, prefix="/api/tracking", tags=["tracking"])
+app.include_router(nisab.router, prefix="/api/nisab", tags=["nisab"])
 
 @app.get("/")
 async def root():
