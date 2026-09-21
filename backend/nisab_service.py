@@ -17,12 +17,26 @@ hardcoded, so the foundation can follow whichever convention it holds without
 a code change -- and the page that displays them says which one is in use.
 
 Refreshing is lazy: the endpoint serves the cache and refreshes it when it is
-older than REFRESH_AFTER_HOURS. No scheduler, nothing to notice has died, and
-no calls at all when nobody is visiting.
+due. No scheduler, nothing to notice has died, and no calls at all when nobody
+is visiting.
+
+"Due" is two intervals, not one, because a success and a failure are not the
+same event. A successful price is good for REFRESH_AFTER_HOURS (24) -- metal
+prices do not move fast enough to justify more. A *failed* attempt only holds
+the next attempt off for RETRY_AFTER_MINUTES (60), which is long enough not to
+hammer an upstream that is down or rate-limiting, and short enough that a
+misconfiguration heals itself. That distinction is the whole point: a missing
+METALS_API_KEY used to burn the full 24 hours, so fixing the key and
+redeploying still left the site showing the method for another day unless
+somebody cleared the row by hand. Now the two are told apart -- nisab.as_of is
+the last success, nisab.fetched_at the last attempt -- and only a real success
+buys a full day of quiet.
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -42,11 +56,66 @@ DEFAULT_GOLD_GRAMS = 87.48
 DEFAULT_SILVER_GRAMS = 612.36
 
 REFRESH_AFTER_HOURS = 24
+# How long a *failed* attempt holds off the next one. Deliberately much shorter
+# than REFRESH_AFTER_HOURS: a broken upstream must not be hammered, but a
+# broken configuration must be allowed to notice it has been fixed.
+RETRY_AFTER_MINUTES = 60
 STALE_AFTER_DAYS = 7
 
 METALS_API_KEY = os.getenv("METALS_API_KEY", "")
 METALS_API_URL = os.getenv("METALS_API_URL", "https://api.metals.dev/v1/latest")
 FETCH_TIMEOUT_SECONDS = 10
+
+
+class _RedactApiKey(logging.Filter):
+    """Keep the metals API key out of the logs.
+
+    httpx logs the full request URL at INFO, and metals.dev only accepts the
+    key as a query parameter -- it answers 401 to an X-API-KEY header. Without
+    this filter the key would be written to the backend log on every refresh
+    and shipped on to Loki, where it would long outlive any rotation.
+
+    A filter rather than a raised log level: it is thread-safe and permanent,
+    and it silences nothing -- it rewrites the one substring that must not be
+    written down and passes every record through.
+    """
+
+    _PATTERN = re.compile(r"(api_key=)[^&\s\"\']+")
+
+    def _redact(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self._PATTERN.sub(r"\1***", value)
+        # The argument that actually carries the key is httpx's `request.url`,
+        # an httpx.URL object rather than a str (httpx 0.28: _client.py logs
+        # 'HTTP Request: %s %s "%s %d %s"' with request.url as an argument).
+        # Testing isinstance(str) alone would therefore redact nothing, so
+        # anything whose text form carries the key is rendered to its redacted
+        # text. A %d argument can never contain "api_key=" and is left as the
+        # number it is, so the record still formats.
+        text = str(value)
+        if "api_key=" in text:
+            return self._PATTERN.sub(r"\1***", text)
+        return value
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._PATTERN.sub(r"\1***", record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: self._redact(v) for k, v in record.args.items()}
+            else:
+                record.args = tuple(self._redact(arg) for arg in record.args)
+        return True
+
+
+# Attached at import time, so both are in place before the first refresh can
+# run. Two loggers, because the key escapes by two routes: httpx logs the
+# request URL on every call, and this module logs the exception on a failure --
+# an httpx.HTTPStatusError renders as "Client error '401 Unauthorized' for url
+# '...api_key=...'", so a 401 (exactly what a wrong or expired key produces)
+# would otherwise write the key out through nisab_service's own logger.
+logging.getLogger("httpx").addFilter(_RedactApiKey())
+logger.addFilter(_RedactApiKey())
 
 _GOLD_PRICE = "nisab.gold_price_per_gram_usd"
 _SILVER_PRICE = "nisab.silver_price_per_gram_usd"
@@ -156,18 +225,34 @@ def _fetch_prices() -> dict[str, Any]:
 
 
 def refresh_if_due(db: Session) -> bool:
-    """Refresh the cached prices when they are older than the interval.
+    """Refresh the cached prices when they are due.
+
+    Two intervals, because a success and a failure mean different things (see
+    the module docstring). A price that succeeded less than REFRESH_AFTER_HOURS
+    ago needs nothing. Otherwise an attempt is made, unless one was already
+    made within RETRY_AFTER_MINUTES -- that shorter window is the anti-hammering
+    backoff, and it is what lets a fixed configuration recover on its own
+    instead of waiting out a full day.
 
     Returns True only when the cache was actually updated. A failure of any
     kind -- no key, timeout, non-200, unusable payload -- is logged and leaves
     the previous values exactly as they were, then still stamps the attempt so
-    a broken upstream is not called again before the interval is out.
+    a broken upstream is not called again before the retry window is out.
     """
-    fetched_at = _as_datetime(_get(db, _FETCHED_AT))
-    if fetched_at and datetime.utcnow() - fetched_at < timedelta(hours=REFRESH_AFTER_HOURS):
+    now = datetime.utcnow()
+
+    # nisab.as_of is the last *success*. Fresh prices need no refresh at all.
+    as_of = _as_datetime(_get(db, _AS_OF))
+    if as_of and now - as_of < timedelta(hours=REFRESH_AFTER_HOURS):
         return False
 
-    now = datetime.utcnow()
+    # nisab.fetched_at is the last *attempt*, successful or not. Reaching here
+    # means the prices are due, so this gate is purely about not retrying a
+    # failing upstream more often than once an hour.
+    fetched_at = _as_datetime(_get(db, _FETCHED_AT))
+    if fetched_at and now - fetched_at < timedelta(minutes=RETRY_AFTER_MINUTES):
+        return False
+
     try:
         prices = _fetch_prices()
     except Exception as exc:

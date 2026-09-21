@@ -9,19 +9,25 @@ from datetime import datetime, timedelta
 from models import Setting
 
 
-def _seed(db, gold="100.00", silver="2.00", fetched_hours_ago=0.0):
+def _seed(db, gold="100.00", silver="2.00", fetched_hours_ago=0.0,
+          as_of_hours_ago=None):
     """Seed a usable cache.
 
-    `fetched_hours_ago` is separate from the price timestamp on purpose: a test
-    that wants to exercise the refresh path needs `fetched_at` old enough to be
-    due while `as_of` is still fresh enough to be trusted.
+    The two timestamps mean different things to refresh_if_due: `nisab.as_of`
+    is the last success, and prices younger than REFRESH_AFTER_HOURS are not
+    refreshed at all; `nisab.fetched_at` is the last attempt, and it only
+    governs the shorter retry backoff. So a test that wants the refresh path
+    must age `as_of` -- by default it moves with `fetched_hours_ago`, which
+    keeps it far inside STALE_AFTER_DAYS and therefore still trustworthy.
     """
     now = datetime.utcnow()
+    as_of_age = fetched_hours_ago if as_of_hours_ago is None else as_of_hours_ago
     fetched = (now - timedelta(hours=fetched_hours_ago)).isoformat()
+    as_of = (now - timedelta(hours=as_of_age)).isoformat()
     for key, value in (
         ("nisab.gold_price_per_gram_usd", gold),
         ("nisab.silver_price_per_gram_usd", silver),
-        ("nisab.as_of", now.isoformat()),
+        ("nisab.as_of", as_of),
         ("nisab.fetched_at", fetched),
         ("nisab.source", "test-source"),
     ):
@@ -67,8 +73,9 @@ def test_with_no_prices_it_reports_the_method_and_no_figure(client, db_session):
 def test_a_broken_upstream_does_not_break_the_endpoint(client, db_session, monkeypatch):
     """The refresh must be attempted and must fail, leaving the cache intact.
 
-    Seeding `fetched_at` a day old is what makes the refresh due; without it
-    the freshness check short-circuits and this test proves nothing.
+    Seeding the cache a day old is what makes the refresh due; without it the
+    freshness check short-circuits and this test proves nothing. A day old is
+    still well inside STALE_AFTER_DAYS, so the figure is served regardless.
     """
     import nisab_service
 
