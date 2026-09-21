@@ -1,6 +1,7 @@
 """The nisab figure: its arithmetic, its cache, and its refusal to go stale."""
 from datetime import datetime, timedelta
 
+import httpx
 import pytest
 
 from models import Setting
@@ -347,6 +348,131 @@ def test_a_negative_upstream_price_is_rejected_too(monkeypatch):
 
     with pytest.raises(ValueError, match="non-positive"):
         nisab_service._fetch_prices()
+
+
+# ---------------------------------------------------------------------------
+# The key in the logs. metals.dev only accepts the key as a query parameter
+# (an X-API-KEY header answers 401), and httpx logs the full request URL at
+# INFO -- which this deployment ships on to Loki, where it would outlive any
+# rotation. A filter on the httpx logger redacts it.
+# ---------------------------------------------------------------------------
+
+
+def test_the_api_key_never_reaches_the_logs(db_session, monkeypatch, caplog):
+    """metals.dev only takes the key as a query parameter, and httpx logs the
+    full request URL -- so the key would otherwise be written to the backend
+    log and shipped to Loki on every refresh."""
+    import logging
+    import nisab_service
+
+    monkeypatch.setattr(nisab_service, "METALS_API_KEY", "SUPERSECRETKEY123")
+
+    with caplog.at_level(logging.DEBUG):
+        logging.getLogger("httpx").info(
+            'HTTP Request: %s %s "%s %d %s"',
+            "GET",
+            "https://api.metals.dev/v1/latest?api_key=SUPERSECRETKEY123&currency=USD",
+            "HTTP/1.1", 200, "OK",
+        )
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "SUPERSECRETKEY123" not in combined
+    assert "api_key=***" in combined
+
+
+def test_the_key_is_redacted_in_the_type_httpx_actually_logs(db_session, caplog):
+    """The guard above passes the URL as a str; httpx does not.
+
+    httpx 0.28 logs 'HTTP Request: %s %s "%s %d %s"' with `request.url` -- an
+    httpx.URL object, not a str -- as the second argument. A filter that only
+    rewrote str arguments would redact nothing at all in production while
+    still passing a str-based test, so this reproduces the real record.
+    """
+    import logging
+
+    import httpx
+    import nisab_service  # noqa: F401  -- importing it installs the filter
+
+    request = httpx.Request(
+        "GET", "https://api.metals.dev/v1/latest?api_key=SUPERSECRETKEY123&currency=USD"
+    )
+    assert not isinstance(request.url, str), "if this ever becomes a str, simplify the filter"
+
+    with caplog.at_level(logging.DEBUG):
+        logging.getLogger("httpx").info(
+            'HTTP Request: %s %s "%s %d %s"',
+            request.method, request.url, "HTTP/1.1", 200, "OK",
+        )
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "SUPERSECRETKEY123" not in combined
+    assert "api_key=***" in combined
+    # The rest of the record must survive intact: redaction, not suppression.
+    assert "GET" in combined and "200" in combined and "OK" in combined
+
+
+def test_a_401_does_not_write_the_key_out_through_the_failure_log(db_session, monkeypatch, caplog):
+    """The key escapes by two routes, not one.
+
+    httpx raises HTTPStatusError whose message embeds the request URL --
+    "Client error '401 Unauthorized' for url '...api_key=...'" -- and
+    refresh_if_due logs that exception. A wrong or expired key produces
+    exactly a 401, so this is the likeliest leak of all, and it travels on
+    nisab_service's own logger rather than httpx's.
+    """
+    import logging
+    import nisab_service
+
+    url = "https://api.metals.dev/v1/latest?api_key=SUPERSECRETKEY123&currency=USD&unit=g"
+    request = httpx.Request("GET", url)
+    response = httpx.Response(401, request=request)
+
+    monkeypatch.setattr(nisab_service, "METALS_API_KEY", "SUPERSECRETKEY123")
+    monkeypatch.setattr(
+        nisab_service.httpx, "get",
+        lambda *a, **k: (_ for _ in ()).throw(
+            httpx.HTTPStatusError("Client error '401 Unauthorized' for url '%s'" % url,
+                                  request=request, response=response)
+        ),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        assert nisab_service.refresh_if_due(db_session) is False
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "SUPERSECRETKEY123" not in combined
+    assert "api_key=***" in combined
+    # The operator must still be told the refresh failed, and why.
+    assert "401" in combined
+
+
+def test_the_recorded_source_is_the_base_url_and_carries_no_key(db_session, monkeypatch, caplog):
+    """`nisab.source` is stored in settings and logged on every success.
+
+    It is set to METALS_API_URL -- the bare endpoint -- and never to the
+    request URL, because httpx builds the query string from `params`. So the
+    key cannot leak through the settings row or through the success log line.
+    """
+    import logging
+    import nisab_service
+
+    monkeypatch.setattr(nisab_service, "METALS_API_KEY", "SUPERSECRETKEY123")
+    monkeypatch.setattr(
+        nisab_service.httpx,
+        "get",
+        lambda *a, **k: _FakeResponse({"metals": {"gold": 140.0, "silver": 2.0}, "unit": "g"}),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        assert nisab_service.refresh_if_due(db_session) is True
+
+    source = nisab_service.build_snapshot(db_session)["source"]
+    assert source == nisab_service.METALS_API_URL
+    assert "api_key" not in source
+    assert "SUPERSECRETKEY123" not in source
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "SUPERSECRETKEY123" not in combined
 
 
 class _FakeResponse:

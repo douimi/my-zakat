@@ -34,7 +34,9 @@ buys a full day of quiet.
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -63,6 +65,57 @@ STALE_AFTER_DAYS = 7
 METALS_API_KEY = os.getenv("METALS_API_KEY", "")
 METALS_API_URL = os.getenv("METALS_API_URL", "https://api.metals.dev/v1/latest")
 FETCH_TIMEOUT_SECONDS = 10
+
+
+class _RedactApiKey(logging.Filter):
+    """Keep the metals API key out of the logs.
+
+    httpx logs the full request URL at INFO, and metals.dev only accepts the
+    key as a query parameter -- it answers 401 to an X-API-KEY header. Without
+    this filter the key would be written to the backend log on every refresh
+    and shipped on to Loki, where it would long outlive any rotation.
+
+    A filter rather than a raised log level: it is thread-safe and permanent,
+    and it silences nothing -- it rewrites the one substring that must not be
+    written down and passes every record through.
+    """
+
+    _PATTERN = re.compile(r"(api_key=)[^&\s\"\']+")
+
+    def _redact(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self._PATTERN.sub(r"\1***", value)
+        # The argument that actually carries the key is httpx's `request.url`,
+        # an httpx.URL object rather than a str (httpx 0.28: _client.py logs
+        # 'HTTP Request: %s %s "%s %d %s"' with request.url as an argument).
+        # Testing isinstance(str) alone would therefore redact nothing, so
+        # anything whose text form carries the key is rendered to its redacted
+        # text. A %d argument can never contain "api_key=" and is left as the
+        # number it is, so the record still formats.
+        text = str(value)
+        if "api_key=" in text:
+            return self._PATTERN.sub(r"\1***", text)
+        return value
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._PATTERN.sub(r"\1***", record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: self._redact(v) for k, v in record.args.items()}
+            else:
+                record.args = tuple(self._redact(arg) for arg in record.args)
+        return True
+
+
+# Attached at import time, so both are in place before the first refresh can
+# run. Two loggers, because the key escapes by two routes: httpx logs the
+# request URL on every call, and this module logs the exception on a failure --
+# an httpx.HTTPStatusError renders as "Client error '401 Unauthorized' for url
+# '...api_key=...'", so a 401 (exactly what a wrong or expired key produces)
+# would otherwise write the key out through nisab_service's own logger.
+logging.getLogger("httpx").addFilter(_RedactApiKey())
+logger.addFilter(_RedactApiKey())
 
 _GOLD_PRICE = "nisab.gold_price_per_gram_usd"
 _SILVER_PRICE = "nisab.silver_price_per_gram_usd"
