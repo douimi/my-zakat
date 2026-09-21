@@ -86,6 +86,13 @@ services:
       - RESEND_FROM_NAME=${RESEND_FROM_NAME:-MyZakat}
       - RESEND_REPLY_TO=${RESEND_REPLY_TO:-info@myzakat.org}
       - RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET}
+      # Nisab — live gold/silver prices for GET /api/nisab. env.production is
+      # passed with --env-file, which only enables ${...} substitution here; a
+      # variable reaches the process only by being named in this block. The
+      # :- defaults keep docker compose quiet when the key is unset, and an
+      # absent key degrades to showing the method instead of a figure.
+      - METALS_API_KEY=${METALS_API_KEY:-}
+      - METALS_API_URL=${METALS_API_URL:-https://api.metals.dev/v1/latest}
     depends_on:
       db:
         condition: service_healthy

@@ -15,11 +15,21 @@ def _set(db, key: str, value: str) -> None:
     db.commit()
 
 
-def _seed_prices(db, *, gold="95.00", silver="1.10", age_days=0.0) -> None:
-    fetched = (datetime.utcnow() - timedelta(days=age_days)).isoformat()
+def _seed_prices(db, *, gold="95.00", silver="1.10", age_days=0.0,
+                 attempt_age_days=None) -> None:
+    """Seed a cache aged `age_days`.
+
+    `nisab.as_of` is the last success and `nisab.fetched_at` the last attempt;
+    refresh_if_due reads them against two different intervals, so a test can
+    age them apart with `attempt_age_days`. By default they move together, the
+    way a run of successes leaves them.
+    """
+    as_of = (datetime.utcnow() - timedelta(days=age_days)).isoformat()
+    attempt_age = age_days if attempt_age_days is None else attempt_age_days
+    fetched = (datetime.utcnow() - timedelta(days=attempt_age)).isoformat()
     _set(db, "nisab.gold_price_per_gram_usd", gold)
     _set(db, "nisab.silver_price_per_gram_usd", silver)
-    _set(db, "nisab.as_of", fetched)
+    _set(db, "nisab.as_of", as_of)
     _set(db, "nisab.fetched_at", fetched)
     _set(db, "nisab.source", "test-source")
 
@@ -104,14 +114,20 @@ def test_a_successful_fetch_updates_the_cache(db_session, monkeypatch):
 def test_a_failed_fetch_leaves_the_last_good_value_alone(db_session, monkeypatch):
     import nisab_service
 
-    _seed_prices(db_session, gold="100.00", silver="2.00")
+    # Aged past REFRESH_AFTER_HOURS so the fetch is genuinely attempted; a
+    # fresh cache would short-circuit and this test would prove nothing.
+    _seed_prices(db_session, gold="100.00", silver="2.00", age_days=2)
+
+    calls = []
 
     def boom():
+        calls.append(1)
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr(nisab_service, "_fetch_prices", boom)
 
     assert nisab_service.refresh_if_due(db_session) is False
+    assert calls == [1], "the refresh must actually have been attempted"
 
     snap = nisab_service.build_snapshot(db_session)
     assert snap["gold_price_per_gram_usd"] == pytest.approx(100.0)
@@ -119,6 +135,7 @@ def test_a_failed_fetch_leaves_the_last_good_value_alone(db_session, monkeypatch
 
 
 def test_the_upstream_is_not_called_twice_inside_the_window(db_session, monkeypatch):
+    """A success buys the full REFRESH_AFTER_HOURS of quiet."""
     import nisab_service
 
     calls = []
@@ -128,10 +145,11 @@ def test_the_upstream_is_not_called_twice_inside_the_window(db_session, monkeypa
     assert nisab_service.refresh_if_due(db_session) is True
     assert nisab_service.refresh_if_due(db_session) is False
 
-    assert len(calls) == 1, "a broken or slow upstream must not be hammered"
+    assert len(calls) == 1, "prices that fresh need no refresh"
 
 
 def test_a_stale_cache_does_trigger_a_refresh(db_session, monkeypatch):
+    """Both gates are open: the last success is old and so is the last attempt."""
     import nisab_service
 
     _seed_prices(db_session, age_days=nisab_service.REFRESH_AFTER_HOURS / 24 + 1)
@@ -140,6 +158,79 @@ def test_a_stale_cache_does_trigger_a_refresh(db_session, monkeypatch):
 
     assert nisab_service.refresh_if_due(db_session) is True
     assert nisab_service.build_snapshot(db_session)["gold_price_per_gram_usd"] == pytest.approx(50.0)
+
+
+# ---------------------------------------------------------------------------
+# The two intervals. A success is good for a day; a failure is retried within
+# the hour. Without the split, a missing METALS_API_KEY stamped the attempt and
+# burned the full day, so fixing the key and redeploying changed nothing until
+# somebody cleared nisab.fetched_at by hand.
+# ---------------------------------------------------------------------------
+
+
+def test_a_failure_is_not_retried_immediately(db_session, monkeypatch):
+    """The 60-minute backoff holds: a down upstream is not hammered."""
+    import nisab_service
+
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("upstream down")
+
+    monkeypatch.setattr(nisab_service, "_fetch_prices", boom)
+
+    assert nisab_service.refresh_if_due(db_session) is False
+    assert nisab_service.refresh_if_due(db_session) is False
+
+    assert len(calls) == 1, "a failing upstream must not be called again straight away"
+
+
+def test_a_failure_is_retried_once_the_backoff_is_out(db_session, monkeypatch):
+    """And a configuration fixed in between heals without anyone clearing a row."""
+    import nisab_service
+
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("METALS_API_KEY is not set")
+
+    monkeypatch.setattr(nisab_service, "_fetch_prices", boom)
+    assert nisab_service.refresh_if_due(db_session) is False
+
+    # Wind the attempt stamp back past RETRY_AFTER_MINUTES -- far short of the
+    # 24 hours the old single-interval version would have demanded.
+    aged = datetime.utcnow() - timedelta(minutes=nisab_service.RETRY_AFTER_MINUTES + 1)
+    _set(db_session, "nisab.fetched_at", aged.isoformat())
+
+    monkeypatch.setattr(nisab_service, "_fetch_prices",
+                        lambda: {"gold": 140.0, "silver": 2.0, "source": "fixed"})
+
+    assert nisab_service.refresh_if_due(db_session) is True
+    snap = nisab_service.build_snapshot(db_session)
+    assert snap["gold_price_per_gram_usd"] == pytest.approx(140.0)
+    assert snap["is_stale"] is False
+    assert len(calls) == 1
+
+
+def test_a_recent_success_blocks_a_refresh_even_when_the_attempt_is_old(db_session, monkeypatch):
+    """The shorter interval is a backoff, not a second refresh schedule.
+
+    Prices that succeeded an hour ago are fine; an old `fetched_at` must not
+    start calling the upstream every hour on top of them.
+    """
+    import nisab_service
+
+    _seed_prices(db_session, gold="100.00", silver="2.00", age_days=0.04,
+                 attempt_age_days=5)
+
+    calls = []
+    monkeypatch.setattr(nisab_service, "_fetch_prices",
+                        lambda: calls.append(1) or {"gold": 1.0, "silver": 1.0, "source": "fake"})
+
+    assert nisab_service.refresh_if_due(db_session) is False
+    assert calls == [], "a fresh success needs no refresh whatever the attempt stamp says"
 
 
 def test_no_api_key_behaves_as_stale_rather_than_crashing(db_session, monkeypatch):
@@ -225,9 +316,10 @@ def test_a_non_positive_upstream_price_is_rejected_before_it_is_cached(db_sessio
     """
     import nisab_service
 
-    _seed_prices(db_session, gold="100.00", silver="2.00")
-    _set(db_session, "nisab.fetched_at",
-         (datetime.utcnow() - timedelta(hours=nisab_service.REFRESH_AFTER_HOURS + 1)).isoformat())
+    # Both stamps aged, so the fetch is genuinely attempted: a fresh success
+    # would short-circuit refresh_if_due and the rejection below never run.
+    _seed_prices(db_session, gold="100.00", silver="2.00",
+                 age_days=nisab_service.REFRESH_AFTER_HOURS / 24 + 1)
 
     monkeypatch.setattr(nisab_service, "METALS_API_KEY", "test-key")
     monkeypatch.setattr(

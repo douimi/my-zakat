@@ -39,6 +39,10 @@ services:
       - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - S3_BUCKET_NAME=myzakat-media
       - S3_PUBLIC_URL=http://localhost:9000
+      # Nisab — live gold/silver prices for GET /api/nisab. Absent key degrades
+      # to showing the method instead of a figure, so the default is empty.
+      - METALS_API_KEY=${METALS_API_KEY:-}
+      - METALS_API_URL=${METALS_API_URL:-https://api.metals.dev/v1/latest}
     depends_on:
       db:
         condition: service_healthy
