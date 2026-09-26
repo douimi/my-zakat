@@ -114,6 +114,14 @@ services:
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE,PATCH"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowheaders=*"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolalloworiginlist=https://myzakat.org,https://www.myzakat.org"
+      # This middleware answers preflights itself — they never reach FastAPI, so
+      # FastAPI's own CORSMiddleware cannot supply this header. Without it the
+      # browser rejects the preflight of any credentialed cross-origin request
+      # ("...Allow-Credentials header ... is '' which must be 'true'"). The
+      # www -> apex redirect above means the app no longer makes cross-origin
+      # calls at all; this keeps already-loaded www pages and cached bundles
+      # working instead of failing until the visitor reloads.
+      - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowcredentials=true"
       - "traefik.http.middlewares.backend-cors.headers.accesscontrolmaxage=100"
       - "traefik.http.middlewares.backend-cors.headers.addvaryheader=true"
       - "traefik.http.routers.backend.middlewares=backend-cors"
@@ -182,6 +190,19 @@ services:
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       - "traefik.http.routers.frontend.priority=1"
+      # Canonicalise www -> apex. The frontend bundle has its API base URL baked
+      # in as https://myzakat.org (VITE_API_URL below), and axios sends requests
+      # with credentials, so a visitor served on www.myzakat.org makes a
+      # *cross-origin credentialed* call to the apex. The browser preflights it
+      # and blocks it, which silently killed every donation, contact form and
+      # login from www — the request never left the browser, so nothing appeared
+      # in the backend or Stripe logs. Serving one origin removes the preflight
+      # entirely. Deliberately NOT applied to the backend router: redirecting
+      # /api would break preflights and drop POST bodies.
+      - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.myzakat\\.org/(.*)"
+      - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://myzakat.org/$${1}"
+      - "traefik.http.middlewares.www-redirect.redirectregex.permanent=true"
+      - "traefik.http.routers.frontend.middlewares=www-redirect"
 
   # MinIO - S3-compatible object storage
   minio:
