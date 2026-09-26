@@ -205,8 +205,24 @@ services:
       - "traefik.http.routers.frontend.middlewares=www-redirect"
 
   # MinIO - S3-compatible object storage
+  #
+  # This tag is no longer obtainable: MinIO withdrew its community images from
+  # Docker Hub (2026-09-11) and quay.io (2026-09-24) and archived the OSS repo,
+  # so anonymous pulls now 401. Production keeps running only because the image
+  # is already cached on the VPS — recreating this container on a host without
+  # that cache would leave media storage down with nothing to pull. Keep a copy:
+  #
+  #   docker save quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
+  #     | gzip > /root/minio-image-backup.tar.gz     # restore: docker load -i
+  #
+  # The default is deliberately left as the image currently in service, so a
+  # deploy changes nothing here. To move to the maintained community fork
+  # (verified against backend/s3_service.py — see docker-compose.yml), snapshot
+  # the minio_data volume first, then set in env.production:
+  #
+  #   MINIO_IMAGE=pgsty/minio:RELEASE.2026-08-04T00-00-00Z
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
     container_name: myzakat-minio
     restart: unless-stopped
     ports:
@@ -223,7 +239,7 @@ services:
       - traefik-network
       - internal
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} 2>/dev/null; mc ready local || exit 1"]
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} 2>/dev/null; mc ready local || exit 1"]
       interval: 30s
       timeout: 20s
       retries: 3

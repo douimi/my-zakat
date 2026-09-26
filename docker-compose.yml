@@ -75,8 +75,21 @@ services:
       - redis_data:/data
 
   # MinIO - S3-compatible object storage
+  #
+  # MinIO withdrew its community images from Docker Hub (2026-09-11) and then
+  # from quay.io (2026-09-24), and archived the OSS repo. The tag this used to
+  # pin now answers 401 to anonymous pulls, which is what turned CI red — the
+  # e2e job could not start its stack at all. There is no upstream channel left
+  # to repoint at, so this tracks pgsty/minio: the community-maintained fork of
+  # the same codebase, still published and CVE-patched.
+  #
+  # Verified against backend/s3_service.py before switching: ensure_bucket_exists,
+  # upload_file, file_exists (present and absent), and a download round-trip all
+  # pass, and the healthcheck below passes unmodified.
+  #
+  # MINIO_IMAGE overrides this, so pinning a mirror of your own needs no edit here.
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
     restart: unless-stopped
     ports:
       - "9000:9000"  # API port
@@ -88,7 +101,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} 2>/dev/null; mc ready local || exit 1"]
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} 2>/dev/null; mc ready local || exit 1"]
       interval: 30s
       timeout: 20s
       retries: 3

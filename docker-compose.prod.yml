@@ -66,8 +66,10 @@ services:
       - zakat_network
 
   # MinIO - S3-compatible object storage
+  # This tag is no longer publicly pullable — see the note in
+  # docker-compose.traefik.yml. Override with MINIO_IMAGE.
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
     restart: unless-stopped
     ports:
       - "9000:9000"  # API port
@@ -79,7 +81,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} 2>/dev/null; mc ready local || exit 1"]
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} 2>/dev/null; mc ready local || exit 1"]
       interval: 30s
       timeout: 20s
       retries: 3
