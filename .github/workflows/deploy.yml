@@ -198,8 +198,15 @@ jobs:
           cd "$DEPLOY_DIR"
 
           echo "--- Pulling latest code from GitHub ---"
+          PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
           git fetch origin main
           git reset --hard origin/main
+          NEW_SHA=$(git rev-parse HEAD)
+          if [ -n "$PREV_SHA" ]; then
+            CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA" || echo "")
+          else
+            CHANGED=""   # first deploy, or no previous SHA: restart nothing extra
+          fi
 
           if [ ! -f "$ENV_FILE" ]; then
             echo "ERROR: $ENV_FILE not found in $DEPLOY_DIR"
@@ -216,6 +223,27 @@ jobs:
 
           echo "--- Restarting services ---"
           docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+
+          # `up -d` only recreates a service whose compose definition changed, so
+          # a service configured by a bind-mounted FILE keeps running with the old
+          # contents indefinitely. Traefik's traefik.yml is static configuration
+          # it reads once at startup, and Loki reads its limits the same way, so
+          # editing either had no effect on a deploy at all — silently, which is
+          # the worst way for a monitoring change to fail.
+          #
+          # Restart only what actually changed, so an ordinary code deploy does
+          # not blip Traefik (and with it every live request) for no reason.
+          # Grafana is absent on purpose: it polls its provisioning directory, so
+          # dashboard and datasource changes land without a restart.
+          for pair in "traefik.yml:traefik" "monitoring/loki:loki" "monitoring/promtail:promtail"; do
+            watched_path="${pair%%:*}"
+            service="${pair##*:}"
+            if echo "$CHANGED" | grep -q "^${watched_path}"; then
+              echo "--- ${watched_path} changed -> restarting ${service} to re-read it ---"
+              docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" restart "$service" || \
+                echo "WARNING: could not restart ${service}; its config change is NOT live"
+            fi
+          done
 
           echo "--- Waiting for services to be healthy ---"
           sleep 15
