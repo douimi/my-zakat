@@ -14,7 +14,7 @@ Every backend log line is **logfmt**: space-separated `key=value`, one event per
 line, always with a timestamp.
 
 ```
-ts=2026-09-26T18:45:12.108Z level=info logger=donations event=donation.succeeded
+ts=2026-09-26T18:45:12.108Z level=info logger=routers.donations event=donation.succeeded
   outcome=success donation_id=412 amount=50 currency=usd purpose=Zakat
   email=a***@gmail.com stripe_session=cs_live_a1OI4h msg="donation succeeded"
 ```

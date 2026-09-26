@@ -217,7 +217,7 @@ Every backend log line is one line of **logfmt** — `key=value`, always
 timestamped, with exceptions folded onto the same line as `error=`/`stack=`:
 
 ```
-ts=2026-09-26T18:45:12.108Z level=info logger=donations event=donation.succeeded
+ts=2026-09-26T18:45:12.108Z level=info logger=routers.donations event=donation.succeeded
   outcome=success donation_id=412 amount=50 email=a***@gmail.com msg="donation succeeded"
 ```
 
