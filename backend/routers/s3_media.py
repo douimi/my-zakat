@@ -10,6 +10,9 @@ from models import GalleryItem, Story, Testimonial, Event, Program, ProgramCateg
 from s3_service import list_files, file_exists, delete_file, extract_object_key_from_url, get_file_info, get_file_url
 from auth_utils import get_current_admin
 from datetime import datetime
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -155,7 +158,7 @@ async def browse_s3_media(
                 
                 all_media.append(media_item)
         except Exception as e:
-            print(f"Error listing files from S3 prefix {prefix_path}: {e}")
+            logger.error(f"Error listing files from S3 prefix {prefix_path}: {e}")
     
     # Sort by last modified, newest first
     all_media.sort(key=lambda x: x.get("last_modified") or "", reverse=True)

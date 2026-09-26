@@ -204,7 +204,7 @@ async def serve_video(filename: str, request: Request):
         except Exception as e:
             import traceback
             logger.error("Error serving video from S3: %s", object_key)
-            logger.error("   Error: %s", str(e))
+            logger.error("Error: %s", str(e))
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=f"Failed to retrieve video from S3: {str(e)}")
     

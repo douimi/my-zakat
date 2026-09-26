@@ -9,6 +9,9 @@ from models import GalleryItem, Story, Testimonial, Event, Program, ProgramCateg
 from s3_service import file_exists, extract_object_key_from_url, delete_file
 from auth_utils import get_current_admin
 import os
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -71,7 +74,7 @@ def cleanup_orphaned_media(
     deleted_count = 0
     
     # Check Gallery Items
-    print("🔍 Checking gallery items...")
+    logger.debug("Checking gallery items...")
     gallery_items = db.query(GalleryItem).all()
     for item in gallery_items:
         if not check_file_exists_in_s3(item.media_filename):
@@ -87,16 +90,16 @@ def cleanup_orphaned_media(
                         thumbnail_key = extract_object_key_from_url(item.thumbnail_url)
                         if thumbnail_key:
                             delete_file(thumbnail_key)
-                            print(f"🗑️  Deleted orphaned thumbnail: {thumbnail_key}")
+                            logger.debug(f"Deleted orphaned thumbnail: {thumbnail_key}")
                     except Exception as e:
-                        print(f"⚠️  Warning: Could not delete thumbnail: {e}")
+                        logger.warning(f"Warning: Could not delete thumbnail: {e}")
                 
                 db.delete(item)
                 deleted_count += 1
-                print(f"🗑️  Deleted orphaned gallery item: {item.id} ({item.media_filename})")
+                logger.debug(f"Deleted orphaned gallery item: {item.id} ({item.media_filename})")
     
     # Check Stories
-    print("🔍 Checking stories...")
+    logger.debug("Checking stories...")
     stories = db.query(Story).filter(Story.video_filename.isnot(None)).all()
     for story in stories:
         if story.video_filename and not check_file_exists_in_s3(story.video_filename):
@@ -108,10 +111,10 @@ def cleanup_orphaned_media(
             if auto_delete:
                 story.video_filename = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned video from story: {story.id} ({story.title})")
+                logger.debug(f"Cleared orphaned video from story: {story.id} ({story.title})")
     
     # Check Testimonials
-    print("🔍 Checking testimonials...")
+    logger.debug("Checking testimonials...")
     testimonials = db.query(Testimonial).filter(
         (Testimonial.video_filename.isnot(None)) | (Testimonial.image.isnot(None))
     ).all()
@@ -125,7 +128,7 @@ def cleanup_orphaned_media(
             if auto_delete:
                 testimonial.video_filename = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned video from testimonial: {testimonial.id}")
+                logger.debug(f"Cleared orphaned video from testimonial: {testimonial.id}")
         
         if testimonial.image and not testimonial.image.startswith('http') and not check_file_exists_in_s3(testimonial.image):
             orphaned_items["testimonials"].append({
@@ -136,10 +139,10 @@ def cleanup_orphaned_media(
             if auto_delete:
                 testimonial.image = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned image from testimonial: {testimonial.id}")
+                logger.debug(f"Cleared orphaned image from testimonial: {testimonial.id}")
     
     # Check Events
-    print("🔍 Checking events...")
+    logger.debug("Checking events...")
     events = db.query(Event).filter(Event.image.isnot(None)).all()
     for event in events:
         if event.image and not event.image.startswith('http') and not check_file_exists_in_s3(event.image):
@@ -151,10 +154,10 @@ def cleanup_orphaned_media(
             if auto_delete:
                 event.image = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned image from event: {event.id} ({event.title})")
+                logger.debug(f"Cleared orphaned image from event: {event.id} ({event.title})")
     
     # Check Programs
-    print("🔍 Checking programs...")
+    logger.debug("Checking programs...")
     programs = db.query(Program).filter(
         (Program.video_filename.isnot(None)) | (Program.image_url.isnot(None))
     ).all()
@@ -168,7 +171,7 @@ def cleanup_orphaned_media(
             if auto_delete:
                 program.video_filename = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned video from program: {program.id}")
+                logger.debug(f"Cleared orphaned video from program: {program.id}")
         
         if program.image_url and not program.image_url.startswith('http') and not check_file_exists_in_s3(program.image_url):
             orphaned_items["programs"].append({
@@ -179,10 +182,10 @@ def cleanup_orphaned_media(
             if auto_delete:
                 program.image_url = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned image from program: {program.id}")
+                logger.debug(f"Cleared orphaned image from program: {program.id}")
     
     # Check Program Categories
-    print("🔍 Checking program categories...")
+    logger.debug("Checking program categories...")
     categories = db.query(ProgramCategory).filter(
         (ProgramCategory.video_filename.isnot(None)) | (ProgramCategory.image_url.isnot(None))
     ).all()
@@ -196,7 +199,7 @@ def cleanup_orphaned_media(
             if auto_delete:
                 category.video_filename = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned video from category: {category.id}")
+                logger.debug(f"Cleared orphaned video from category: {category.id}")
         
         if category.image_url and not category.image_url.startswith('http') and not check_file_exists_in_s3(category.image_url):
             orphaned_items["program_categories"].append({
@@ -207,10 +210,10 @@ def cleanup_orphaned_media(
             if auto_delete:
                 category.image_url = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned image from category: {category.id}")
+                logger.debug(f"Cleared orphaned image from category: {category.id}")
     
     # Check Slideshow Slides
-    print("🔍 Checking slideshow slides...")
+    logger.debug("Checking slideshow slides...")
     slides = db.query(SlideshowSlide).filter(
         (SlideshowSlide.image_url.isnot(None)) | (SlideshowSlide.image_filename.isnot(None))
     ).all()
@@ -226,16 +229,16 @@ def cleanup_orphaned_media(
                 slide.image_url = None
                 slide.image_filename = None
                 deleted_count += 1
-                print(f"🗑️  Cleared orphaned image from slide: {slide.id}")
+                logger.debug(f"Cleared orphaned image from slide: {slide.id}")
     
     # Commit changes if auto_delete is enabled
     if auto_delete and deleted_count > 0:
         try:
             db.commit()
-            print(f"✅ Committed {deleted_count} cleanup operations")
+            logger.debug(f"Committed {deleted_count} cleanup operations")
         except Exception as e:
             db.rollback()
-            print(f"❌ Error committing cleanup: {e}")
+            logger.error(f"Error committing cleanup: {e}")
             raise HTTPException(status_code=500, detail=f"Error committing cleanup: {str(e)}")
     
     # Calculate totals

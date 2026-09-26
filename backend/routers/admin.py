@@ -130,10 +130,10 @@ async def upload_media(
     is_video = file.content_type.startswith('video/')
     
     if is_image and should_compress_image(file.content_type):
-        print(f"🗜️  Compressing image before upload...")
+        logger.debug(f"Compressing image before upload...")
         file_content = compress_image(file_content)
     elif is_video and should_compress_video(file.content_type):
-        print(f"🗜️  Compressing video before upload...")
+        logger.debug(f"Compressing video before upload...")
         file_content = compress_video(file_content)
     
     # Generate unique filename
@@ -144,19 +144,19 @@ async def upload_media(
     # Upload to S3 - ALWAYS use S3, never fall back to local storage
     try:
         object_key = generate_object_key(category, filename)
-        print(f"📤 Uploading to S3: {object_key} (size: {len(file_content)} bytes)")
+        logger.debug(f"Uploading to S3: {object_key} (size: {len(file_content)} bytes)")
         s3_url = upload_file(
             file_content=file_content,
             object_key=object_key,
             content_type=file.content_type,
             metadata={"type": type, "original_filename": file.filename or ""}
         )
-        print(f"✅ Successfully uploaded to S3: {s3_url}")
+        logger.debug(f"Successfully uploaded to S3: {s3_url}")
         
         # Generate and upload thumbnail for videos
         thumbnail_url = None
         if is_video:
-            print(f"🖼️  Generating video thumbnail...")
+            logger.debug(f"Generating video thumbnail...")
             thumbnail_data = generate_video_thumbnail(file_content)
             if thumbnail_data:
                 thumbnail_filename = f"{type}_{timestamp}_thumb.jpg"
@@ -167,7 +167,7 @@ async def upload_media(
                     content_type="image/jpeg",
                     metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
                 )
-                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+                logger.debug(f"Video thumbnail uploaded: {thumbnail_url}")
         
         return {
             "filename": filename,
@@ -181,9 +181,7 @@ async def upload_media(
         # Log the error with full details
         import traceback
         error_msg = f"Failed to upload to S3: {str(e)}"
-        print(f"❌ {error_msg}")
-        print(f"   Error type: {type(e).__name__}")
-        print(traceback.format_exc())
+        logger.error(f"{error_msg}", exc_info=True)
         
         # ALWAYS fail - never fall back to local storage
         # This ensures files are stored in S3, not in container filesystem

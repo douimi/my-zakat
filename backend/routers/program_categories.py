@@ -10,6 +10,9 @@ from models import ProgramCategory
 from schemas import ProgramCategoryCreate, ProgramCategoryUpdate, ProgramCategoryResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -115,7 +118,7 @@ async def update_category(
                     try:
                         old_path.unlink()
                     except Exception as e:
-                        print(f"Warning: Could not delete old video file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old video file {old_path}: {e}")
     
     # Delete old image if image_url is being cleared or changed from filename to URL
     if 'image_url' in update_data:
@@ -130,7 +133,7 @@ async def update_category(
                     try:
                         old_path.unlink()
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
     
     # Update fields
     for field, value in update_data.items():
@@ -159,7 +162,7 @@ async def delete_category(
             try:
                 video_path.unlink()
             except Exception as e:
-                print(f"Warning: Could not delete video file {video_path}: {e}")
+                logger.warning(f"Warning: Could not delete video file {video_path}: {e}")
     
     # Delete associated image file if exists and is a filename (not URL)
     if category.image_url and not category.image_url.startswith(('http://', 'https://')):
@@ -168,7 +171,7 @@ async def delete_category(
             try:
                 image_path.unlink()
             except Exception as e:
-                print(f"Warning: Could not delete image file {image_path}: {e}")
+                logger.warning(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(category)
     db.commit()
@@ -207,7 +210,7 @@ async def upload_category_video(
                 try:
                     old_path.unlink()
                 except Exception as e:
-                    print(f"Warning: Could not delete old video {old_path}: {e}")
+                    logger.warning(f"Warning: Could not delete old video {old_path}: {e}")
     
     # Read file content
     file_content = await file.read()
@@ -225,8 +228,7 @@ async def upload_category_video(
     except Exception as e:
         # ALWAYS fail - never fall back to local storage
         import traceback
-        print(f"❌ Failed to upload category video to S3: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Failed to upload category video to S3: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload video to S3. Error: {str(e)}"

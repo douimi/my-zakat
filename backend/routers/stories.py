@@ -18,6 +18,9 @@ from schemas import StoryResponse
 from auth_utils import get_current_admin, get_current_manager_or_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 from media_processing import compress_video, generate_video_thumbnail, should_compress_video
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -47,14 +50,14 @@ def _delete_video_asset(video_value: str) -> None:
             if object_key:
                 delete_file(object_key)
         except Exception as e:
-            print(f"Warning: could not delete video from S3: {e}")
+            logger.warning(f"Warning: could not delete video from S3: {e}")
     else:
         local_path = os.path.join("uploads/stories", video_value)
         if os.path.exists(local_path):
             try:
                 os.remove(local_path)
             except Exception as e:
-                print(f"Warning: could not delete local video {local_path}: {e}")
+                logger.warning(f"Warning: could not delete local video {local_path}: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -167,8 +170,7 @@ async def create_story(
                 image_filename = thumbnail_url
         except Exception as e:
             import traceback
-            print(f"Failed to upload story video to S3: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload story video to S3: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to upload video to S3. Error: {e}")
 
     # Manager-authored stories require admin approval before going live.
@@ -256,8 +258,7 @@ async def update_story(
                 story.image_filename = thumbnail_url
         except Exception as e:
             import traceback
-            print(f"Failed to upload story video to S3: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload story video to S3: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to upload video to S3. Error: {e}")
 
     # Image handling --------------------------------------------------
@@ -269,7 +270,7 @@ async def update_story(
                 try:
                     os.remove(old_path)
                 except Exception as e:
-                    print(f"Warning: could not delete old image {old_path}: {e}")
+                    logger.warning(f"Warning: could not delete old image {old_path}: {e}")
         story.image_filename = image_filename
 
     story.title = title
@@ -310,7 +311,7 @@ async def delete_story(
             try:
                 os.remove(image_path)
             except Exception as e:
-                print(f"Warning: could not delete image file {image_path}: {e}")
+                logger.warning(f"Warning: could not delete image file {image_path}: {e}")
 
     db.delete(story)
     db.commit()

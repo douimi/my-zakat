@@ -10,6 +10,9 @@ from schemas import EventCreate, EventResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 from media_processing import compress_image, should_compress_image
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -45,7 +48,7 @@ async def create_event(
         
         # Compress image before uploading
         if should_compress_image(image.content_type):
-            print(f"🗜️  Compressing event image before upload...")
+            logger.debug(f"Compressing event image before upload...")
             content_bytes = compress_image(content_bytes)
         
         # Upload to S3
@@ -60,8 +63,7 @@ async def create_event(
             image_value = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload event image to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload event image to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
@@ -154,7 +156,7 @@ async def update_event(
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -174,8 +176,7 @@ async def update_event(
             event.image = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload event image to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload event image to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
@@ -190,16 +191,16 @@ async def update_event(
                 if object_key:
                     try:
                         delete_file(object_key)
-                        print(f"🗑️  Deleted old event image from S3: {object_key}")
+                        logger.debug(f"Deleted old event image from S3: {object_key}")
                     except Exception as e:
-                        print(f"⚠️  Warning: Could not delete old image from S3: {e}")
+                        logger.warning(f"Warning: Could not delete old image from S3: {e}")
             else:
                 old_path = os.path.join("uploads/events", old_image)
                 if os.path.exists(old_path):
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Update image URL
         event.image = new_image_value
@@ -231,7 +232,7 @@ async def delete_event(
                 try:
                     os.remove(image_path)
                 except Exception as e:
-                    print(f"Warning: Could not delete image file {image_path}: {e}")
+                    logger.warning(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(event)
     db.commit()
@@ -263,8 +264,7 @@ async def upload_event_image(
         return {"filename": filename, "path": s3_url, "url": s3_url}
     except Exception as e:
         import traceback
-        print(f"❌ Failed to upload event image to S3: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Failed to upload event image to S3: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload image to S3. Error: {str(e)}"

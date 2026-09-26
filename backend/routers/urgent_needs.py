@@ -8,6 +8,9 @@ from database import get_db
 from models import UrgentNeed
 from schemas import UrgentNeedCreate, UrgentNeedUpdate, UrgentNeedResponse
 from auth_utils import get_current_admin
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -114,7 +117,7 @@ async def update_urgent_need(
                     try:
                         old_path.unlink()
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
     
     for field, value in update_data.items():
         setattr(need, field, value)
@@ -145,7 +148,7 @@ async def delete_urgent_need(
             try:
                 image_path.unlink()
             except Exception as e:
-                print(f"Warning: Could not delete image file {image_path}: {e}")
+                logger.warning(f"Warning: Could not delete image file {image_path}: {e}")
     
     db.delete(need)
     db.commit()

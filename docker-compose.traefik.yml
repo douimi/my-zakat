@@ -63,6 +63,10 @@ services:
       - env.production  # Load environment variables from env.production file
     environment:
       - PYTHONUNBUFFERED=1  # Ensure Python output is unbuffered and logs are visible
+      # INFO keeps the steady state quiet. LOG_LEVEL=DEBUG brings back the
+      # per-upload progress lines and third-party request logs for
+      # troubleshooting; see backend/logging_config.py.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD}@db:5432/myzakat
       - SECRET_KEY=${SECRET_KEY}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
@@ -138,6 +142,7 @@ services:
       - env.production
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-myzakat_user}:${POSTGRES_PASSWORD}@db:5432/myzakat
       - SECRET_KEY=${SECRET_KEY}
       - REDIS_URL=redis://redis:6379/0

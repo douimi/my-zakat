@@ -1,0 +1,454 @@
+{
+  "uid": "myzakat-donations",
+  "title": "Donations",
+  "description": "Did donations work? Every panel reads logfmt fields emitted by backend/log_events.py -- event, outcome and reason -- rather than matching prose, so rewording a log message cannot empty a panel. Renaming an event in log_events.py will, which is why that module documents the coupling.",
+  "tags": ["myzakat", "donations", "payments"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {
+    "refresh_intervals": ["30s", "1m", "5m", "15m", "1h"]
+  },
+  "annotations": { "list": [] },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Is the money arriving?",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Donations succeeded",
+      "description": "event=donation.succeeded -- money arrived AND a Donation row exists.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "decimals": 0,
+          "unit": "short",
+          "mappings": [{ "options": { "match": "null", "result": { "text": "0" } }, "type": "special" }]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value", "graphMode": "area", "textMode": "auto",
+        "justifyMode": "auto", "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"donation.succeeded\" [$__range]))"
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Donations failed",
+      "description": "outcome=failure on any donation/webhook/subscription event, excluding receipt-email failures (the money is safe in those -- they have their own tile).",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 5, "w": 5, "x": 5, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": [{ "options": { "match": "null", "result": { "text": "0" } }, "type": "special" }]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value", "graphMode": "area", "textMode": "auto",
+        "justifyMode": "auto", "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | outcome=\"failure\" | event!=\"donation.certificate_failed\" [$__range]))"
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Success rate",
+      "description": "succeeded / (succeeded + failed) over the selected range. Shows No data when nothing was attempted, which is itself worth noticing outside quiet hours.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 5, "w": 5, "x": 10, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.8 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value", "graphMode": "none", "textMode": "auto",
+        "justifyMode": "auto", "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"donation.succeeded\" [$__range])) / (sum(count_over_time({service=\"backend\"} | logfmt | event=\"donation.succeeded\" [$__range])) + sum(count_over_time({service=\"backend\"} | logfmt | outcome=\"failure\" | event!=\"donation.certificate_failed\" [$__range])))"
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Receipts not sent",
+      "description": "event=donation.certificate_failed. Orange, not red: the donation itself succeeded, but the donor has no receipt -- they will ask.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 5, "w": 4, "x": 15, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          },
+          "mappings": [{ "options": { "match": "null", "result": { "text": "0" } }, "type": "special" }]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value", "graphMode": "none", "textMode": "auto",
+        "justifyMode": "auto", "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"donation.certificate_failed\" [$__range]))"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Paid but not recorded",
+      "description": "event=webhook.failed or webhook.rejected. The worst case in the system: Stripe took money we have no row for. Any non-zero value needs acting on -- the failure line carries the stripe_session to recover from.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 5, "w": 5, "x": 19, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "dark-red", "value": 1 }
+            ]
+          },
+          "mappings": [{ "options": { "match": "null", "result": { "text": "0" } }, "type": "special" }]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background", "graphMode": "none", "textMode": "auto",
+        "justifyMode": "auto", "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=~\"webhook.failed|webhook.rejected\" [$__range]))"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Succeeded vs failed over time",
+      "description": "Both series are counts on one axis. Status colours are fixed by override, so a filter that removes one series never repaints the other.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 15, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "pointSize": 8,
+            "showPoints": "never",
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "axisLabel": "events",
+            "gradientMode": "none",
+            "spanNulls": false
+          },
+          "decimals": 0,
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "succeeded" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "failed" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "legendFormat": "succeeded",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"donation.succeeded\" [$__interval]))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "legendFormat": "failed",
+          "expr": "sum(count_over_time({service=\"backend\"} | logfmt | outcome=\"failure\" | event!=\"donation.certificate_failed\" [$__interval]))"
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Why donations failed",
+      "description": "Grouped by the bounded reason vocabulary in log_events.py, so this stays a short readable list instead of one bucket per exception message. One hue: this is magnitude by category, not identity.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 9, "x": 15, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "dark-red" },
+          "decimals": 0,
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "text",
+        "showUnfilled": true,
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "sizing": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "legendFormat": "{{reason}}",
+          "expr": "sum by (reason) (count_over_time({service=\"backend\"} | logfmt | outcome=\"failure\" | reason != \"\" [$__range]))"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "What went wrong -- start here",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 20,
+      "type": "logs",
+      "title": "Donation failures",
+      "description": "Every failure on the money path, newest first. Each line carries reason, amount, a masked email and the stripe_session or stripe_charge needed to find it in Stripe -- plus error and stack folded onto the SAME line, so a traceback sits with the failure it belongs to.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 16 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "expr": "{service=\"backend\"} | logfmt | outcome=\"failure\""
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Full donation activity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 21,
+          "type": "logs",
+          "title": "Every donation, subscription and webhook event",
+          "description": "The whole money path in order, successes included -- the context for anything the failures panel shows.",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 14, "w": 24, "x": 0, "y": 29 },
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "loki" },
+              "queryType": "range",
+              "expr": "{service=\"backend\"} | logfmt | event=~\"donation..*|subscription..*|webhook..*\""
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Stripe webhook throughput",
+          "description": "If received drops to zero while the site is taking donations, Stripe cannot reach us and donations are being paid without being recorded.",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 43 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "pointSize": 8,
+                "showPoints": "auto",
+                "spanNulls": false,
+                "axisLabel": "events"
+              },
+              "decimals": 0,
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "received" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "processed" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "duplicate retries" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "failed or rejected" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "loki", "uid": "loki" },
+              "queryType": "range",
+              "legendFormat": "received",
+              "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"webhook.received\" [$__interval]))"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "loki", "uid": "loki" },
+              "queryType": "range",
+              "legendFormat": "processed",
+              "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"webhook.processed\" [$__interval]))"
+            },
+            {
+              "refId": "C",
+              "datasource": { "type": "loki", "uid": "loki" },
+              "queryType": "range",
+              "legendFormat": "duplicate retries",
+              "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=\"webhook.duplicate\" [$__interval]))"
+            },
+            {
+              "refId": "D",
+              "datasource": { "type": "loki", "uid": "loki" },
+              "queryType": "range",
+              "legendFormat": "failed or rejected",
+              "expr": "sum(count_over_time({service=\"backend\"} | logfmt | event=~\"webhook.failed|webhook.rejected\" [$__interval]))"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,16 +1,22 @@
 """
 Audit logging middleware for MyZakat.
 
-Logs every state-changing request in a human-readable format:
+Logs every state-changing request as one structured event, keeping the readable
+sentence as the message:
 
-    Otmane: logged in
-    Zak: deleted story #5
-    Omar: uploaded a new gallery image
-    Admin: created a new event
+    ts=... level=info logger=audit event=content.changed actor=z***@myzakat.org
+      method=POST path=/api/stories status=200 duration_ms=42 msg="Zak: deleted story #5"
 
-Plus a structured tail for filtering/grouping in Grafana:
-    [method=POST path=/api/stories status=200 duration_ms=42 ip=1.2.3.4]
+Requests that failed get event=request.failed at WARNING, so every 4xx/5xx in
+the application is reachable with one query regardless of which endpoint it hit:
+
+    {service="backend"} | logfmt | event="request.failed"
+
+Reads are not audited (see SKIP_PATHS and READ_METHODS) — they were the bulk of
+the volume and carried no information, since uvicorn's access log covered them
+and Traefik still records access at the edge.
 """
+import logging
 import time
 import os
 import re
@@ -22,7 +28,8 @@ from starlette.responses import Response
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
-from logging_config import get_logger
+from logging_config import get_logger, mask_email
+import log_events as ev
 from database import SessionLocal
 from models import User
 
@@ -275,21 +282,24 @@ class AuditMiddleware(BaseHTTPMiddleware):
             action = f"{method} {path}"
 
         status = response.status_code
-        status_icon = "✗" if status >= 400 else "✓"
 
         # Client IP
         ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
         if not ip and request.client:
             ip = request.client.host
 
-        # Human-readable message on one line, machine tail after `|` for parsing
-        human = f"{actor}: {action}"
-        if status >= 400:
-            human += f" — failed ({status})"
-
-        tail = f"| email={email or '-'} method={method} path={path} status={status} duration_ms={duration_ms} ip={ip or '-'}"
-
-        log_level = logger.warning if status >= 400 else logger.info
-        log_level("%s %s %s", status_icon, human, tail)
+        # Emitted as a structured event rather than the old prose-plus-tail
+        # line. The dashboards used to match on the ✓/✗ glyphs, which meant any
+        # rewording of these messages silently emptied a panel; they now filter
+        # on event and status, and `msg` is free to read however reads best.
+        failed = status >= 400
+        logger.event(
+            ev.REQUEST_FAILED if failed else ev.CONTENT_CHANGED,
+            f"{actor}: {action}",
+            level=logging.WARNING if failed else logging.INFO,
+            actor=mask_email(email) if email else actor,
+            method=method, path=path, status=status,
+            duration_ms=duration_ms, ip=ip or None,
+        )
 
         return response

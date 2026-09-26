@@ -30,5 +30,19 @@ providers:
 
 log:
   level: INFO
+  format: json
 
-accessLog: {}
+# JSON rather than the default common-log format, so Promtail can extract the
+# request path and status as fields instead of positionally parsing a text line.
+# The noise filtering lives in Promtail (monitoring/promtail/promtail-config.yml)
+# because it is path-dependent — successful static-asset reads are dropped while
+# every 4xx/5xx is kept — and Traefik's own filters cannot express that.
+#
+# Request headers are dropped: they carry cookies and Authorization, which must
+# not be written to disk or shipped to Loki and retained for 30 days.
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: drop

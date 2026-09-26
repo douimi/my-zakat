@@ -28,18 +28,95 @@ scrape_configs:
       # Keep container ID for correlation
       - source_labels: ['__meta_docker_container_id']
         target_label: 'container_id'
+
     pipeline_stages:
-      # Try to detect log level from common patterns
-      - regex:
-          expression: '(?i)(?P<level>ERROR|WARN(?:ING)?|INFO|DEBUG|CRITICAL)'
-      - labels:
-          level:
-      # Detect JSON-formatted logs from the backend
-      - json:
-          expressions:
-            level: level
-            msg: msg
-            timestamp: timestamp
-          source: output
-      - labels:
-          level:
+      # ── Level ────────────────────────────────────────────────────────────
+      # The backend emits logfmt, so the level is read from the `level=` key
+      # rather than guessed. The previous config ran a bare
+      #   (?i)(ERROR|WARN|INFO|DEBUG|CRITICAL)
+      # over the whole line, which matched the FIRST level-shaped word
+      # anywhere — so a success line mentioning "no error" was labelled
+      # error, and the Problems panel filled with things that were fine.
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - regex:
+                expression: '(?:^|\s)level=(?P<level>trace|debug|info|warning|warn|error|critical|fatal)(?:\s|$)'
+            - labels:
+                level:
+
+      # ── Timestamp ────────────────────────────────────────────────────────
+      # Use the application's own ts= rather than Promtail's read time, so a
+      # restart that replays a backlog does not stamp every old line "now"
+      # and flatten the ordering the dashboards rely on.
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - regex:
+                expression: '^ts=(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)'
+            - timestamp:
+                source: ts
+                format: '2006-01-02T15:04:05.000Z'
+                action_on_failure: fudge   # keep the line; never drop on a bad ts
+
+      # ── Traefik access log ───────────────────────────────────────────────
+      # Traefik is configured (traefik.yml) to write JSON access logs, so the
+      # path and status are extracted as fields rather than scraped out of the
+      # line with a regex. That matters: Go serialises a map with its keys
+      # sorted, so DownstreamStatus and OriginStatus both come BEFORE
+      # RequestPath, and any 'path.*status' pattern would never match.
+      #
+      # Extracted fields are not promoted to labels (only `level` is) — a label
+      # per request path would multiply the index by every URL on the site.
+      - match:
+          selector: '{container="traefik"}'
+          stages:
+            - json:
+                expressions:
+                  req_path: RequestPath
+                  req_status: DownstreamStatus
+            # Give Traefik's lines a level so they are not left unlabelled and
+            # therefore invisible to every level-based panel.
+            - template:
+                source: level
+                template: '{{ if regexMatch "^5" (.req_status | toString) }}error{{ else if regexMatch "^4" (.req_status | toString) }}warning{{ else }}info{{ end }}'
+            - labels:
+                level:
+
+      # ── Drop pure noise ──────────────────────────────────────────────────
+      # Blank lines and container lifecycle chatter carry no information but
+      # still cost ingestion quota and clutter every live tail.
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - drop:
+                expression: '^\s*$'
+                drop_counter_reason: blank_line
+
+      # Health probes and successful static-asset reads. Both are matched on the
+      # extracted path AND status together (drop's `source` accepts a list, which
+      # it joins with `separator` before applying `expression`) so the rule is
+      # independent of JSON key order.
+      #
+      # Only SUCCESSES are dropped. A /health that starts returning 503, or a
+      # media file that 404s, still reaches Loki — which is the whole point of
+      # pairing the status with the path instead of dropping by path alone.
+      - match:
+          selector: '{container="traefik"}'
+          stages:
+            - drop:
+                source: [req_path, req_status]
+                separator: ' '
+                expression: '^/health (?:2\d\d|30\d)$'
+                drop_counter_reason: healthcheck_ok
+
+      # Static and media reads are the single largest source of access-log volume
+      # on this site: every image on every page view.
+      - match:
+          selector: '{container="traefik"}'
+          stages:
+            - drop:
+                source: [req_path, req_status]
+                separator: ' '
+                expression: '^/(?:assets|api/uploads|api/media-library)/[^ ]* (?:2\d\d|30\d)$'
+                drop_counter_reason: static_asset_ok

@@ -367,7 +367,7 @@ def test_the_api_key_never_reaches_the_logs(db_session, monkeypatch, caplog):
 
     monkeypatch.setattr(nisab_service, "METALS_API_KEY", "SUPERSECRETKEY123")
 
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(logging.DEBUG, logger="httpx"):
         logging.getLogger("httpx").info(
             'HTTP Request: %s %s "%s %d %s"',
             "GET",
@@ -398,7 +398,7 @@ def test_the_key_is_redacted_in_the_type_httpx_actually_logs(db_session, caplog)
     )
     assert not isinstance(request.url, str), "if this ever becomes a str, simplify the filter"
 
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(logging.DEBUG, logger="httpx"):
         logging.getLogger("httpx").info(
             'HTTP Request: %s %s "%s %d %s"',
             request.method, request.url, "HTTP/1.1", 200, "OK",

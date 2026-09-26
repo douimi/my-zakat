@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 import stripe
+import logging
 import os
 from datetime import datetime, timedelta
 from calendar import monthrange
@@ -16,7 +17,11 @@ from schemas import DonationCreate, DonationUpdate, DonationResponse, PaymentCre
 from auth_utils import get_current_admin
 from pdf_service import generate_donation_certificate, generate_donation_certificate_to_bytes
 from email_service import send_donation_certificate_email
-from logging_config import get_logger
+from logging_config import get_logger, mask_email
+# The money path's log lines are an interface: the Donations dashboard and
+# scripts/logs.sh match on these event names, so they live in one module rather
+# than being spelled out as prose at each call site.
+import log_events as ev
 from s3_service import upload_file, download_file, generate_object_key, file_exists
 # One definition of the nisab mass for the whole codebase: the figure this
 # calculation compares against is the same object the /api/nisab snapshot and
@@ -81,15 +86,20 @@ def generate_certificate(donation: Donation, db: Session) -> str:
         donation.certificate_filename = filename
         db.commit()
         
-        logger.info("Certificate generated successfully for donation %s", donation.id)
+        logger.event(
+            ev.DONATION_CERTIFICATE_EMAILED, "receipt PDF written to disk",
+            level=logging.DEBUG, donation_id=donation.id, filename=filename,
+        )
 
         return filepath
 
     except Exception as e:
-        # Log error but don't fail the donation processing
-        import traceback
-        logger.error("Failed to generate certificate for donation %s: %s", donation.id, str(e))
-        logger.error("Traceback: %s", traceback.format_exc())
+        # Log but don't fail the donation: the money is already safe.
+        logger.event(
+            ev.DONATION_CERTIFICATE_FAILED, "could not build the receipt PDF",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_PDF_FAILED, donation_id=donation.id,
+        )
         raise
 
 
@@ -140,10 +150,15 @@ def email_certificate(donation: Donation) -> bool:
                 donation_date=donation.donated_at,
             )
             
-            if success:
-                logger.info("Certificate emailed successfully for donation %s", donation.id)
-            else:
-                logger.warning("Failed to email certificate for donation %s", donation.id)
+            if not success:
+                # The caller turns this into donation.certificate_failed; a
+                # second event here would double-count the same failure.
+                logger.event(
+                    ev.DONATION_CERTIFICATE_FAILED, "the mail transport refused the receipt",
+                    level=logging.WARNING, outcome=ev.OUTCOME_FAILURE,
+                    reason=ev.REASON_EMAIL_SEND_FAILED,
+                    donation_id=donation.id, email=mask_email(donation.email),
+                )
             
             return success
         finally:
@@ -155,9 +170,12 @@ def email_certificate(donation: Donation) -> bool:
                 logger.warning("Failed to delete temporary certificate file: %s", str(cleanup_error))
         
     except Exception as e:
-        import traceback
-        logger.error("Failed to email certificate for donation %s: %s", donation.id, str(e))
-        logger.error("Traceback: %s", traceback.format_exc())
+        logger.event(
+            ev.DONATION_CERTIFICATE_FAILED, "building or sending the receipt raised",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_UNEXPECTED,
+            donation_id=donation.id, email=mask_email(donation.email),
+        )
         return False
 
 
@@ -210,7 +228,10 @@ async def update_donation(
     db.commit()
     db.refresh(donation)
 
-    logger.info("Admin %s updated donation #%s", current_admin.email, donation_id)
+    logger.event(
+        ev.DONATION_UPDATED, "an admin edited a donation record",
+        donation_id=donation_id, actor=mask_email(current_admin.email),
+    )
     return donation
 
 
@@ -236,7 +257,11 @@ async def delete_donation(
     db.delete(donation)
     db.commit()
 
-    logger.info("Admin %s deleted donation #%s (%s)", current_admin.email, donation_id, donation.email)
+    logger.event(
+        ev.DONATION_DELETED, "an admin deleted a donation record",
+        level=logging.WARNING, donation_id=donation_id,
+        email=mask_email(donation.email), actor=mask_email(current_admin.email),
+    )
     return {"message": "Donation deleted successfully"}
 
 
@@ -322,7 +347,12 @@ async def create_manual_donation(
             )
             proof_filename = object_key
         except Exception as e:
-            logger.error("Failed to upload manual donation proof: %s", e)
+            logger.event(
+                ev.DONATION_RECORDED_MANUALLY, "could not upload the proof for a manual donation",
+                level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_UNEXPECTED, amount=amount,
+                email=mask_email(email), actor=mask_email(current_admin.email),
+            )
             raise HTTPException(status_code=500, detail="Failed to upload proof file")
 
     donation = Donation(
@@ -340,9 +370,12 @@ async def create_manual_donation(
     db.commit()
     db.refresh(donation)
 
-    logger.info(
-        "Manual donation recorded by admin %s: $%s from %s via %s",
-        current_admin.email, amount, email, payment_method,
+    logger.event(
+        ev.DONATION_RECORDED_MANUALLY, "an admin recorded a donation taken outside Stripe",
+        outcome=ev.OUTCOME_SUCCESS,
+        donation_id=donation.id, amount=amount, currency="usd",
+        payment_method=payment_method, email=mask_email(email),
+        actor=mask_email(current_admin.email),
     )
 
     return donation
@@ -695,14 +728,25 @@ async def calculate_zakat(calculation: ZakatCalculation, db: Session = Depends(g
 async def create_payment_session(payment: PaymentCreate, db: Session = Depends(get_db)):
     # Validate amount
     if not payment.amount or payment.amount < 1:
+        logger.event(
+            ev.DONATION_SESSION_FAILED, "rejected a donation with an invalid amount",
+            level=logging.WARNING, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_INVALID_AMOUNT,
+            amount=payment.amount, email=mask_email(payment.email),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid amount"
         )
-    
+
     # Check if Stripe is configured
     if not stripe.api_key or not stripe_secret_key:
-        logger.error("Payment processing is not configured: Stripe API key missing")
+        logger.event(
+            ev.DONATION_SESSION_FAILED, "Stripe API key is missing, so no donation can be taken",
+            level=logging.ERROR, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_STRIPE_NOT_CONFIGURED,
+            amount=payment.amount, email=mask_email(payment.email),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Payment processing is not configured. Please contact support."
@@ -751,21 +795,40 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         # when Stripe confirms payment succeeded. If the webhook fails,
         # admins can recover missing donations via the "Sync Stripe" button.
 
+        # Intent, not money: most sessions that never get paid were simply
+        # abandoned. Pairing this with donation.succeeded on the same
+        # stripe_session is what makes the funnel measurable.
+        logger.event(
+            ev.DONATION_SESSION_CREATED, "handed the donor a Stripe checkout session",
+            amount=payment.amount, currency="usd", purpose=purpose,
+            frequency=payment.frequency, email=mask_email(payment.email),
+            stripe_session=checkout_session.id,
+        )
         return PaymentSession(id=checkout_session.id)
-        
+
+    # Both handlers fold the exception into the single event record via exc=,
+    # instead of the three separate lines this used to emit (message, error
+    # type, then a multi-line traceback that Loki received as unrelated
+    # entries and scattered away from the failure it belonged to).
     except stripe.error.StripeError as e:
-        import traceback
-        logger.error("Stripe error in create_payment_session: %s", str(e))
-        logger.error("Traceback: %s", traceback.format_exc())
+        logger.event(
+            ev.DONATION_SESSION_FAILED, "Stripe refused to create the checkout session",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_STRIPE_ERROR,
+            stripe_code=getattr(e, "code", None),
+            amount=payment.amount, email=mask_email(payment.email),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stripe error: {str(e)}"
         )
     except Exception as e:
-        import traceback
-        logger.error("Payment processing error: %s", str(e))
-        logger.error("Error type: %s", type(e).__name__)
-        logger.error("Traceback: %s", traceback.format_exc())
+        logger.event(
+            ev.DONATION_SESSION_FAILED, "could not create the checkout session",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_UNEXPECTED,
+            amount=payment.amount, email=mask_email(payment.email),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment processing error: {str(e)}"
@@ -942,7 +1005,14 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
         # and donation records when Stripe confirms the payment succeeded.
         # Abandoned checkouts never clutter the admin console.
 
-
+        # The recurring counterpart of donation.session_created: intent only.
+        # subscription.activated is what says money actually moved.
+        logger.event(
+            ev.SUBSCRIPTION_CREATED, "handed the donor a recurring checkout session",
+            amount=subscription.amount, currency="usd", purpose=purpose,
+            interval=subscription.interval, email=mask_email(subscription.email),
+            stripe_session=checkout_session.id,
+        )
         return SubscriptionSession(id=checkout_session.id)
         
     except stripe.error.StripeError as e:
@@ -986,7 +1056,13 @@ async def cancel_subscription(request: dict, db: Session = Depends(get_db), curr
             db_subscription.status = "canceled"
             db_subscription.updated_at = datetime.utcnow()
             db.commit()
-        
+
+        logger.event(
+            ev.SUBSCRIPTION_CANCELLED, "recurring donation cancelled",
+            outcome=ev.OUTCOME_SUCCESS,
+            stripe_subscription=subscription_id,
+            email=mask_email(getattr(db_subscription, "email", None)),
+        )
         return {"status": "success", "message": "Subscription canceled"}
         
     except stripe.error.StripeError as e:
@@ -1195,8 +1271,11 @@ async def sync_stripe_data(db: Session = Depends(get_db), current_admin = Depend
         db.rollback()
         # Log the full error for debugging
         import traceback
-        logger.error("Stripe sync error: %s", str(e))
-        logger.error("Traceback: %s", traceback.format_exc())
+        logger.event(
+            ev.WEBHOOK_FAILED, "the manual Stripe sync failed",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_STRIPE_ERROR,
+        )
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1246,18 +1325,34 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         sig_header = request.headers.get("stripe-signature")
         webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 
+        # Every rejection below means Stripe knows about money we do not. They
+        # are logged at ERROR with a stable reason so the Donations dashboard
+        # can surface "donors paid but nothing was recorded" as its own signal,
+        # which is otherwise the most expensive way for this system to fail.
         if not webhook_secret:
-            logger.error("Webhook secret not configured")
+            logger.event(
+                ev.WEBHOOK_REJECTED, "STRIPE_WEBHOOK_SECRET is unset, so no payment can be recorded",
+                level=logging.ERROR, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_WEBHOOK_SECRET_MISSING,
+            )
             return JSONResponse(status_code=500, content={"status": "webhook secret not configured"})
 
         # Verify webhook signature
         try:
             event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
         except ValueError as e:
-            logger.error("Invalid webhook payload: %s", str(e))
+            logger.event(
+                ev.WEBHOOK_REJECTED, "could not parse the webhook payload",
+                level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_BAD_PAYLOAD,
+            )
             return JSONResponse(status_code=400, content={"status": "invalid payload"})
         except stripe.error.SignatureVerificationError as e:
-            logger.error("Invalid webhook signature: %s", str(e))
+            logger.event(
+                ev.WEBHOOK_REJECTED, "webhook signature did not verify",
+                level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_BAD_SIGNATURE,
+            )
             return JSONResponse(status_code=400, content={"status": "invalid signature"})
 
         event_id = event.get("id", "")
@@ -1265,14 +1360,22 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         # ── Idempotency: skip already-processed events ──
         if event_id in _processed_events:
-            logger.info("Skipping duplicate webhook event: %s (%s)", event_id, event_type)
+            # Stripe retries are routine, so this stays at INFO and out of the
+            # Problems panel; it is only interesting as a volume signal.
+            logger.event(
+                ev.WEBHOOK_DUPLICATE, "ignored a Stripe retry we already handled",
+                stripe_event=event_id, stripe_event_type=event_type,
+            )
             return {"status": "already_processed"}
 
         _processed_events.add(event_id)
         if len(_processed_events) > _MAX_PROCESSED_EVENTS:
             _processed_events = set(list(_processed_events)[_MAX_PROCESSED_EVENTS // 2:])
 
-        logger.info("Processing webhook: %s (event %s)", event_type, event_id)
+        logger.event(
+            ev.WEBHOOK_RECEIVED, "processing a Stripe webhook",
+            stripe_event=event_id, stripe_event_type=event_type,
+        )
 
         # ── checkout.session.completed ──
         if event_type == "checkout.session.completed":
@@ -1315,7 +1418,17 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             existing.donated_at = datetime.utcnow()
                         db.commit()
                         db.refresh(existing)
-                        logger.info("Donation %s confirmed (updated pending) — sending certificate to %s", existing.id, existing.email)
+                        # THE success signal for the whole platform. Money has
+                        # arrived and a Donation row exists.
+                        logger.event(
+                            ev.DONATION_SUCCEEDED, "donation succeeded",
+                            outcome=ev.OUTCOME_SUCCESS,
+                            donation_id=existing.id, amount=amount, currency="usd",
+                            purpose=metadata.get("purpose") or "General Donation",
+                            frequency=frequency, email=mask_email(existing.email),
+                            stripe_session=session_id, stripe_event=event_id,
+                            recorded_as="updated_pending",
+                        )
                         _record_marketing_conversion(db, existing)
                         _send_certificate_safe(existing)
                     else:
@@ -1335,12 +1448,33 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         db.add(new_donation)
                         db.commit()
                         db.refresh(new_donation)
-                        logger.info("Donation %s created (no pending found)", new_donation.id)
+                        # Same success signal; recorded_as distinguishes the two
+                        # routes without needing two event names, so one query
+                        # still counts every donation that succeeded.
+                        logger.event(
+                            ev.DONATION_SUCCEEDED, "donation succeeded",
+                            outcome=ev.OUTCOME_SUCCESS,
+                            donation_id=new_donation.id, amount=amount, currency="usd",
+                            purpose=metadata.get("purpose") or "General Donation",
+                            frequency=frequency, email=mask_email(new_donation.email),
+                            stripe_session=session_id, stripe_event=event_id,
+                            recorded_as="created_fresh",
+                        )
                         _record_marketing_conversion(db, new_donation)
                         _send_certificate_safe(new_donation)
 
                 except Exception as e:
-                    logger.error("Error processing payment webhook: %s", e)
+                    # Stripe has the money and we failed to write the row: the
+                    # worst outcome in the system, so it is an explicit failure
+                    # event carrying the session id needed to recover it.
+                    logger.event(
+                        ev.WEBHOOK_FAILED, "paid donation could not be recorded",
+                        level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                        reason=ev.REASON_DB_ERROR,
+                        amount=amount, email=mask_email(customer_email),
+                        stripe_session=session_id, stripe_event=event_id,
+                        stripe_event_type=event_type,
+                    )
                     db.rollback()
                     raise
 
@@ -1353,7 +1487,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         sub.status = "checkout_completed"
                         db.commit()
                 except Exception as e:
-                    logger.error("Error updating subscription checkout: %s", e)
+                    logger.event(
+                        ev.SUBSCRIPTION_FAILED, "could not update a subscription checkout",
+                        level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                        reason=ev.REASON_DB_ERROR, stripe_event=event_id,
+                    )
                     db.rollback()
 
         # ── customer.subscription.created — activate subscription, NO donation ──
@@ -1393,10 +1531,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 # NOTE: No donation record here. invoice.payment_succeeded
                 # creates exactly one donation per actual charge.
                 db.commit()
-                logger.info("Subscription %s activated for %s", subscription_id, customer.email)
+                logger.event(
+                    ev.SUBSCRIPTION_ACTIVATED, "recurring donation activated",
+                    outcome=ev.OUTCOME_SUCCESS,
+                    stripe_subscription=subscription_id,
+                    email=mask_email(customer.email), stripe_event=event_id,
+                )
 
             except Exception as e:
-                logger.error("Error processing subscription created: %s", e)
+                logger.event(
+                    ev.SUBSCRIPTION_FAILED, "could not activate a recurring donation",
+                    level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                    reason=ev.REASON_DB_ERROR, stripe_event=event_id,
+                )
                 db.rollback()
 
         # ── invoice.payment_succeeded — ONE donation per actual charge ──
@@ -1439,10 +1586,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             db_sub.updated_at = datetime.utcnow()
                             db.commit()
                             db.refresh(donation)
-                            logger.info("Subscription payment recorded: donation %s ($%s)", donation.id, amount_paid)
+                            logger.event(
+                                ev.SUBSCRIPTION_PAYMENT_RECORDED, "recurring donation charged",
+                                outcome=ev.OUTCOME_SUCCESS,
+                                donation_id=donation.id, amount=amount_paid,
+                                currency="usd", stripe_event=event_id,
+                            )
                             _send_certificate_safe(donation)
                         except Exception as e:
-                            logger.error("Error processing subscription payment: %s", e)
+                            logger.event(
+                                ev.SUBSCRIPTION_FAILED, "a recurring charge could not be recorded",
+                                level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                                reason=ev.REASON_DB_ERROR, stripe_event=event_id,
+                            )
                             db.rollback()
 
         # ── invoice.payment_failed ──
@@ -1496,9 +1652,22 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             donated_at=datetime.utcnow(),
                         ))
                         db.commit()
-                        logger.info("Recorded abandoned checkout for %s ($%s)", customer_email, amount)
+                        # Expected in volume and not a fault, so INFO with no
+                        # outcome field: it must not count against the success
+                        # rate, but it is the funnel's denominator.
+                        logger.event(
+                            ev.DONATION_ABANDONED, "donor left checkout without paying",
+                            amount=amount, email=mask_email(customer_email),
+                            stripe_session=session_id, stripe_event=event_id,
+                        )
                     except Exception as e:
-                        logger.error("Error recording abandoned checkout: %s", e)
+                        logger.event(
+                            ev.WEBHOOK_FAILED, "could not record an abandoned checkout",
+                            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                            reason=ev.REASON_DB_ERROR,
+                            stripe_session=session_id, stripe_event=event_id,
+                            stripe_event_type=event_type,
+                        )
                         db.rollback()
 
         # ── charge.failed — payment was declined ──
@@ -1527,34 +1696,84 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             donated_at=datetime.utcnow(),
                         ))
                         db.commit()
-                        logger.info("Recorded failed charge for %s ($%s): %s — %s", customer_email, amount, failure_code, failure_message)
+                        # A declined card is a real donation failure: the donor
+                        # tried to give and could not. WARNING rather than ERROR
+                        # because nothing on our side is broken, but it carries
+                        # outcome=failure so it lands on the dashboard, grouped
+                        # by Stripe's failure_code.
+                        logger.event(
+                            ev.DONATION_FAILED, failure_message or "the card was declined",
+                            level=logging.WARNING, outcome=ev.OUTCOME_FAILURE,
+                            reason=ev.REASON_CARD_DECLINED,
+                            stripe_code=failure_code,
+                            amount=amount, email=mask_email(customer_email),
+                            stripe_charge=charge_id, stripe_event=event_id,
+                        )
                     except Exception as e:
-                        logger.error("Error recording failed charge: %s", e)
+                        logger.event(
+                            ev.WEBHOOK_FAILED, "could not record a failed charge",
+                            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                            reason=ev.REASON_DB_ERROR,
+                            stripe_charge=charge_id, stripe_event=event_id,
+                            stripe_event_type=event_type,
+                        )
                         db.rollback()
 
-        logger.info("Webhook processed successfully: %s", event_type)
+        logger.event(
+            ev.WEBHOOK_PROCESSED, "webhook handled",
+            outcome=ev.OUTCOME_SUCCESS,
+            stripe_event=event_id, stripe_event_type=event_type,
+        )
         return {"status": "success"}
 
     except stripe.error.SignatureVerificationError as e:
-        logger.error("Webhook signature verification failed: %s", str(e))
+        logger.event(
+            ev.WEBHOOK_REJECTED, "webhook signature did not verify",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_BAD_SIGNATURE,
+        )
         return JSONResponse(status_code=400, content={"status": "signature verification failed"})
     except Exception as e:
-        logger.error("Webhook processing error: %s", str(e))
+        # Catch-all: Stripe will retry, but if the retry fails too the payment
+        # is recorded by Stripe and not by us, so this must be loud.
+        logger.event(
+            ev.WEBHOOK_FAILED, "webhook handler raised",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_UNEXPECTED,
+        )
         return JSONResponse(status_code=500, content={"status": "webhook error"})
 
 
 def _send_certificate_safe(donation: Donation):
-    """Send certificate email without failing the webhook if it errors."""
+    """Send certificate email without failing the webhook if it errors.
+
+    Receipt delivery is logged separately from the donation itself on purpose:
+    the money is safe even when the email is not. Folding the two together
+    would either mark a successful donation as failed, or — as before — bury a
+    failed receipt among success lines where nobody would look for it.
+    """
     try:
-        logger.info("Auto-sending certificate for donation %s to %s (amount: $%s)", donation.id, donation.email, donation.amount)
         if email_certificate(donation):
-            logger.info("Certificate auto-emailed to %s for donation %s", donation.email, donation.id)
+            logger.event(
+                ev.DONATION_CERTIFICATE_EMAILED, "receipt emailed to the donor",
+                donation_id=donation.id, amount=donation.amount,
+                email=mask_email(donation.email),
+            )
         else:
-            logger.error("Certificate auto-email FAILED for donation %s (email_certificate returned False)", donation.id)
+            logger.event(
+                ev.DONATION_CERTIFICATE_FAILED, "receipt was not emailed",
+                level=logging.ERROR, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_EMAIL_SEND_FAILED,
+                donation_id=donation.id, amount=donation.amount,
+                email=mask_email(donation.email),
+            )
     except Exception as e:
-        import traceback
-        logger.error("Certificate auto-email ERROR for donation %s: %s", donation.id, e)
-        logger.error("Traceback: %s", traceback.format_exc())
+        logger.event(
+            ev.DONATION_CERTIFICATE_FAILED, "sending the receipt raised",
+            level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_UNEXPECTED,
+            donation_id=donation.id, email=mask_email(donation.email),
+        )
 
 
 def _record_marketing_conversion(db: Session, donation: Donation) -> None:
@@ -1651,6 +1870,8 @@ def _record_marketing_conversion(db: Session, donation: Donation) -> None:
         )
     except Exception as e:
         import traceback
-        logger.warning("Could not record marketing conversion for donation %s: %s", donation.id, e)
-        logger.warning(traceback.format_exc())
+        logger.warning(
+            "could not record the marketing conversion", exc_info=e,
+            extra={"donation_id": donation.id},
+        )
         db.rollback()

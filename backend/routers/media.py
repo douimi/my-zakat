@@ -10,6 +10,9 @@ from database import get_db
 from auth_utils import get_current_admin
 from models import Story, Testimonial, Setting, GalleryItem, Event
 from s3_service import upload_file, delete_file, file_exists, get_file_url, generate_object_key, list_files, get_file_info, extract_object_key_from_url
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -83,7 +86,7 @@ async def list_videos(
                     "exists_in_s3": True  # Mark that file exists in S3
                 })
     except Exception as e:
-        print(f"Error listing videos from S3: {e}")
+        logger.error(f"Error listing videos from S3: {e}")
     
     # Also check database for videos that might be referenced but deleted from S3
     # This helps identify orphaned database entries
@@ -129,7 +132,7 @@ async def list_videos(
                             "orphaned": True  # Mark as orphaned database entry
                         })
     except Exception as e:
-        print(f"Error checking database for orphaned videos: {e}")
+        logger.error(f"Error checking database for orphaned videos: {e}")
     
     # Check local filesystem as fallback
     # Check media/videos directory (general videos)
@@ -253,7 +256,7 @@ async def list_images(
                     "used_in": used_in
                 })
     except Exception as e:
-        print(f"Error listing images from S3: {e}")
+        logger.error(f"Error listing images from S3: {e}")
     
     # Check local filesystem as fallback
     image_dirs = [

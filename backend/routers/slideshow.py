@@ -11,6 +11,9 @@ from models import SlideshowSlide
 from schemas import SlideshowSlideCreate, SlideshowSlideUpdate, SlideshowSlideResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -54,9 +57,8 @@ async def get_slideshow_slides(active_only: bool = False, db: Session = Depends(
                 result.append(validated_slide)
             except Exception as slide_error:
                 error_trace = traceback.format_exc()
-                print(f"Error serializing slide {slide.id}: {str(slide_error)}")
-                print(f"Slide data: id={slide.id}, title={slide.title}, display_order={slide.display_order}, created_at={slide.created_at}, updated_at={slide.updated_at}")
-                print(f"Traceback: {error_trace}")
+                logger.error(f"Error serializing slide {slide.id}: {str(slide_error)}", exc_info=True)
+                logger.debug(f"Slide data: id={slide.id}, title={slide.title}, display_order={slide.display_order}, created_at={slide.created_at}, updated_at={slide.updated_at}")
                 # Skip invalid slides or raise error
                 raise HTTPException(
                     status_code=500, 
@@ -69,8 +71,7 @@ async def get_slideshow_slides(active_only: bool = False, db: Session = Depends(
     except Exception as e:
         # Log the full error for debugging
         error_trace = traceback.format_exc()
-        print(f"Error in get_slideshow_slides: {str(e)}")
-        print(f"Traceback: {error_trace}")
+        logger.error(f"Error in get_slideshow_slides: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching slideshow slides: {str(e)}")
 
 
@@ -101,8 +102,7 @@ async def create_slideshow_slide(
     except Exception as e:
         db.rollback()
         error_trace = traceback.format_exc()
-        print(f"Error in create_slideshow_slide: {str(e)}")
-        print(f"Traceback: {error_trace}")
+        logger.error(f"Error in create_slideshow_slide: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error creating slideshow slide: {str(e)}")
 
 
@@ -132,7 +132,7 @@ async def update_slideshow_slide(
                 try:
                     os.remove(old_path)
                 except Exception as e:
-                    print(f"Warning: Could not delete old image_filename file {old_path}: {e}")
+                    logger.warning(f"Warning: Could not delete old image_filename file {old_path}: {e}")
     
     # Delete old image_url if being cleared or changed from filename to URL
     if 'image_url' in update_data:
@@ -147,7 +147,7 @@ async def update_slideshow_slide(
                     try:
                         delete_file(object_key)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image_url from S3: {e}")
+                        logger.warning(f"Warning: Could not delete old image_url from S3: {e}")
             else:
                 # Local filename - delete from filesystem
                 old_path = os.path.join(UPLOAD_DIR, old_image_url)
@@ -155,7 +155,7 @@ async def update_slideshow_slide(
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image_url file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image_url file {old_path}: {e}")
     
     for field, value in update_data.items():
         setattr(slide, field, value)
@@ -183,7 +183,7 @@ async def delete_slideshow_slide(
             try:
                 os.remove(image_path)
             except Exception as e:
-                print(f"Error deleting image file: {e}")
+                logger.error(f"Error deleting image file: {e}")
     
     # Also check image_url - handle both S3 URLs and local filenames
     if slide.image_url:
@@ -194,7 +194,7 @@ async def delete_slideshow_slide(
                 try:
                     delete_file(object_key)
                 except Exception as e:
-                    print(f"Error deleting image from S3: {e}")
+                    logger.error(f"Error deleting image from S3: {e}")
         else:
             # Local filename - delete from filesystem
             image_path = os.path.join(UPLOAD_DIR, slide.image_url)
@@ -202,7 +202,7 @@ async def delete_slideshow_slide(
                 try:
                     os.remove(image_path)
                 except Exception as e:
-                    print(f"Error deleting image file from image_url: {e}")
+                    logger.error(f"Error deleting image file from image_url: {e}")
     
     db.delete(slide)
     db.commit()
@@ -245,7 +245,7 @@ async def upload_slideshow_image(
                 try:
                     os.remove(old_path)
                 except Exception as e:
-                    print(f"Error deleting old image: {e}")
+                    logger.error(f"Error deleting old image: {e}")
     
     # Also check image_url if it's a filename (not a URL)
     if slide.image_url and not slide.image_url.startswith(('http://', 'https://')):
@@ -254,7 +254,7 @@ async def upload_slideshow_image(
             try:
                 os.remove(old_path)
             except Exception as e:
-                print(f"Error deleting old image from image_url: {e}")
+                logger.error(f"Error deleting old image from image_url: {e}")
     
     # Read file content
     content_bytes = await file.read()
@@ -272,8 +272,7 @@ async def upload_slideshow_image(
     except Exception as e:
         # ALWAYS fail - never fall back to local storage
         import traceback
-        print(f"❌ Failed to upload slideshow image to S3: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Failed to upload slideshow image to S3: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload image to S3. Error: {str(e)}"

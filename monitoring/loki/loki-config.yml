@@ -26,9 +26,30 @@ schema_config:
 
 limits_config:
   reject_old_samples: true
-  reject_old_samples_max_age: 168h  # 7 days
+  # Matched to retention_period below, deliberately. Promtail now stamps each
+  # entry with the application's own ts= rather than its read time, so if it
+  # ever replays a backlog (a lost positions file, a container with old logs)
+  # those entries carry their true age. At the previous 168h anything older was
+  # rejected with a 400 and lost, while still being inside the 30 days we claim
+  # to keep. Accepting anything we would still retain also makes replays
+  # idempotent: Loki de-duplicates identical stream+timestamp+line, so a
+  # re-read produces no duplicates instead of a second copy stamped "now".
+  reject_old_samples_max_age: 720h  # 30 days — same as retention_period
   ingestion_rate_mb: 4
   ingestion_burst_size_mb: 6
+  # 30 days. The compactor below had retention_enabled: true but no period was
+  # ever set, and the default is retain-forever — so nothing was actually
+  # deleted and the volume grew until the disk decided the matter. Chosen to
+  # cover month-end donation reconciliation: a donation queried at the end of
+  # the following month is still in range.
+  retention_period: 720h
+  # Cardinality guards. Labels are indexed, so a label per donation id or per
+  # stripe session would multiply the index until queries crawl. The dashboards
+  # deliberately keep event/reason/donation_id as logfmt FIELDS parsed at query
+  # time, not labels; these limits make a mistake fail loudly instead of
+  # silently degrading every query.
+  max_label_names_per_series: 15
+  max_query_series: 500
 
 storage_config:
   filesystem:

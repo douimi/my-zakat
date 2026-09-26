@@ -213,17 +213,29 @@ Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Monitoring
 
-Grafana dashboard "MyZakat Activity" provides a live view of:
+Every backend log line is one line of **logfmt** — `key=value`, always
+timestamped, with exceptions folded onto the same line as `error=`/`stack=`:
 
-- 🔴 **Live Activity** — every state-changing action, human-readable
-  (e.g. `✓ otmane: uploaded a new gallery item`)
-- ❌ **Problems** — errors and failures
-- 💳 **Payments** — donations, subscriptions, Stripe webhooks, certificates
-- 🔐 **Logins & Signups** — authentication events
-- 📤 **Content Changes** — uploads, edits, deletes
+```
+ts=2026-09-26T18:45:12.108Z level=info logger=donations event=donation.succeeded
+  outcome=success donation_id=412 amount=50 email=a***@gmail.com msg="donation succeeded"
+```
 
-Logs are collected by Promtail from all Docker containers, stored in Loki
-with 7-day retention. Full guide: [docs/MONITORING.md](docs/MONITORING.md).
+That one format greps on the VPS and gives Grafana real fields via `| logfmt`,
+so dashboards filter on `event` and `reason` rather than on wording.
+
+Two provisioned Grafana dashboards:
+
+- **Donations** — succeeded / failed / success rate / receipts not sent / paid
+  but not recorded, failures grouped by cause, and every failure with the
+  `stripe_session` needed to chase it down. Start here.
+- **Platform activity** — errors, failed requests, log volume by level, and the
+  admin audit trail.
+
+On the server, `./scripts/logs.sh donations --failed` is the fast path.
+
+Promtail ships every container's stdout to Loki, 30-day retention.
+Full guide: [docs/MONITORING.md](docs/MONITORING.md).
 
 ---
 

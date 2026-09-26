@@ -11,6 +11,9 @@ from schemas import GalleryItemCreate, GalleryItemUpdate, GalleryItemResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
 from media_processing import compress_image, compress_video, generate_video_thumbnail, should_compress_image, should_compress_video
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -121,10 +124,10 @@ async def upload_and_create_gallery_item(
     
     # Compress media before uploading
     if is_image and should_compress_image(file.content_type):
-        print(f"🗜️  Compressing image before upload...")
+        logger.debug(f"Compressing image before upload...")
         file_content = compress_image(file_content)
     elif is_video and should_compress_video(file.content_type):
-        print(f"🗜️  Compressing video before upload...")
+        logger.debug(f"Compressing video before upload...")
         file_content = compress_video(file_content)
     
     # Generate unique filename
@@ -135,19 +138,19 @@ async def upload_and_create_gallery_item(
     # Upload to S3 - ALWAYS use S3, never fall back to local storage
     try:
         object_key = generate_object_key(category, filename)
-        print(f"📤 Uploading gallery item to S3: {object_key} (size: {len(file_content)} bytes)")
+        logger.debug(f"Uploading gallery item to S3: {object_key} (size: {len(file_content)} bytes)")
         s3_url = upload_file(
             file_content=file_content,
             object_key=object_key,
             content_type=file.content_type,
             metadata={"original_filename": file.filename or "", "type": "gallery"}
         )
-        print(f"✅ Successfully uploaded gallery item to S3: {s3_url}")
+        logger.debug(f"Successfully uploaded gallery item to S3: {s3_url}")
         
         # Generate and upload thumbnail for videos
         thumbnail_url = None
         if is_video:
-            print(f"🖼️  Generating video thumbnail...")
+            logger.debug(f"Generating video thumbnail...")
             thumbnail_data = generate_video_thumbnail(file_content)
             if thumbnail_data:
                 thumbnail_filename = f"gallery_{timestamp}_thumb.jpg"
@@ -158,7 +161,7 @@ async def upload_and_create_gallery_item(
                     content_type="image/jpeg",
                     metadata={"original_filename": filename, "type": "video_thumbnail", "parent_video": object_key}
                 )
-                print(f"✅ Video thumbnail uploaded: {thumbnail_url}")
+                logger.debug(f"Video thumbnail uploaded: {thumbnail_url}")
         
         # Store the S3 URL as the filename
         stored_filename = s3_url
@@ -166,9 +169,7 @@ async def upload_and_create_gallery_item(
         # Log the error and fail - never fall back to local storage
         import traceback
         error_msg = f"Failed to upload gallery item to S3: {str(e)}"
-        print(f"❌ {error_msg}")
-        print(f"   Error type: {type(e).__name__}")
-        print(traceback.format_exc())
+        logger.error(f"{error_msg}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload file to S3. Please check S3 configuration. Error: {str(e)}"
@@ -245,9 +246,9 @@ async def delete_gallery_item(
             # Delete from S3
             try:
                 delete_file(object_key)
-                print(f"✅ Deleted gallery item from S3: {object_key}")
+                logger.debug(f"Deleted gallery item from S3: {object_key}")
             except Exception as e:
-                print(f"⚠️  Warning: Could not delete from S3: {e}")
+                logger.warning(f"Warning: Could not delete from S3: {e}")
             
             # Also delete thumbnail if it exists
             if is_video and db_item.thumbnail_url:
@@ -255,9 +256,9 @@ async def delete_gallery_item(
                 if thumbnail_key:
                     try:
                         delete_file(thumbnail_key)
-                        print(f"✅ Deleted thumbnail from S3: {thumbnail_key}")
+                        logger.debug(f"Deleted thumbnail from S3: {thumbnail_key}")
                     except Exception as e:
-                        print(f"⚠️  Warning: Could not delete thumbnail from S3: {e}")
+                        logger.warning(f"Warning: Could not delete thumbnail from S3: {e}")
     else:
         # Handle local filesystem deletion (legacy)
         if is_video:
@@ -272,16 +273,16 @@ async def delete_gallery_item(
             from s3_service import file_exists
             if file_exists(object_key):
                 delete_file(object_key)
-                print(f"✅ Deleted gallery item from S3: {object_key}")
+                logger.debug(f"Deleted gallery item from S3: {object_key}")
         except Exception as e:
-            print(f"⚠️  Warning: Could not delete from S3: {e}")
+            logger.warning(f"Warning: Could not delete from S3: {e}")
         
         # Try to delete from local filesystem
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
             except Exception as e:
-                print(f"⚠️  Warning: Could not delete local file: {e}")
+                logger.warning(f"Warning: Could not delete local file: {e}")
         
         # Delete thumbnail if it exists
         if is_video and db_item.thumbnail_url:
@@ -290,9 +291,9 @@ async def delete_gallery_item(
                 from s3_service import file_exists
                 if file_exists(thumbnail_key):
                     delete_file(thumbnail_key)
-                    print(f"✅ Deleted thumbnail from S3: {thumbnail_key}")
+                    logger.debug(f"Deleted thumbnail from S3: {thumbnail_key}")
             except Exception as e:
-                print(f"⚠️  Warning: Could not delete thumbnail from S3: {e}")
+                logger.warning(f"Warning: Could not delete thumbnail from S3: {e}")
     
     db.delete(db_item)
     db.commit()

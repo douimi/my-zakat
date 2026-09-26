@@ -9,6 +9,9 @@ from models import Testimonial
 from schemas import TestimonialCreate, TestimonialResponse
 from auth_utils import get_current_admin
 from s3_service import upload_file, delete_file, generate_object_key, extract_object_key_from_url
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -51,8 +54,7 @@ async def create_testimonial(
             image_value = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload testimonial image to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload testimonial image to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
@@ -85,8 +87,7 @@ async def create_testimonial(
             video_filename = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload testimonial video to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload testimonial video to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload video to S3. Error: {str(e)}"
@@ -172,7 +173,7 @@ async def update_testimonial(
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -192,8 +193,7 @@ async def update_testimonial(
             testimonial.image = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload testimonial image to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload testimonial image to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload image to S3. Error: {str(e)}"
@@ -209,16 +209,16 @@ async def update_testimonial(
                 if object_key:
                     try:
                         delete_file(object_key)
-                        print(f"🗑️  Deleted old testimonial image from S3: {object_key}")
+                        logger.debug(f"Deleted old testimonial image from S3: {object_key}")
                     except Exception as e:
-                        print(f"⚠️  Warning: Could not delete old image from S3: {e}")
+                        logger.warning(f"Warning: Could not delete old image from S3: {e}")
             else:
                 old_path = os.path.join("uploads/testimonials", old_image)
                 if os.path.exists(old_path):
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Warning: Could not delete old image file {old_path}: {e}")
+                        logger.warning(f"Warning: Could not delete old image file {old_path}: {e}")
         
         # Update image URL
         testimonial.image = new_image_value
@@ -236,7 +236,7 @@ async def update_testimonial(
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Error deleting video: {e}")
+                        logger.error(f"Error deleting video: {e}")
         testimonial.video_filename = None
     # Handle video upload if provided
     elif video and video.filename:
@@ -255,7 +255,7 @@ async def update_testimonial(
                     try:
                         os.remove(old_path)
                     except Exception as e:
-                        print(f"Error deleting old video: {e}")
+                        logger.error(f"Error deleting old video: {e}")
         
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -275,8 +275,7 @@ async def update_testimonial(
             testimonial.video_filename = s3_url
         except Exception as e:
             import traceback
-            print(f"❌ Failed to upload testimonial video to S3: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"Failed to upload testimonial video to S3: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to upload video to S3. Error: {str(e)}"
@@ -324,7 +323,7 @@ async def delete_testimonial(
                 try:
                     os.remove(video_path)
                 except Exception as e:
-                    print(f"Warning: Could not delete video file {video_path}: {e}")
+                    logger.warning(f"Warning: Could not delete video file {video_path}: {e}")
     
     # Delete associated image file if exists
     if testimonial.image:
@@ -338,7 +337,7 @@ async def delete_testimonial(
                 try:
                     os.remove(image_path)
                 except Exception as e:
-                    print(f"Warning: Could not delete image file {image_path}: {e}")
+                    logger.warning(f"Warning: Could not delete image file {image_path}: {e}")
     
     testimonial = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
     if not testimonial:
