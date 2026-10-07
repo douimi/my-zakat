@@ -104,9 +104,14 @@ def test_every_event_a_dashboard_filters_on_still_exists(path):
 
 def test_every_payment_event_is_actually_emitted(backend_text):
     """An event defined but never emitted means a dashboard tile that can only
-    ever read zero -- which looks exactly like 'nothing went wrong'."""
+    ever read zero -- which looks exactly like 'nothing went wrong'.
+
+    Covers the proposal events too: declaring a name and never emitting it is
+    the same smell wherever it happens, and it is exactly what this test caught
+    when the agreement work first added them.
+    """
     missing = []
-    for name in ev.PAYMENT_EVENTS:
+    for name in ev.PAYMENT_EVENTS + ev.PROPOSAL_EVENTS:
         const = next((k for k, v in vars(ev).items()
                       if isinstance(v, str) and v == name and k.isupper()), None)
         # Call sites reference the constant (ev.DONATION_SUCCEEDED), not the

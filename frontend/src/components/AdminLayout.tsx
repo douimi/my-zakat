@@ -14,6 +14,10 @@ import { NAV, filterNavForRole, type NavEntry, type NavLink, type NavGroup } fro
 
 const STORAGE_KEY = 'myzakat_admin_nav_expanded'
 
+/** How often the sidebar re-checks for proposals nobody has opened yet. */
+const UNREAD_POLL_MS = 60_000
+const PROPOSALS_HREF = '/admin/project-proposals'
+
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
@@ -73,8 +77,45 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
+  const [proposalsUnread, setProposalsUnread] = useState(0)
   const location = useLocation()
   const { logout, user, role } = useAuthStore()
+  const token = useAuthStore((s) => s.token)
+
+  /**
+   * Keep the proposals badge current.
+   *
+   * Polled rather than pushed: one small request a minute is cheaper than the
+   * websocket plumbing a true push would need, and a reviewer who sees a
+   * revision up to a minute late has lost nothing. Re-runs on navigation so
+   * the count drops as soon as the reviewer opens a dossier, without waiting
+   * for the next tick.
+   *
+   * Failures are swallowed on purpose: a missing badge must never produce an
+   * error toast on every admin page.
+   */
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+    const check = async () => {
+      try {
+        const resp = await fetch(`${API_URL}/api/project-proposals/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!resp.ok) return
+        const body = await resp.json()
+        if (!cancelled) setProposalsUnread(body.count || 0)
+      } catch {
+        /* the badge is not worth surfacing an error for */
+      }
+    }
+
+    check()
+    const timer = window.setInterval(check, UNREAD_POLL_MS)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [token, location.pathname])
 
   const nav = useMemo(() => filterNavForRole(NAV, role), [role])
   const activeGroupId = useMemo(
@@ -113,6 +154,10 @@ const AdminLayout = () => {
 
   const renderLink = (link: NavLink, indented = false) => {
     const active = isLinkActive(location.pathname, link.href)
+    // Only the proposals entry carries a count today; `badge` stays a local
+    // lookup rather than a field on NavLink so adminNav.ts remains a pure
+    // static structure with no data fetching behind it.
+    const badge = link.href === PROPOSALS_HREF ? proposalsUnread : 0
     return (
       <Link
         key={link.href}
@@ -128,9 +173,24 @@ const AdminLayout = () => {
         )}
         title={sidebarCollapsed ? link.name : undefined}
       >
-        <link.icon className={clsx('w-5 h-5 flex-shrink-0', sidebarCollapsed ? 'lg:mr-0' : 'mr-3')} />
+        <span className={clsx('relative flex-shrink-0', sidebarCollapsed ? 'lg:mr-0' : 'mr-3')}>
+          <link.icon className="w-5 h-5" />
+          {/* Collapsed sidebar has no room for the number, so the icon itself
+              carries a dot — the title attribute still says how many. */}
+          {badge > 0 && sidebarCollapsed && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" aria-hidden />
+          )}
+        </span>
         {!sidebarCollapsed && <span className="truncate">{link.name}</span>}
-        {active && !sidebarCollapsed && (
+        {badge > 0 && !sidebarCollapsed && (
+          <span
+            className="ml-auto min-w-[1.25rem] px-1.5 py-0.5 text-xs font-bold leading-none text-center rounded-full bg-amber-500 text-white"
+            aria-label={`${badge} awaiting review`}
+          >
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+        {active && !sidebarCollapsed && badge === 0 && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-600" aria-hidden />
         )}
       </Link>

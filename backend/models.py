@@ -625,6 +625,23 @@ class ProjectProposal(Base):
         ),
         nullable=True,
     )
+    # Which version an admin has actually opened. A dossier is unread when this
+    # differs from current_version_id, which is what drives the admin badge.
+    #
+    # Not derived from status: add_revision() sets status='submitted' for a
+    # brand-new dossier as well as a revision, so the two are indistinguishable
+    # that way — and reading a dossier could then only be recorded by changing
+    # its review state, which is a different fact.
+    admin_seen_version_id = Column(
+        Integer,
+        ForeignKey(
+            "proposal_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_project_proposals_admin_seen_version_id",
+        ),
+        nullable=True,
+    )
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)
@@ -726,6 +743,58 @@ class ProposalAccessCode(Base):
     consumed_at = Column(DateTime, nullable=True)
     attempts = Column(Integer, nullable=False, default=0)
     request_ip = Column(String(45), nullable=True)
+
+
+class ProposalAgreement(Base):
+    """The funding & implementation agreement issued once a proposal is approved.
+
+    One row per proposal, not one per generated PDF: the agreement is a draft
+    the reviewer edits until it reads correctly, and the PDF is rendered from it
+    on demand — the same pattern as the proposal PDF and the donation receipt,
+    neither of which stores a file.
+
+    Most of these fields are pre-filled from the approved version, but they are
+    stored rather than re-derived on each render. Two of them have to be
+    (`distribution_per_beneficiary` and `total_planned_distribution` map to no
+    submitted field, and the document quotes them again in sections 3, 4 and 7),
+    and once a reviewer has corrected any of the others, a later revision to the
+    proposal must not silently rewrite a contract that has already been issued.
+
+    `version_id` records which submission the agreement was drawn from, so that
+    divergence is visible instead of invisible.
+    """
+    __tablename__ = "proposal_agreements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_id = Column(
+        Integer, ForeignKey("project_proposals.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
+    version_id = Column(
+        Integer, ForeignKey("proposal_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # ── The agreement's header block ───────────────────────
+    project_title = Column(String(300), nullable=False)
+    location = Column(String(300), nullable=False)
+    field_representative = Column(String(200), nullable=False)
+    approved_funding_usd = Column(Float, nullable=False)
+    target_count = Column(Integer, nullable=False)
+    target_label = Column(String(120), nullable=False)
+    distribution_per_beneficiary = Column(Text, nullable=False)
+    total_planned_distribution = Column(Text, nullable=False)
+
+    # Appended to the "Use of Funds" list, for project-specific cost lines.
+    extra_fund_uses = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # Stamped on first PDF download, so a draft is distinguishable from an
+    # agreement that has actually gone out to a field representative.
+    issued_at = Column(DateTime, nullable=True)
 
 
 # ─────────────────────────────────────────────────────────────────────

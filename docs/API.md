@@ -357,6 +357,86 @@ PDF of that one version. Both stream `application/pdf` as
 status even on an exported older version; that version's own verdict stays in
 its `decision` field.
 
+### `GET /api/project-proposals/unread-count` — admin
+
+```json
+{ "count": 3 }
+```
+
+Dossiers whose current version nobody has opened. Drives the sidebar badge.
+Declared before `/{id}` in the router — otherwise FastAPI maps `unread-count`
+onto the integer path parameter and answers `422`.
+
+### `POST /api/project-proposals/{id}/seen` — admin
+
+Marks the dossier's current version as read. Idempotent, and returns the fresh
+count so the caller can update the badge from the same round trip:
+
+```json
+{ "proposal_id": 12, "is_unread": false, "unread_count": 2 }
+```
+
+Does not touch `updated_at` — reading a dossier is not a change to it, and the
+admin list sorts on that column.
+
+The list and detail payloads carry the other half of this:
+
+| Field | Meaning |
+|---|---|
+| `is_unread` | current version has not been opened |
+| `is_revision` | more than one version exists, so an unread row is a *change*, not a new arrival |
+
+### `GET /api/project-proposals/{id}/agreement` — admin
+
+The funding agreement, or a pre-filled draft when none has been saved yet.
+
+```json
+{
+  "exists": false,
+  "proposal_status": "approved",
+  "version_drifted": false,
+  "agreement": {
+    "project_title": "Distribution of Rice and Potatoes",
+    "location": "Al-Mawasi, Khan Younis, Gaza",
+    "field_representative": "Naji Abu Raida",
+    "approved_funding_usd": 4500.0,
+    "target_count": 50,
+    "target_label": "families",
+    "distribution_per_beneficiary": "",
+    "total_planned_distribution": "",
+    "extra_fund_uses": "Purchase of rice and potatoes"
+  }
+}
+```
+
+The two distribution lines come back **empty on a draft, by design**: they map
+to no submitted field, and the document quotes them again in sections 3, 4 and
+7, so a guess would propagate through the contract. The reviewer fills them in.
+
+`version_drifted` is true when the saved agreement was drawn from a version the
+dossier has since moved past — the contract may no longer match what was
+approved.
+
+### `PUT /api/project-proposals/{id}/agreement` — admin
+
+Creates or updates the agreement. Every field optional; a partial payload is
+overlaid on the draft, so sending only the distribution lines does not blank
+the rest. Returns the same shape as the `GET`.
+
+- `409` — the proposal is not `approved`. An agreement commits funds, so this
+  gate is enforced server-side and not only in the UI.
+- `400` — a required field (`project_title`, `location`,
+  `field_representative`, `target_label`) would be left blank.
+- `422` — `approved_funding_usd < 0` or `target_count < 1`.
+
+### `GET /api/project-proposals/{id}/agreement/pdf` — admin
+
+Streams `agreement-project-{id}-{slug}.pdf`: the Funding & Implementation
+Agreement, with both signature blocks left blank to be signed. `404` until an
+agreement has been saved. The first download stamps `issued_at`, so a draft is
+distinguishable from a contract that has actually gone out; re-downloading does
+not move it.
+
 ### Submitter portal
 
 Applicants have no account. They prove control of the address on their dossier

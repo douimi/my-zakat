@@ -26,7 +26,8 @@ import proposal_otp
 import proposal_service
 from auth_utils import PORTAL_TOKEN_MINUTES, create_portal_token, get_portal_email
 from database import get_db
-from logging_config import get_logger
+from logging_config import get_logger, mask_email
+import log_events as ev
 from models import ProjectProposal
 from proposal_service import ProposalNotEditable
 from routers.project_proposals import ProposalSubmit, client_ip
@@ -168,7 +169,14 @@ async def submit_revision(
     except ProposalNotEditable as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    logger.info("Proposal #%s revised to version %s", dossier.id, version.version_no)
+    # The event the admin badge keys on: an application the reviewer has
+    # already read once has changed underneath them.
+    logger.event(
+        ev.PROPOSAL_REVISED, "a proposal was revised by its submitter",
+        proposal_id=dossier.id, version_no=version.version_no,
+        email=mask_email(dossier.email),
+        project=(version.project_name or "")[:80],
+    )
     email_service.send_proposal_received(
         email=dossier.email,
         name=version.full_name,

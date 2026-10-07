@@ -21,7 +21,7 @@ from typing import Any, Iterable
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import ProjectProposal, ProposalVersion
+from models import ProjectProposal, ProposalAgreement, ProposalVersion
 
 # Every field the applicant fills in, in form order. One source of truth for the
 # router's payload dump, the version insert, and the serializers.
@@ -372,6 +372,12 @@ def serialize_for_admin(
         "version_count": len(versions),
         "current_version_no": version.version_no if version else None,
         "versions": [serialize_version_summary(v) for v in versions],
+        # Drives the admin badge and the row marker. `is_revision` separates
+        # "someone changed their application" from "a new application arrived":
+        # both arrive as status='submitted', but only the first means the
+        # reviewer is looking at something they have already read once.
+        "is_unread": is_unread(proposal),
+        "is_revision": len(versions) > 1,
         # Kept for the current admin UI, which reads these at the top level.
         "submitted_ip": version.submitted_ip if version else None,
         "decision_comment": version.decision_comment if version else None,
@@ -446,3 +452,287 @@ def delete_proposal(db: Session, proposal: ProjectProposal) -> None:
     ).delete(synchronize_session=False)
     db.delete(proposal)
     db.commit()
+
+
+# -------------------------------------------------------------------
+# Unread tracking
+#
+# "Has anyone looked at the current version of this dossier?" -- one fact per
+# dossier, which is why it is a column and not an event stream. It cannot be
+# derived from `status`: add_revision() sets status='submitted' for a brand-new
+# dossier as well as for a revision, so the two are indistinguishable that way,
+# and marking a dossier read would otherwise mean changing its review state.
+# -------------------------------------------------------------------
+
+def is_unread(proposal: ProjectProposal) -> bool:
+    """True when the dossier's current version has not been opened by an admin.
+
+    A dossier with no version at all is not unread: there is nothing to read,
+    and putting it in the badge would send the reviewer to an empty drawer.
+    """
+    if proposal.current_version_id is None:
+        return False
+    return proposal.admin_seen_version_id != proposal.current_version_id
+
+
+def unread_count(db: Session) -> int:
+    """How many dossiers are waiting to be looked at -- the admin badge."""
+    return (
+        db.query(func.count(ProjectProposal.id))
+        .filter(ProjectProposal.current_version_id.isnot(None))
+        .filter(
+            (ProjectProposal.admin_seen_version_id.is_(None))
+            | (ProjectProposal.admin_seen_version_id
+               != ProjectProposal.current_version_id)
+        )
+        .scalar()
+    ) or 0
+
+
+def mark_seen(db: Session, proposal: ProjectProposal) -> bool:
+    """Record that an admin has opened the current version.
+
+    Returns whether anything changed, so the caller can skip logging on every
+    re-open of an already-read dossier.
+
+    Deliberately does NOT touch `updated_at`: reading a dossier is not a change
+    to it, and bumping the timestamp would reorder the admin list -- which sorts
+    on updated_at -- under the reviewer as they clicked through it.
+
+    That takes an explicit assignment, not just a bulk update: Query.update()
+    DOES apply a Python-side `onupdate`, so leaving the column out of the SET
+    clause would still rewrite it. Passing the current value overrides it.
+    """
+    if proposal.current_version_id is None:
+        return False
+    if proposal.admin_seen_version_id == proposal.current_version_id:
+        return False
+    db.query(ProjectProposal).filter(ProjectProposal.id == proposal.id).update(
+        {
+            ProjectProposal.admin_seen_version_id: proposal.current_version_id,
+            ProjectProposal.updated_at: proposal.updated_at,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+    db.refresh(proposal)
+    return True
+
+
+# -------------------------------------------------------------------
+# Funding agreement
+# -------------------------------------------------------------------
+
+# The fields a reviewer may set. Anything outside this tuple in a payload is
+# ignored rather than written, so a stray key cannot reach the ORM.
+AGREEMENT_FIELDS: tuple[str, ...] = (
+    "project_title", "location", "field_representative",
+    "approved_funding_usd", "target_count", "target_label",
+    "distribution_per_beneficiary", "total_planned_distribution",
+    "extra_fund_uses",
+)
+
+# Fields the document cannot be issued without. The two distribution lines are
+# NOT here: a project handing out one indivisible thing per beneficiary has
+# nothing sensible to put in them, and the renderer omits those lines when they
+# are blank.
+AGREEMENT_REQUIRED: tuple[str, ...] = (
+    "project_title", "location", "field_representative", "target_label",
+)
+
+
+class AgreementIncomplete(ProposalError):
+    """A required agreement field is missing or blank."""
+
+
+class ProposalNotApproved(ProposalError):
+    """An agreement was requested for a dossier that is not approved."""
+
+
+def _first_line(text) -> str:
+    """The first non-blank line of a free-text field, for a one-line slot."""
+    for line in (text or "").splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def _pluralise(label: str, count: int) -> str:
+    """"family" -> "families" for a count other than one.
+
+    Naive on purpose: the reviewer sees and corrects this field before anything
+    is issued, so a clever inflector would be more code for no extra safety.
+    """
+    label = (label or "").strip()
+    if not label or count == 1 or label.endswith("s"):
+        return label or "beneficiaries"
+    if label.endswith("y") and label[-2:-1] not in "aeiou":
+        return label[:-1] + "ies"
+    return label + "s"
+
+
+def agreement_draft(proposal: ProjectProposal, version) -> dict[str, Any]:
+    """Pre-fill the agreement form from the approved version.
+
+    Everything that maps cleanly is filled; the two distribution lines are left
+    empty on purpose. They cannot be derived -- "10 kg rice + 10 kg potatoes" is
+    not a function of any submitted field -- and guessing would put a wrong
+    figure into a document that quotes it again in sections 3, 4 and 7.
+
+    `location` takes only the first line of implementation_location, which
+    applicants often write as a paragraph; the agreement header needs one line.
+    """
+    if version is None:
+        return {name: "" for name in AGREEMENT_FIELDS}
+
+    count = int(version.number_of_beneficiaries or 0)
+    return {
+        "project_title": (version.project_name or "").strip(),
+        "location": _first_line(version.implementation_location),
+        "field_representative": (
+            version.full_name or proposal.full_name or "").strip(),
+        "approved_funding_usd": float(version.total_amount_usd or 0),
+        "target_count": count,
+        "target_label": _pluralise(version.unit_type, count),
+        # Left blank for the reviewer -- see the docstring.
+        "distribution_per_beneficiary": "",
+        "total_planned_distribution": "",
+        "extra_fund_uses": _first_line(version.required_materials),
+    }
+
+
+def get_agreement(db: Session, proposal: ProjectProposal):
+    return (
+        db.query(ProposalAgreement)
+        .filter(ProposalAgreement.proposal_id == proposal.id)
+        .one_or_none()
+    )
+
+
+def _clean_agreement_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    clean: dict[str, Any] = {}
+    for name in AGREEMENT_FIELDS:
+        if name not in fields:
+            continue
+        value = fields[name]
+        if name == "approved_funding_usd":
+            try:
+                value = round(float(value or 0), 2)
+            except (TypeError, ValueError):
+                raise AgreementIncomplete("Approved funding must be a number.")
+            if value < 0:
+                raise AgreementIncomplete("Approved funding cannot be negative.")
+        elif name == "target_count":
+            try:
+                value = int(value or 0)
+            except (TypeError, ValueError):
+                raise AgreementIncomplete("Target count must be a whole number.")
+            if value < 1:
+                raise AgreementIncomplete("Target count must be at least 1.")
+        else:
+            value = (str(value).strip() if value is not None else "")
+        clean[name] = value
+    return clean
+
+
+def save_agreement(
+    db: Session,
+    proposal: ProjectProposal,
+    *,
+    fields: dict[str, Any],
+    reviewer_id,
+):
+    """Create or update the dossier's agreement draft.
+
+    Refuses on a dossier that is not approved: an agreement commits funds, and
+    the one gate that must not be bypassable from the UI is issuing one for a
+    proposal nobody approved.
+    """
+    if proposal.status != "approved":
+        raise ProposalNotApproved(
+            "A funding agreement needs an approved proposal; this one is "
+            "'%s'." % proposal.status
+        )
+
+    clean = _clean_agreement_fields(fields)
+    agreement = get_agreement(db, proposal)
+
+    if agreement is None:
+        # Start from the draft so a partial payload still yields a complete row,
+        # then overlay what the reviewer actually sent.
+        base = agreement_draft(proposal, current_version(db, proposal))
+        base.update({k: v for k, v in clean.items() if v != ""})
+        missing = [n for n in AGREEMENT_REQUIRED
+                   if not str(base.get(n) or "").strip()]
+        if missing:
+            raise AgreementIncomplete(
+                "Missing required field(s): " + ", ".join(missing))
+        agreement = ProposalAgreement(
+            proposal_id=proposal.id,
+            version_id=proposal.current_version_id,
+            project_title=base["project_title"],
+            location=base["location"],
+            field_representative=base["field_representative"],
+            approved_funding_usd=float(base.get("approved_funding_usd") or 0),
+            target_count=int(base.get("target_count") or 1),
+            target_label=base["target_label"],
+            distribution_per_beneficiary=base.get(
+                "distribution_per_beneficiary") or "",
+            total_planned_distribution=base.get(
+                "total_planned_distribution") or "",
+            extra_fund_uses=base.get("extra_fund_uses") or None,
+            updated_by=reviewer_id,
+        )
+        db.add(agreement)
+    else:
+        for name, value in clean.items():
+            if name in AGREEMENT_REQUIRED and not str(value or "").strip():
+                raise AgreementIncomplete("'%s' cannot be blank." % name)
+            if name == "extra_fund_uses":
+                value = value or None
+            setattr(agreement, name, value)
+        agreement.updated_by = reviewer_id
+
+    db.commit()
+    db.refresh(agreement)
+    return agreement
+
+
+def mark_agreement_issued(db: Session, agreement) -> bool:
+    """Stamp first issue. Returns whether this was the first time.
+
+    Only the first download is stamped: `issued_at` answers "has this gone out
+    to the representative", and overwriting it on every re-download would turn
+    it into "when did someone last click the button" -- a different and much
+    less useful question.
+    """
+    if agreement.issued_at is not None:
+        return False
+    agreement.issued_at = datetime.utcnow()
+    db.commit()
+    db.refresh(agreement)
+    return True
+
+
+def serialize_agreement(agreement):
+    if agreement is None:
+        return None
+    return {
+        "id": agreement.id,
+        "proposal_id": agreement.proposal_id,
+        "version_id": agreement.version_id,
+        "project_title": agreement.project_title,
+        "location": agreement.location,
+        "field_representative": agreement.field_representative,
+        "approved_funding_usd": float(agreement.approved_funding_usd or 0),
+        "target_count": agreement.target_count,
+        "target_label": agreement.target_label,
+        "distribution_per_beneficiary":
+            agreement.distribution_per_beneficiary or "",
+        "total_planned_distribution":
+            agreement.total_planned_distribution or "",
+        "extra_fund_uses": agreement.extra_fund_uses or "",
+        "created_at": agreement.created_at,
+        "updated_at": agreement.updated_at,
+        "issued_at": agreement.issued_at,
+    }

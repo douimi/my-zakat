@@ -81,6 +81,37 @@ docker-compose -f docker-compose.traefik.yml exec -T db \
 # must return 0
 ```
 
+### `35_proposal_agreements_and_unread.sql` — BEFORE deploying the new backend
+
+Adds `project_proposals.admin_seen_version_id` (the unread marker behind the
+admin badge) and creates `proposal_agreements` (the funding agreement issued
+after approval). Additive and idempotent.
+
+**It must come first, for the same reason 32 did.** `main.py` calls
+`Base.metadata.create_all()` at import, and create_all only ever creates missing
+*tables* — never a missing *column*. So deploying first would give you
+`proposal_agreements` (built from the model, which is why the migration also
+fixes up its types and constraints) while `project_proposals` silently lacks
+`admin_seen_version_id`, and every call to the proposals list would 500 on a
+column that does not exist. That is exactly the failure migration 34 exists to
+clean up after.
+
+Apply it, then deploy:
+
+```bash
+docker-compose -f docker-compose.traefik.yml exec -T db \
+  psql -U myzakat_user -d myzakat < migrations/35_proposal_agreements_and_unread.sql
+
+# confirm, before deploying
+docker-compose -f docker-compose.traefik.yml exec -T db \
+  psql -U myzakat_user -d myzakat -c "\d project_proposals" | grep admin_seen_version_id
+```
+
+Existing dossiers are backfilled as already-seen on purpose: marking a backlog
+unread on deploy day would fill the badge with proposals handled months ago, and
+the reviewer would learn to ignore it. Only revisions arriving afterwards light
+it up.
+
 ## Services
 - **Frontend**: https://myzakat.org
 - **Backend API**: https://myzakat.org/api

@@ -13,6 +13,11 @@ Admin / manager (auth):
   DELETE /api/project-proposals/{id}                 → delete the dossier and its versions
   GET    /api/project-proposals/{id}/pdf             → PDF of the current version
   GET    /api/project-proposals/{id}/versions/{n}/pdf→ PDF of that version
+  GET    /api/project-proposals/unread-count         → badge count for the admin nav
+  POST   /api/project-proposals/{id}/seen            → mark the current version read
+  GET    /api/project-proposals/{id}/agreement       → saved agreement, or a draft
+  PUT    /api/project-proposals/{id}/agreement       → create/update the agreement
+  GET    /api/project-proposals/{id}/agreement/pdf   → the signed-ready agreement
 
 The submitter-facing half of this feature lives in routers/proposal_portal.py.
 Domain rules live in proposal_service.py; this module only maps HTTP to them.
@@ -20,6 +25,7 @@ Domain rules live in proposal_service.py; this module only maps HTTP to them.
 from __future__ import annotations
 
 import io
+import logging
 from types import SimpleNamespace
 from typing import Optional
 
@@ -32,14 +38,18 @@ import email_service
 import proposal_service
 from auth_utils import get_current_manager_or_admin
 from database import get_db
-from logging_config import get_logger
+from logging_config import get_logger, mask_email
+from agreement_pdf import render_agreement_pdf
 from models import ProjectProposal, ProposalVersion, User
 from proposal_pdf import render_proposal_pdf, safe_slug
 from proposal_service import (
+    AgreementIncomplete,
     DecisionCommentRequired,
     InvalidProposalStatus,
     ProposalError,
+    ProposalNotApproved,
 )
+import log_events as ev
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -156,10 +166,12 @@ async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session
         sms_consent=bool(data.get("sms_consent")),
         sms_consent_text=data.get("sms_consent_text"),
     )
-    logger.info(
-        "Project proposal #%s submitted by %s (%s)%s",
-        dossier.id, dossier.email, version.project_name[:60],
-        " [SMS opt-in]" if version.sms_consent else "",
+    logger.event(
+        ev.PROPOSAL_SUBMITTED, "a new project proposal was submitted",
+        proposal_id=dossier.id, version_no=version.version_no,
+        email=mask_email(dossier.email),
+        project=version.project_name[:80],
+        sms_consent=bool(version.sms_consent),
     )
     email_service.send_proposal_received(
         email=dossier.email,
@@ -177,6 +189,39 @@ async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session
 
 
 # ── Admin: list / get / update / delete ──────────────────────────────
+
+class AgreementUpdate(BaseModel):
+    """What the reviewer may set on the agreement.
+
+    Every field optional: the drawer saves the whole form, but a caller that
+    sends only the two distribution lines must not blank the rest. The service
+    layer ignores keys outside its own allow-list, so an unexpected field here
+    cannot reach the ORM.
+    """
+    project_title: Optional[str] = Field(default=None, max_length=300)
+    location: Optional[str] = Field(default=None, max_length=300)
+    field_representative: Optional[str] = Field(default=None, max_length=200)
+    approved_funding_usd: Optional[float] = Field(default=None, ge=0)
+    target_count: Optional[int] = Field(default=None, ge=1)
+    target_label: Optional[str] = Field(default=None, max_length=120)
+    distribution_per_beneficiary: Optional[str] = None
+    total_planned_distribution: Optional[str] = None
+    extra_fund_uses: Optional[str] = None
+
+
+# ── Unread tracking ──────────────────────────────────────────────────
+# Declared BEFORE /{proposal_id}: FastAPI matches routes in declaration order,
+# and "unread-count" would otherwise be captured by the int path parameter and
+# answered with a 422.
+
+@router.get("/unread-count")
+async def proposals_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """How many dossiers nobody has opened since their latest submission."""
+    return {"count": proposal_service.unread_count(db)}
+
 
 @router.get("/")
 async def list_proposals(
@@ -264,7 +309,13 @@ async def update_proposal_status(
     except ProposalError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    logger.info("Proposal #%s status → %s by %s", dossier.id, dossier.status, current_user.email)
+    logger.event(
+        ev.PROPOSAL_DECIDED, "a proposal decision was recorded",
+        proposal_id=dossier.id, decision=dossier.status,
+        previous_status=previous_status, version_no=version.version_no,
+        amount=float(version.total_amount_usd or 0),
+        actor=mask_email(current_user.email),
+    )
 
     if previous_status != dossier.status:
         _notify_decision(dossier, version)
@@ -361,3 +412,149 @@ def _pdf_response(dossier: ProjectProposal, version: ProposalVersion) -> Streami
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+
+# ── Mark a dossier read ──────────────────────────────────────────────
+
+@router.post("/{proposal_id}/seen")
+async def mark_proposal_seen(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Record that this reviewer has opened the dossier's current version.
+
+    Idempotent, and returns the fresh badge count either way so the admin nav
+    can update from the same round trip the drawer already makes.
+    """
+    dossier = _load(db, proposal_id)
+    changed = proposal_service.mark_seen(db, dossier)
+    if changed:
+        logger.event(
+            ev.PROPOSAL_SEEN, "an admin opened a proposal",
+            proposal_id=dossier.id, version_id=dossier.current_version_id,
+            actor=mask_email(current_user.email),
+        )
+    return {
+        "proposal_id": dossier.id,
+        "is_unread": proposal_service.is_unread(dossier),
+        "unread_count": proposal_service.unread_count(db),
+    }
+
+
+# ── Funding agreement ────────────────────────────────────────────────
+
+@router.get("/{proposal_id}/agreement")
+async def get_proposal_agreement(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """The saved agreement if there is one, otherwise a pre-filled draft.
+
+    `exists` tells the drawer which it is looking at, so it can label the
+    button "Generate" or "Update" without guessing from the field values.
+    `version_drifted` flags an agreement drawn from a version the dossier has
+    since moved past — the contract may no longer match what was approved.
+    """
+    dossier = _load(db, proposal_id)
+    agreement = proposal_service.get_agreement(db, dossier)
+    if agreement is not None:
+        return {
+            "exists": True,
+            "proposal_status": dossier.status,
+            "version_drifted": (
+                agreement.version_id is not None
+                and agreement.version_id != dossier.current_version_id
+            ),
+            "agreement": proposal_service.serialize_agreement(agreement),
+        }
+    version = proposal_service.current_version(db, dossier)
+    return {
+        "exists": False,
+        "proposal_status": dossier.status,
+        "version_drifted": False,
+        "agreement": proposal_service.agreement_draft(dossier, version),
+    }
+
+
+@router.put("/{proposal_id}/agreement")
+async def put_proposal_agreement(
+    proposal_id: int,
+    payload: AgreementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    dossier = _load(db, proposal_id)
+    try:
+        agreement = proposal_service.save_agreement(
+            db, dossier,
+            fields=payload.model_dump(exclude_unset=True),
+            reviewer_id=current_user.id,
+        )
+    except ProposalNotApproved as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except AgreementIncomplete as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    logger.event(
+        ev.AGREEMENT_SAVED, "funding agreement saved",
+        proposal_id=dossier.id, agreement_id=agreement.id,
+        amount=float(agreement.approved_funding_usd or 0),
+        actor=mask_email(current_user.email),
+    )
+    return {
+        "exists": True,
+        "proposal_status": dossier.status,
+        "version_drifted": (
+            agreement.version_id is not None
+            and agreement.version_id != dossier.current_version_id
+        ),
+        "agreement": proposal_service.serialize_agreement(agreement),
+    }
+
+
+@router.get("/{proposal_id}/agreement/pdf")
+async def download_proposal_agreement_pdf(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Render the agreement. First download stamps it as issued."""
+    dossier = _load(db, proposal_id)
+    agreement = proposal_service.get_agreement(db, dossier)
+    if agreement is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No funding agreement has been prepared for this proposal yet.",
+        )
+
+    try:
+        pdf = render_agreement_pdf(agreement)
+    except Exception as exc:
+        logger.event(
+            ev.AGREEMENT_ISSUED, "could not render the funding agreement",
+            level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_PDF_FAILED, proposal_id=dossier.id,
+            agreement_id=agreement.id,
+        )
+        raise HTTPException(status_code=500, detail="Could not render the agreement PDF.")
+
+    first_issue = proposal_service.mark_agreement_issued(db, agreement)
+    logger.event(
+        ev.AGREEMENT_ISSUED, "funding agreement downloaded",
+        outcome=ev.OUTCOME_SUCCESS, proposal_id=dossier.id,
+        agreement_id=agreement.id, first_issue=first_issue,
+        amount=float(agreement.approved_funding_usd or 0),
+        actor=mask_email(current_user.email),
+    )
+
+    filename = "agreement-project-%s-%s.pdf" % (
+        dossier.id, safe_slug(agreement.project_title))
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+    )
+

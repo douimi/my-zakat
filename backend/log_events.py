@@ -82,6 +82,19 @@ SUBSCRIPTION_CANCELLED = "subscription.cancelled"
 SUBSCRIPTION_FAILED = "subscription.failed"
 
 # ---------------------------------------------------------------------------
+# Project proposals. Not money, but the decisions here commit money, so the
+# review trail is worth being able to reconstruct from the log alone.
+# ---------------------------------------------------------------------------
+PROPOSAL_SUBMITTED = "proposal.submitted"      # first version of a new dossier
+PROPOSAL_REVISED = "proposal.revised"          # a further version arrived
+PROPOSAL_DECIDED = "proposal.decided"          # approved / rejected / changes_requested
+PROPOSAL_SEEN = "proposal.seen"                # an admin opened the current version
+
+# The funding agreement issued after approval.
+AGREEMENT_SAVED = "agreement.saved"            # draft created or edited
+AGREEMENT_ISSUED = "agreement.issued"          # PDF rendered and downloaded
+
+# ---------------------------------------------------------------------------
 # Everything else worth finding again.
 # ---------------------------------------------------------------------------
 AUTH_LOGIN = "auth.login"
@@ -129,6 +142,11 @@ PAYMENT_EVENTS = (
     SUBSCRIPTION_FAILED,
 )
 
-ALL_EVENTS = PAYMENT_EVENTS + (
+PROPOSAL_EVENTS = (
+    PROPOSAL_SUBMITTED, PROPOSAL_REVISED, PROPOSAL_DECIDED, PROPOSAL_SEEN,
+    AGREEMENT_SAVED, AGREEMENT_ISSUED,
+)
+
+ALL_EVENTS = PAYMENT_EVENTS + PROPOSAL_EVENTS + (
     AUTH_LOGIN, AUTH_REGISTER, REQUEST_FAILED, CONTENT_CHANGED,
 )
