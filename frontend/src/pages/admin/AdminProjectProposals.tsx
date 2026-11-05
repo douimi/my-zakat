@@ -8,9 +8,10 @@
 import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
-  CheckCircle2, XCircle, ClipboardList, Search, Sparkles, FileText, Bell,
-  Banknote, Paperclip, ClipboardCheck,
+  CheckCircle2, XCircle, Search, FileText, Bell,
+  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight,
 } from 'lucide-react'
+import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -95,7 +96,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 const STATUS_LABEL: Record<string, string> = {
   funded: 'Funded',
-  report_submitted: 'Report to review',
+  report_submitted: 'Report filed',
   report_changes_requested: 'Report sent back',
   completed: 'Completed',
   submitted: 'Submitted',
@@ -103,6 +104,165 @@ const STATUS_LABEL: Record<string, string> = {
   changes_requested: 'Changes requested',
   approved: 'Approved',
   rejected: 'Rejected',
+}
+
+/**
+ * The lifecycle, declared once.
+ *
+ * The drawer used to show nine always-open sections and five status buttons at
+ * all times, which left the reviewer to work out for themselves where a dossier
+ * stood and what to do with it. Everything below exists so the UI can answer
+ * those two questions outright: a stepper that shows the position, and a single
+ * panel that shows the one action the position allows.
+ */
+const LIFECYCLE = [
+  { key: 'received', label: 'Received' },
+  { key: 'review', label: 'Review' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'funded', label: 'Funded' },
+  { key: 'report', label: 'Report' },
+  { key: 'completed', label: 'Completed' },
+] as const
+
+/**
+ * Where each status sits on that line, and whether it is stalled there.
+ *
+ * The branches are not extra steps. `changes_requested` is the Review step
+ * waiting on the applicant; `report_changes_requested` is the Report step
+ * waiting on the team; `rejected` is the Review step, stopped. Modelling them
+ * as positions-with-a-state keeps the stepper a straight line, which is the
+ * only reason it reads at a glance.
+ */
+const STATUS_STEP: Record<string, { index: number; waitingOn?: string; stopped?: boolean }> = {
+  submitted:                { index: 0 },
+  under_review:             { index: 1 },
+  changes_requested:        { index: 1, waitingOn: 'the applicant' },
+  rejected:                 { index: 1, stopped: true },
+  approved:                 { index: 2 },
+  funded:                   { index: 3, waitingOn: 'the team' },
+  report_submitted:         { index: 4 },
+  report_changes_requested: { index: 4, waitingOn: 'the team' },
+  completed:                { index: 5 },
+}
+
+/** What the reviewer should do next, per status. One sentence, no jargon. */
+const NEXT_STEP: Record<string, { title: string; body: string; waiting?: boolean }> = {
+  submitted: {
+    title: 'A new application to review',
+    body: 'Read the dossier, then approve it, ask for changes, or decline it.',
+  },
+  under_review: {
+    title: 'Your decision',
+    body: 'Approve this application, ask the applicant for changes, or decline it.',
+  },
+  changes_requested: {
+    title: 'Waiting on the applicant',
+    body: 'They have been emailed what to change. The dossier comes back here when they resubmit.',
+    waiting: true,
+  },
+  rejected: {
+    title: 'Declined',
+    body: 'The applicant has been told. You can reopen it for a second look if that was wrong.',
+    waiting: true,
+  },
+  approved: {
+    title: 'Prepare the agreement, then release the funds',
+    body: 'Fill in the funding agreement and send it to be signed. Mark the project funded once the money has actually left.',
+  },
+  funded: {
+    title: 'Waiting on the team',
+    body: 'They are implementing the project, and owe a completion report. They cannot apply for anything else until it is accepted.',
+    waiting: true,
+  },
+  report_submitted: {
+    title: 'A completion report to review',
+    body: 'Read what they sent and the files attached, then accept it to close the project, or send it back saying what is missing.',
+  },
+  report_changes_requested: {
+    title: 'Waiting on the team',
+    body: 'They have been emailed what is still needed, and will submit a corrected report.',
+    waiting: true,
+  },
+  completed: {
+    title: 'Closed',
+    body: 'The report was accepted. The team is free to apply for a new project.',
+    waiting: true,
+  },
+}
+
+/**
+ * The lifecycle as a single line of dots.
+ *
+ * Deliberately not colour-only: the current step carries its label in bold and
+ * the stalled state is spelled out underneath, so the position is readable
+ * without distinguishing green from grey.
+ */
+const Lifecycle = ({ status }: { status: string }) => {
+  const here = STATUS_STEP[status] ?? { index: 0 }
+  return (
+    <div>
+      <ol className="flex items-center gap-1 overflow-x-auto pb-1">
+        {LIFECYCLE.map((step, i) => {
+          const done = i < here.index
+          const current = i === here.index
+          const stopped = current && here.stopped
+          return (
+            <li key={step.key} className="flex items-center gap-1 shrink-0">
+              <span
+                className={clsx(
+                  'w-2.5 h-2.5 rounded-full shrink-0',
+                  stopped ? 'bg-red-500'
+                    : current ? 'bg-primary-600 ring-2 ring-primary-200'
+                    : done ? 'bg-primary-400' : 'bg-gray-300',
+                )}
+                aria-hidden
+              />
+              <span className={clsx(
+                'text-xs whitespace-nowrap',
+                current ? 'font-bold text-gray-900' : done ? 'text-gray-600' : 'text-gray-400',
+              )}>
+                {step.label}
+              </span>
+              {i < LIFECYCLE.length - 1 && (
+                <span className={clsx('w-5 h-px mx-1 shrink-0', done ? 'bg-primary-300' : 'bg-gray-200')} aria-hidden />
+              )}
+            </li>
+          )
+        })}
+      </ol>
+      {here.waitingOn && (
+        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+          <Hourglass className="w-3 h-3" /> Waiting on {here.waitingOn}
+        </p>
+      )}
+      {here.stopped && (
+        <p className="text-xs text-red-700 mt-1 flex items-center gap-1">
+          <Ban className="w-3 h-3" /> Stopped here
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The single thing a row is waiting on, or null.
+ *
+ * A row could previously carry five marks at once — unread dot, New/Modified,
+ * version count, "Report to review", and the status badge — which between them
+ * said less than one clear sentence. The status badge keeps saying WHERE the
+ * dossier is; this says only whether it needs YOU, and the detail stays in the
+ * drawer.
+ *
+ * Ordered by urgency: a dossier that is both unread and owes a report review is
+ * reported as the report, because that is the action with money already spent
+ * behind it.
+ */
+const attentionFor = (r: { is_unread: boolean; is_revision: boolean; awaiting_report_review: boolean; report_unread: boolean }):
+  { label: string; tone: string } | null => {
+  if (r.awaiting_report_review) return { label: 'Review report', tone: 'bg-indigo-100 text-indigo-800' }
+  if (r.is_unread && r.is_revision) return { label: 'Changed — reread', tone: 'bg-amber-100 text-amber-800' }
+  if (r.is_unread) return { label: 'New', tone: 'bg-blue-100 text-blue-800' }
+  return null
 }
 
 // Statuses the applicant must be given a reason for — the backend enforces
@@ -176,6 +336,8 @@ const AdminProjectProposals = () => {
   const [reportComment, setReportComment] = useState('')
   const [reportNote, setReportNote] = useState('')
   const [reportBusy, setReportBusy] = useState(false)
+  type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history'
+  const [tab, setTab] = useState<DrawerTab>('dossier')
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
@@ -212,6 +374,7 @@ const AdminProjectProposals = () => {
     setOpenVersion(p.current_version_no)
     setVersionDetail(null)
     if (p.current_version_no != null) fetchVersion(p.id, p.current_version_no)
+    setTab('dossier')
     markSeen(p)
     loadAgreement(p)
     loadReports(p)
@@ -589,6 +752,7 @@ const AdminProjectProposals = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Applicant</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attention</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Submitted</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -598,36 +762,19 @@ const AdminProjectProposals = () => {
                 <tr key={r.id} className={r.is_unread ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-gray-50'}>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-start gap-2">
-                      {/* Never colour alone: the dot is paired with the
-                          "New"/"Modified" wording below it. */}
-                      {r.is_unread && (
-                        <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 shrink-0" aria-label="Unread" title="Not yet opened" />
+                      {/* Colour never alone: the dot repeats what the badge in
+                          the Attention column spells out in words. */}
+                      {attentionFor(r) && (
+                        <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 shrink-0" aria-hidden />
                       )}
                       <div className="min-w-0">
                         <div className="font-medium text-gray-900 max-w-[260px] truncate" title={r.project_name || undefined}>{r.project_name || '—'}</div>
-                        <div className="text-xs text-gray-500">Ref #{r.id}</div>
+                        {/* Version number inline, not a pill: it is reference
+                            information, not something to act on. */}
+                        <div className="text-xs text-gray-500">
+                          Ref #{r.id}{r.version_count > 1 && ` · v${r.current_version_no}`}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1 mt-1">
-                      {r.is_unread && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${r.is_revision ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                          {r.is_revision ? (
-                            <><RefreshCw className="w-3 h-3" /> Modified · v{r.current_version_no}</>
-                          ) : (
-                            <><Sparkles className="w-3 h-3" /> New</>
-                          )}
-                        </span>
-                      )}
-                      {r.awaiting_report_review && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                          <ClipboardCheck className="w-3 h-3" /> Report to review
-                        </span>
-                      )}
-                      {r.version_count > 1 && !r.is_unread && (
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                          v{r.current_version_no} · {r.version_count} versions
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700 hidden md:table-cell">
@@ -639,6 +786,14 @@ const AdminProjectProposals = () => {
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_BADGE[r.status] || 'bg-gray-100'}`}>
                       {STATUS_LABEL[r.status] || r.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const a = attentionFor(r)
+                      return a
+                        ? <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${a.tone}`}>{a.label}</span>
+                        : <span className="text-xs text-gray-400">—</span>
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell whitespace-nowrap">{formatDate(r.submitted_at)}</td>
                   <td className="px-4 py-3">
@@ -674,7 +829,98 @@ const AdminProjectProposals = () => {
               </div>
             </div>
 
+            {/* Where the dossier stands, and the single action that stands
+                open. Together these replace nine always-expanded sections and a
+                permanent row of five status buttons. */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 space-y-3">
+              <Lifecycle status={selected.status} />
+
+              {(() => {
+                const step = NEXT_STEP[selected.status]
+                if (!step) return null
+                return (
+                  <div className={clsx(
+                    'rounded-lg border p-3',
+                    step.waiting ? 'border-gray-200 bg-white' : 'border-primary-200 bg-primary-50',
+                  )}>
+                    <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                      {step.waiting ? 'Where it stands' : 'Next step'}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900 mt-1">{step.title}</p>
+                    <p className="text-sm text-gray-700 mt-0.5">{step.body}</p>
+
+                    {/* Review verdicts. Shown only where a verdict is the next
+                        move, so "Mark submitted" can no longer appear on a
+                        closed dossier. */}
+                    {['submitted', 'under_review'].includes(selected.status) && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button onClick={() => changeStatus('approved')} className="text-sm px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded inline-flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Approve</button>
+                        <button onClick={() => changeStatus('changes_requested')} className="text-sm px-3 py-2 bg-orange-100 hover:bg-orange-200 text-orange-900 font-semibold rounded inline-flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Ask for changes</button>
+                        <button onClick={() => changeStatus('rejected')} className="text-sm px-3 py-2 bg-white border border-red-200 hover:bg-red-50 text-red-800 font-semibold rounded inline-flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Decline</button>
+                        {selected.status === 'submitted' && (
+                          <button onClick={() => changeStatus('under_review')} className="text-sm px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded">Mark under review</button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Approved: the agreement, then the money. */}
+                    {selected.status === 'approved' && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button onClick={() => setTab('agreement')} className="text-sm px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold rounded inline-flex items-center gap-1.5"><FileText className="w-4 h-4" /> Funding agreement <ArrowRight className="w-3.5 h-3.5" /></button>
+                        <button onClick={markFunded} disabled={reportBusy} className="text-sm px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded inline-flex items-center gap-1.5 disabled:opacity-50"><Banknote className="w-4 h-4" /> {reportBusy ? 'Working…' : 'Mark as funded'}</button>
+                      </div>
+                    )}
+
+                    {/* A report is waiting: send them to it rather than make
+                        them find it among the tabs. */}
+                    {selected.status === 'report_submitted' && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button onClick={() => setTab('report')} className="text-sm px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded inline-flex items-center gap-1.5"><ClipboardCheck className="w-4 h-4" /> Read the report <ArrowRight className="w-3.5 h-3.5" /></button>
+                      </div>
+                    )}
+
+                    {/* Reopening a dossier that was closed in error. */}
+                    {['rejected', 'changes_requested'].includes(selected.status) && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button onClick={() => changeStatus('under_review')} className="text-sm px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded inline-flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Reopen for review</button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Everything else, behind tabs. The agreement and report tabs only
+                exist once they can hold anything. */}
+            <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
+              {([
+                ['dossier', 'Application', true],
+                ['report', 'Report', selected.has_report || ['funded', 'report_submitted', 'report_changes_requested', 'completed'].includes(selected.status)],
+                ['agreement', 'Agreement', ['approved', 'funded', 'report_submitted', 'report_changes_requested', 'completed'].includes(selected.status)],
+                ['history', `History (${selected.version_count})`, true],
+              ] as [DrawerTab, string, boolean][])
+                .filter(([, , show]) => show)
+                .map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={clsx(
+                      'px-3 py-2 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap',
+                      tab === key
+                        ? 'border-primary-600 text-primary-700'
+                        : 'border-transparent text-gray-500 hover:text-gray-800',
+                    )}
+                  >
+                    {label}
+                    {key === 'report' && selected.awaiting_report_review && (
+                      <span className="ml-1.5 w-2 h-2 rounded-full bg-indigo-500 inline-block align-middle" aria-label="awaiting review" />
+                    )}
+                  </button>
+                ))}
+            </div>
+
             <div className="flex-1 overflow-y-auto">
+              {tab === 'dossier' && (<>
               {/* Section 1 */}
               <Section title="1. Personal information">
                 <KV rows={[
@@ -736,6 +982,36 @@ const AdminProjectProposals = () => {
                 </div>
               </Section>
 
+              {/* The applicant's own message and the staff note live with the
+                  application, since that is what they are about. */}
+              <Section title="Review notes">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Message to the applicant <span className="text-gray-400">— goes out in the email</span>
+                  </label>
+                  <textarea rows={3} value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)}
+                    placeholder="What the applicant will read — the reason for the decision, or what to change."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+                  <p className="text-xs text-gray-500 mt-1">Required to decline or ask for changes.</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Internal note <span className="text-gray-400">— staff only, never sent</span>
+                  </label>
+                  <textarea rows={2} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Notes for admins and managers. The applicant never sees this."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  {selected.reviewed_at
+                    ? <p className="text-xs text-gray-500">Last reviewed {formatDate(selected.reviewed_at)}</p>
+                    : <span />}
+                  <button onClick={saveNotes} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded shrink-0">Save without notifying</button>
+                </div>
+              </Section>
+              </>)}
+
+              {tab === 'history' && (<>
               {/* Version history — the current version opens expanded (see
                   openDetail); older ones stay collapsed behind "View content". */}
               <Section title={`Version history (${selected.version_count})`}>
@@ -804,11 +1080,13 @@ const AdminProjectProposals = () => {
                 ))}
               </Section>
 
-              {/* Disbursement — approved means decided, funded means the money
-                  left. Separate from the review buttons because it is not a
-                  verdict on the application, and the backend refuses it from
-                  any status but `approved`. */}
-              {selected.status === 'approved' && (
+              </>)}
+
+              {/* Disbursement moved into the Next step panel above — it is the
+                  action an approved dossier is waiting for, so it belongs where
+                  the reviewer is already looking rather than in a section of
+                  its own further down. */}
+              {false && (
                 <Section title="Disbursement">
                   <p className="text-xs text-gray-500">
                     Mark this once the funds have actually been released. It emails the team —
@@ -827,7 +1105,7 @@ const AdminProjectProposals = () => {
               )}
 
               {/* Completion report */}
-              {(selected.has_report || selected.status === 'funded') && (
+              {tab === 'report' && (
                 <Section title="Completion report">
                   {selected.status === 'funded' && !selected.has_report && (
                     <p className="text-sm text-gray-500">
@@ -941,9 +1219,10 @@ const AdminProjectProposals = () => {
                 </Section>
               )}
 
-              {/* Funding agreement — only once the proposal is approved, which
-                  is also enforced server-side: an agreement commits money. */}
-              {selected.status === 'approved' && (
+              {/* Funding agreement — the tab only exists from `approved`
+                  onwards, and the backend refuses to save one before then
+                  anyway: an agreement commits money. */}
+              {tab === 'agreement' && (
                 <Section title="Funding agreement">
                   {!agreement ? (
                     <p className="text-sm text-gray-500">Loading…</p>
@@ -1025,41 +1304,18 @@ const AdminProjectProposals = () => {
                 </Section>
               )}
 
-              {/* Decision */}
-              <Section title="Decision">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">
-                    Message to the applicant <span className="text-gray-400">— goes out in the email</span>
-                  </label>
-                  <textarea rows={4} value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)}
-                    placeholder="What the applicant will read — the reason for the decision, or what to change."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
-                  <p className="text-xs text-gray-500 mt-1">Required to reject or request changes.</p>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">
-                    Internal note <span className="text-gray-400">— staff only, never sent</span>
-                  </label>
-                  <textarea rows={3} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
-                    placeholder="Notes for admins and managers. The applicant never sees this."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
-                </div>
-                <div className="flex justify-end">
-                  <button onClick={saveNotes} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded">Save without notifying</button>
-                </div>
-                {selected.reviewed_at && (
-                  <p className="text-xs text-gray-500">Last reviewed on {formatDate(selected.reviewed_at)}</p>
-                )}
-              </Section>
             </div>
 
-            {/* Status action bar */}
-            <div className="border-t border-gray-200 p-4 flex flex-wrap items-center justify-end gap-2">
-              <button onClick={() => changeStatus('submitted')} className="text-sm px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded inline-flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Mark submitted</button>
-              <button onClick={() => changeStatus('under_review')} className="text-sm px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded inline-flex items-center gap-1">Mark under review</button>
-              <button onClick={() => changeStatus('changes_requested')} className="text-sm px-3 py-2 bg-orange-100 hover:bg-orange-200 text-orange-900 rounded inline-flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Request changes</button>
-              <button onClick={() => changeStatus('rejected')} className="text-sm px-3 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded inline-flex items-center gap-1"><XCircle className="w-4 h-4" /> Reject</button>
-              <button onClick={() => changeStatus('approved')} className="text-sm px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded inline-flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Approve</button>
+            {/* The footer carries only what is true at every step. The verdicts
+                live in the Next step panel, where they are shown for the one
+                status that allows them. */}
+            <div className="border-t border-gray-200 p-4 flex flex-wrap items-center justify-between gap-2">
+              <button onClick={() => setDeleting(selected)} className="text-sm px-3 py-2 text-red-700 hover:bg-red-50 rounded inline-flex items-center gap-1.5">
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button onClick={closeDetail} className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded">
+                Close
+              </button>
             </div>
           </div>
         </div>
