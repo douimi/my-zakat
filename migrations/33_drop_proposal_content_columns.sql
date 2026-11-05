@@ -1,3 +1,8 @@
+-- migrate:phase post
+--
+-- Destructive, and the PREVIOUS image still writes these columns, so this
+-- must run only once the new image is live. scripts/migrate.sh defers any
+-- file carrying this header to the post-deploy pass.
 -- Migration 33: drop the project_proposals columns that moved to
 -- proposal_versions in migration 32.
 --

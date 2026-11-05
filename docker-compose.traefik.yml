@@ -39,7 +39,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # No initdb script on purpose. The schema is built by
+      # scripts/migrate.sh, which the deploy job runs before starting the
+      # new image — one path for a fresh volume and for an upgrade alike.
+      # An initdb script would also be a trap: it would leave a non-empty
+      # schema with no migration history, which the runner baselines as
+      # "already applied", silently skipping every migration after it.
     networks:
       - internal
     healthcheck:

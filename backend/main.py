@@ -21,9 +21,21 @@ from routers import auth, admin, donations, events, stories, contact, testimonia
 # Check if running in test mode
 TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
 
-# Create database tables only if not in test mode
-if not TESTING_MODE:
+# Create database tables from the models in development and tests only.
+#
+# NOT in production: create_all() creates missing TABLES but never a missing
+# COLUMN, so on a schema that has drifted it quietly produces a half-right
+# table instead of an error — which is how the proposal-versioning deploy ended
+# up 500ing on a column that did not exist, and why migration 34 exists at all.
+#
+# In production the schema comes from migrations/ via scripts/migrate.sh, which
+# the deploy job runs before this image starts. A missing table is then a loud
+# failure pointing at a migration that did not run, instead of a silent one.
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
+if not TESTING_MODE and not IS_PRODUCTION:
     Base.metadata.create_all(bind=engine)
+elif IS_PRODUCTION:
+    logger.info("Production: schema is owned by migrations/, skipping create_all()")
 
 def ensure_admin_user():
     """Ensure at least one admin user exists"""

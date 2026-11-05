@@ -221,8 +221,31 @@ jobs:
           # it MUST be in this list or it keeps running stale code after a deploy.
           docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --no-cache frontend backend worker
 
+          # ── Schema, before any new code runs ────────────────────────────
+          # Bring up the database on its own first. On an upgrade it is already
+          # running and this is a no-op; on a fresh volume it is what makes the
+          # whole thing work with no manual step, since there is no initdb
+          # script any more and migrate.sh needs something to connect to.
+          echo "--- Starting the database ---"
+          docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --wait db
+
+          # Additive migrations run BEFORE the new image starts, because the new
+          # code selects columns the old schema does not have. A failure here is
+          # a red deploy with the OLD image still serving traffic — which is the
+          # entire point of doing it in this order.
+          echo "--- Applying migrations (pre-deploy) ---"
+          ./scripts/migrate.sh \
+            --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE" --phase pre
+
           echo "--- Restarting services ---"
           docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+
+          # Destructive migrations run only now: the previous image was still
+          # writing the columns they drop. Nothing marks itself post-deploy
+          # unless it has to — today that is migration 33 alone.
+          echo "--- Applying migrations (post-deploy) ---"
+          ./scripts/migrate.sh \
+            --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE" --phase post
 
           # `up -d` only recreates a service whose compose definition changed, so
           # a service configured by a bind-mounted FILE keeps running with the old

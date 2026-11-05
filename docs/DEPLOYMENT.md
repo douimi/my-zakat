@@ -39,78 +39,100 @@ chmod +x deploy.sh
 
 ## Database Migrations
 
-`migrations/init.sql` is mounted into the database container and only runs on a
-fresh volume. Every numbered file in `migrations/` after that is applied by
-hand — neither `deploy.sh` nor the GitHub Actions deploy job runs them:
+**Applied automatically by the deploy.** `scripts/migrate.sh` walks
+`migrations/NN_*.sql` in filename order, applies whatever has not run yet, and
+records it in a `schema_migrations` table. There is nothing to do by hand.
 
-```bash
-docker-compose -f docker-compose.traefik.yml exec -T db \
-  psql -U myzakat_user -d myzakat < migrations/NN_name.sql
+The deploy order is what makes this safe:
+
+```
+git reset --hard origin/main
+build frontend backend worker
+docker compose up -d --wait db          # no-op on an upgrade; required on a fresh volume
+./scripts/migrate.sh --phase pre        # additive — BEFORE the new image starts
+docker compose up -d                    # new code goes live
+./scripts/migrate.sh --phase post       # destructive — AFTER the old image is gone
 ```
 
-Most migrations are additive and can go before or after the deploy they belong
-to. **Proposal versioning (32 and 33) cannot.** Apply them around the deploy, in
-this order:
+A failure in the `pre` pass stops the deploy with the **old image still
+serving**. That is the point: the new code would select columns the old schema
+does not have.
 
-### 1. `32_proposal_versioning.sql` — BEFORE deploying the new backend
+### Adding a migration
 
-Creates `proposal_versions` and `proposal_access_codes`, adds
-`project_proposals.current_version_id`, backfills a version 1 for every existing
-proposal, and drops the NOT NULL constraints on the legacy content columns.
-Additive and idempotent; the running image keeps working after it.
+Drop a numbered file in `migrations/` and commit it. That is all.
 
-It must come first: the new code inserts dossier rows that carry no content, and
-against the un-relaxed schema those inserts fail.
+Two rules:
 
-### 2. Deploy the new backend
+- **Idempotent** (`IF NOT EXISTS`, `DO $$ ... IF NOT EXISTS`), like the existing
+  files. The runner will not apply a file twice, but a re-run after a partial
+  failure should be harmless.
+- **If it is destructive** — dropping a column or table the *current* image
+  still writes — add this header so it is deferred until after the new image is
+  live:
 
-Push to `main`, or run `./deploy.sh`.
+  ```sql
+  -- migrate:phase post
+  ```
 
-### 3. `33_drop_proposal_content_columns.sql` — AFTER the deploy
+  Default is `pre`. Migration 33 is the only one that needs it today. A typo
+  here silently falls back to `pre`, so `backend/tests/test_migration_inventory.py`
+  rejects any `migrate:phase` line the runner cannot parse.
 
-Drops the content columns (and `admin_notes`) from `project_proposals`.
+Each file is applied inside a transaction **together with its tracking row**, so
+a migration that fails records nothing and leaves the database as it was. The
+one exception is `32_proposal_versioning.sql`, which opens its own transaction;
+the runner detects that, runs it as-is, and records it immediately after.
 
-It must come last: the previous image still writes those columns, so running it
-while the old image is live breaks every submission. Destructive and with no
-down script — take a dump first, and confirm the backfill:
-
-```bash
-docker-compose -f docker-compose.traefik.yml exec -T db \
-  psql -U myzakat_user -d myzakat \
-  -c "SELECT count(*) FROM project_proposals WHERE current_version_id IS NULL;"
-# must return 0
-```
-
-### `35_proposal_agreements_and_unread.sql` — BEFORE deploying the new backend
-
-Adds `project_proposals.admin_seen_version_id` (the unread marker behind the
-admin badge) and creates `proposal_agreements` (the funding agreement issued
-after approval). Additive and idempotent.
-
-**It must come first, for the same reason 32 did.** `main.py` calls
-`Base.metadata.create_all()` at import, and create_all only ever creates missing
-*tables* — never a missing *column*. So deploying first would give you
-`proposal_agreements` (built from the model, which is why the migration also
-fixes up its types and constraints) while `project_proposals` silently lacks
-`admin_seen_version_id`, and every call to the proposals list would 500 on a
-column that does not exist. That is exactly the failure migration 34 exists to
-clean up after.
-
-Apply it, then deploy:
+### Running it by hand
 
 ```bash
-docker-compose -f docker-compose.traefik.yml exec -T db \
-  psql -U myzakat_user -d myzakat < migrations/35_proposal_agreements_and_unread.sql
-
-# confirm, before deploying
-docker-compose -f docker-compose.traefik.yml exec -T db \
-  psql -U myzakat_user -d myzakat -c "\d project_proposals" | grep admin_seen_version_id
+./scripts/migrate.sh --list        # what is applied, what is pending
+./scripts/migrate.sh --dry-run     # what would run, changes nothing
+./scripts/migrate.sh --phase all   # apply everything pending
 ```
 
-Existing dossiers are backfilled as already-seen on purpose: marking a backlog
-unread on deploy day would fill the badge with proposals handled months ago, and
-the reviewer would learn to ignore it. Only revisions arriving afterwards light
-it up.
+Locally, against the dev stack:
+
+```bash
+./scripts/migrate.sh --compose-file docker-compose.yml   --env-file .env --db-user postgres
+```
+
+### An existing database, and a fresh one
+
+The first run against a database that predates the runner finds no
+`schema_migrations` table but plenty of application tables. It then **records
+every existing migration as applied without running it** — replaying them would
+duplicate seed data (`16_populate_programs`) and drop columns (`33`). It says so
+loudly in the deploy log.
+
+An **empty** database is built from zero instead: every migration in order. That
+is what makes a new VPS, or a lost volume, work with no manual step. There is
+deliberately no `initdb` script — one that populated the schema would leave a
+database with no migration history, which the runner would baseline as
+"already applied", silently skipping every migration after it.
+
+If the count of existing tables cannot be read, the runner **stops** rather than
+guess: assuming "empty" on a live database would replay the whole chain.
+
+### If a migration was edited after being applied
+
+The runner stores a checksum and fails loudly when the repository and the
+database disagree about what ran. Resolve it deliberately — restore the file, or
+if the edit was only a comment:
+
+```sql
+UPDATE schema_migrations SET checksum = '<new>' WHERE filename = '<file>';
+```
+
+`./scripts/migrate.sh --list` prints the new checksum next to the old one.
+
+### Schema ownership
+
+`create_all()` runs in development and tests only. In production the schema
+comes from `migrations/` alone, because `create_all()` creates missing *tables*
+but never a missing *column* — which is how the proposal-versioning deploy ended
+up 500ing on a column that did not exist, and why migration 34 exists.
 
 ## Services
 - **Frontend**: https://myzakat.org
@@ -123,7 +145,10 @@ it up.
 - `env.production` - Production environment variables
 - `deploy.sh` - Deployment script
 - `setup-vps.sh` - VPS setup script
-- `migrations/` - Numbered SQL migrations, applied by hand (see above)
+- `migrations/` - Numbered SQL migrations, applied automatically by the deploy
+  via `scripts/migrate.sh` (see above)
+- `scripts/migrate.sh` - Migration runner
+- `scripts/logs.sh` - Read the logs on the VPS
 
 ## Security Notes
 1. Change default Traefik dashboard password

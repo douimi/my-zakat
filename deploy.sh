@@ -72,9 +72,24 @@ docker-compose -f docker-compose.traefik.yml pull
 print_status "Building frontend without cache..."
 docker-compose -f docker-compose.traefik.yml --env-file env.production build --no-cache frontend
 
+# ── Schema, before any new code runs ──────────────────────────────────
+# Database first, on its own: a no-op on an upgrade, and on a fresh volume it
+# is what lets migrate.sh connect at all (there is no initdb script).
+print_status "Starting the database..."
+docker-compose -f docker-compose.traefik.yml --env-file env.production up -d --wait db
+
+print_status "Applying migrations (pre-deploy)..."
+if ! ./scripts/migrate.sh --compose-file docker-compose.traefik.yml        --env-file env.production --phase pre; then
+    print_error "Migrations failed — NOT deploying. The running app is untouched."
+    exit 1
+fi
+
 # Build and start services
 print_status "Building and starting services..."
 docker-compose -f docker-compose.traefik.yml --env-file env.production up -d --build
+
+print_status "Applying migrations (post-deploy)..."
+./scripts/migrate.sh --compose-file docker-compose.traefik.yml     --env-file env.production --phase post ||     print_warning "Post-deploy migrations failed — see ./scripts/migrate.sh --list"
 
 # Wait for services to be ready
 print_status "Waiting for services to be ready..."
