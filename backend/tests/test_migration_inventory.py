@@ -159,3 +159,70 @@ def test_production_does_not_create_tables_from_the_models():
     assert "IS_PRODUCTION" in body
     assert re.search(r"if not TESTING_MODE and not IS_PRODUCTION:\s*\n\s*Base\.metadata\.create_all",
                      body), "create_all() is no longer gated on production"
+
+
+# --------------------------------------------------------------------------
+# The baseline watermark
+#
+# migrations/.baseline says how far this database was migrated by hand. The
+# runner records everything up to it as applied and RUNS everything after it.
+# Get it wrong and a migration is either replayed against live data or skipped
+# forever — the second being how a new migration silently never reaches
+# production.
+# --------------------------------------------------------------------------
+
+BASELINE = os.path.join(MIGRATIONS, ".baseline")
+
+
+def _watermark():
+    if not os.path.exists(BASELINE):
+        return None
+    for line in open(BASELINE, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return line
+    return None
+
+
+def test_the_watermark_file_exists():
+    assert os.path.exists(BASELINE), (
+        "migrations/.baseline is missing. Without it the runner baselines "
+        "nothing and replays every migration against a live database.")
+
+
+def test_the_watermark_names_a_real_migration():
+    """A typo here is not caught until the first automated deploy, where the
+    runner refuses to continue — better to fail in CI."""
+    mark = _watermark()
+    assert mark, "migrations/.baseline names no watermark"
+    assert mark in migration_files(), (
+        "migrations/.baseline names %r, which is not a file in migrations/" % mark)
+
+
+def test_everything_after_the_watermark_is_genuinely_unapplied():
+    """The watermark must not drift forward on its own.
+
+    It records a fact about the production database, not about this directory,
+    so adding a migration must NOT move it — the new file has to stay pending.
+    This fails if someone bumps the watermark to the newest file out of tidiness,
+    which would skip that migration in production forever.
+    """
+    files = migration_files()
+    mark = _watermark()
+    after = files[files.index(mark) + 1:]
+    assert after, (
+        "the watermark is the LAST migration, so nothing is pending. If you "
+        "just added a migration, do not move the watermark: it describes how "
+        "far production was migrated by hand, and moving it makes the runner "
+        "skip your file instead of applying it.")
+
+
+def test_the_watermark_is_not_a_post_deploy_migration():
+    """Baselining stops at the watermark inclusively, in filename order. A
+    post-deploy file as the watermark would mean the phases no longer line up
+    with what was actually run."""
+    mark = _watermark()
+    body = read(mark)
+    found = PHASE_HEADER.search(body)
+    assert not (found and found.group(1) == "post"), (
+        "%s is a post-deploy migration and a poor watermark" % mark)

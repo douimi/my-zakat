@@ -34,16 +34,24 @@
 #
 # Baselining
 # ----------
-# On a database that predates this script, every migration has already been
-# applied by hand. If `schema_migrations` is missing but application tables are
-# present, the existing files are RECORDED WITHOUT BEING RUN — re-running them
-# would duplicate seed data (16_populate_programs) and drop columns (33).
+# On a database that predates this script, migrations up to a known point have
+# already been applied by hand. If `schema_migrations` is missing but
+# application tables are present, the files up to the watermark in
+# migrations/.baseline are RECORDED WITHOUT BEING RUN — re-running them would
+# duplicate seed data (16_populate_programs) and drop columns (33) — and
+# everything AFTER the watermark is applied normally.
+#
+# The watermark is why that file exists. Baselining the whole directory would
+# mark a migration that has never run as applied and skip it forever, which is
+# how a new migration silently fails to reach production.
+#
 # An empty database is built from zero instead, which is what makes a fresh VPS
 # work with no manual step.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATIONS_DIR="$REPO_ROOT/migrations"
+BASELINE_FILE="$MIGRATIONS_DIR/.baseline"
 
 COMPOSE_FILE="${MIGRATE_COMPOSE_FILE:-docker-compose.traefik.yml}"
 ENV_FILE="${MIGRATE_ENV_FILE:-env.production}"
@@ -158,13 +166,35 @@ SQL
     warn "database already has $existing table(s) and no migration history."
     warn "recording every existing migration as applied WITHOUT running it."
     warn "(re-running them would duplicate seed data and drop columns)"
+    # The watermark: the last migration applied by hand. Everything after it
+    # has never run and must NOT be recorded as though it had.
+    watermark=""
+    if [ -f "$BASELINE_FILE" ]; then
+      watermark="$(grep -vE '^[[:space:]]*(#|$)' "$BASELINE_FILE" | head -1 | tr -d '[:space:]')"
+    fi
+    if [ -z "$watermark" ]; then
+      warn "migrations/.baseline names no watermark — baselining NOTHING."
+      warn "every migration will run. Stop now if this database is not empty."
+    else
+      if [ ! -f "$MIGRATIONS_DIR/$watermark" ]; then
+        die "migrations/.baseline names '$watermark', which is not in migrations/.
+    Refusing to guess how far this database was migrated by hand."
+      fi
+      info "watermark: $watermark (recorded as applied; later files will run)"
+    fi
+
+    baselined=0
     for f in $(ls "$MIGRATIONS_DIR"/[0-9]*.sql 2>/dev/null | sort); do
       base="$(basename "$f")"
       psql_value "INSERT INTO schema_migrations (filename, checksum, phase, baselined)
                   VALUES ('$base', '$(checksum "$f")', '$(file_phase "$f")', TRUE)
                   ON CONFLICT (filename) DO NOTHING" >/dev/null
+      baselined=$((baselined + 1))
+      # Filename sort is the same total order the apply loop uses, so stopping
+      # here leaves exactly the files after the watermark pending.
+      [ "$base" = "$watermark" ] && break
     done
-    ok "baselined $(ls "$MIGRATIONS_DIR"/[0-9]*.sql | wc -l | tr -d ' ') migration(s)"
+    ok "baselined $baselined migration(s); the rest will be applied"
   elif [ "$existing" -gt 0 ]; then
     warn "--no-baseline: existing tables will NOT be recorded; every migration will run"
   else

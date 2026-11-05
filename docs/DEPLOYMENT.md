@@ -101,10 +101,22 @@ Locally, against the dev stack:
 ### An existing database, and a fresh one
 
 The first run against a database that predates the runner finds no
-`schema_migrations` table but plenty of application tables. It then **records
-every existing migration as applied without running it** — replaying them would
-duplicate seed data (`16_populate_programs`) and drop columns (`33`). It says so
-loudly in the deploy log.
+`schema_migrations` table but plenty of application tables. It then records the
+migrations **up to the watermark in `migrations/.baseline`** as applied without
+running them — replaying those would duplicate seed data
+(`16_populate_programs`) and drop columns (`33`) — and applies everything after
+the watermark normally. It says so loudly in the deploy log.
+
+That watermark is the whole reason the file exists. Baselining the *entire*
+directory would mark a migration that has never run as "applied" and skip it
+forever, which is how a brand-new migration silently fails to reach production.
+
+**The watermark is a fact about the production database, not about this
+directory, so adding a migration must not move it.** It is read once per
+database; after that `schema_migrations` is authoritative and the file is inert.
+`backend/tests/test_migration_inventory.py` fails if it names a missing file, or
+if it has been bumped to the newest migration — which would skip that migration
+in production.
 
 An **empty** database is built from zero instead: every migration in order. That
 is what makes a new VPS, or a lost volume, work with no manual step. There is

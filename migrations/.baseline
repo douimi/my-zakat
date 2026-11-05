@@ -1,0 +1,20 @@
+# The last migration that was applied BY HAND, before scripts/migrate.sh took
+# over. On a database with no schema_migrations table, the runner records every
+# file up to and including this one as already applied, and RUNS everything
+# after it.
+#
+# Why this file has to exist
+# --------------------------
+# Baselining the whole directory would mark a migration that has never run as
+# "applied" and skip it forever — which on the first automated deploy would
+# mean 36_proposal_reports.sql was recorded without being executed, and the new
+# code 500ing on a table that does not exist.
+#
+# It is read ONCE, on the first run against a given database. After that the
+# schema_migrations table is authoritative and this file is inert, so it does
+# not need updating when you add migrations — only if you ever point the runner
+# at another hand-built database.
+#
+# Blank or missing means "baseline nothing": every migration runs. That is the
+# right default for a fresh database and the safe default for an unknown one.
+35_proposal_agreements_and_unread.sql
