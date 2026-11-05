@@ -289,6 +289,82 @@ def send_proposal_approved(
     )
 
 
+def send_proposal_funded(
+    *, email: str, name: str, proposal_id: int, version_no: int,
+    project_name: str, comment: str = "",
+) -> bool:
+    """Tell the team the money has been released -- and what they owe in return.
+
+    This is the one email that has to carry the reporting obligation, because it
+    is the moment the obligation begins. A team that never reads it discovers
+    the rule only when a later application is refused.
+    """
+    return _enqueue(
+        "proposal_funded",
+        to_email=email,
+        to_name=name,
+        subject=f"Your project #{proposal_id} has been funded — MyZakat",
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-funded",
+    )
+
+
+def send_report_received(
+    *, email: str, name: str, proposal_id: int, report_no: int, project_name: str
+) -> bool:
+    """Acknowledge a completion report -- the first one and every resubmission.
+
+    The idempotency key carries report_no, so a corrected report is a new email
+    rather than one suppressed as a duplicate of the first.
+    """
+    return _enqueue(
+        "report_received",
+        to_email=email,
+        to_name=name,
+        subject=f"We have your completion report for #{proposal_id} — MyZakat",
+        context=_proposal_context(name, proposal_id, report_no, project_name),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-report{report_no}-received",
+    )
+
+
+def send_report_changes_requested(
+    *, email: str, name: str, proposal_id: int, report_no: int,
+    project_name: str, comment: str = "",
+) -> bool:
+    """Send a report back with what is missing.
+
+    `comment` is required by the domain layer before this is ever called: it is
+    the only thing in the message that tells the team what to fix.
+    """
+    return _enqueue(
+        "report_changes_requested",
+        to_email=email,
+        to_name=name,
+        subject=f"More detail needed on your report for #{proposal_id} — MyZakat",
+        context=_proposal_context(name, proposal_id, report_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-report{report_no}-changes",
+    )
+
+
+def send_proposal_completed(
+    *, email: str, name: str, proposal_id: int, report_no: int,
+    project_name: str, comment: str = "",
+) -> bool:
+    """Close the project, and say plainly that they may apply again."""
+    return _enqueue(
+        "proposal_completed",
+        to_email=email,
+        to_name=name,
+        subject=f"Project #{proposal_id} is closed — thank you — MyZakat",
+        context=_proposal_context(name, proposal_id, report_no, project_name, comment),
+        category="transactional",
+        idempotency_key=f"proposal-{proposal_id}-report{report_no}-completed",
+    )
+
+
 def send_proposal_access_code(*, email: str, code: str, ttl_minutes: int = 10) -> bool:
     """Send a one-time portal sign-in code.
 

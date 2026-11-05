@@ -1,0 +1,13 @@
+Assalamu alaikum {{ name }},
+
+Your completion report for '{{ project_name }}' (reference #{{ proposal_id }}) has
+reached us and is now with our review team.
+
+You do not need to do anything further for now. We will write to you once it has
+been reviewed -- either confirming the project is closed, or telling you what
+still needs to be added.
+
+View it in your portal: {{ portal_url }}
+
+With gratitude,
+The MyZakat Team

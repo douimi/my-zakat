@@ -33,8 +33,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle, ArrowLeft, CheckCircle2, Clock, Eye, FileText, Inbox, KeyRound,
-  Loader2, Mail, MessageSquare, PencilLine, XCircle,
+  AlertCircle, ArrowLeft, Banknote, CheckCircle2, Clock, Eye, FileText, Inbox,
+  KeyRound, Loader2, Mail, MessageSquare, Paperclip, PencilLine, Send, Trash2,
+  Upload, XCircle,
 } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
 import ProposalForm, {
@@ -49,7 +50,9 @@ import {
   fetchMyProposals,
   hasPortalToken,
   isNoProposalForAddress,
+  reportAttachmentUrl,
   requestPortalCode,
+  submitCompletionReport,
   submitRevision,
   verifyPortalCode,
   type PortalProposal,
@@ -59,29 +62,41 @@ type View = 'email' | 'code' | 'list' | 'edit' | 'not-found'
 type ProposalPayload = ReturnType<typeof buildProposalPayload>
 
 const STATUS_BADGE: Record<string, string> = {
-  submitted:         'bg-blue-100 text-blue-800',
-  under_review:      'bg-amber-100 text-amber-800',
-  changes_requested: 'bg-orange-100 text-orange-800',
-  approved:          'bg-green-100 text-green-800',
-  rejected:          'bg-red-100 text-red-800',
+  submitted:                'bg-blue-100 text-blue-800',
+  under_review:             'bg-amber-100 text-amber-800',
+  changes_requested:        'bg-orange-100 text-orange-800',
+  approved:                 'bg-green-100 text-green-800',
+  rejected:                 'bg-red-100 text-red-800',
+  funded:                   'bg-emerald-100 text-emerald-800',
+  report_submitted:         'bg-indigo-100 text-indigo-800',
+  report_changes_requested: 'bg-orange-100 text-orange-800',
+  completed:                'bg-slate-200 text-slate-800',
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  submitted:         'Submitted',
-  under_review:      'Under review',
-  changes_requested: 'Changes requested',
-  approved:          'Approved',
+  submitted:                'Submitted',
+  under_review:             'Under review',
+  changes_requested:        'Changes requested',
+  approved:                 'Approved',
   // Deliberately gentler than the admin-side "Rejected": this is the wording
   // the applicant reads about their own application.
-  rejected:          'Not funded',
+  rejected:                 'Not funded',
+  funded:                   'Funded — in progress',
+  report_submitted:         'Report under review',
+  report_changes_requested: 'Report needs more detail',
+  completed:                'Completed',
 }
 
 const STATUS_ICON: Record<string, typeof Clock> = {
-  submitted:         Clock,
-  under_review:      Eye,
-  changes_requested: PencilLine,
-  approved:          CheckCircle2,
-  rejected:          XCircle,
+  submitted:                Clock,
+  under_review:             Eye,
+  changes_requested:        PencilLine,
+  approved:                 CheckCircle2,
+  rejected:                 XCircle,
+  funded:                   Banknote,
+  report_submitted:         Eye,
+  report_changes_requested: PencilLine,
+  completed:                CheckCircle2,
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -131,6 +146,12 @@ class MissingPortalEmailError extends Error {
   }
 }
 
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 const statusOf = (error: any): number | undefined => error?.response?.status
 
 const detailOf = (error: any): unknown => error?.response?.data?.detail
@@ -146,6 +167,14 @@ const MyProposals = () => {
   const [flash, setFlash] = useState('')
 
   const [items, setItems] = useState<PortalProposal[]>([])
+  // Which dossier's report form is open, and its contents. One at a time,
+  // keyed by id: two half-typed reports would be easy to file against the
+  // wrong project.
+  const [reportFor, setReportFor] = useState<number | null>(null)
+  const [reportText, setReportText] = useState('')
+  const [reportFiles, setReportFiles] = useState<File[]>([])
+  const [reportBusy, setReportBusy] = useState(false)
+  const [reportError, setReportError] = useState('')
   const [editing, setEditing] = useState<PortalProposal | null>(null)
 
   // The revision the applicant already submitted once, held across a
@@ -359,6 +388,63 @@ const MyProposals = () => {
     setFlash('')
     replayingRef.current = false
     setView('edit')
+  }
+
+  const openReportForm = (proposal: PortalProposal) => {
+    setReportFor(proposal.id)
+    setReportText('')
+    setReportFiles([])
+    setReportError('')
+  }
+
+  const closeReportForm = () => {
+    setReportFor(null)
+    setReportText('')
+    setReportFiles([])
+    setReportError('')
+  }
+
+  const addReportFiles = (picked: FileList | null) => {
+    if (!picked) return
+    // Append rather than replace: people pick receipts and photos in separate
+    // trips through the file dialog, and a second pick replacing the first is
+    // a silent loss of what they already chose.
+    setReportFiles((prev) => [...prev, ...Array.from(picked)])
+  }
+
+  const removeReportFile = (index: number) =>
+    setReportFiles((prev) => prev.filter((_, i) => i !== index))
+
+  const sendReport = async (proposalId: number) => {
+    if (!reportText.trim()) {
+      setReportError('Please describe what was done before submitting.')
+      return
+    }
+    setReportBusy(true)
+    setReportError('')
+    try {
+      const result = await submitCompletionReport(proposalId, reportText.trim(), reportFiles)
+      closeReportForm()
+      await loadList()
+      const missing = result.attachments_offered - result.attachments_stored
+      setFlash(
+        missing > 0
+          // Said plainly rather than hidden: the report is filed, but they
+          // need to know some evidence did not arrive.
+          ? `Report submitted — but ${missing} of ${result.attachments_offered} files could not be stored. Please submit again with those files.`
+          : 'Your completion report has been submitted. We will be in touch once it has been reviewed.',
+      )
+    } catch (err: any) {
+      if (statusOf(err) === 401) {
+        // Same reasoning as the revision path: do not throw away typed work.
+        setReportError('Your session expired. Request a new code, then submit again.')
+      } else {
+        const detail = detailOf(err)
+        setReportError(typeof detail === 'string' ? detail : 'Could not submit the report.')
+      }
+    } finally {
+      setReportBusy(false)
+    }
   }
 
   const backToEmail = () => {
@@ -603,6 +689,174 @@ const MyProposals = () => {
               </span>
               <span className="whitespace-pre-line">{p.decision_comment}</span>
             </blockquote>
+          )}
+
+          {/* ── The report that was already filed ── */}
+          {p.report && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-gray-700">
+                  Completion report {p.report.report_no > 1 && `#${p.report.report_no}`}
+                </span>
+                <span className="text-xs text-gray-500">
+                  submitted {formatDate(p.report.submitted_at)}
+                </span>
+              </div>
+              <p className="text-sm text-gray-800 whitespace-pre-line">{p.report.narrative}</p>
+              {p.report.attachments.length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {p.report.attachments.map((a) => (
+                    <li key={a.id}>
+                      <a
+                        href={reportAttachmentUrl(p.id, a.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:border-primary-300 text-gray-700"
+                      >
+                        <Paperclip className="w-3 h-3" />
+                        {a.filename}
+                        <span className="text-gray-400">{formatBytes(a.size_bytes)}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* The reason it was sent back. The only thing telling them what
+                  to fix, so it is never collapsed behind anything. */}
+              {p.report.decision === 'changes_requested' && p.report.decision_comment && (
+                <blockquote className="border-l-4 border-orange-300 bg-orange-50 rounded-r-lg p-3 text-sm text-orange-900">
+                  <span className="flex items-center gap-1.5 font-semibold mb-1">
+                    <MessageSquare className="w-3.5 h-3.5" /> What still needs to be added
+                  </span>
+                  <span className="whitespace-pre-line">{p.report.decision_comment}</span>
+                </blockquote>
+              )}
+            </div>
+          )}
+
+          {p.awaiting_report_review && (
+            <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg p-3 flex items-start gap-2">
+              <Eye className="w-4 h-4 mt-0.5 shrink-0" />
+              Your report is with our review team. There is nothing more to do for now —
+              we will write to you once it has been reviewed.
+            </p>
+          )}
+
+          {p.completed && (
+            <p className="text-sm text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+              This project is closed, and you are free to apply for a new one.
+            </p>
+          )}
+
+          {/* ── Filing (or re-filing) a report ── */}
+          {p.may_submit_report && reportFor !== p.id && (
+            <div className="pt-2 border-t border-gray-100 space-y-2">
+              <p className="text-sm text-gray-600">
+                {p.status === 'report_changes_requested'
+                  ? 'Submit a corrected report. Your previous one is kept — you are adding to the record, not replacing it.'
+                  : 'Once the project is complete, submit your report: what was done, with receipts, invoices and photographs.'}
+              </p>
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded p-2">
+                You cannot apply for another project until this report has been submitted and accepted.
+              </p>
+              <button
+                onClick={() => openReportForm(p)}
+                className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg inline-flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                {p.status === 'report_changes_requested' ? 'Submit a corrected report' : 'Submit completion report'}
+              </button>
+            </div>
+          )}
+
+          {reportFor === p.id && (
+            <div className="pt-3 border-t border-gray-100 space-y-3">
+              <div>
+                <label htmlFor={`report-${p.id}`} className="block text-sm font-semibold text-gray-800 mb-1">
+                  What was done
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Please cover: how many beneficiaries were served, what was distributed,
+                  what was actually spent, any funds left over, and anything that differed
+                  from the approved plan.
+                </p>
+                <textarea
+                  id={`report-${p.id}`}
+                  rows={8}
+                  value={reportText}
+                  onChange={(e) => setReportText(e.target.value)}
+                  disabled={reportBusy}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
+                  placeholder="We distributed food parcels to 48 of the 50 planned families…"
+                />
+              </div>
+
+              <div>
+                <span className="block text-sm font-semibold text-gray-800 mb-1">
+                  Receipts, invoices and photographs
+                </span>
+                <label className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg cursor-pointer">
+                  <Paperclip className="w-4 h-4" /> Add files
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,video/*,application/pdf"
+                    onChange={(e) => { addReportFiles(e.target.files); e.target.value = '' }}
+                    disabled={reportBusy}
+                    className="hidden"
+                  />
+                </label>
+                <span className="ml-2 text-xs text-gray-500">
+                  Photos, videos or PDFs · up to 25 MB each · 20 files max
+                </span>
+
+                {reportFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {reportFiles.map((file, i) => (
+                      <li key={`${file.name}-${i}`} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                        <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <span className="truncate flex-1" title={file.name}>{file.name}</span>
+                        <span className="text-xs text-gray-400">{formatBytes(file.size)}</span>
+                        <button
+                          onClick={() => removeReportFile(i)}
+                          disabled={reportBusy}
+                          aria-label={`Remove ${file.name}`}
+                          className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {reportError && (
+                <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {reportError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => sendReport(p.id)}
+                  disabled={reportBusy || !reportText.trim()}
+                  className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2"
+                >
+                  {reportBusy
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                    : <><Send className="w-4 h-4" /> Submit report</>}
+                </button>
+                <button
+                  onClick={closeReportForm}
+                  disabled={reportBusy}
+                  className="px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold rounded-lg disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
 
           {p.editable && (

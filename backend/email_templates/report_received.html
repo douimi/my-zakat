@@ -1,0 +1,9 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #1e3a8a; margin: 0 0 18px 0; font-size: 20px;">We have your completion report</h2>
+<p>Assalamu alaikum {{ name }},</p>
+<p>Your completion report for <strong>{{ project_name }}</strong> (reference <strong>#{{ proposal_id }}</strong>) has reached us and is now with our review team.</p>
+<p>You do not need to do anything further for now. We will write to you once it has been reviewed — either confirming the project is closed, or telling you what still needs to be added.</p>
+<p><a href="{{ portal_url }}" style="color:#1e3a8a;">View it in your portal</a></p>
+<p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+{% endblock %}

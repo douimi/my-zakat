@@ -18,6 +18,11 @@ Admin / manager (auth):
   GET    /api/project-proposals/{id}/agreement       → saved agreement, or a draft
   PUT    /api/project-proposals/{id}/agreement       → create/update the agreement
   GET    /api/project-proposals/{id}/agreement/pdf   → the signed-ready agreement
+  POST   /api/project-proposals/{id}/funded          → record that funds were released
+  GET    /api/project-proposals/{id}/reports         → the completion-report history
+  POST   /api/project-proposals/{id}/report-decision → accept a report, or send it back
+  GET    /api/project-proposals/{id}/reports/{rid}/attachments/{aid}
+                                                     → download one attachment
 
 The submitter-facing half of this feature lives in routers/proposal_portal.py.
 Domain rules live in proposal_service.py; this module only maps HTTP to them.
@@ -46,9 +51,15 @@ from proposal_service import (
     AgreementIncomplete,
     DecisionCommentRequired,
     InvalidProposalStatus,
+    NoReportToDecide,
+    OutstandingReport,
     ProposalError,
     ProposalNotApproved,
+    ProposalNotFunded,
+    ReportCommentRequired,
 )
+from models import ProposalReport, ProposalReportAttachment
+import s3_service
 import log_events as ev
 
 logger = get_logger(__name__)
@@ -159,13 +170,27 @@ async def submit_proposal(payload: ProposalSubmit, request: Request, db: Session
     (PUT /api/project-proposals/portal/{id}), never through here.
     """
     data = payload.model_dump()
-    dossier, version = proposal_service.create_proposal(
-        db,
-        content=data,
-        submitted_ip=client_ip(request),
-        sms_consent=bool(data.get("sms_consent")),
-        sms_consent_text=data.get("sms_consent_text"),
-    )
+    try:
+        dossier, version = proposal_service.create_proposal(
+            db,
+            content=data,
+            submitted_ip=client_ip(request),
+            sms_consent=bool(data.get("sms_consent")),
+            sms_consent_text=data.get("sms_consent_text"),
+        )
+    except OutstandingReport as exc:
+        # 409, not 400: the submission is well-formed, the applicant's account
+        # is simply not in a state that allows it. The message names the
+        # blocking dossier so they know what to go and do.
+        logger.event(
+            ev.PROPOSAL_BLOCKED,
+            "a new application was refused: a funded project still owes a report",
+            level=logging.WARNING,
+            blocking_proposal_id=exc.blocking.id,
+            blocking_status=exc.blocking.status,
+            email=mask_email(data.get("email")),
+        )
+        raise HTTPException(status_code=409, detail=str(exc))
     logger.event(
         ev.PROPOSAL_SUBMITTED, "a new project proposal was submitted",
         proposal_id=dossier.id, version_no=version.version_no,
@@ -207,6 +232,18 @@ class AgreementUpdate(BaseModel):
     distribution_per_beneficiary: Optional[str] = None
     total_planned_distribution: Optional[str] = None
     extra_fund_uses: Optional[str] = None
+
+
+class ReportDecisionUpdate(BaseModel):
+    """The admin's verdict on a completion report.
+
+    Narrower than the application's: accepted, or sent back for more. A report
+    is never "rejected" -- the project happened, and the dossier cannot close
+    without an accepted account of it.
+    """
+    decision: str = Field(pattern="^(approved|changes_requested)$")
+    decision_comment: Optional[str] = None
+    internal_note: Optional[str] = None
 
 
 # ── Unread tracking ──────────────────────────────────────────────────
@@ -556,5 +593,194 @@ async def download_proposal_agreement_pdf(
         io.BytesIO(pdf),
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+    )
+
+
+# ── Funding ──────────────────────────────────────────────────────────
+
+@router.post("/{proposal_id}/funded")
+async def mark_proposal_funded(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Record that the approved funding has actually been released.
+
+    Separate from PATCH /status on purpose: `funded` is a statement about money
+    leaving, not a verdict on the application, and it is only reachable from
+    `approved` — the agreement is drawn up in between.
+
+    The email it sends is the one that carries the reporting obligation, since
+    this is the moment the obligation begins.
+    """
+    dossier = _load(db, proposal_id)
+    was_already = dossier.status == proposal_service.FUNDED
+    try:
+        proposal_service.mark_funded(db, dossier, reviewer_id=current_user.id)
+    except InvalidProposalStatus as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    version = proposal_service.current_version(db, dossier)
+    logger.event(
+        ev.PROPOSAL_FUNDED, "approved funding was released",
+        proposal_id=dossier.id,
+        amount=float(getattr(version, "total_amount_usd", 0) or 0),
+        email=mask_email(dossier.email),
+        actor=mask_email(current_user.email),
+        already_funded=was_already,
+    )
+
+    # Only on the transition. Re-marking an already-funded dossier must not
+    # re-send an email telling the team to start work they are halfway through.
+    if not was_already and version is not None:
+        try:
+            email_service.send_proposal_funded(
+                email=dossier.email,
+                name=version.full_name,
+                proposal_id=dossier.id,
+                version_no=version.version_no,
+                project_name=version.project_name,
+            )
+        except Exception as exc:
+            logger.event(
+                ev.PROPOSAL_FUNDED, "could not email the funding notice",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_EMAIL_SEND_FAILED, proposal_id=dossier.id,
+            )
+
+    return proposal_service.serialize_for_admin(dossier, version, db=db)
+
+
+# ── Completion reports ───────────────────────────────────────────────
+
+@router.get("/{proposal_id}/reports")
+async def list_proposal_reports(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """The whole report history, oldest first, with attachment metadata.
+
+    Staff shape: includes the internal note and the submitting IP, neither of
+    which the portal serializer carries.
+    """
+    dossier = _load(db, proposal_id)
+    reports = proposal_service.reports_for(db, dossier)
+    grouped = proposal_service.attachments_for(db, [r.id for r in reports])
+    current = proposal_service.current_report(db, dossier)
+    return {
+        "proposal_id": dossier.id,
+        "status": dossier.status,
+        "current_report_no": current.report_no if current else None,
+        "awaiting_review": dossier.status == proposal_service.REPORT_SUBMITTED,
+        "reports": [
+            proposal_service.serialize_report(
+                r, attachments=grouped.get(r.id, []), staff=True)
+            for r in reports
+        ],
+    }
+
+
+@router.post("/{proposal_id}/report-decision")
+async def decide_proposal_report(
+    proposal_id: int,
+    payload: ReportDecisionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Accept the completion report and close the project, or send it back.
+
+    Accepting releases the team to apply again, which is the only exit from the
+    rule that blocks them; sending it back is the other, and requires a reason
+    because that reason is the only thing telling them what to fix.
+    """
+    dossier = _load(db, proposal_id)
+    try:
+        report = proposal_service.record_report_decision(
+            db, dossier,
+            decision=payload.decision,
+            decision_comment=payload.decision_comment,
+            internal_note=payload.internal_note,
+            reviewer_id=current_user.id,
+        )
+    except (NoReportToDecide, InvalidProposalStatus) as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ReportCommentRequired as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    logger.event(
+        ev.REPORT_DECIDED, "a completion report was reviewed",
+        proposal_id=dossier.id, report_no=report.report_no,
+        decision=payload.decision, new_status=dossier.status,
+        email=mask_email(dossier.email), actor=mask_email(current_user.email),
+    )
+
+    version = proposal_service.current_version(db, dossier)
+    if version is not None:
+        sender = (email_service.send_proposal_completed
+                  if payload.decision == "approved"
+                  else email_service.send_report_changes_requested)
+        try:
+            sender(
+                email=dossier.email,
+                name=version.full_name,
+                proposal_id=dossier.id,
+                report_no=report.report_no,
+                project_name=version.project_name,
+                comment=report.decision_comment or "",
+            )
+        except Exception as exc:
+            logger.event(
+                ev.REPORT_DECIDED, "could not email the report verdict",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_EMAIL_SEND_FAILED, proposal_id=dossier.id,
+            )
+
+    return proposal_service.serialize_for_admin(dossier, version, db=db)
+
+
+@router.get("/{proposal_id}/reports/{report_id}/attachments/{attachment_id}")
+async def download_report_attachment(
+    proposal_id: int,
+    report_id: int,
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Stream one attachment.
+
+    Every id in the path is checked against its parent rather than trusted:
+    an attachment id alone would otherwise read any report's file, including
+    another dossier's. The stored filename is used only for the download
+    header — it was stripped of any path at upload.
+    """
+    dossier = _load(db, proposal_id)
+    attachment = (
+        db.query(ProposalReportAttachment)
+        .join(ProposalReport, ProposalReport.id == ProposalReportAttachment.report_id)
+        .filter(ProposalReportAttachment.id == attachment_id)
+        .filter(ProposalReportAttachment.report_id == report_id)
+        .filter(ProposalReport.proposal_id == dossier.id)
+        .one_or_none()
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    content = s3_service.download_file(attachment.object_key)
+    if content is None:
+        logger.event(
+            ev.REPORT_SUBMITTED, "an attachment is recorded but missing from storage",
+            level=logging.ERROR, outcome=ev.OUTCOME_FAILURE,
+            reason=ev.REASON_UNEXPECTED, proposal_id=dossier.id,
+            attachment_id=attachment.id, object_key=attachment.object_key,
+        )
+        raise HTTPException(status_code=404, detail="The stored file could not be read")
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=attachment.content_type,
+        headers={
+            "Content-Disposition": 'attachment; filename="%s"' % attachment.filename,
+        },
     )
 

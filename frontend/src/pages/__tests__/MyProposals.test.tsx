@@ -79,6 +79,13 @@ const DOSSIER = {
   version_no: 1,
   decision_comment: 'Please give us a firmer beneficiary number.',
   content: CONTENT,
+  // The reporting half of the lifecycle. Always present in the payload, so
+  // they are required on the type rather than optional — this dossier is in
+  // review, so none of them is active.
+  may_submit_report: false,
+  awaiting_report_review: false,
+  completed: false,
+  report: null,
 }
 
 /** The shape axios hands the page: only `response.status` and the detail. */

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
   CheckCircle2, XCircle, ClipboardList, Search, Sparkles, FileText, Bell,
+  Banknote, Paperclip, ClipboardCheck,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -69,6 +70,9 @@ interface Proposal {
   versions: ProposalVersionSummary[]
   /** Nobody has opened the dossier since its latest submission. */
   is_unread: boolean
+  has_report: boolean
+  awaiting_report_review: boolean
+  report_unread: boolean
   /** More than one version exists, so an unread row is a CHANGE, not a new arrival. */
   is_revision: boolean
   reviewed_at: string | null
@@ -79,13 +83,21 @@ interface Proposal {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  submitted:         'bg-blue-100 text-blue-800',
-  under_review:      'bg-amber-100 text-amber-800',
-  changes_requested: 'bg-orange-100 text-orange-900',
-  approved:          'bg-green-100 text-green-800',
-  rejected:          'bg-red-100 text-red-800',
+  submitted:                'bg-blue-100 text-blue-800',
+  under_review:             'bg-amber-100 text-amber-800',
+  changes_requested:        'bg-orange-100 text-orange-900',
+  approved:                 'bg-green-100 text-green-800',
+  rejected:                 'bg-red-100 text-red-800',
+  funded:                   'bg-emerald-100 text-emerald-800',
+  report_submitted:         'bg-indigo-100 text-indigo-800',
+  report_changes_requested: 'bg-orange-100 text-orange-900',
+  completed:                'bg-slate-200 text-slate-800',
 }
 const STATUS_LABEL: Record<string, string> = {
+  funded: 'Funded',
+  report_submitted: 'Report to review',
+  report_changes_requested: 'Report sent back',
+  completed: 'Completed',
   submitted: 'Submitted',
   under_review: 'Under review',
   changes_requested: 'Changes requested',
@@ -97,6 +109,28 @@ const STATUS_LABEL: Record<string, string> = {
 // this too (400 without a comment); mirroring it here keeps the reviewer from
 // losing a click.
 const COMMENT_REQUIRED = new Set(['rejected', 'changes_requested'])
+interface ReportAttachment {
+  id: number
+  filename: string
+  content_type: string
+  kind: 'image' | 'video' | 'document'
+  size_bytes: number
+}
+
+/** One submission of a completion report, staff shape. */
+interface CompletionReport {
+  id: number
+  report_no: number
+  narrative: string
+  submitted_at: string
+  decision: 'approved' | 'changes_requested' | null
+  decision_comment: string | null
+  decided_at: string | null
+  internal_note: string | null
+  submitted_ip: string | null
+  attachments: ReportAttachment[]
+}
+
 /** The funding agreement issued after approval. Mirrors the backend payload. */
 interface Agreement {
   project_title: string
@@ -138,6 +172,10 @@ const AdminProjectProposals = () => {
   const [agreementExists, setAgreementExists] = useState(false)
   const [versionDrifted, setVersionDrifted] = useState(false)
   const [agreementBusy, setAgreementBusy] = useState(false)
+  const [reports, setReports] = useState<CompletionReport[] | null>(null)
+  const [reportComment, setReportComment] = useState('')
+  const [reportNote, setReportNote] = useState('')
+  const [reportBusy, setReportBusy] = useState(false)
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
@@ -176,6 +214,7 @@ const AdminProjectProposals = () => {
     if (p.current_version_no != null) fetchVersion(p.id, p.current_version_no)
     markSeen(p)
     loadAgreement(p)
+    loadReports(p)
   }
   const closeDetail = () => {
     setSelected(null)
@@ -186,6 +225,9 @@ const AdminProjectProposals = () => {
     setAgreement(null)
     setAgreementExists(false)
     setVersionDrifted(false)
+    setReports(null)
+    setReportComment('')
+    setReportNote('')
   }
 
   /**
@@ -206,6 +248,85 @@ const AdminProjectProposals = () => {
       setSelected((prev) => (prev && prev.id === p.id ? { ...prev, is_unread: false } : prev))
     } catch { /* a failed mark-seen must never block the drawer */ }
   }
+
+  /** The whole completion-report history for the open dossier. */
+  const loadReports = async (p: Proposal) => {
+    setReports(null)
+    if (!p.has_report) { setReports([]); return }
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${p.id}/reports`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) { setReports([]); return }
+      const body = await resp.json()
+      setReports(body.reports || [])
+      // Pre-fill from the current report so a note saved earlier is not lost
+      // by reopening the drawer.
+      const current = (body.reports || []).slice(-1)[0]
+      setReportComment(current?.decision_comment || '')
+      setReportNote(current?.internal_note || '')
+    } catch { showError('Error', 'Could not load the completion report') }
+  }
+
+  const markFunded = async () => {
+    if (!selected) return
+    setReportBusy(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/funded`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null)
+        showError('Error', body?.detail || 'Could not mark this project funded')
+        return
+      }
+      const updated = await resp.json()
+      setSelected(updated)
+      showSuccess('Funded', 'The team has been emailed, including the reporting requirement.')
+      fetchRows()
+      fetchUnreadCount()
+    } catch { showError('Error', 'Network error') }
+    finally { setReportBusy(false) }
+  }
+
+  const decideReport = async (decision: 'approved' | 'changes_requested') => {
+    if (!selected) return
+    if (decision === 'changes_requested' && !reportComment.trim()) {
+      showError('A message is required',
+        'Tell the team what is missing — it goes out in the email and is the only thing they can act on.')
+      return
+    }
+    setReportBusy(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/report-decision`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          decision,
+          decision_comment: reportComment.trim() || null,
+          internal_note: reportNote.trim() || null,
+        }),
+      })
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null)
+        showError('Error', body?.detail || 'Could not record the decision')
+        return
+      }
+      const updated = await resp.json()
+      setSelected(updated)
+      await loadReports(updated)
+      showSuccess(
+        decision === 'approved' ? 'Project closed' : 'Report sent back',
+        decision === 'approved'
+          ? 'The team has been emailed and may now apply for a new project.'
+          : 'The team has been emailed with what is still needed.',
+      )
+      fetchRows()
+      fetchUnreadCount()
+    } catch { showError('Error', 'Network error') }
+    finally { setReportBusy(false) }
+  }
+
+  const reportAttachmentHref = (reportId: number, attachmentId: number) =>
+    `${API_URL}/api/project-proposals/${selected?.id}/reports/${reportId}/attachments/${attachmentId}`
 
   /** Load the saved agreement, or the pre-filled draft when none exists yet. */
   const loadAgreement = async (p: Proposal) => {
@@ -497,6 +618,11 @@ const AdminProjectProposals = () => {
                           )}
                         </span>
                       )}
+                      {r.awaiting_report_review && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                          <ClipboardCheck className="w-3 h-3" /> Report to review
+                        </span>
+                      )}
                       {r.version_count > 1 && !r.is_unread && (
                         <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
                           v{r.current_version_no} · {r.version_count} versions
@@ -677,6 +803,143 @@ const AdminProjectProposals = () => {
                   </div>
                 ))}
               </Section>
+
+              {/* Disbursement — approved means decided, funded means the money
+                  left. Separate from the review buttons because it is not a
+                  verdict on the application, and the backend refuses it from
+                  any status but `approved`. */}
+              {selected.status === 'approved' && (
+                <Section title="Disbursement">
+                  <p className="text-xs text-gray-500">
+                    Mark this once the funds have actually been released. It emails the team —
+                    and that email is what tells them a completion report is required before
+                    they can apply again.
+                  </p>
+                  <button
+                    onClick={markFunded}
+                    disabled={reportBusy}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+                  >
+                    <Banknote className="w-4 h-4" />
+                    {reportBusy ? 'Working…' : 'Mark as funded'}
+                  </button>
+                </Section>
+              )}
+
+              {/* Completion report */}
+              {(selected.has_report || selected.status === 'funded') && (
+                <Section title="Completion report">
+                  {selected.status === 'funded' && !selected.has_report && (
+                    <p className="text-sm text-gray-500">
+                      Waiting for the team to file their report. They cannot apply for another
+                      project until it has been submitted and accepted.
+                    </p>
+                  )}
+
+                  {reports === null && selected.has_report && (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  )}
+
+                  {reports?.map((report) => (
+                    <div key={report.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">
+                          Report {report.report_no}
+                        </span>
+                        <span className="text-xs text-gray-500">{formatDate(report.submitted_at)}</span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${report.decision ? (STATUS_BADGE[report.decision] || 'bg-gray-100 text-gray-600') : 'bg-indigo-100 text-indigo-800'}`}>
+                          {report.decision === 'approved' ? 'Accepted'
+                            : report.decision === 'changes_requested' ? 'Sent back'
+                            : 'Awaiting review'}
+                        </span>
+                      </div>
+
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.narrative}</p>
+
+                      {report.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {report.attachments.map((a) => (
+                            <a
+                              key={a.id}
+                              href={reportAttachmentHref(report.id, a.id)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-50 border border-gray-200 rounded hover:border-primary-300 text-gray-700"
+                              title={`${a.content_type} · ${Math.round(a.size_bytes / 1024)} KB`}
+                            >
+                              <Paperclip className="w-3 h-3" />
+                              {a.filename}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      {report.decision_comment && (
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">
+                            Sent to the team{report.decided_at ? ` on ${formatDate(report.decided_at)}` : ''}
+                          </div>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.decision_comment}</p>
+                        </div>
+                      )}
+                      {report.internal_note && (
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Internal note</div>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.internal_note}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* The verdict, only while one is actually awaiting review */}
+                  {selected.awaiting_report_review && (
+                    <div className="pt-2 border-t border-gray-100 space-y-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Message to the team <span className="text-gray-400">— required when sending it back</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={reportComment}
+                          onChange={(e) => setReportComment(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="Attach the purchase receipts and the beneficiary list."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Internal note <span className="text-gray-400">— staff only, never emailed</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={reportNote}
+                          onChange={(e) => setReportNote(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => decideReport('approved')}
+                          disabled={reportBusy}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-4 h-4" /> Accept and close the project
+                        </button>
+                        <button
+                          onClick={() => decideReport('changes_requested')}
+                          disabled={reportBusy}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-900 disabled:opacity-50"
+                        >
+                          <AlertTriangle className="w-4 h-4" /> Send back for more detail
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Accepting closes the project and releases the team to apply again.
+                      </p>
+                    </div>
+                  )}
+                </Section>
+              )}
 
               {/* Funding agreement — only once the proposal is approved, which
                   is also enforced server-side: an agreement commits money. */}

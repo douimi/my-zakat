@@ -134,6 +134,16 @@ comes from `migrations/` alone, because `create_all()` creates missing *tables*
 but never a missing *column* — which is how the proposal-versioning deploy ended
 up 500ing on a column that did not exist, and why migration 34 exists.
 
+### `36_proposal_reports.sql` — BEFORE deploying the new backend
+
+Widens `project_proposals.status` to VARCHAR(32), adds the report pointers, and
+creates `proposal_reports` and `proposal_report_attachments`. Additive and
+idempotent, and the migration runner applies it automatically.
+
+The width matters: `report_changes_requested` is 24 characters and a VARCHAR(20)
+rejects it outright rather than truncating, so the new statuses cannot be
+written at all until this has run.
+
 ## Services
 - **Frontend**: https://myzakat.org
 - **Backend API**: https://myzakat.org/api

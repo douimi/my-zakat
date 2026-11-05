@@ -608,8 +608,17 @@ class ProjectProposal(Base):
     full_name = Column(String(200), nullable=False)
 
     # ── Review state ───────────────────────────────────────
-    # submitted | under_review | changes_requested | approved | rejected
-    status = Column(String(20), nullable=False, default="submitted", index=True)
+    # The full lifecycle, in order:
+    #
+    #   submitted -> under_review -> approved -> funded -> report_submitted
+    #                                                           -> completed
+    #
+    # with changes_requested branching off review, rejected ending it, and
+    # report_changes_requested sending a report back to the team.
+    #
+    # String(32), not (20): 'report_changes_requested' is 24 characters, and a
+    # VARCHAR(20) rejects it outright rather than truncating. See migration 36.
+    status = Column(String(32), nullable=False, default="submitted", index=True)
     current_version_id = Column(
         Integer,
         # use_alter breaks the metadata-level cycle with proposal_versions
@@ -642,6 +651,31 @@ class ProjectProposal(Base):
         ),
         nullable=True,
     )
+    # ── Completion report ──────────────────────────────────
+    # Mirrors the two version pointers above: the report that counts, and the
+    # one an admin has actually opened. A report is not a version, so the
+    # unread test is "unseen version OR unseen report".
+    current_report_id = Column(
+        Integer,
+        ForeignKey(
+            "proposal_reports.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_project_proposals_current_report_id",
+        ),
+        nullable=True,
+    )
+    admin_seen_report_id = Column(
+        Integer,
+        ForeignKey(
+            "proposal_reports.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_project_proposals_admin_seen_report_id",
+        ),
+        nullable=True,
+    )
+
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)
@@ -795,6 +829,73 @@ class ProposalAgreement(Base):
     # Stamped on first PDF download, so a draft is distinguishable from an
     # agreement that has actually gone out to a field representative.
     issued_at = Column(DateTime, nullable=True)
+
+
+class ProposalReport(Base):
+    """One submission of a funded project's completion report.
+
+    Append-only, like ProposalVersion: a report sent back for correction stays
+    readable beside the one that replaced it, so the comment on report 1 is
+    visibly what caused report 2.
+
+    The narrative is one free-text field rather than a column per figure. The
+    contract's section 7 says what it should cover, but the projects differ too
+    much for a fixed schema to fit them, and the numbers that matter are
+    already pinned in ProposalAgreement — the report is read against those.
+    """
+    __tablename__ = "proposal_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_id = Column(
+        Integer, ForeignKey("project_proposals.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    report_no = Column(Integer, nullable=False)
+
+    narrative = Column(Text, nullable=False)
+
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    submitted_ip = Column(String(45), nullable=True)
+
+    # NULL = awaiting review | approved | changes_requested
+    decision = Column(String(20), nullable=True)
+    decision_comment = Column(Text, nullable=True)   # shown to the team
+    internal_note = Column(Text, nullable=True)      # staff only
+    decided_at = Column(DateTime, nullable=True)
+    decided_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "report_no", name="uq_proposal_report_no"),
+    )
+
+
+class ProposalReportAttachment(Base):
+    """A receipt, invoice, photograph or video attached to a report.
+
+    The bytes live in S3 under `object_key`; only metadata is here, which is how
+    the rest of this schema treats uploaded media. `content_type` is what the
+    BYTES sniffed to, never what the client declared — a declared type that
+    contradicts the bytes is refused at upload rather than stored.
+
+    `filename` is for display and download only. It never builds a path:
+    object_key is generated server-side, so a crafted name cannot escape the
+    prefix or collide with another report's objects.
+    """
+    __tablename__ = "proposal_report_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(
+        Integer, ForeignKey("proposal_reports.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    filename = Column(String(255), nullable=False)
+    object_key = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=False)
+    kind = Column(String(20), nullable=False)      # image | video | document
+    size_bytes = Column(Integer, nullable=False)
+
+    uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 # ─────────────────────────────────────────────────────────────────────

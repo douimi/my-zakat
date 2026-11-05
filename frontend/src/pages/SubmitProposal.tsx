@@ -15,7 +15,7 @@
  */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
 import ProposalForm, {
   buildProposalPayload,
@@ -32,9 +32,13 @@ const SubmitProposal = () => {
   const [submittedEmail, setSubmittedEmail] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
   const [genericError, setGenericError] = useState<string>('')
+  // A 409 means the applicant has funded work with no accepted report. It is
+  // not a mistake in the form, so it gets its own panel above it — with a link
+  // to the one place they can actually resolve it.
+  const [blockedMessage, setBlockedMessage] = useState<string>('')
 
   const handleSubmit = async (payload: ReturnType<typeof buildProposalPayload>) => {
-    setSubmitting(true); setGenericError(''); setFieldErrors([])
+    setSubmitting(true); setGenericError(''); setFieldErrors([]); setBlockedMessage('')
     try {
       const resp = await fetch(`${API_URL}/api/project-proposals/`, {
         method: 'POST',
@@ -49,7 +53,15 @@ const SubmitProposal = () => {
           setFieldErrors(parseFieldErrors(err.detail))
           return  // keep submitting=false via finally
         }
-        setGenericError(typeof err.detail === 'string' ? err.detail : 'Please check your entries and try again.')
+        const detail = typeof err.detail === 'string' ? err.detail : ''
+        if (resp.status === 409 && detail) {
+          // Nothing in the form can fix this, so do not phrase it as a
+          // validation problem and do not scroll them back into the fields.
+          setBlockedMessage(detail)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          return
+        }
+        setGenericError(detail || 'Please check your entries and try again.')
         return
       }
       const data = await resp.json()
@@ -112,6 +124,22 @@ const SubmitProposal = () => {
             we'll email you your reference number and follow up after review.
           </p>
         </div>
+
+        {blockedMessage && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <h2 className="text-base font-bold text-amber-900 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              One of your projects still needs a completion report
+            </h2>
+            <p className="text-sm text-amber-900 mt-2">{blockedMessage}</p>
+            <Link
+              to="/my-proposals"
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg"
+            >
+              Go to my proposals <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
 
         <ProposalForm
           mode="create"

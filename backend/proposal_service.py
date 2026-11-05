@@ -21,7 +21,13 @@ from typing import Any, Iterable
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import ProjectProposal, ProposalAgreement, ProposalVersion
+from models import (
+    ProjectProposal,
+    ProposalAgreement,
+    ProposalReport,
+    ProposalReportAttachment,
+    ProposalVersion,
+)
 
 # Every field the applicant fills in, in form order. One source of truth for the
 # router's payload dump, the version insert, and the serializers.
@@ -40,15 +46,55 @@ PROPOSAL_CONTENT_FIELDS: tuple[str, ...] = (
     "additional_expenses_usd", "additional_expenses_description", "total_amount_usd",
 )
 
-VALID_STATUSES = frozenset(
+# ── The lifecycle ────────────────────────────────────────────────────
+#
+#   submitted -> under_review -> approved -> funded -> report_submitted
+#                                                           -> completed
+#
+# with changes_requested branching off review, rejected ending it, and
+# report_changes_requested sending a report back to the team.
+#
+# `approved` and `funded` are deliberately two steps. Approval is the verdict on
+# the application; funded means the money actually left. The agreement is drawn
+# up between them, and the rule that blocks a team from opening a second dossier
+# must only bite once funds have really been released.
+FUNDED = "funded"
+REPORT_SUBMITTED = "report_submitted"
+REPORT_CHANGES_REQUESTED = "report_changes_requested"
+COMPLETED = "completed"
+
+# What record_decision() may set: verdicts on the application itself. The
+# lifecycle statuses below are NOT here on purpose — each has its own
+# transition guard, and letting PATCH /status set `funded` directly would
+# bypass "only from approved" and stamp reviewed_at for a disbursement.
+REVIEW_STATUSES = frozenset(
     {"submitted", "under_review", "changes_requested", "approved", "rejected"}
 )
+
+# Every value the status column may hold. Used to validate the admin list
+# filter, which must be able to ask for `funded` or `completed`.
+VALID_STATUSES = REVIEW_STATUSES | frozenset(
+    {FUNDED, REPORT_SUBMITTED, REPORT_CHANGES_REQUESTED, COMPLETED}
+)
+
 # Statuses that constitute a decision on the current version.
 DECISION_STATUSES = frozenset({"approved", "rejected", "changes_requested"})
 # Decisions the submitter must be given a reason for.
 COMMENT_REQUIRED_STATUSES = frozenset({"rejected", "changes_requested"})
 # The one status from which a submitter may send a new version.
 EDITABLE_STATUSES = frozenset({"changes_requested"})
+
+# Money has been released and no report has been accepted yet. A dossier in one
+# of these blocks its owner from opening another one.
+BLOCKING_STATUSES = frozenset({FUNDED, REPORT_SUBMITTED, REPORT_CHANGES_REQUESTED})
+
+# Where a team may submit, or resubmit, a completion report from.
+REPORT_SUBMITTABLE_STATUSES = frozenset({FUNDED, REPORT_CHANGES_REQUESTED})
+
+# Verdicts on a report. Narrower than the application's: a report is either
+# accepted or sent back, never "rejected" outright — the project happened, and
+# the dossier cannot be closed without an accepted account of it.
+REPORT_DECISIONS = frozenset({"approved", "changes_requested"})
 
 
 class ProposalError(Exception):
@@ -99,8 +145,14 @@ def create_proposal(
 
     Always a new dossier: one email may own several. A revision of an existing
     dossier goes through `add_revision`.
+
+    Refused while the applicant still owes an accepted completion report on
+    funded work -- see assert_may_open_new_dossier(). The check lives here, not
+    in the router, so every caller inherits it: the public form today, and
+    anything added later.
     """
     fields = _content_only(content)
+    assert_may_open_new_dossier(db, fields.get("email"))
     dossier = ProjectProposal(
         email=fields["email"],
         full_name=fields["full_name"],
@@ -208,7 +260,15 @@ def record_decision(
     note saved that way must not re-date the decision nor credit it to whoever
     happened to open the drawer last.
     """
-    if status not in VALID_STATUSES:
+    if status not in REVIEW_STATUSES:
+        # A lifecycle status reaching here means a caller tried to shortcut a
+        # transition that has its own guard — mark_funded(), submit_report(),
+        # record_report_decision(). Naming them beats "invalid status".
+        if status in VALID_STATUSES:
+            raise InvalidProposalStatus(
+                f"'{status}' is not a review verdict; it is reached through the "
+                f"funding and reporting steps, not by setting the status."
+            )
         raise InvalidProposalStatus(f"Invalid status: {status}")
 
     version = current_version(db, proposal)
@@ -378,6 +438,14 @@ def serialize_for_admin(
         # reviewer is looking at something they have already read once.
         "is_unread": is_unread(proposal),
         "is_revision": len(versions) > 1,
+        # Reporting state, so the list can show "report to review" without a
+        # second request per row.
+        "has_report": proposal.current_report_id is not None,
+        "awaiting_report_review": proposal.status == REPORT_SUBMITTED,
+        "report_unread": (
+            proposal.current_report_id is not None
+            and proposal.admin_seen_report_id != proposal.current_report_id
+        ),
         # Kept for the current admin UI, which reads these at the top level.
         "submitted_ip": version.submitted_ip if version else None,
         "decision_comment": version.decision_comment if version else None,
@@ -433,6 +501,44 @@ def serialize_for_portal(
             else None
         ),
         "content": _content_dict(version),
+        # ── Reporting ──
+        # `may_submit_report` is computed here rather than left to the portal
+        # to infer from `status`: the rule is one place, and the UI showing a
+        # form the backend would refuse is worse than showing none.
+        "may_submit_report": proposal.status in REPORT_SUBMITTABLE_STATUSES,
+        "awaiting_report_review": proposal.status == REPORT_SUBMITTED,
+        "completed": proposal.status == COMPLETED,
+        # Set by the caller, which has the report and its attachments loaded.
+        "report": None,
+    }
+
+
+def serialize_portal_report(report, *, attachments=None) -> dict[str, Any]:
+    """A report as its own team may see it.
+
+    Deliberately not serialize_report(staff=False): that one is shaped for the
+    admin console. Keeping them apart means `internal_note` has no path to an
+    applicant even if someone later adds a field to the staff shape.
+    """
+    if report is None:
+        return None
+    return {
+        "report_no": report.report_no,
+        "narrative": report.narrative,
+        "submitted_at": report.submitted_at,
+        "decision": report.decision,
+        # Why it was sent back. The only thing telling the team what to fix.
+        "decision_comment": report.decision_comment,
+        "decided_at": report.decided_at,
+        "attachments": [
+            {
+                "id": a.id,
+                "filename": a.filename,
+                "kind": a.kind,
+                "size_bytes": a.size_bytes,
+            }
+            for a in (attachments or [])
+        ],
     }
 
 
@@ -465,26 +571,49 @@ def delete_proposal(db: Session, proposal: ProjectProposal) -> None:
 # -------------------------------------------------------------------
 
 def is_unread(proposal: ProjectProposal) -> bool:
-    """True when the dossier's current version has not been opened by an admin.
+    """True when something on this dossier has not been opened by an admin.
 
-    A dossier with no version at all is not unread: there is nothing to read,
-    and putting it in the badge would send the reviewer to an empty drawer.
+    Either side can be the unread thing: a new or revised application, or a
+    completion report that has arrived. A report is not a version, so it needs
+    its own pointer -- without this, a team submitting a report would light
+    nothing up and the dossier would sit unreviewed, blocking them from
+    applying again for a reason nobody could see.
+
+    A dossier with neither a version nor a report is not unread: there is
+    nothing to read, and putting it in the badge would send the reviewer to an
+    empty drawer.
     """
-    if proposal.current_version_id is None:
-        return False
-    return proposal.admin_seen_version_id != proposal.current_version_id
+    version_unread = (
+        proposal.current_version_id is not None
+        and proposal.admin_seen_version_id != proposal.current_version_id
+    )
+    report_unread = (
+        proposal.current_report_id is not None
+        and proposal.admin_seen_report_id != proposal.current_report_id
+    )
+    return version_unread or report_unread
 
 
 def unread_count(db: Session) -> int:
-    """How many dossiers are waiting to be looked at -- the admin badge."""
+    """How many dossiers are waiting to be looked at -- the admin badge.
+
+    Mirrors is_unread(): an unseen application OR an unseen completion report.
+    Written as one OR over both pairs rather than two queries, so a dossier
+    with both outstanding is still counted once.
+    """
+    version_unread = ProjectProposal.current_version_id.isnot(None) & (
+        (ProjectProposal.admin_seen_version_id.is_(None))
+        | (ProjectProposal.admin_seen_version_id
+           != ProjectProposal.current_version_id)
+    )
+    report_unread = ProjectProposal.current_report_id.isnot(None) & (
+        (ProjectProposal.admin_seen_report_id.is_(None))
+        | (ProjectProposal.admin_seen_report_id
+           != ProjectProposal.current_report_id)
+    )
     return (
         db.query(func.count(ProjectProposal.id))
-        .filter(ProjectProposal.current_version_id.isnot(None))
-        .filter(
-            (ProjectProposal.admin_seen_version_id.is_(None))
-            | (ProjectProposal.admin_seen_version_id
-               != ProjectProposal.current_version_id)
-        )
+        .filter(version_unread | report_unread)
         .scalar()
     ) or 0
 
@@ -503,13 +632,12 @@ def mark_seen(db: Session, proposal: ProjectProposal) -> bool:
     DOES apply a Python-side `onupdate`, so leaving the column out of the SET
     clause would still rewrite it. Passing the current value overrides it.
     """
-    if proposal.current_version_id is None:
-        return False
-    if proposal.admin_seen_version_id == proposal.current_version_id:
+    if not is_unread(proposal):
         return False
     db.query(ProjectProposal).filter(ProjectProposal.id == proposal.id).update(
         {
             ProjectProposal.admin_seen_version_id: proposal.current_version_id,
+            ProjectProposal.admin_seen_report_id: proposal.current_report_id,
             ProjectProposal.updated_at: proposal.updated_at,
         },
         synchronize_session=False,
@@ -736,3 +864,317 @@ def serialize_agreement(agreement):
         "updated_at": agreement.updated_at,
         "issued_at": agreement.issued_at,
     }
+
+
+# -------------------------------------------------------------------
+# Funding, reporting, completion
+# -------------------------------------------------------------------
+
+class ProposalNotFunded(ProposalError):
+    """A report was offered for a dossier that is not awaiting one."""
+
+
+class NoReportToDecide(ProposalError):
+    """A report verdict was recorded with no submitted report to judge."""
+
+
+class ReportCommentRequired(ProposalError):
+    """Sending a report back needs a reason the team can act on."""
+
+
+class OutstandingReport(ProposalError):
+    """The applicant already has funded work with no accepted report.
+
+    Carries the blocking dossier so the caller can name it: "proposal #12 is
+    still open" is actionable, "you cannot submit" is not.
+    """
+
+    def __init__(self, message: str, blocking):
+        super().__init__(message)
+        self.blocking = blocking
+
+
+def mark_funded(db: Session, proposal: ProjectProposal, *, reviewer_id):
+    """Record that the approved funding has actually been released.
+
+    Only from `approved`: funded is a statement about money leaving, and the
+    agreement is drawn up in between. Re-marking an already-funded dossier is a
+    no-op rather than an error, so a double click cannot re-date anything.
+    """
+    if proposal.status == FUNDED:
+        return proposal
+    if proposal.status != "approved":
+        raise InvalidProposalStatus(
+            f"Only an approved proposal can be marked funded; this one is "
+            f"'{proposal.status}'."
+        )
+    proposal.status = FUNDED
+    proposal.reviewed_at = datetime.utcnow()
+    proposal.reviewed_by = reviewer_id
+    db.commit()
+    db.refresh(proposal)
+    return proposal
+
+
+def blocking_dossier(db: Session, email: str):
+    """The applicant's funded dossier that still owes an accepted report.
+
+    `None` means they are free to apply again. Matched on the lowercased email,
+    which is the identity key for the whole feature, so a differently-cased
+    address cannot be used to get a second dossier.
+    """
+    if not (email or "").strip():
+        return None
+    return (
+        db.query(ProjectProposal)
+        .filter(func.lower(ProjectProposal.email) == (email or "").strip().lower())
+        .filter(ProjectProposal.status.in_(tuple(BLOCKING_STATUSES)))
+        .order_by(ProjectProposal.submitted_at)
+        .first()
+    )
+
+
+def assert_may_open_new_dossier(db: Session, email: str) -> None:
+    """Raise OutstandingReport when the applicant still owes a report.
+
+    Enforced here rather than in the router so the portal, the public form and
+    anything added later all inherit it — this is the rule that stops a team
+    collecting a second grant before accounting for the first.
+    """
+    blocking = blocking_dossier(db, email)
+    if blocking is None:
+        return
+    raise OutstandingReport(
+        f"Proposal #{blocking.id} has been funded and its completion report "
+        f"has not been accepted yet. Submit and get that report approved "
+        f"before applying again.",
+        blocking,
+    )
+
+
+def current_report(db: Session, proposal: ProjectProposal):
+    """The report that counts, following the dossier's pointer.
+
+    Falls back to the highest report_no for a row the pointer never got set on,
+    exactly as current_version() does for versions.
+    """
+    if proposal.current_report_id is not None:
+        found = (
+            db.query(ProposalReport)
+            .filter(ProposalReport.id == proposal.current_report_id)
+            .one_or_none()
+        )
+        if found is not None:
+            return found
+    return (
+        db.query(ProposalReport)
+        .filter(ProposalReport.proposal_id == proposal.id)
+        .order_by(ProposalReport.report_no.desc())
+        .first()
+    )
+
+
+def reports_for(db: Session, proposal: ProjectProposal):
+    return (
+        db.query(ProposalReport)
+        .filter(ProposalReport.proposal_id == proposal.id)
+        .order_by(ProposalReport.report_no)
+        .all()
+    )
+
+
+def attachments_for(db: Session, report_ids):
+    """Attachments grouped by report id, in one query for a whole page."""
+    ids = [int(i) for i in (report_ids or [])]
+    if not ids:
+        return {}
+    rows = (
+        db.query(ProposalReportAttachment)
+        .filter(ProposalReportAttachment.report_id.in_(ids))
+        .order_by(ProposalReportAttachment.id)
+        .all()
+    )
+    grouped: dict = {}
+    for row in rows:
+        grouped.setdefault(row.report_id, []).append(row)
+    return grouped
+
+
+def submit_report(
+    db: Session,
+    proposal: ProjectProposal,
+    *,
+    narrative: str,
+    submitted_ip: str = None,
+):
+    """Append the next completion report and send the dossier for review.
+
+    Allowed only from `funded` or `report_changes_requested`: before funding
+    there is nothing to report on, and after `completed` the dossier is closed.
+
+    MAX+1, not COUNT+1, for the same reason the version chain uses it: a gap in
+    the numbering would make COUNT+1 collide with a report that already exists
+    and break the dossier permanently.
+    """
+    text = (narrative or "").strip()
+    if not text:
+        raise ProposalError("A completion report needs a description of what was done.")
+
+    if proposal.status not in REPORT_SUBMITTABLE_STATUSES:
+        if proposal.status == COMPLETED:
+            raise ProposalNotFunded(
+                f"Proposal #{proposal.id} is already completed."
+            )
+        if proposal.status == REPORT_SUBMITTED:
+            raise ProposalNotFunded(
+                f"A report for proposal #{proposal.id} is already awaiting review."
+            )
+        raise ProposalNotFunded(
+            f"Proposal #{proposal.id} is '{proposal.status}'; a completion "
+            f"report can only be submitted once it has been funded."
+        )
+
+    highest = (
+        db.query(func.max(ProposalReport.report_no))
+        .filter(ProposalReport.proposal_id == proposal.id)
+        .scalar()
+    )
+    report = ProposalReport(
+        proposal_id=proposal.id,
+        report_no=(highest or 0) + 1,
+        narrative=text,
+        submitted_ip=submitted_ip or None,
+    )
+    db.add(report)
+    db.flush()
+
+    proposal.current_report_id = report.id
+    proposal.status = REPORT_SUBMITTED
+    # A fresh submission has not been reviewed. Clearing the stamp keeps the
+    # admin list from sorting it as though a decision had just been taken.
+    proposal.reviewed_at = None
+    proposal.reviewed_by = None
+    db.commit()
+    db.refresh(proposal)
+    db.refresh(report)
+    return report
+
+
+def add_report_attachment(
+    db: Session, report: ProposalReport, *, checked, object_key: str
+):
+    """Persist metadata for a file already written to S3.
+
+    `checked` is a report_attachments.CheckedAttachment, so content_type and
+    kind are what the bytes proved rather than what the client declared.
+    """
+    attachment = ProposalReportAttachment(
+        report_id=report.id,
+        filename=checked.filename,
+        object_key=object_key,
+        content_type=checked.content_type,
+        kind=checked.kind,
+        size_bytes=checked.size_bytes,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+def record_report_decision(
+    db: Session,
+    proposal: ProjectProposal,
+    *,
+    decision: str,
+    decision_comment: str = None,
+    internal_note: str = None,
+    reviewer_id=None,
+):
+    """Accept the completion report, or send it back with a reason.
+
+    Accepting closes the dossier (`completed`) and releases the applicant to
+    apply again. Sending it back moves to `report_changes_requested`, from which
+    the team submits a corrected report — which is the only way out for a
+    report that is incomplete, since the dossier otherwise blocks them forever.
+    """
+    if decision not in REPORT_DECISIONS:
+        raise InvalidProposalStatus(
+            f"A report decision must be one of {sorted(REPORT_DECISIONS)}; "
+            f"got '{decision}'."
+        )
+
+    report = current_report(db, proposal)
+    if report is None:
+        raise NoReportToDecide(
+            f"Proposal #{proposal.id} has no completion report to decide on.")
+    if proposal.status != REPORT_SUBMITTED:
+        raise NoReportToDecide(
+            f"Proposal #{proposal.id} is '{proposal.status}'; there is no "
+            f"report awaiting review."
+        )
+
+    if decision == "changes_requested":
+        effective = (decision_comment if decision_comment is not None
+                     else report.decision_comment)
+        if not (effective or "").strip():
+            raise ReportCommentRequired(
+                "Sending a report back requires a message for the team — it "
+                "goes out in the email, and it is the only thing telling them "
+                "what to fix."
+            )
+
+    if decision_comment is not None:
+        report.decision_comment = decision_comment.strip() or None
+    if internal_note is not None:
+        report.internal_note = internal_note.strip() or None
+
+    report.decision = decision
+    report.decided_at = datetime.utcnow()
+    report.decided_by = reviewer_id
+
+    proposal.status = COMPLETED if decision == "approved" else REPORT_CHANGES_REQUESTED
+    proposal.reviewed_at = datetime.utcnow()
+    proposal.reviewed_by = reviewer_id
+    db.commit()
+    db.refresh(proposal)
+    db.refresh(report)
+    return report
+
+
+# -------------------------------------------------------------------
+# Serializers
+# -------------------------------------------------------------------
+
+def serialize_attachment(attachment) -> dict[str, Any]:
+    """Metadata only. The bytes are served by an authenticated endpoint; no S3
+    key or signed URL is ever handed to a client."""
+    return {
+        "id": attachment.id,
+        "filename": attachment.filename,
+        "content_type": attachment.content_type,
+        "kind": attachment.kind,
+        "size_bytes": attachment.size_bytes,
+        "uploaded_at": attachment.uploaded_at,
+    }
+
+
+def serialize_report(report, *, attachments=None, staff: bool = False) -> dict[str, Any]:
+    """One report. `staff=True` adds the fields the team must not see."""
+    out: dict[str, Any] = {
+        "id": report.id,
+        "proposal_id": report.proposal_id,
+        "report_no": report.report_no,
+        "narrative": report.narrative,
+        "submitted_at": report.submitted_at,
+        "decision": report.decision,
+        "decision_comment": report.decision_comment,
+        "decided_at": report.decided_at,
+        "attachments": [serialize_attachment(a) for a in (attachments or [])],
+    }
+    if staff:
+        out["internal_note"] = report.internal_note
+        out["decided_by"] = report.decided_by
+        out["submitted_ip"] = report.submitted_ip
+    return out
+

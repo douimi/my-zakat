@@ -1,0 +1,20 @@
+Assalamu alaikum {{ name }},
+
+Your completion report for '{{ project_name }}' (reference #{{ proposal_id }}) has
+been accepted, and the project is now closed.
+{% if comment %}
+
+A note from the team
+---------------------
+{{ comment }}
+{% endif %}
+
+Thank you for the care you took over this work, and for accounting for it so we
+can show our donors where their Zakat went.
+
+YOU ARE FREE TO APPLY FOR A NEW PROJECT whenever you are ready.
+
+Open your portal: {{ portal_url }}
+
+With gratitude,
+The MyZakat Team

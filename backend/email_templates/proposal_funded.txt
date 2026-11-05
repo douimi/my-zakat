@@ -1,0 +1,20 @@
+Assalamu alaikum {{ name }},
+
+The funding for '{{ project_name }}' (reference #{{ proposal_id }}) has been released. You may begin implementation.
+{% if comment %}
+
+A note from the team
+---------------------
+{{ comment }}
+{% endif %}
+
+WHEN THE PROJECT IS COMPLETE, SUBMIT YOUR COMPLETION REPORT through the portal:
+the narrative of what was done, plus receipts, invoices and photographs.
+
+Please note: until that report has been submitted and accepted, you will not be
+able to apply for another project.
+
+Open your portal: {{ portal_url }}
+
+With gratitude,
+The MyZakat Team

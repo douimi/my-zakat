@@ -90,6 +90,13 @@ PROPOSAL_REVISED = "proposal.revised"          # a further version arrived
 PROPOSAL_DECIDED = "proposal.decided"          # approved / rejected / changes_requested
 PROPOSAL_SEEN = "proposal.seen"                # an admin opened the current version
 
+# The funded -> report -> completed half of the lifecycle. These commit and then
+# account for money, so the trail has to be reconstructable from the log alone.
+PROPOSAL_FUNDED = "proposal.funded"            # the approved funds were released
+REPORT_SUBMITTED = "report.submitted"          # the team filed a completion report
+REPORT_DECIDED = "report.decided"              # accepted, or sent back for more
+PROPOSAL_BLOCKED = "proposal.blocked"          # a new application refused: report outstanding
+
 # The funding agreement issued after approval.
 AGREEMENT_SAVED = "agreement.saved"            # draft created or edited
 AGREEMENT_ISSUED = "agreement.issued"          # PDF rendered and downloaded
@@ -144,6 +151,7 @@ PAYMENT_EVENTS = (
 
 PROPOSAL_EVENTS = (
     PROPOSAL_SUBMITTED, PROPOSAL_REVISED, PROPOSAL_DECIDED, PROPOSAL_SEEN,
+    PROPOSAL_FUNDED, REPORT_SUBMITTED, REPORT_DECIDED, PROPOSAL_BLOCKED,
     AGREEMENT_SAVED, AGREEMENT_ISSUED,
 )
 

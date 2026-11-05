@@ -437,6 +437,78 @@ agreement has been saved. The first download stamps `issued_at`, so a draft is
 distinguishable from a contract that has actually gone out; re-downloading does
 not move it.
 
+### `POST /api/project-proposals/{id}/funded` — admin
+
+Records that the approved funding has actually been released: `approved` →
+`funded`. Separate from `PATCH /status` because it is not a verdict on the
+application, and `PATCH /status` **refuses** it with a 400 (`"not a review
+verdict"`) — the transition has its own guard.
+
+- `409` — the proposal is not `approved`.
+- Re-marking an already-funded proposal is a no-op and does **not** re-send the
+  email, which is what tells the team to start work.
+
+The email it sends carries the reporting obligation, because this is the moment
+the obligation begins.
+
+### `GET /api/project-proposals/{id}/reports` — admin
+
+The whole completion-report history, oldest first, staff shape (includes
+`internal_note` and `submitted_ip`, neither of which the portal ever sees).
+
+```json
+{
+  "proposal_id": 12, "status": "report_submitted",
+  "current_report_no": 2, "awaiting_review": true,
+  "reports": [{
+    "id": 5, "report_no": 1, "narrative": "We served 48 families…",
+    "decision": "changes_requested", "decision_comment": "Attach the receipts.",
+    "internal_note": null, "submitted_ip": "203.0.113.7",
+    "attachments": [{"id": 9, "filename": "receipt.pdf", "kind": "document",
+                     "content_type": "application/pdf", "size_bytes": 81234}]
+  }]
+}
+```
+
+### `POST /api/project-proposals/{id}/report-decision` — admin
+
+```json
+{ "decision": "approved", "decision_comment": null, "internal_note": null }
+```
+
+`approved` closes the dossier (`completed`) and releases the applicant to apply
+again. `changes_requested` moves to `report_changes_requested`, from which the
+team files a corrected report.
+
+- `422` — any other `decision`. A report is accepted or sent back, never
+  "rejected": the project happened, and the dossier cannot close without an
+  accepted account of it.
+- `400` — `changes_requested` with no comment. That comment is the only thing
+  telling the team what to fix.
+- `409` — no report is awaiting review.
+
+### `GET /api/project-proposals/{id}/reports/{rid}/attachments/{aid}` — admin
+
+Streams one attachment. Every id is verified against its parent, so an
+attachment id alone cannot read another report's — or another dossier's — file.
+
+### The gate on new applications
+
+`POST /api/project-proposals/` answers **409** while the applicant has a funded
+dossier whose completion report has not been accepted:
+
+```json
+{ "detail": "Proposal #12 has been funded and its completion report has not been accepted yet. Submit and get that report approved before applying again." }
+```
+
+409 rather than 400: the submission is well-formed, the account is simply not in
+a state that allows it. The message names the blocking dossier, and matching is
+case-insensitive on the email, so a differently-cased address cannot buy a
+second grant. Revising an existing dossier through the portal is never blocked.
+
+Blocking statuses: `funded`, `report_submitted`, `report_changes_requested`.
+`approved` does **not** block — no money has moved yet.
+
 ### Submitter portal
 
 Applicants have no account. They prove control of the address on their dossier
@@ -603,3 +675,58 @@ hardening item.
 | 500 | Server error (logged with traceback) |
 
 Error responses are always JSON: `{ "detail": "human-readable message" }`.
+
+#### `POST /api/project-proposals/portal/{id}/report` — portal token
+
+Files a completion report. **Multipart**, not JSON, because the agreement asks
+for receipts and photographs.
+
+| Field | |
+|---|---|
+| `narrative` | required free text — what was done, what was spent, what was left |
+| `files` | zero or more attachments, repeated |
+
+Attachments: photos, videos and PDF only, **25 MB each, 20 per report**. The
+stored Content-Type is the one the *bytes* sniff to; a file declaring a type its
+contents contradict is refused with 400 rather than silently stored as what it
+really is.
+
+Order of operations matters and is deliberate: the batch is counted, then every
+file is read and validated, and only then is anything written. A submission
+refused on its last file leaves no report row and no orphaned objects in S3.
+
+- `409` — the dossier is not `funded` or `report_changes_requested`.
+- `400` — empty narrative, or a rejected attachment.
+- `404` — the dossier does not belong to the token's address.
+
+```json
+{
+  "proposal_id": 12, "status": "report_submitted",
+  "attachments_stored": 2, "attachments_offered": 2,
+  "report": { "report_no": 1, "narrative": "…", "decision": null,
+              "attachments": [{"id": 9, "filename": "receipt.pdf",
+                               "kind": "document", "size_bytes": 81234}] }
+}
+```
+
+`attachments_stored` can be lower than `attachments_offered`: the report itself
+is saved first on purpose, since losing the narrative because one photo failed
+to upload would be worse than an incomplete set the team can top up by
+resubmitting. The portal says so plainly rather than hiding it.
+
+#### `GET /api/project-proposals/portal/{id}/report/attachments/{aid}` — portal token
+
+Lets a team re-read what it sent. Scoped to the token's address.
+
+#### Reporting fields on `GET /portal/me`
+
+| Field | Meaning |
+|---|---|
+| `may_submit_report` | a report may be filed right now (computed server-side, so the form is never shown for a submission the API would refuse) |
+| `awaiting_report_review` | filed, with the review team |
+| `completed` | accepted; free to apply again |
+| `report` | the current report, or `null` — carries `decision_comment`, the only thing telling the team what to fix |
+
+`internal_note`, `submitted_ip`, `reviewed_by` and `decided_by` are never in
+this payload. The portal has its own serializer rather than a flag on the staff
+one, so a field added to the admin shape has no path to an applicant.

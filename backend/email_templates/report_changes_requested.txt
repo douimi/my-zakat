@@ -1,0 +1,16 @@
+Assalamu alaikum {{ name }},
+
+Thank you for the report on '{{ project_name }}' (reference #{{ proposal_id }}).
+Before we can close the project, our review team has asked for the following:
+
+What is needed
+---------------
+{{ comment }}
+
+You can submit a corrected report from your portal. Your previous one is kept,
+so you are adding to the record rather than replacing it.
+
+Submit a corrected report: {{ portal_url }}
+
+With gratitude,
+The MyZakat Team

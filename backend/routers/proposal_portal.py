@@ -4,6 +4,7 @@ Endpoints (all mounted under /api/project-proposals/portal)
 ───────────────────────────────────────────────────────────
   POST /request-code    → email a six-digit code (404 if the address has none)
   POST /verify-code     → exchange the code for a 30-minute portal token
+  POST /{id}/report     → file a completion report for a funded project
   GET  /me              → the dossiers belonging to the token's address
   PUT  /{proposal_id}   → submit the next version of one of them
 
@@ -16,7 +17,10 @@ Three rules hold everywhere in this file:
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status,
+)
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -28,6 +32,13 @@ from auth_utils import PORTAL_TOKEN_MINUTES, create_portal_token, get_portal_ema
 from database import get_db
 from logging_config import get_logger, mask_email
 import log_events as ev
+import logging
+import io as _io
+import email_service
+import report_attachments
+import s3_service
+from models import ProposalReport, ProposalReportAttachment
+from report_attachments import AttachmentRejected
 from models import ProjectProposal
 from proposal_service import ProposalNotEditable
 from routers.project_proposals import ProposalSubmit, client_ip
@@ -121,15 +132,28 @@ async def my_proposals(
     email: str = Depends(get_portal_email),
     db: Session = Depends(get_db),
 ):
-    """Every dossier submitted from this address, newest first."""
+    """Every dossier submitted from this address, newest first.
+
+    The current completion report travels with each dossier. Without it the
+    portal cannot show a team WHY their report was sent back, and that comment
+    is the only thing telling them what to fix.
+    """
     dossiers = _dossiers_for(db, email)
-    return {
-        "email": email,
-        "items": [
-            proposal_service.serialize_for_portal(d, proposal_service.current_version(db, d))
-            for d in dossiers
-        ],
-    }
+    reports = {d.id: proposal_service.current_report(db, d) for d in dossiers}
+    attachments = proposal_service.attachments_for(
+        db, [r.id for r in reports.values() if r is not None])
+
+    items = []
+    for dossier in dossiers:
+        payload = proposal_service.serialize_for_portal(
+            dossier, proposal_service.current_version(db, dossier))
+        report = reports.get(dossier.id)
+        if report is not None:
+            payload["report"] = proposal_service.serialize_portal_report(
+                report, attachments=attachments.get(report.id, []))
+        items.append(payload)
+
+    return {"email": email, "items": items}
 
 
 @router.put("/{proposal_id}")
@@ -185,3 +209,166 @@ async def submit_revision(
         project_name=version.project_name,
     )
     return proposal_service.serialize_for_portal(dossier, version)
+
+
+def _own_dossier(db: Session, proposal_id: int, email: str) -> ProjectProposal:
+    """One of this address's dossiers, or 404.
+
+    The address in the token is the only identity, and it is filtered on here
+    exactly as every other portal query does — an id alone must never reach
+    another applicant's dossier.
+    """
+    dossier = (
+        db.query(ProjectProposal)
+        .filter(
+            ProjectProposal.id == proposal_id,
+            func.lower(ProjectProposal.email) == email.strip().lower(),
+        )
+        .first()
+    )
+    if not dossier:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return dossier
+
+
+@router.post("/{proposal_id}/report", status_code=status.HTTP_201_CREATED)
+async def submit_completion_report(
+    proposal_id: int,
+    request: Request,
+    narrative: str = Form(...),
+    files: list[UploadFile] = File(default_factory=list),
+    email: str = Depends(get_portal_email),
+    db: Session = Depends(get_db),
+):
+    """File a completion report for a funded project.
+
+    Multipart rather than JSON because the contract asks for receipts and
+    photographs, and those come as files.
+
+    Order matters here. The batch is counted, then every file is read and
+    checked, and only then is anything written: a submission refused on its
+    last file must not leave the first nineteen objects orphaned in S3, and
+    must not leave a report row with half its evidence.
+    """
+    dossier = _own_dossier(db, proposal_id, email)
+
+    try:
+        report_attachments.check_batch(files)
+        # Read and validate everything up front. An UploadFile is a stream, so
+        # this is also what lets the size cap be enforced on actual bytes
+        # rather than on a Content-Length a client chose.
+        staged = []
+        for upload in files or []:
+            content = await upload.read()
+            checked = report_attachments.check_attachment(
+                filename=upload.filename,
+                declared_content_type=upload.content_type,
+                content=content,
+            )
+            staged.append((checked, content))
+    except AttachmentRejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    try:
+        report = proposal_service.submit_report(
+            db, dossier,
+            narrative=narrative,
+            submitted_ip=client_ip(request),
+        )
+    except proposal_service.ProposalNotFunded as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except proposal_service.ProposalError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    stored = 0
+    for checked, content in staged:
+        object_key = s3_service.generate_object_key(
+            "proposal-reports/%d" % dossier.id, checked.filename)
+        try:
+            s3_service.upload_file(
+                content, object_key, content_type=checked.content_type,
+                metadata={"proposal_id": str(dossier.id),
+                          "report_no": str(report.report_no)},
+            )
+        except Exception as exc:
+            # The report itself is already saved, deliberately: losing the
+            # narrative because one photo failed to upload would be worse than
+            # an incomplete attachment set the team can top up by resubmitting.
+            logger.event(
+                ev.REPORT_SUBMITTED, "an attachment could not be stored",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_UNEXPECTED, proposal_id=dossier.id,
+                report_no=report.report_no, filename=checked.filename,
+            )
+            continue
+        proposal_service.add_report_attachment(
+            db, report, checked=checked, object_key=object_key)
+        stored += 1
+
+    logger.event(
+        ev.REPORT_SUBMITTED, "a completion report was filed",
+        proposal_id=dossier.id, report_no=report.report_no,
+        attachments=stored, attachments_offered=len(staged),
+        email=mask_email(dossier.email),
+    )
+
+    version = proposal_service.current_version(db, dossier)
+    if version is not None:
+        try:
+            email_service.send_report_received(
+                email=dossier.email,
+                name=version.full_name,
+                proposal_id=dossier.id,
+                report_no=report.report_no,
+                project_name=version.project_name,
+            )
+        except Exception as exc:
+            logger.event(
+                ev.REPORT_SUBMITTED, "could not acknowledge the report by email",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_EMAIL_SEND_FAILED, proposal_id=dossier.id,
+            )
+
+    attachments = proposal_service.attachments_for(db, [report.id]).get(report.id, [])
+    return {
+        "proposal_id": dossier.id,
+        "status": dossier.status,
+        "attachments_stored": stored,
+        "attachments_offered": len(staged),
+        "report": proposal_service.serialize_portal_report(
+            report, attachments=attachments),
+    }
+
+
+@router.get("/{proposal_id}/report/attachments/{attachment_id}")
+async def download_own_report_attachment(
+    proposal_id: int,
+    attachment_id: int,
+    email: str = Depends(get_portal_email),
+    db: Session = Depends(get_db),
+):
+    """Let a team re-read what it sent.
+
+    Every id is checked against its parent and the dossier against the token's
+    address, so an attachment id alone cannot read another applicant's file.
+    """
+    dossier = _own_dossier(db, proposal_id, email)
+    attachment = (
+        db.query(ProposalReportAttachment)
+        .join(ProposalReport, ProposalReport.id == ProposalReportAttachment.report_id)
+        .filter(ProposalReportAttachment.id == attachment_id)
+        .filter(ProposalReport.proposal_id == dossier.id)
+        .one_or_none()
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    content = s3_service.download_file(attachment.object_key)
+    if content is None:
+        raise HTTPException(status_code=404, detail="The stored file could not be read")
+    return StreamingResponse(
+        _io.BytesIO(content),
+        media_type=attachment.content_type,
+        headers={"Content-Disposition": 'attachment; filename="%s"' % attachment.filename},
+    )
+

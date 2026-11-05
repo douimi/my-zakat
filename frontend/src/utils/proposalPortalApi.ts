@@ -26,6 +26,24 @@ portalApi.interceptors.request.use((config) => {
 export const hasPortalToken = (): boolean => Boolean(sessionStorage.getItem(PORTAL_TOKEN_KEY))
 export const clearPortalToken = (): void => sessionStorage.removeItem(PORTAL_TOKEN_KEY)
 
+export interface PortalReportAttachment {
+  id: number
+  filename: string
+  kind: 'image' | 'video' | 'document'
+  size_bytes: number
+}
+
+export interface PortalReport {
+  report_no: number
+  narrative: string
+  submitted_at: string
+  decision: 'approved' | 'changes_requested' | null
+  /** Why it was sent back — the only thing telling the team what to fix. */
+  decision_comment: string | null
+  decided_at: string | null
+  attachments: PortalReportAttachment[]
+}
+
 export interface PortalProposal {
   id: number
   project_name: string | null
@@ -36,6 +54,12 @@ export interface PortalProposal {
   version_no: number | null
   decision_comment: string | null
   content: Record<string, unknown>
+  /** Whether a completion report may be filed right now. Computed by the
+   *  backend so the form is never shown for a submission it would refuse. */
+  may_submit_report: boolean
+  awaiting_report_review: boolean
+  completed: boolean
+  report: PortalReport | null
 }
 
 export const requestPortalCode = async (email: string): Promise<{ message: string }> => {
@@ -72,3 +96,27 @@ export const submitRevision = async (
 /** True when the backend said no proposal is filed under the address tried. */
 export const isNoProposalForAddress = (error: unknown): boolean =>
   (error as { response?: { status?: number } })?.response?.status === 404
+
+/**
+ * File a completion report for a funded project.
+ *
+ * Multipart, not JSON: the agreement asks for receipts and photographs. The
+ * browser sets the multipart boundary itself, so Content-Type is deliberately
+ * left unset — naming it here produces a request the server cannot parse.
+ */
+export const submitCompletionReport = async (
+  proposalId: number,
+  narrative: string,
+  files: File[],
+): Promise<{ status: string; attachments_stored: number; attachments_offered: number; report: PortalReport }> => {
+  const form = new FormData()
+  form.append('narrative', narrative)
+  files.forEach((file) => form.append('files', file))
+  const { data } = await portalApi.post(
+    `/api/project-proposals/portal/${proposalId}/report`, form)
+  return data
+}
+
+/** A funded project's report attachment, for the team to re-read. */
+export const reportAttachmentUrl = (proposalId: number, attachmentId: number): string =>
+  `${API_BASE_URL}/api/project-proposals/portal/${proposalId}/report/attachments/${attachmentId}`

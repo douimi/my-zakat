@@ -1,0 +1,19 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<h2 style="color: #16a34a; margin: 0 0 18px 0; font-size: 20px;">Project closed — thank you</h2>
+<p>Assalamu alaikum {{ name }},</p>
+<p>Your completion report for <strong>{{ project_name }}</strong> (reference <strong>#{{ proposal_id }}</strong>) has been accepted, and the project is now closed.</p>
+{% if comment %}
+<table role="presentation" width="100%" style="margin: 18px 0; border-collapse: collapse;">
+  <tr>
+    <td style="border-left: 4px solid #16a34a; background: #f0fdf4; padding: 14px 16px; color: #1f2937; white-space: pre-wrap;">
+      {{ comment }}
+    </td>
+  </tr>
+</table>
+{% endif %}
+<p>Thank you for the care you took over this work, and for accounting for it so we can show our donors where their Zakat went.</p>
+<p><strong>You are free to apply for a new project whenever you are ready.</strong></p>
+<p><a href="{{ portal_url }}" style="color:#1e3a8a;">Open your proposals portal</a></p>
+<p>With gratitude,<br><strong>The MyZakat Team</strong></p>
+{% endblock %}
