@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
   CheckCircle2, XCircle, Search, FileText, Bell,
-  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink,
+  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink, ChevronRight,
 } from 'lucide-react'
 import { PORTAL_HANDOFF_PREFIX } from '../../utils/proposalPortalApi'
 import { clsx } from 'clsx'
@@ -203,8 +203,8 @@ const NEXT_STEP: Record<string, { title: string; body: string; waiting?: boolean
 const Lifecycle = ({ status }: { status: string }) => {
   const here = STATUS_STEP[status] ?? { index: 0 }
   return (
-    <div>
-      <ol className="flex items-center gap-1 overflow-x-auto pb-1">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <ol className="flex items-center gap-1 overflow-x-auto">
         {LIFECYCLE.map((step, i) => {
           const done = i < here.index
           const current = i === here.index
@@ -234,12 +234,12 @@ const Lifecycle = ({ status }: { status: string }) => {
         })}
       </ol>
       {here.waitingOn && (
-        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+        <p className="text-xs text-gray-500 flex items-center gap-1">
           <Hourglass className="w-3 h-3" /> Waiting on {here.waitingOn}
         </p>
       )}
       {here.stopped && (
-        <p className="text-xs text-red-700 mt-1 flex items-center gap-1">
+        <p className="text-xs text-red-700 flex items-center gap-1">
           <Ban className="w-3 h-3" /> Stopped here
         </p>
       )}
@@ -320,10 +320,24 @@ const EMPTY_AGREEMENT: Agreement = {
 // Statuses that decide the current version, and so email the applicant.
 const DECISION_STATUSES = new Set(['approved', 'rejected', 'changes_requested'])
 
+/** "1 family", "50 families", "3 units". The unit comes from the form. */
+const countOf = (n: number | null | undefined, unit: string | null | undefined): string => {
+  if (n == null) return '—'
+  const word = (unit || 'unit').trim()
+  if (n === 1) return `1 ${word}`
+  // A label that already ends in s ("displaced families") is left alone.
+  const plural = /s$/i.test(word) ? word
+    : /[^aeiou]y$/i.test(word) ? `${word.slice(0, -1)}ies`
+    : /(x|z|ch|sh)$/i.test(word) ? `${word}es` : `${word}s`
+  return `${n} ${plural}`
+}
+
 /** Every status from approval on carries the agreement. Only `approved` may
  *  still change it: once funded, the money left under those terms, and the
  *  server refuses edits (proposal_service.save_agreement). */
 const AGREEMENT_STATUSES = new Set(['approved', 'funded', 'report_submitted', 'report_changes_requested', 'completed'])
+/** From funding on, a completion report is owed or on file. */
+const REPORT_STATUSES = new Set(['funded', 'report_submitted', 'report_changes_requested', 'completed'])
 
 /** The email "Resend" sends for each status. Mirrors _NOTIFICATION_FOR_STATUS
  *  in routers/project_proposals.py, which is what actually decides. */
@@ -381,7 +395,7 @@ const AdminProjectProposals = () => {
   const [reportBusy, setReportBusy] = useState(false)
   const [sentEmails, setSentEmails] = useState<SentEmail[] | null>(null)
   const [resending, setResending] = useState(false)
-  type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history'
+  type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history' | 'emails'
   const [tab, setTab] = useState<DrawerTab>('dossier')
   // Past approval the funds left under these terms; the server refuses edits.
   const agreementLocked = !!selected && selected.status !== 'approved'
@@ -416,11 +430,10 @@ const AdminProjectProposals = () => {
     setSelected(p)
     setCommentDraft(p.decision_comment || '')
     setNoteDraft(p.internal_note || '')
-    // The latest version is what the reviewer came to read, so it opens
-    // expanded; the older ones stay collapsed behind "View content".
-    setOpenVersion(p.current_version_no)
+    // Every version starts folded: the current one's content is already the
+    // Application tab, and repeating it here only made the panel longer.
+    setOpenVersion(null)
     setVersionDetail(null)
-    if (p.current_version_no != null) fetchVersion(p.id, p.current_version_no)
     setTab('dossier')
     markSeen(p)
     loadAgreement(p)
@@ -837,6 +850,10 @@ const AdminProjectProposals = () => {
             <option value="changes_requested">Changes requested</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+            <option value="funded">Funded</option>
+            <option value="report_submitted">Report filed</option>
+            <option value="report_changes_requested">Report sent back</option>
+            <option value="completed">Completed</option>
           </select>
           <button onClick={fetchRows} className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg" title="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -844,10 +861,7 @@ const AdminProjectProposals = () => {
         </div>
       </div>
 
-      <p className="text-sm text-gray-600">
-        Funding requests submitted through the public <code>/submit-proposal</code> form. Click a row to review
-        every section of the application, read its version history, change its status, or download the reconstructed PDF.
-      </p>
+      <p className="text-sm text-gray-600">Click a proposal to open it.</p>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
         <div className="relative max-w-sm">
@@ -874,7 +888,8 @@ const AdminProjectProposals = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filtered.map((r) => (
-                <tr key={r.id} className={r.is_unread ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-gray-50'}>
+                <tr key={r.id} onClick={() => openDetail(r)}
+                  className={clsx('cursor-pointer', r.is_unread ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-gray-50')}>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-start gap-2">
                       {/* Colour never alone: the dot repeats what the badge in
@@ -912,7 +927,7 @@ const AdminProjectProposals = () => {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell whitespace-nowrap">{formatDate(r.submitted_at)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
+                    <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => openDetail(r)} className="text-primary-600 hover:text-primary-800 p-1.5 rounded hover:bg-primary-50" title="Review"><Eye className="w-4 h-4" /></button>
                       <button onClick={() => downloadPdf(r)} className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded hover:bg-indigo-50" title="Download PDF"><Download className="w-4 h-4" /></button>
                       <button onClick={() => setDeleting(r)} className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
@@ -932,7 +947,11 @@ const AdminProjectProposals = () => {
       {selected && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            {/* shrink-0 on the header, the next-step panel and the tab bar:
+                without it the tab bar was the one flex child left to give way,
+                and on most screens it was squeezed to nothing, which is why the
+                Agreement and History tabs seemed to come and go. */}
+            <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="min-w-0">
                 <h3 className="text-lg font-bold text-gray-900 truncate">{selected.project_name || '—'}</h3>
                 <p className="text-xs text-gray-500 truncate">Ref #{selected.id} · {selected.full_name || '—'} · <a href={`mailto:${selected.email}`} className="text-primary-600 hover:underline">{selected.email}</a></p>
@@ -948,7 +967,7 @@ const AdminProjectProposals = () => {
             {/* Where the dossier stands, and the single action that stands
                 open. Together these replace nine always-expanded sections and a
                 permanent row of five status buttons. */}
-            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 space-y-3">
+            <div className="shrink-0 px-6 py-3 border-b border-gray-200 bg-gray-50 space-y-2">
               <Lifecycle status={selected.status} />
 
               {(() => {
@@ -959,11 +978,13 @@ const AdminProjectProposals = () => {
                     'rounded-lg border p-3',
                     step.waiting ? 'border-gray-200 bg-white' : 'border-primary-200 bg-primary-50',
                   )}>
-                    <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                      {step.waiting ? 'Where it stands' : 'Next step'}
+                    <p className="text-sm">
+                      <span className="text-xs font-bold uppercase tracking-wide text-gray-500 mr-2">
+                        {step.waiting ? 'Where it stands' : 'Next step'}
+                      </span>
+                      <span className="font-semibold text-gray-900">{step.title}</span>
                     </p>
-                    <p className="text-sm font-semibold text-gray-900 mt-1">{step.title}</p>
-                    <p className="text-sm text-gray-700 mt-0.5">{step.body}</p>
+                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-1" title={step.body}>{step.body}</p>
 
                     {/* Review verdicts. Shown only where a verdict is the next
                         move, so "Mark submitted" can no longer appear on a
@@ -1006,7 +1027,7 @@ const AdminProjectProposals = () => {
                         find the portal. Says what was last sent first, so a
                         blocked address is seen before anyone clicks. */}
                     {NOTIFICATION_LABEL[selected.status] && (
-                      <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                      <div className="mt-2 pt-2 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-gray-600 min-w-0" data-testid="last-email">
                           {(() => {
                             if (sentEmails === null) return 'Checking emails sent…'
@@ -1029,23 +1050,27 @@ const AdminProjectProposals = () => {
 
             {/* Everything else, behind tabs. The agreement and report tabs only
                 exist once they can hold anything. */}
-            <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
+            <div className="shrink-0 px-6 pt-2 border-b border-gray-200 flex gap-1 overflow-x-auto" role="tablist">
               {([
                 ['dossier', 'Application', true],
-                ['report', 'Report', selected.has_report || ['funded', 'report_submitted', 'report_changes_requested', 'completed'].includes(selected.status)],
-                ['agreement', 'Agreement', ['approved', 'funded', 'report_submitted', 'report_changes_requested', 'completed'].includes(selected.status)],
-                ['history', `History (${selected.version_count})`, true],
+                ['history', `Versions (${selected.version_count})`, true],
+                ['agreement', 'Agreement', AGREEMENT_STATUSES.has(selected.status)],
+                ['report', 'Report', selected.has_report || REPORT_STATUSES.has(selected.status)],
+                ['emails', 'Emails', true],
               ] as [DrawerTab, string, boolean][])
-                .filter(([, , show]) => show)
-                .map(([key, label]) => (
+                // Every tab is always there, so nothing seems to come and go.
+                // One that cannot hold anything yet is greyed, and says why.
+                .map(([key, label, live]) => (
                   <button
                     key={key}
+                    role="tab"
+                    aria-selected={tab === key}
                     onClick={() => setTab(key)}
                     className={clsx(
                       'px-3 py-2 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap',
                       tab === key
                         ? 'border-primary-600 text-primary-700'
-                        : 'border-transparent text-gray-500 hover:text-gray-800',
+                        : live ? 'border-transparent text-gray-600 hover:text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600',
                     )}
                   >
                     {label}
@@ -1058,8 +1083,17 @@ const AdminProjectProposals = () => {
 
             <div className="flex-1 overflow-y-auto">
               {tab === 'dossier' && (<>
-              {/* Section 1 */}
-              <Section title="1. Personal information">
+              {/* The essentials without opening anything. */}
+              <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3 border-b border-gray-200">
+                <Stat label="Total requested" value={formatMoney(selected.total_amount_usd)} strong />
+                <Stat label="Beneficiaries" value={countOf(selected.number_of_beneficiaries, selected.unit_type)} />
+                <Stat label="Location" value={selected.implementation_location || '—'} />
+                <Stat label="Duration" value={selected.expected_duration || '—'} />
+              </div>
+
+              {/* Everything else folded, one line of preview each. */}
+              <Collapsible title="1. Personal information"
+                preview={[selected.full_name, selected.place_of_residence, selected.mobile_number].filter(Boolean).join(' · ')}>
                 <KV rows={[
                   ['Full name', selected.full_name],
                   ['National ID', selected.national_id],
@@ -1069,20 +1103,19 @@ const AdminProjectProposals = () => {
                   ['Email', selected.email],
                   ['Education', selected.educational_level],
                 ]} />
-              </Section>
+              </Collapsible>
 
-              {/* Section 2 */}
-              <Section title="2. Project information">
+              <Collapsible title="2. Project information" preview={selected.project_description || '—'}>
                 <Paragraph label="Project name" text={selected.project_name} />
                 <Paragraph label="Description" text={selected.project_description} />
                 <Paragraph label="Problem solved" text={selected.problem_solved} />
                 <Paragraph label="Target beneficiaries" text={selected.target_beneficiaries} />
                 <Paragraph label="Community impact" text={selected.community_impact} />
                 <Paragraph label="Expected impact" text={selected.expected_impact} />
-              </Section>
+              </Collapsible>
 
-              {/* Section 3 */}
-              <Section title="3. Project plan">
+              <Collapsible title="3. Project plan"
+                preview={[selected.implementation_location, selected.expected_duration].filter(Boolean).join(' · ')}>
                 <Paragraph label="Implementation steps" text={selected.implementation_steps} bullets />
                 <Paragraph label="Location" text={selected.implementation_location} />
                 <Paragraph label="Required materials" text={selected.required_materials} bullets />
@@ -1090,13 +1123,13 @@ const AdminProjectProposals = () => {
                 <Paragraph label="Continuity plan" text={selected.continuity_plan} />
                 <Paragraph label="Feasibility" text={selected.feasibility} />
                 <Paragraph label="Expected challenges" text={selected.expected_challenges} bullets />
-              </Section>
+              </Collapsible>
 
-              {/* Section 4 */}
-              <Section title="4. Required budget">
+              <Collapsible title="4. Required budget"
+                preview={`${formatMoney(selected.total_amount_usd)} · ${countOf(selected.number_of_beneficiaries, selected.unit_type)} × ${formatMoney(selected.cost_per_unit_usd)}${(selected.additional_expenses_usd ?? 0) > 0 ? ` + ${formatMoney(selected.additional_expenses_usd)} extra` : ''}`}>
                 <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 space-y-2">
                   <div className="flex justify-between text-sm text-primary-900">
-                    <span>{selected.number_of_beneficiaries ?? '—'} {selected.unit_type || 'unit'}s × {formatMoney(selected.cost_per_unit_usd, 2)}</span>
+                    <span>{countOf(selected.number_of_beneficiaries, selected.unit_type)} × {formatMoney(selected.cost_per_unit_usd, 2)}</span>
                     <span className="font-semibold">
                       {formatMoney(
                         selected.number_of_beneficiaries != null && selected.cost_per_unit_usd != null
@@ -1117,11 +1150,13 @@ const AdminProjectProposals = () => {
                     <span className="text-2xl font-bold text-primary-900">{formatMoney(selected.total_amount_usd, 2)} <span className="text-sm font-normal">USD</span></span>
                   </div>
                 </div>
-              </Section>
+              </Collapsible>
 
-              {/* The applicant's own message and the staff note live with the
-                  application, since that is what they are about. */}
-              <Section title="Review notes">
+              {/* The message and the staff note. Open while a decision is the
+                  next move, since that is when they get written. */}
+              <Collapsible title="Review notes"
+                defaultOpen={['submitted', 'under_review'].includes(selected.status)}
+                preview={commentDraft ? `Message: ${commentDraft}` : noteDraft ? `Note: ${noteDraft}` : 'No message or note yet'}>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">
                     Message to the applicant <span className="text-gray-400">— goes out in the email</span>
@@ -1145,18 +1180,16 @@ const AdminProjectProposals = () => {
                     : <span />}
                   <button onClick={saveNotes} className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded shrink-0">Save without notifying</button>
                 </div>
-              </Section>
+              </Collapsible>
               </>)}
 
               {tab === 'history' && (<>
               {/* Version history — the current version opens expanded (see
                   openDetail); older ones stay collapsed behind "View content". */}
               <Section title={`Version history (${selected.version_count})`}>
-                {selected.version_count > 1 && (
-                  <p className="text-xs text-gray-500 -mt-1">
-                    The current version is shown in full below. Earlier versions are collapsed — open any of them to compare.
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 -mt-1">
+                  The current version is what the Application tab shows. Open any version to read it as it was sent.
+                </p>
                 {[...selected.versions].reverse().map((v) => (
                   <div key={v.id} className="border border-gray-200 rounded-lg p-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1184,13 +1217,13 @@ const AdminProjectProposals = () => {
                     {v.decision_comment && (
                       <div className="mt-3">
                         <div className="text-xs text-gray-500 mb-1">Sent to the applicant{v.decided_at ? ` on ${formatDate(v.decided_at)}` : ''}</div>
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{v.decision_comment}</p>
+                        <LongText text={v.decision_comment} />
                       </div>
                     )}
                     {v.internal_note && (
                       <div className="mt-3">
                         <div className="text-xs text-gray-500 mb-1">Internal note</div>
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{v.internal_note}</p>
+                        <LongText text={v.internal_note} />
                       </div>
                     )}
 
@@ -1221,7 +1254,9 @@ const AdminProjectProposals = () => {
                   </div>
                 ))}
               </Section>
+              </>)}
 
+              {tab === 'emails' && (<>
               <Section title="Emails sent to the applicant">
                 {sentEmails === null ? (
                   <p className="text-sm text-gray-500">Loading…</p>
@@ -1276,6 +1311,13 @@ const AdminProjectProposals = () => {
               {/* Completion report */}
               {tab === 'report' && (
                 <Section title="Completion report">
+                  {!selected.has_report && !REPORT_STATUSES.has(selected.status) && (
+                    <EmptyTab>
+                      {selected.status === 'rejected'
+                        ? 'This application was declined, so no report is due.'
+                        : 'The team files its completion report once the project is funded. Nothing is due yet.'}
+                    </EmptyTab>
+                  )}
                   {selected.status === 'funded' && !selected.has_report && (
                     <p className="text-sm text-gray-500">
                       Waiting for the team to file their report. They cannot apply for another
@@ -1306,7 +1348,7 @@ const AdminProjectProposals = () => {
                         </span>
                       </div>
 
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.narrative}</p>
+                      <LongText text={report.narrative} lines={4} />
 
                       {report.attachments.length > 0 && (
                         <div className="flex flex-wrap gap-2 pt-1">
@@ -1331,13 +1373,13 @@ const AdminProjectProposals = () => {
                           <div className="text-xs text-gray-500 mb-1">
                             Sent to the team{report.decided_at ? ` on ${formatDate(report.decided_at)}` : ''}
                           </div>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.decision_comment}</p>
+                          <LongText text={report.decision_comment} />
                         </div>
                       )}
                       {report.internal_note && (
                         <div>
                           <div className="text-xs text-gray-500 mb-1">Internal note</div>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.internal_note}</p>
+                          <LongText text={report.internal_note} />
                         </div>
                       )}
                     </div>
@@ -1398,7 +1440,13 @@ const AdminProjectProposals = () => {
                   anyway: an agreement commits money. */}
               {tab === 'agreement' && (
                 <Section title="Funding agreement">
-                  {!agreement ? (
+                  {!AGREEMENT_STATUSES.has(selected.status) ? (
+                    <EmptyTab>
+                      {selected.status === 'rejected'
+                        ? 'This application was declined, so no agreement was drawn up.'
+                        : 'The funding agreement is drawn up once the application is approved. Approve it from the Next step panel above.'}
+                    </EmptyTab>
+                  ) : !agreement ? (
                     <p className="text-sm text-gray-500">Loading…</p>
                   ) : (
                     <>
@@ -1429,6 +1477,31 @@ const AdminProjectProposals = () => {
                         </p>
                       )}
 
+                      {agreementLocked ? (agreementExists && (
+                        <>
+                          <button
+                            onClick={downloadAgreementPdf}
+                            disabled={agreementBusy}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-50"
+                          >
+                            <Download className="w-4 h-4" />
+                            {agreementBusy ? 'Working…' : 'Download agreement PDF'}
+                          </button>
+                          <Collapsible title="Terms of the agreement"
+                            preview={`${formatMoney(Number(agreement.approved_funding_usd) || 0)} · ${countOf(Number(agreement.target_count) || null, agreement.target_label)} · ${agreement.location || '—'}`}>
+                            <KV rows={[
+                              ['Project', agreement.project_title],
+                              ['Location', agreement.location],
+                              ['Field representative', agreement.field_representative],
+                              ['Approved funding', formatMoney(Number(agreement.approved_funding_usd) || 0)],
+                              ['Beneficiaries', countOf(Number(agreement.target_count) || null, agreement.target_label)],
+                              ['Per beneficiary', agreement.distribution_per_beneficiary],
+                              ['Total planned', agreement.total_planned_distribution],
+                              ['Other uses of funds', agreement.extra_fund_uses],
+                            ]} />
+                          </Collapsible>
+                        </>
+                      )) : (<>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <Field disabled={agreementLocked} label="Project" value={agreement.project_title} onChange={(v) => setAgreementField('project_title', v)} />
                         <Field disabled={agreementLocked} label="Location" value={agreement.location} onChange={(v) => setAgreementField('location', v)} />
@@ -1487,6 +1560,7 @@ const AdminProjectProposals = () => {
                           </button>
                         )}
                       </div>
+                      </>)}
                     </>
                   )}
                 </Section>
@@ -1526,6 +1600,60 @@ const AdminProjectProposals = () => {
     </div>
   )
 }
+
+/** A section that starts folded, with one line saying what is inside. Long
+ *  text stays out of the way until someone asks for it. */
+const Collapsible = ({ title, preview, defaultOpen = false, children }: {
+  title: string
+  preview?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) => {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="border-b border-gray-100 last:border-b-0">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        className="w-full flex items-start gap-2 px-6 py-3 text-left hover:bg-gray-50">
+        <ChevronRight className={clsx('w-4 h-4 mt-0.5 text-gray-400 shrink-0 transition-transform', open && 'rotate-90')} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-gray-800">{title}</span>
+          {!open && preview && <span className="block text-xs text-gray-500 truncate">{preview}</span>}
+        </span>
+      </button>
+      {open && <div className="px-6 pb-4 pl-12 space-y-3">{children}</div>}
+    </div>
+  )
+}
+
+/** Long text clamped to a few lines, with a toggle only when it is long. */
+const LongText = ({ text, lines = 2 }: { text: string | null | undefined; lines?: 2 | 3 | 4 }) => {
+  const [open, setOpen] = useState(false)
+  const value = text || '—'
+  const long = value.length > 160 || value.split('\n').length > lines
+  const clamp = { 2: 'line-clamp-2', 3: 'line-clamp-3', 4: 'line-clamp-4' }[lines]
+  return (
+    <div>
+      <p className={clsx('text-sm text-gray-800 whitespace-pre-wrap', long && !open && clamp)}>{value}</p>
+      {long && (
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className="text-xs font-medium text-primary-700 hover:underline mt-0.5">
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const Stat = ({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) => (
+  <div className="min-w-0">
+    <div className="text-xs text-gray-500">{label}</div>
+    <div className={clsx('truncate', strong ? 'text-lg font-bold text-primary-700' : 'text-sm font-medium text-gray-900')} title={value}>{value}</div>
+  </div>
+)
+
+const EmptyTab = ({ children }: { children: React.ReactNode }) => (
+  <p className="text-sm text-gray-600 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4">{children}</p>
+)
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="px-6 py-5 border-b border-gray-100 last:border-b-0">
@@ -1578,7 +1706,7 @@ const Paragraph = ({ label, text, bullets }: { label: string; text: string | nul
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       {bullets && lines.length > 1
         ? <ul className="list-disc list-inside text-sm text-gray-800 space-y-0.5">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
-        : <p className="text-sm text-gray-800 whitespace-pre-wrap">{text || '—'}</p>}
+        : <LongText text={text} />}
     </div>
   )
 }

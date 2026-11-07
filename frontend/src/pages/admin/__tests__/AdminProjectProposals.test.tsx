@@ -11,7 +11,7 @@
  * `useAuthStore`, not the axios client, so `fetch` is what gets mocked here.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AdminProjectProposals from '../AdminProjectProposals'
 
@@ -232,33 +232,65 @@ describe('AdminProjectProposals - the reworked drawer', () => {
     expect(screen.getByText(/stopped here/i)).toBeInTheDocument()
   })
 
-  it('hides the agreement and report tabs until they can hold anything', async () => {
+  it.each(['submitted', 'approved', 'funded', 'completed'])(
+    'shows every tab on a %s dossier, so nothing seems to come and go',
+    async (status) => {
+      const user = userEvent.setup()
+      await openDrawer(user, lifecycleRow(status, { has_report: status === 'completed' }))
+      for (const name of [/^application$/i, /^versions/i, /^agreement$/i, /^report$/i, /^emails$/i]) {
+        expect(screen.getByRole('tab', { name })).toBeInTheDocument()
+      }
+    },
+  )
+
+  it('says why the agreement tab is empty before approval, instead of loading forever', async () => {
     const user = userEvent.setup()
     await openDrawer(user, lifecycleRow('submitted'))
-    expect(screen.getByRole('button', { name: /^application$/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^agreement$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^report$/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /^agreement$/i }))
+    expect(screen.getByText(/drawn up once the application is approved/i)).toBeInTheDocument()
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument()
   })
 
-  it('shows the agreement tab from approval onwards', async () => {
+  it('says why the report tab is empty before funding', async () => {
     const user = userEvent.setup()
     await openDrawer(user, lifecycleRow('approved'))
-    expect(screen.getByRole('button', { name: /^agreement$/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /^report$/i }))
+    expect(screen.getByText(/once the project is funded/i)).toBeInTheDocument()
   })
 
-  it('opens on the application and keeps the other tabs out of the way', async () => {
+  it('opens on the application with the essentials shown and the long sections folded', async () => {
     const user = userEvent.setup()
     await openDrawer(user, lifecycleRow('funded', { has_report: true }))
-    expect(await screen.findByText(/1\. Personal information/i)).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /Version history/i })).not.toBeInTheDocument()
+    expect(await screen.findByText('Total requested')).toBeInTheDocument()
+    expect(screen.getByText('250 families')).toBeInTheDocument()
+    const section = screen.getByRole('button', { name: /2\. project information/i })
+    expect(section).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Shallow aquifer.')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /3\. project plan/i }))
+    expect(screen.getByText('Shallow aquifer.')).toBeInTheDocument()
   })
 
-  it('switches to the history tab on demand', async () => {
+  it('keeps the review notes open while a decision is the next move', async () => {
+    const user = userEvent.setup()
+    await openDrawer(user, lifecycleRow('submitted'))
+    expect(screen.getByRole('button', { name: /review notes/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('switches to the versions tab on demand, with every version folded', async () => {
     const user = userEvent.setup()
     await openDrawer(user, lifecycleRow('funded', { has_report: true }))
-    await user.click(screen.getByRole('button', { name: /history/i }))
+    await user.click(screen.getByRole('tab', { name: /^versions/i }))
     expect(await screen.findByRole('heading', { name: /Version history/i })).toBeInTheDocument()
     expect(screen.queryByText(/1\. Personal information/i)).not.toBeInTheDocument()
+  })
+
+  it('opens a dossier from anywhere on its row', async () => {
+    const user = userEvent.setup()
+    mockList([lifecycleRow('submitted')])
+    renderPage()
+    await user.click(await screen.findByText('Amina Yusuf'))
+    expect(await screen.findByRole('tab', { name: /^application$/i })).toBeInTheDocument()
   })
 })
 
@@ -275,7 +307,8 @@ describe('AdminProjectProposals - the reworked list', () => {
     renderPage()
     expect(await screen.findByText('Review report')).toBeInTheDocument()
     // And the status column says where it IS, not what to do about it.
-    expect(screen.getByText('Report filed')).toBeInTheDocument()
+    // (Scoped to the table: the status filter offers "Report filed" too.)
+    expect(within(screen.getByRole('table')).getByText('Report filed')).toBeInTheDocument()
   })
 
   it('reports the report review ahead of an unread application', async () => {
@@ -385,7 +418,7 @@ describe('AdminProjectProposals - resending the status email', () => {
 
   it('lists every email, sign-in codes included, in the history tab', async () => {
     const { user } = await open('funded')
-    await user.click(screen.getByRole('button', { name: /history/i }))
+    await user.click(screen.getByRole('tab', { name: /^emails$/i }))
 
     const list = await screen.findByTestId('sent-emails')
     expect(list).toHaveTextContent('Sign-in code')
@@ -430,7 +463,7 @@ describe('AdminProjectProposals - the agreement after approval, and acting for t
     const fetchMock = mockApi(lifecycleRow(status), agreementExists)
     renderPage()
     await user.click(await screen.findByTitle(/review/i))
-    await user.click(screen.getByRole('button', { name: /^agreement$/i }))
+    await user.click(screen.getByRole('tab', { name: /^agreement$/i }))
     return { user, fetchMock }
   }
 
@@ -442,8 +475,11 @@ describe('AdminProjectProposals - the agreement after approval, and acting for t
       const { user, fetchMock } = await openAgreement(status)
 
       expect(await screen.findByText(/this agreement is locked/i)).toBeInTheDocument()
-      expect(screen.getByDisplayValue('Community Water Well')).toBeDisabled()
+      // A short summary, folded, rather than a form nobody may edit.
+      expect(screen.queryByDisplayValue('Community Water Well')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /terms of the agreement/i }))
+      expect(screen.getByText('250 families')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: /download agreement pdf/i }))
 

@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle, ArrowLeft, Banknote, CheckCircle2, Clock, Eye, FileText, Inbox,
-  KeyRound, Loader2, Mail, MessageSquare, Paperclip, PencilLine,
+  ChevronDown, KeyRound, Loader2, Mail, MessageSquare, Paperclip, PencilLine,
   Upload, XCircle,
 } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
@@ -99,6 +99,20 @@ const STATUS_ICON: Record<string, typeof Clock> = {
   report_submitted:         Eye,
   report_changes_requested: PencilLine,
   completed:                CheckCircle2,
+}
+
+/** One line on a folded card: where the dossier stands and what, if anything,
+ *  the team has to do. The detail is one click away. */
+const STATUS_HINT: Record<string, string> = {
+  submitted:                'Received. Waiting for our review.',
+  under_review:             'Our team is reviewing it.',
+  changes_requested:        'We asked for changes. Open it to see what to fix.',
+  approved:                 'Approved. We will be in touch about funding.',
+  rejected:                 'Not funded. Open it to read our reason.',
+  funded:                   'Funded. Send your completion report when the project is done.',
+  report_submitted:         'Your report is with our review team.',
+  report_changes_requested: 'Your report needs more detail. Open it to see what to add.',
+  completed:                'Closed. You are free to apply again.',
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -174,6 +188,11 @@ const MyProposals = () => {
   // form owns its own contents (see components/proposals/ReportForm).
   const [reportFor, setReportFor] = useState<number | null>(null)
   const [editing, setEditing] = useState<PortalProposal | null>(null)
+  // Dossiers start folded to their status line; these are the ones opened.
+  const [expanded, setExpanded] = useState<number[]>([])
+  const toggle = (id: number) =>
+    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const expand = (id: number) => setExpanded((prev) => (prev.includes(id) ? prev : [...prev, id]))
 
   // `?proposal=ID`, the link in the funding and report emails. After sign-in
   // the portal goes straight to that dossier and, if a report is what it
@@ -418,6 +437,7 @@ const MyProposals = () => {
 
   const openReportForm = (proposal: PortalProposal) => {
     setReportFor(proposal.id)
+    expand(proposal.id)
     setFlash('')
     scrollToDossier(proposal.id)
   }
@@ -446,6 +466,7 @@ const MyProposals = () => {
     const target = items.find((p) => p.id === focusId)
     if (!target) return
     focusedRef.current = true
+    expand(target.id)
     if (target.may_submit_report) setReportFor(target.id)
     scrollToDossier(target.id)
   }, [view, items, focusId])
@@ -700,6 +721,20 @@ const MyProposals = () => {
       {/* What the team has to do, before anything else on the page. A funded
           team owes a report, and the button for it used to sit at the bottom
           of a card among others. */}
+      {items.filter((p) => p.editable).map((p) => (
+        <div key={`edit-${p.id}`} role="alert"
+          className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-amber-900">
+            <p className="font-semibold">Action needed: our review team asked for changes</p>
+            <p>{p.project_name || 'Untitled proposal'} (#{p.id}).</p>
+          </div>
+          <button onClick={() => startEditing(p)}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg inline-flex items-center gap-2">
+            <PencilLine className="w-4 h-4" /> Fix and resubmit
+          </button>
+        </div>
+      ))}
+
       {items.filter((p) => p.may_submit_report && reportFor !== p.id).map((p) => (
         <div key={`action-${p.id}`} role="alert"
           className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
@@ -719,20 +754,30 @@ const MyProposals = () => {
         </div>
       ))}
 
-      {items.map((p) => (
+      {items.map((p) => {
+        const open = expanded.includes(p.id) || reportFor === p.id
+        return (
         <div key={p.id} id={`proposal-${p.id}`}
-          className={`bg-white rounded-xl shadow-sm border p-6 space-y-3 scroll-mt-6 ${
+          className={`bg-white rounded-xl shadow-sm border scroll-mt-6 ${
             focusId === p.id || reportFor === p.id ? 'border-primary-400 ring-2 ring-primary-100' : 'border-gray-200'}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+          <button type="button" onClick={() => toggle(p.id)} aria-expanded={open}
+            className="w-full text-left p-5 sm:p-6 flex items-start justify-between gap-3 hover:bg-gray-50 rounded-xl">
+            <div className="min-w-0">
               <h2 className="text-lg font-bold text-gray-900">{p.project_name || 'Untitled proposal'}</h2>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 mt-0.5">
                 Reference #{p.id} · Submitted {formatDate(p.submitted_at)}
                 {p.version_no && p.version_no > 1 && <> · Version {p.version_no}</>}
               </p>
+              <p className="text-sm text-gray-700 mt-2">{STATUS_HINT[p.status] || ''}</p>
             </div>
-            <StatusBadge status={p.status} />
-          </div>
+            <span className="flex items-center gap-2 shrink-0">
+              <StatusBadge status={p.status} />
+              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+            </span>
+          </button>
+
+          {open && (
+          <div className="px-5 sm:px-6 pb-6 space-y-3">
 
           {p.decision_comment && (
             <blockquote className="border-l-4 border-amber-300 bg-amber-50 rounded-r-lg p-3 text-sm text-amber-900">
@@ -842,8 +887,11 @@ const MyProposals = () => {
               </button>
             </div>
           )}
+          </div>
+          )}
         </div>
-      ))}
+        )
+      })}
 
       {items.length > 0 && (
         <div className="text-center">

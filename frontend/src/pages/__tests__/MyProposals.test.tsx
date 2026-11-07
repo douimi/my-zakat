@@ -442,3 +442,37 @@ describe('MyProposals — an admin acting for the team', () => {
     expect(requestPortalCode).not.toHaveBeenCalled()
   })
 })
+
+describe('MyProposals — each dossier shows its status, details on demand', () => {
+  const REJECTED = {
+    ...DOSSIER, id: 16, project_name: 'Solar Lamps', status: 'rejected', editable: false,
+    decision_comment: 'Outside the scope of this funding cycle.',
+    may_submit_report: false, awaiting_report_review: false, completed: false,
+  }
+
+  it('folds a dossier to its status line, and opens it on click', async () => {
+    const user = userEvent.setup()
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [REJECTED] })
+    renderPortal()
+
+    const header = await screen.findByRole('button', { name: /solar lamps/i })
+    expect(header).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText(/not funded\. open it to read our reason/i)).toBeInTheDocument()
+    expect(screen.queryByText(/outside the scope/i)).toBeNull()
+
+    await user.click(header)
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/outside the scope/i)).toBeInTheDocument()
+  })
+
+  it('keeps a requested fix reachable without opening anything', async () => {
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [DOSSIER] })
+    renderPortal()
+
+    const banner = await screen.findByRole('alert')
+    expect(banner).toHaveTextContent(/our review team asked for changes/i)
+    expect(screen.getAllByRole('button', { name: /fix and resubmit/i })).toHaveLength(1)
+  })
+})
