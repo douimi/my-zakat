@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import AdminMediaWorkspace from '../AdminMediaWorkspace'
 import { mediaLibraryApi } from '../../../utils/mediaLibraryApi'
-import type { MediaAsset } from '../../../utils/mediaLibraryApi'
+import type { MediaAsset, ProjectFolder } from '../../../utils/mediaLibraryApi'
 
 vi.mock('../../../utils/mediaLibraryApi', () => ({
   mediaLibraryApi: {
     list: vi.fn(),
+    projects: vi.fn(),
+    upload: vi.fn(),
   },
 }))
 
@@ -33,6 +35,7 @@ vi.mock('../../../components/media/MediaDetailDrawer', () => ({
 const makeAsset = (overrides: Partial<MediaAsset> = {}): MediaAsset => ({
   id: 1,
   owner_id: 7,
+  project_id: null,
   object_key: 'workspaces/7/2026/03/photo.jpg',
   filename: 'photo.jpg',
   media_type: 'image',
@@ -54,11 +57,24 @@ const makeAsset = (overrides: Partial<MediaAsset> = {}): MediaAsset => ({
   ...overrides,
 })
 
+const makeFolder = (overrides: Partial<ProjectFolder> = {}): ProjectFolder => ({
+  project_id: 5,
+  name: 'Rice distribution',
+  status: 'funded',
+  fileable: true,
+  asset_count: 3,
+  image_count: 2,
+  video_count: 1,
+  submitted_count: 0,
+  ...overrides,
+})
+
 describe('AdminMediaWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     drawerCalls.length = 0
     vi.mocked(mediaLibraryApi.list).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 48 })
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [] })
   })
 
   it('loads the workspace with the default query on mount', async () => {
@@ -71,6 +87,7 @@ describe('AdminMediaWorkspace', () => {
         sort: 'created_at',
         order: 'desc',
         page: 1,
+        projectId: null,
         pageSize: 48,
       })
     )
@@ -109,6 +126,67 @@ describe('AdminMediaWorkspace', () => {
     expect(drawerCalls[0].canReview).toBe(false)
     expect(drawerCalls[0].currentUserId).toBeUndefined()
     expect(drawerCalls[0].workspaces).toBeUndefined()
+  })
+
+  it('lists project folders with what each holds', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({
+      projects: [makeFolder(), makeFolder({ project_id: null, name: 'Unassigned', fileable: true, asset_count: 1, image_count: 1, video_count: 0 })],
+    })
+    render(<AdminMediaWorkspace />)
+    const nav = await screen.findByRole('navigation', { name: /projects/i })
+    expect(await within(nav).findByText('Rice distribution')).toBeInTheDocument()
+    expect(within(nav).getByText('2 photos · 1 video')).toBeInTheDocument()
+    expect(within(nav).getByText('Unassigned')).toBeInTheDocument()
+  })
+
+  it('opening a folder filters the grid and targets uploads at it', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    render(<AdminMediaWorkspace />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /rice distribution/i }))
+
+    await waitFor(() =>
+      expect(mediaLibraryApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: 5 }))
+    )
+    expect(screen.getByLabelText(/file under/i)).toHaveValue('5')
+  })
+
+  it('uploads into the chosen project', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    vi.mocked(mediaLibraryApi.upload).mockResolvedValue(makeAsset())
+    render(<AdminMediaWorkspace />)
+    await screen.findByRole('button', { name: /rice distribution/i })
+
+    fireEvent.change(screen.getByLabelText(/file under/i), { target: { value: '5' } })
+    const file = new File(['x'], 'well.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('media-file-input'), { target: { files: [file] } })
+
+    await waitFor(() =>
+      expect(mediaLibraryApi.upload).toHaveBeenCalledWith(file, { projectId: 5 }, expect.any(Function))
+    )
+  })
+
+  it('does not offer a closed project as an upload destination', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({
+      projects: [makeFolder({ project_id: 9, name: 'Old project', fileable: false })],
+    })
+    render(<AdminMediaWorkspace />)
+    fireEvent.click(await screen.findByRole('button', { name: /old project/i }))
+
+    const select = screen.getByLabelText(/file under/i)
+    expect(select).toHaveValue('')
+    expect(within(select).queryByText('Old project')).not.toBeInTheDocument()
+  })
+
+  it('hands the drawer the folders so the asset can be moved', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    vi.mocked(mediaLibraryApi.list).mockResolvedValue({ items: [makeAsset()], total: 1, page: 1, page_size: 48 })
+    render(<AdminMediaWorkspace />)
+    await screen.findByRole('button', { name: /rice distribution/i })
+
+    fireEvent.click(await screen.findByRole('button', { name: /photo\.jpg/i }))
+    await waitFor(() => expect(drawerCalls.length).toBeGreaterThan(0))
+    expect(drawerCalls[drawerCalls.length - 1].projects).toEqual([makeFolder()])
   })
 
   it('shows an error toast when the workspace fails to load', async () => {

@@ -6,6 +6,7 @@ import type { MediaAsset } from '../../../utils/mediaLibraryApi'
 const asset = (overrides: Partial<MediaAsset> = {}): MediaAsset => ({
   id: 1,
   owner_id: 3,
+  project_id: null,
   object_key: 'workspaces/3/2026/03/a.jpg',
   filename: 'IMG_4821.jpg',
   media_type: 'image',

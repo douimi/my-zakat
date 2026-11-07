@@ -585,6 +585,9 @@ def serialize_asset(asset: "MediaAsset") -> dict:
     return {
         "id": asset.id,
         "owner_id": asset.owner_id,
+        # The folder this file lives in. None is the "Unassigned" folder, which
+        # is where everything uploaded before projects existed still sits.
+        "project_id": asset.project_id,
         "object_key": asset.object_key,
         "filename": asset.filename,
         "media_type": asset.media_type,

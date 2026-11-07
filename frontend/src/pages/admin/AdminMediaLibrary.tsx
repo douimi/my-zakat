@@ -6,10 +6,12 @@ import MediaFilters from '../../components/media/MediaFilters'
 import MediaGrid from '../../components/media/MediaGrid'
 import MediaDetailDrawer from '../../components/media/MediaDetailDrawer'
 import { formatBytes } from '../../components/media/MediaCard'
+import ProjectFolderList, { type FolderSelection } from '../../components/media/ProjectFolderList'
 import {
   mediaLibraryApi,
   type ListQuery,
   type MediaAsset,
+  type ProjectFolder,
   type Workspace,
 } from '../../utils/mediaLibraryApi'
 
@@ -21,6 +23,11 @@ const AdminMediaLibrary = () => {
   const [tab, setTab] = useState<'all' | 'review'>('all')
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [ownerId, setOwnerId] = useState<number | 'unassigned' | null>(null)
+  // Projects first: people look for "the rice distribution photos", not for
+  // whoever happened to take them. By-person stays for reassigning legacy media.
+  const [browseBy, setBrowseBy] = useState<'project' | 'person'>('project')
+  const [folders, setFolders] = useState<ProjectFolder[]>([])
+  const [folder, setFolder] = useState<FolderSelection>(null)
   const [query, setQuery] = useState<ListQuery>({
     q: '', type: 'all', status: 'all', sort: 'created_at', order: 'desc', page: 1,
   })
@@ -39,6 +46,16 @@ const AdminMediaLibrary = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const loadFolders = useCallback(async () => {
+    try {
+      const data = await mediaLibraryApi.projects()
+      setFolders(data.projects)
+    } catch {
+      showError('Could not load projects.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -47,6 +64,7 @@ const AdminMediaLibrary = () => {
         // The review queue is the submitted-status view of every workspace.
         status: tab === 'review' ? 'submitted' : query.status,
         ownerId: tab === 'review' ? null : ownerId,
+        projectId: tab === 'review' ? null : folder,
         pageSize: PAGE_SIZE,
       })
       setItems(data.items)
@@ -57,12 +75,26 @@ const AdminMediaLibrary = () => {
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, ownerId, tab])
+  }, [query, ownerId, folder, tab])
 
   useEffect(() => { loadWorkspaces() }, [loadWorkspaces])
+  useEffect(() => { loadFolders() }, [loadFolders])
   useEffect(() => { load() }, [load])
 
-  const refresh = () => { load(); loadWorkspaces() }
+  const refresh = () => { load(); loadWorkspaces(); loadFolders() }
+
+  // One axis at a time. Switching clears the other filter, so the grid never
+  // silently shows "this project AND this person" with only one of them visible.
+  const switchBrowse = (value: 'project' | 'person') => {
+    setBrowseBy(value)
+    setFolder(null)
+    setOwnerId(null)
+    setQuery((c) => ({ ...c, page: 1 }))
+  }
+  const openFolder = (value: FolderSelection) => {
+    setFolder(value)
+    setQuery((c) => ({ ...c, page: 1 }))
+  }
   const patchQuery = (patch: Partial<ListQuery>) =>
     setQuery((current) => ({ ...current, ...patch, page: patch.page ?? 1 }))
 
@@ -73,7 +105,7 @@ const AdminMediaLibrary = () => {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-gray-900">All Media</h1>
-        <p className="text-sm text-gray-600 mt-1">Every workspace, and the queue waiting on review.</p>
+        <p className="text-sm text-gray-600 mt-1">Every project folder, and the queue waiting on review.</p>
       </header>
 
       <div className="flex gap-1 border-b border-gray-200">
@@ -96,7 +128,22 @@ const AdminMediaLibrary = () => {
 
       <div className="flex gap-6 items-start">
         {tab === 'all' && (
-          <nav className="w-56 shrink-0 space-y-1">
+          <nav className="w-56 shrink-0 space-y-3">
+            <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm" role="group" aria-label="Browse by">
+              {(['project', 'person'] as const).map((value) => (
+                <button key={value} type="button" aria-pressed={browseBy === value}
+                  onClick={() => switchBrowse(value)}
+                  className={clsx('flex-1 rounded-md py-1',
+                    browseBy === value ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:text-gray-900')}>
+                  {value === 'project' ? 'Projects' : 'People'}
+                </button>
+              ))}
+            </div>
+
+            {browseBy === 'project' ? (
+              <ProjectFolderList folders={folders} selected={folder} onSelect={openFolder} />
+            ) : (
+            <div className="space-y-1">
             <button type="button" onClick={() => setOwnerId(null)}
               className={clsx('w-full text-left px-3 py-2 rounded-lg text-sm',
                 ownerId === null ? 'bg-emerald-50 text-emerald-800 font-medium' : 'hover:bg-gray-50')}>
@@ -116,6 +163,8 @@ const AdminMediaLibrary = () => {
                 </button>
               )
             })}
+            </div>
+            )}
           </nav>
         )}
 
@@ -158,6 +207,7 @@ const AdminMediaLibrary = () => {
           assetId={selectedId}
           canReview
           workspaces={workspaces}
+          projects={folders}
           currentUserId={user?.id ?? null}
           onClose={() => setSelectedId(null)}
           onChanged={refresh}

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import MediaDetailDrawer from '../MediaDetailDrawer'
 import { mediaLibraryApi } from '../../../utils/mediaLibraryApi'
-import type { MediaAsset } from '../../../utils/mediaLibraryApi'
+import type { MediaAsset, ProjectFolder } from '../../../utils/mediaLibraryApi'
 
 vi.mock('../../../utils/mediaLibraryApi', () => ({
   mediaLibraryApi: {
@@ -13,6 +13,7 @@ vi.mock('../../../utils/mediaLibraryApi', () => ({
     review: vi.fn(),
     remove: vi.fn(),
     reassign: vi.fn(),
+    refile: vi.fn(),
     fileUrl: (id: number) => `http://api.test/api/media-library/${id}/file`,
     thumbUrl: (id: number) => `http://api.test/api/media-library/${id}/thumb`,
   },
@@ -25,7 +26,7 @@ vi.mock('../../../contexts/ToastContext', () => ({
 }))
 
 const asset: MediaAsset = {
-  id: 1, owner_id: 3, object_key: 'k', filename: 'IMG_1.jpg', media_type: 'image',
+  id: 1, owner_id: 3, project_id: null, object_key: 'k', filename: 'IMG_1.jpg', media_type: 'image',
   content_type: 'image/jpeg', size_bytes: 2048, width: 800, height: 600, duration_seconds: null,
   title: null, description: null, tags: [], status: 'private', review_note: null,
   reviewed_at: null, created_at: '2026-03-14T10:00:00Z', updated_at: '2026-03-14T10:00:00Z',
@@ -34,6 +35,11 @@ const asset: MediaAsset = {
 
 const detail = (overrides: Partial<MediaAsset> = {}) =>
   ({ ...asset, ...overrides, usage: {}, usage_count: 0 })
+
+const folder = (overrides: Partial<ProjectFolder> = {}): ProjectFolder => ({
+  project_id: 5, name: 'Rice distribution', status: 'funded', fileable: true,
+  asset_count: 0, image_count: 0, video_count: 0, submitted_count: 0, ...overrides,
+})
 
 describe('MediaDetailDrawer', () => {
   beforeEach(() => {
@@ -199,5 +205,35 @@ describe('MediaDetailDrawer', () => {
     vi.mocked(mediaLibraryApi.detail).mockResolvedValue(detail({ status: 'public' }) as never)
     render(<MediaDetailDrawer assetId={1} canReview={false} onClose={vi.fn()} onChanged={vi.fn()} />)
     expect(await screen.findByText(/live on the public site/i)).toBeInTheDocument()
+  })
+
+  it('moves the asset into a project', async () => {
+    vi.mocked(mediaLibraryApi.refile).mockResolvedValue(detail({ project_id: 5 }) as never)
+    const onChanged = vi.fn()
+    render(<MediaDetailDrawer assetId={1} canReview={false} projects={[folder()]}
+      onClose={vi.fn()} onChanged={onChanged} />)
+
+    fireEvent.change(await screen.findByLabelText('Project'), { target: { value: '5' } })
+
+    await waitFor(() => expect(mediaLibraryApi.refile).toHaveBeenCalledWith(1, 5))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('shows a closed project as the current home but does not offer it elsewhere', async () => {
+    const closed = folder({ project_id: 9, name: 'Old project', fileable: false })
+    vi.mocked(mediaLibraryApi.detail).mockResolvedValue(detail({ project_id: 9 }) as never)
+    render(<MediaDetailDrawer assetId={1} canReview={false} projects={[folder(), closed]}
+      onClose={vi.fn()} onChanged={vi.fn()} />)
+
+    const select = await screen.findByLabelText('Project')
+    expect(select).toHaveValue('9')
+    expect(screen.getByRole('option', { name: 'Old project' })).toBeDisabled()
+  })
+
+  it('locks the project for an owner once the media is public', async () => {
+    vi.mocked(mediaLibraryApi.detail).mockResolvedValue(detail({ status: 'public' }) as never)
+    render(<MediaDetailDrawer assetId={1} canReview={false} projects={[folder()]}
+      onClose={vi.fn()} onChanged={vi.fn()} />)
+    expect(await screen.findByLabelText('Project')).toBeDisabled()
   })
 })

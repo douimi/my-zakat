@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react'
 import { clsx } from 'clsx'
-import { mediaLibraryApi } from '../../utils/mediaLibraryApi'
+import { mediaLibraryApi, type ProjectFolder } from '../../utils/mediaLibraryApi'
 
 interface UploadItem {
   name: string
@@ -12,6 +12,11 @@ interface UploadItem {
 
 interface MediaUploaderProps {
   onUploaded: () => void
+  /** Project folders. When given, the uploader asks which project the files
+   *  document — at upload, because asking later means it never gets asked. */
+  projects?: ProjectFolder[]
+  /** The folder the page has open; new uploads go there unless changed. */
+  projectId?: number | null
 }
 
 /**
@@ -38,10 +43,21 @@ function errorMessage(error: unknown): string {
   return 'Upload failed. Please try again.'
 }
 
-const MediaUploader = ({ onUploaded }: MediaUploaderProps) => {
+const MediaUploader = ({ onUploaded, projects, projectId = null }: MediaUploaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [items, setItems] = useState<UploadItem[]>([])
+  const [target, setTarget] = useState<number | null>(projectId)
+
+  // Opening another folder retargets the uploader, so dropping files into the
+  // folder on screen files them there.
+  useEffect(() => { setTarget(projectId) }, [projectId])
+
+  const fileable = (projects || []).filter((p) => p.project_id !== null && p.fileable)
+  // The open folder may not accept new media (its project changed status), and
+  // the list may not have loaded yet. Either way the honest target is none —
+  // which is also what the select displays — rather than a guaranteed 400.
+  const chosen = target !== null && fileable.some((p) => p.project_id === target) ? target : null
 
   const handleFiles = async (fileList: FileList | null) => {
     const files = Array.from(fileList || [])
@@ -57,7 +73,7 @@ const MediaUploader = ({ onUploaded }: MediaUploaderProps) => {
     // failure never stops — or gets confused with — the rest of the batch.
     for (let index = 0; index < files.length; index += 1) {
       try {
-        await mediaLibraryApi.upload(files[index], {}, (percent) => {
+        await mediaLibraryApi.upload(files[index], { projectId: chosen }, (percent) => {
           setItems((current) =>
             current.map((item, i) => (i === index ? { ...item, percent } : item))
           )
@@ -83,6 +99,24 @@ const MediaUploader = ({ onUploaded }: MediaUploaderProps) => {
 
   return (
     <div>
+      {projects && (
+        <div className="mb-3 flex items-center gap-2">
+          <label htmlFor="media-upload-project" className="text-sm font-medium text-gray-700 shrink-0">
+            File under
+          </label>
+          <select
+            id="media-upload-project"
+            value={chosen ?? ''}
+            onChange={(e) => setTarget(e.target.value === '' ? null : Number(e.target.value))}
+            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+          >
+            <option value="">No project (Unassigned)</option>
+            {fileable.map((p) => (
+              <option key={p.project_id} value={p.project_id as number}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}

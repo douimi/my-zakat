@@ -8,7 +8,7 @@ vi.mock('../../../utils/mediaLibraryApi', () => ({
 }))
 
 const asset = (id: number, filename: string) => ({
-  id, owner_id: 3, object_key: 'k', filename, media_type: 'image',
+  id, owner_id: 3, project_id: null, object_key: 'k', filename, media_type: 'image',
   content_type: 'image/jpeg', size_bytes: 10, width: null, height: null,
   duration_seconds: null, title: null, description: null, tags: [],
   status: 'public', review_note: null, reviewed_at: null,

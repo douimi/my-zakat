@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import AdminMediaLibrary from '../AdminMediaLibrary'
 import { mediaLibraryApi } from '../../../utils/mediaLibraryApi'
-import type { MediaAsset, Workspace } from '../../../utils/mediaLibraryApi'
+import type { MediaAsset, ProjectFolder, Workspace } from '../../../utils/mediaLibraryApi'
 
 vi.mock('../../../utils/mediaLibraryApi', () => ({
   mediaLibraryApi: {
     list: vi.fn(),
     workspaces: vi.fn(),
+    projects: vi.fn(),
     thumbUrl: (id: number) => `http://api.test/api/media-library/${id}/thumb`,
   },
 }))
@@ -35,6 +36,7 @@ vi.mock('../../../components/media/MediaDetailDrawer', () => ({
 const makeAsset = (overrides: Partial<MediaAsset> = {}): MediaAsset => ({
   id: 1,
   owner_id: 7,
+  project_id: null,
   object_key: 'workspaces/7/2026/03/photo.jpg',
   filename: 'photo.jpg',
   media_type: 'image',
@@ -67,6 +69,18 @@ const makeWorkspaces = (overrides: Partial<Workspace>[] = []): Workspace[] =>
     ...o,
   }))
 
+const makeFolder = (overrides: Partial<ProjectFolder> = {}): ProjectFolder => ({
+  project_id: 5,
+  name: 'Rice distribution',
+  status: 'funded',
+  fileable: true,
+  asset_count: 3,
+  image_count: 2,
+  video_count: 1,
+  submitted_count: 0,
+  ...overrides,
+})
+
 describe('AdminMediaLibrary', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -74,6 +88,7 @@ describe('AdminMediaLibrary', () => {
     mockUser = { id: 42 }
     vi.mocked(mediaLibraryApi.list).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 48 })
     vi.mocked(mediaLibraryApi.workspaces).mockResolvedValue({ workspaces: [] })
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [] })
   })
 
   it('renders the heading and loads every workspace on mount', async () => {
@@ -95,6 +110,7 @@ describe('AdminMediaLibrary', () => {
       ]),
     })
     render(<AdminMediaLibrary />)
+    fireEvent.click(screen.getByRole('button', { name: 'People' }))
 
     expect(await screen.findByText('Amina')).toBeInTheDocument()
     const nav = screen.getByRole('navigation')
@@ -108,6 +124,7 @@ describe('AdminMediaLibrary', () => {
       workspaces: makeWorkspaces([{ owner_id: 1, owner_name: 'Amina', asset_count: 3 }]),
     })
     render(<AdminMediaLibrary />)
+    fireEvent.click(screen.getByRole('button', { name: 'People' }))
 
     fireEvent.click(await screen.findByText('Amina'))
 
@@ -123,6 +140,8 @@ describe('AdminMediaLibrary', () => {
       workspaces: makeWorkspaces([{ owner_id: 1, owner_name: 'Amina', submitted_count: 2 }]),
     })
     render(<AdminMediaLibrary />)
+    fireEvent.click(screen.getByRole('button', { name: 'People' }))
+    expect(await screen.findByText('Amina')).toBeInTheDocument()
 
     fireEvent.click(await screen.findByRole('button', { name: /review queue/i }))
 
@@ -134,6 +153,51 @@ describe('AdminMediaLibrary', () => {
     // The sidebar is a workspace picker for "All media"; it makes no sense
     // once the view is the cross-workspace review queue.
     expect(screen.queryByText('Amina')).not.toBeInTheDocument()
+  })
+
+  it('browses by project by default, and opening a folder filters the grid', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    render(<AdminMediaLibrary />)
+
+    expect(screen.getByRole('button', { name: 'Projects' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(await screen.findByRole('button', { name: /rice distribution/i }))
+
+    await waitFor(() =>
+      expect(mediaLibraryApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ projectId: 5, ownerId: null })
+      )
+    )
+  })
+
+  it('switching to People clears the open folder, so the filters never combine unseen', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    render(<AdminMediaLibrary />)
+    fireEvent.click(await screen.findByRole('button', { name: /rice distribution/i }))
+    await waitFor(() =>
+      expect(mediaLibraryApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: 5 }))
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'People' }))
+
+    await waitFor(() =>
+      expect(mediaLibraryApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ projectId: null, ownerId: null })
+      )
+    )
+  })
+
+  it('the review queue ignores the open folder', async () => {
+    vi.mocked(mediaLibraryApi.projects).mockResolvedValue({ projects: [makeFolder()] })
+    render(<AdminMediaLibrary />)
+    fireEvent.click(await screen.findByRole('button', { name: /rice distribution/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /review queue/i }))
+
+    await waitFor(() =>
+      expect(mediaLibraryApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: 'submitted', projectId: null })
+      )
+    )
   })
 
   it('shows the review queue count, matching the workspaces summary total', async () => {
@@ -164,6 +228,7 @@ describe('AdminMediaLibrary', () => {
     expect(drawerCalls[0].workspaces).toEqual(
       expect.arrayContaining([expect.objectContaining({ owner_name: 'Amina' })])
     )
+    expect(drawerCalls[0].projects).toEqual([])
   })
 
   it('does not crash when the workspaces summary is unavailable, and still shows the caller\'s own media', async () => {
@@ -180,6 +245,8 @@ describe('AdminMediaLibrary', () => {
 
     expect(await screen.findByText(/photo\.jpg/i)).toBeInTheDocument()
     await waitFor(() => expect(showError).toHaveBeenCalledWith('Could not load workspaces.'))
+    expect(screen.getByText('Every project')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'People' }))
     expect(screen.getByText('Every workspace')).toBeInTheDocument()
   })
 })

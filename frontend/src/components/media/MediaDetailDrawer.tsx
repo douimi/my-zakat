@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { X, Trash2, Send, Globe, Undo2, RotateCcw } from 'lucide-react'
 import { useToast } from '../../contexts/ToastContext'
-import { mediaLibraryApi, type MediaAssetDetail, type Workspace } from '../../utils/mediaLibraryApi'
+import {
+  mediaLibraryApi, type MediaAssetDetail, type ProjectFolder, type Workspace,
+} from '../../utils/mediaLibraryApi'
 import { formatBytes } from './MediaCard'
 
 interface MediaDetailDrawerProps {
@@ -19,6 +21,9 @@ interface MediaDetailDrawerProps {
    *  looking at their own asset (anything else 404s before the drawer has
    *  content to show). */
   currentUserId?: number | null
+  /** Project folders, for moving the asset into one. Filing follows the same
+   *  rule as editing the caption — the server checks both the same way. */
+  projects?: ProjectFolder[]
 }
 
 /**
@@ -43,7 +48,7 @@ function errorMessage(error: unknown): string {
 }
 
 const MediaDetailDrawer = ({
-  assetId, canReview, onClose, onChanged, workspaces, currentUserId,
+  assetId, canReview, onClose, onChanged, workspaces, currentUserId, projects,
 }: MediaDetailDrawerProps) => {
   const { showSuccess, showError } = useToast()
   const [asset, setAsset] = useState<MediaAssetDetail | null>(null)
@@ -180,6 +185,35 @@ const MediaDetailDrawer = ({
                   onChange={(e) => setTagText(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500" />
               </div>
+              {projects && (
+                <div>
+                  <label htmlFor="media-project" className="block text-xs font-medium text-gray-600 mb-1">
+                    Project
+                  </label>
+                  <select
+                    id="media-project"
+                    value={asset.project_id ?? ''}
+                    disabled={busy || !canEditMetadata}
+                    onChange={(e) => {
+                      const value = e.target.value === '' ? null : Number(e.target.value)
+                      return run(() => mediaLibraryApi.refile(asset.id, value), 'Moved to project')
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {projects
+                      // A closed project still shows when it is this asset's
+                      // home, so the select tells the truth; it just cannot
+                      // be chosen again once moved away from.
+                      .filter((p) => p.project_id !== null && (p.fileable || p.project_id === asset.project_id))
+                      .map((p) => (
+                        <option key={p.project_id} value={p.project_id as number} disabled={!p.fileable}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
               {workspaces && (
                 <div>
                   <label htmlFor="media-owner" className="block text-xs font-medium text-gray-600 mb-1">

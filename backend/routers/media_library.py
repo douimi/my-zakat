@@ -5,6 +5,8 @@ Staff (admin | manager | field_staff):
   GET    /api/media-library                list / search / sort / paginate
   GET    /api/media-library/{id}           detail + site-usage cross-reference
   PATCH  /api/media-library/{id}           edit title / description / tags
+  GET    /api/media-library/projects       project folders with counts
+  POST   /api/media-library/{id}/project   file under a project, or unfile
   POST   /api/media-library/{id}/submit    owner: private -> submitted
   POST   /api/media-library/{id}/withdraw  owner: submitted -> private
   DELETE /api/media-library/{id}           owner (private only) or admin/manager
@@ -25,12 +27,12 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, model_validator
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -56,7 +58,8 @@ from media_library_upload import (
     process_upload_bytes,
     store_processed_upload,
 )
-from models import MediaAsset, User
+from models import MediaAsset, ProjectProposal, ProposalVersion, User
+from proposal_service import COMPLETED, FUNDED, REPORT_CHANGES_REQUESTED, REPORT_SUBMITTED
 from routers.s3_media import get_media_usage
 from s3_service import get_file_url
 
@@ -218,16 +221,85 @@ def _refuse_if_duplicate(db: Session, owner_id: int, checksum: str) -> None:
 
 # ── Upload ───────────────────────────────────────────────────────────
 
+# int32 bounds, for the same reason owner_id checks them below: int() has no
+# size limit, so an absurd digit string parses here and only fails once the
+# query executes — an unhandled 500 where a bounds check gives a clean 400.
+_INT32 = (-2_147_483_648, 2_147_483_647)
+
+
+# Projects media may be filed under: approved, and everything after it. Media
+# documents work that is happening or has happened. An application still in
+# review, sent back or rejected has none — and its name is the applicant's,
+# which field staff have no reason to see.
+FILEABLE_STATUSES = frozenset(
+    {"approved", FUNDED, REPORT_SUBMITTED, REPORT_CHANGES_REQUESTED, COMPLETED}
+)
+
+
+def _resolve_project_id(db: Session, raw, *, for_filing: bool = True) -> Optional[int]:
+    """Validate a project reference from a request, or raise 400/404.
+
+    None and "" both mean "no project" — the Unassigned folder — which is a
+    real choice at upload time and the only possible state for everything
+    already in the library.
+
+    The project is checked to EXIST rather than trusted: a dangling id would
+    create a folder that renders with a blank name and no way to find its
+    contents again.
+
+    `for_filing` additionally requires a fileable status. Browsing does not:
+    a folder must stay openable for whatever it already holds, whatever has
+    happened to the project since.
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, str) and raw.strip().lower() in ("none", "null", "unassigned"):
+        return None
+    # Only ints and digit strings. bool is an int subclass (JSON `true` would
+    # file under project 1) and int(3.7) is 3 — both are silent wrong answers.
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise HTTPException(status_code=400, detail="project_id must be an integer.")
+    try:
+        project_id = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="project_id must be an integer.")
+    if not (_INT32[0] <= project_id <= _INT32[1]):
+        raise HTTPException(status_code=400, detail="project_id must be an integer.")
+    row = (
+        db.query(ProjectProposal.id, ProjectProposal.status)
+        .filter(ProjectProposal.id == project_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="That project does not exist.")
+    if for_filing and row.status not in FILEABLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="Media can only be filed under an approved project.",
+        )
+    return project_id
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def upload_media(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
+    project_id: Optional[str] = Form(
+        None, description="The funded project this documents; blank for none"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_staff),
 ):
-    """Upload one photo or video into the caller's own workspace."""
+    """Upload one photo or video into the caller's own workspace.
+
+    `project_id` files it under the project it documents. Taken at upload time
+    on purpose: asking later means it never gets asked, and an unfiled library
+    is the problem this replaces.
+    """
+    # Validated before a byte is read, so a wrong project id does not cost a
+    # staff member their 100 MB video upload.
+    resolved_project_id = _resolve_project_id(db, project_id)
     # Not Form(..., max_length=200): FastAPI turns a Pydantic max_length
     # violation into a 422 with a Pydantic-shaped error body, not the plain
     # 400 this endpoint uses for every other input problem (verified against
@@ -298,6 +370,7 @@ async def upload_media(
     thumbnail_key = store_processed_upload(processed, object_key)
 
     asset = MediaAsset(
+        project_id=resolved_project_id,
         owner_id=current_user.id,
         object_key=object_key,
         # Truncated, not rejected: the caller didn't choose this value (it's
@@ -358,6 +431,8 @@ async def list_media(
     status: Optional[str] = Query(None, description="private | submitted | public"),
     tag: Optional[str] = Query(None, description="Exact tag match"),
     owner_id: Optional[str] = Query(None, description="Admin/manager only; accepts 'unassigned'"),
+    project_id: Optional[str] = Query(
+        None, description="Folder to show; accepts 'unassigned' for media with no project"),
     sort: str = Query("created_at"),
     order: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -399,6 +474,18 @@ async def list_media(
             if not (-2_147_483_648 <= owner_id_int <= 2_147_483_647):
                 raise HTTPException(status_code=400, detail="owner_id must be an integer or 'unassigned'")
             query = query.filter(MediaAsset.owner_id == owner_id_int)
+
+    # The folder. 'unassigned' is a first-class choice, not a missing value:
+    # it is where every asset uploaded before projects existed still lives,
+    # and the one view from which they can be filed.
+    if project_id:
+        if project_id == "unassigned":
+            query = query.filter(MediaAsset.project_id.is_(None))
+        else:
+            # Reuses the shared validator, so a bad id gives the same 400 and
+            # a non-existent project the same 404 as it does at upload.
+            query = query.filter(MediaAsset.project_id == _resolve_project_id(
+                db, project_id, for_filing=False))
 
     # Both helpers escape LIKE metacharacters and hand back the escape character
     # with the pattern — without it, q="%" or tag="%" matches every row, and a
@@ -507,6 +594,75 @@ async def list_workspaces(
     return {"workspaces": workspaces}
 
 
+# ── Project folders (declare before /{asset_id}) ─────────────────────
+
+@router.get("/projects")
+async def list_project_folders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """The library as folders, one per project, plus Unassigned.
+
+    A folder is listed when its project is fileable (so an empty one can be
+    chosen at upload) or when it already holds media the caller can see (so
+    nothing goes missing when a project changes status). Unassigned appears
+    only while it holds something: it is a to-do pile, not a destination.
+
+    Counts follow the same scope as the listing. A field-staff member sees
+    their own media counted, and the folder totals add up to what the grid
+    shows them when they open it.
+    """
+    counts = db.query(
+        MediaAsset.project_id,
+        func.count(MediaAsset.id).label("asset_count"),
+        func.coalesce(func.sum(
+            case((MediaAsset.media_type == "video", 1), else_=0)), 0).label("video_count"),
+        func.coalesce(func.sum(
+            case((MediaAsset.status == "submitted", 1), else_=0)), 0).label("submitted_count"),
+    )
+    if role_of(current_user) not in MANAGER_ROLES:
+        counts = counts.filter(MediaAsset.owner_id == current_user.id)
+    totals = {row.project_id: row for row in counts.group_by(MediaAsset.project_id).all()}
+
+    holding = [pid for pid in totals if pid is not None]
+    # The name is the current version's: what the project is called now, not
+    # what the first draft called it.
+    projects = (
+        db.query(ProjectProposal.id, ProjectProposal.status, ProposalVersion.project_name)
+        .outerjoin(ProposalVersion, ProposalVersion.id == ProjectProposal.current_version_id)
+        .filter(
+            ProjectProposal.status.in_(FILEABLE_STATUSES)
+            | ProjectProposal.id.in_(holding)
+        )
+        .order_by(ProjectProposal.id.desc())
+        .all()
+    )
+
+    def _row(project_id, name, project_status):
+        total = totals.get(project_id)
+        asset_count = int(total.asset_count) if total else 0
+        video_count = int(total.video_count) if total else 0
+        return {
+            "project_id": project_id,
+            "name": name,
+            "status": project_status,
+            # Whether new media may be filed here. A folder can be listed and
+            # not fileable: it holds media from before its project changed.
+            "fileable": project_id is None or project_status in FILEABLE_STATUSES,
+            "asset_count": asset_count,
+            "image_count": asset_count - video_count,
+            "video_count": video_count,
+            "submitted_count": int(total.submitted_count) if total else 0,
+        }
+
+    folders = [
+        _row(p.id, p.project_name or f"Project #{p.id}", p.status) for p in projects
+    ]
+    if None in totals:
+        folders.append(_row(None, "Unassigned", None))
+    return {"projects": folders}
+
+
 # ── Detail and metadata ──────────────────────────────────────────────
 
 class MediaAssetUpdate(BaseModel):
@@ -574,6 +730,43 @@ async def update_media_metadata(
     logger.info(
         "Media %s metadata updated by %s (role=%s)",
         asset.id, current_user.email, role_of(current_user),
+    )
+    return serialize_asset(asset)
+
+
+class RefileRequest(BaseModel):
+    """Move an asset into a project folder, or out of all of them."""
+    # Untyped on purpose: the shared validator owns the 400s, so a bad value
+    # gets the same plain error here as at upload rather than a Pydantic 422.
+    project_id: Any = None
+
+
+@router.post("/{asset_id}/project")
+async def refile_media(
+    asset_id: int,
+    payload: RefileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff),
+):
+    """File an asset under a project, or clear it (project_id: null).
+
+    A separate endpoint from PATCH rather than a field on it: PATCH edits what
+    a file IS (title, description, tags) and this changes where it LIVES, which
+    is the one media operation a reviewer does in bulk while tidying the
+    library. Keeping them apart also means the folder cannot be moved by
+    accident while someone edits a caption.
+    """
+    asset = _load_asset(db, asset_id)
+    _require_can_edit(asset, current_user)
+
+    previous_project_id = asset.project_id
+    asset.project_id = _resolve_project_id(db, payload.project_id)
+    db.commit()
+    db.refresh(asset)
+    # The previous folder too, so a mistaken move can be traced and undone.
+    logger.info(
+        "Media %s refiled from project_id=%s to project_id=%s by %s",
+        asset.id, previous_project_id, asset.project_id, current_user.email,
     )
     return serialize_asset(asset)
 

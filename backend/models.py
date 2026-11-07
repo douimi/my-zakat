@@ -937,6 +937,24 @@ class MediaAsset(Base):
     # pass foreign_keys= explicitly or SQLAlchemy raises
     # AmbiguousForeignKeysError.
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # The project this media documents, and the folder it appears under.
+    #
+    # NULL is a real state, not a defect: everything already in the library
+    # predates this column and belongs to the "Unassigned" folder rather than
+    # being force-fitted to a guess.
+    #
+    # ON DELETE SET NULL, never CASCADE. Deleting a proposal must not delete
+    # photographs of work that actually happened — the media outlives the
+    # dossier that justified it.
+    #
+    # One project per asset (a column, not a join table) because a folder view
+    # needs a single home per file; two homes and the counts stop adding up.
+    project_id = Column(
+        Integer, ForeignKey("project_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     object_key = Column(String(500), nullable=False, unique=True)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(10), nullable=False)  # 'image' | 'video'

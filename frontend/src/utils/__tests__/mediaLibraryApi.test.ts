@@ -25,6 +25,12 @@ describe('buildListParams', () => {
   it('treats a null ownerId as no filter', () => {
     expect(buildListParams({ ownerId: null })).toEqual({})
   })
+
+  it('passes projectId through as project_id, including the Unassigned folder', () => {
+    expect(buildListParams({ projectId: 5 })).toEqual({ project_id: 5 })
+    expect(buildListParams({ projectId: 'unassigned' })).toEqual({ project_id: 'unassigned' })
+    expect(buildListParams({ projectId: null })).toEqual({})
+  })
 })
 
 describe('mediaLibraryApi', () => {
@@ -48,6 +54,25 @@ describe('mediaLibraryApi', () => {
     expect(body).toBeInstanceOf(FormData)
     expect((body as FormData).get('title')).toBe('T')
     expect((body as FormData).get('tags')).toBe('a,b')
+  })
+
+  it('sends the project with an upload, and leaves it out when there is none', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 1 } })
+    const file = new File(['x'], 'photo.jpg', { type: 'image/jpeg' })
+
+    await mediaLibraryApi.upload(file, { projectId: 5 })
+    expect((vi.mocked(api.post).mock.calls[0][1] as FormData).get('project_id')).toBe('5')
+
+    await mediaLibraryApi.upload(file, { projectId: null })
+    expect((vi.mocked(api.post).mock.calls[1][1] as FormData).has('project_id')).toBe(false)
+  })
+
+  it('refiles into a project, and back to Unassigned with null', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 1 } })
+    await mediaLibraryApi.refile(1, 5)
+    expect(api.post).toHaveBeenCalledWith('/api/media-library/1/project', { project_id: 5 })
+    await mediaLibraryApi.refile(1, null)
+    expect(api.post).toHaveBeenLastCalledWith('/api/media-library/1/project', { project_id: null })
   })
 
   it('builds an absolute thumbnail URL with a width', () => {

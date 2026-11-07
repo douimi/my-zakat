@@ -6,6 +6,8 @@ export type MediaType = 'image' | 'video'
 export interface MediaAsset {
   id: number
   owner_id: number | null
+  /** The project folder this lives in; null is Unassigned. */
+  project_id: number | null
   object_key: string
   filename: string
   media_type: MediaType
@@ -47,12 +49,27 @@ export interface Workspace {
   submitted_count: number
 }
 
+/** One folder in the library: a project, or Unassigned (`project_id: null`). */
+export interface ProjectFolder {
+  project_id: number | null
+  name: string
+  status: string | null
+  /** Whether new media may be filed here. False for a project that holds media
+   *  from before it stopped being an approved project. */
+  fileable: boolean
+  asset_count: number
+  image_count: number
+  video_count: number
+  submitted_count: number
+}
+
 export interface ListQuery {
   q?: string
   type?: MediaType | 'all'
   status?: MediaStatus | 'all'
   tag?: string
   ownerId?: number | 'unassigned' | null
+  projectId?: number | 'unassigned' | null
   sort?: 'created_at' | 'filename' | 'title' | 'size' | 'type'
   order?: 'asc' | 'desc'
   page?: number
@@ -67,6 +84,7 @@ export function buildListParams(query: ListQuery): Record<string, string | numbe
   if (query.status && query.status !== 'all') params.status = query.status
   if (query.tag) params.tag = query.tag
   if (query.ownerId !== undefined && query.ownerId !== null) params.owner_id = query.ownerId
+  if (query.projectId !== undefined && query.projectId !== null) params.project_id = query.projectId
   if (query.sort) params.sort = query.sort
   if (query.order) params.order = query.order
   if (query.page) params.page = query.page
@@ -87,7 +105,7 @@ export const mediaLibraryApi = {
 
   async upload(
     file: File,
-    meta: { title?: string; description?: string; tags?: string[] } = {},
+    meta: { title?: string; description?: string; tags?: string[]; projectId?: number | null } = {},
     onProgress?: (percent: number) => void
   ): Promise<MediaAsset> {
     const form = new FormData()
@@ -95,6 +113,7 @@ export const mediaLibraryApi = {
     if (meta.title) form.append('title', meta.title)
     if (meta.description) form.append('description', meta.description)
     if (meta.tags?.length) form.append('tags', meta.tags.join(','))
+    if (meta.projectId != null) form.append('project_id', String(meta.projectId))
 
     const { data } = await api.post('/api/media-library', form, {
       onUploadProgress: (event) => {
@@ -140,6 +159,17 @@ export const mediaLibraryApi = {
 
   async reassign(id: number, ownerId: number | null): Promise<MediaAsset> {
     const { data } = await api.post(`/api/media-library/${id}/reassign`, { owner_id: ownerId })
+    return data
+  },
+
+  /** File under a project, or pass null to move it back to Unassigned. */
+  async refile(id: number, projectId: number | null): Promise<MediaAsset> {
+    const { data } = await api.post(`/api/media-library/${id}/project`, { project_id: projectId })
+    return data
+  },
+
+  async projects(): Promise<{ projects: ProjectFolder[] }> {
+    const { data } = await api.get('/api/media-library/projects')
     return data
   },
 

@@ -4,7 +4,10 @@ import MediaFilters from '../../components/media/MediaFilters'
 import MediaGrid from '../../components/media/MediaGrid'
 import MediaUploader from '../../components/media/MediaUploader'
 import MediaDetailDrawer from '../../components/media/MediaDetailDrawer'
-import { mediaLibraryApi, type ListQuery, type MediaAsset } from '../../utils/mediaLibraryApi'
+import ProjectFolderList, { type FolderSelection } from '../../components/media/ProjectFolderList'
+import {
+  mediaLibraryApi, type ListQuery, type MediaAsset, type ProjectFolder,
+} from '../../utils/mediaLibraryApi'
 
 const PAGE_SIZE = 48
 
@@ -17,11 +20,23 @@ const AdminMediaWorkspace = () => {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [folders, setFolders] = useState<ProjectFolder[]>([])
+  const [folder, setFolder] = useState<FolderSelection>(null)
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const data = await mediaLibraryApi.projects()
+      setFolders(data.projects)
+    } catch {
+      showError('Could not load projects.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await mediaLibraryApi.list({ ...query, pageSize: PAGE_SIZE })
+      const data = await mediaLibraryApi.list({ ...query, projectId: folder, pageSize: PAGE_SIZE })
       setItems(data.items)
       setTotal(data.total)
     } catch {
@@ -30,9 +45,17 @@ const AdminMediaWorkspace = () => {
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query, folder])
 
+  useEffect(() => { loadFolders() }, [loadFolders])
   useEffect(() => { load() }, [load])
+
+  // Uploads, refiles and deletes all change folder counts as well as the grid.
+  const refresh = () => { load(); loadFolders() }
+  const openFolder = (value: FolderSelection) => {
+    setFolder(value)
+    setQuery((c) => ({ ...c, page: 1 }))
+  }
 
   // Any filter change resets to page 1; an explicit page change does not.
   const patchQuery = (patch: Partial<ListQuery>) =>
@@ -49,36 +72,48 @@ const AdminMediaWorkspace = () => {
         </p>
       </header>
 
-      <MediaUploader onUploaded={load} />
+      <div className="flex gap-6 items-start">
+        <nav className="w-56 shrink-0" aria-label="Projects">
+          <ProjectFolderList folders={folders} selected={folder} onSelect={openFolder} allLabel="All my media" />
+        </nav>
 
-      <MediaFilters query={query} onChange={patchQuery} showStatusFilter />
+        <div className="flex-1 space-y-6 min-w-0">
+          <MediaUploader
+            onUploaded={refresh}
+            projects={folders}
+            projectId={typeof folder === 'number' ? folder : null}
+          />
 
-      <p className="text-sm text-gray-500">
-        {total} item{total === 1 ? '' : 's'}
-      </p>
+          <MediaFilters query={query} onChange={patchQuery} showStatusFilter />
 
-      <MediaGrid
-        items={items}
-        loading={loading}
-        onSelect={(asset) => setSelectedId(asset.id)}
-        emptyHint="Drop a photo or video above to add your first item."
-      />
+          <p className="text-sm text-gray-500">
+            {total} item{total === 1 ? '' : 's'}
+          </p>
 
-      {pageCount > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <button type="button" disabled={(query.page || 1) <= 1}
-            onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) - 1 }))}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
-            Previous
-          </button>
-          <span className="text-sm text-gray-600">Page {query.page || 1} of {pageCount}</span>
-          <button type="button" disabled={(query.page || 1) >= pageCount}
-            onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) + 1 }))}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
-            Next
-          </button>
+          <MediaGrid
+            items={items}
+            loading={loading}
+            onSelect={(asset) => setSelectedId(asset.id)}
+            emptyHint="Drop a photo or video above to add your first item."
+          />
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-center gap-3">
+              <button type="button" disabled={(query.page || 1) <= 1}
+                onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) - 1 }))}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">Page {query.page || 1} of {pageCount}</span>
+              <button type="button" disabled={(query.page || 1) >= pageCount}
+                onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) + 1 }))}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                Next
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {selectedId !== null && (
         // canReview is always false here: My Workspace is the owner's own
@@ -89,8 +124,9 @@ const AdminMediaWorkspace = () => {
         <MediaDetailDrawer
           assetId={selectedId}
           canReview={false}
+          projects={folders}
           onClose={() => setSelectedId(null)}
-          onChanged={load}
+          onChanged={refresh}
         />
       )}
     </div>
