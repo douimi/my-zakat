@@ -22,6 +22,7 @@ from typing import Optional
 from fastapi import (
     APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status,
 )
+from http_headers import content_disposition
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
@@ -478,6 +479,6 @@ async def download_own_report_attachment(
     return StreamingResponse(
         _io.BytesIO(content),
         media_type=attachment.content_type,
-        headers={"Content-Disposition": 'attachment; filename="%s"' % attachment.filename},
+        headers={"Content-Disposition": content_disposition(attachment.filename)},
     )
 

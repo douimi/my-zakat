@@ -36,6 +36,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from http_headers import content_disposition
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
@@ -956,7 +957,7 @@ async def download_report_attachment(
         io.BytesIO(content),
         media_type=attachment.content_type,
         headers={
-            "Content-Disposition": 'attachment; filename="%s"' % attachment.filename,
+            "Content-Disposition": content_disposition(attachment.filename),
         },
     )
 

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, Form, UploadFile
+from http_headers import content_disposition
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from io import BytesIO
 from sqlalchemy.orm import Session
@@ -468,9 +469,9 @@ async def admin_download_receipt(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="ZDF_Donation_Receipt_'
-                f'{safe_name}_{donation.donated_at.strftime("%Y%m%d")}.pdf"'
+            # A donor's name can be in any script; see http_headers.
+            "Content-Disposition": content_disposition(
+                f'ZDF_Donation_Receipt_{safe_name}_{donation.donated_at.strftime("%Y%m%d")}.pdf'
             )
         },
     )

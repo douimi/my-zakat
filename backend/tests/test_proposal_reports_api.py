@@ -647,3 +647,30 @@ def test_attachment_downloads_require_authentication(client, portal_headers, fun
     if report_id:
         staff_url = "/api/project-proposals/%d/reports/%d/attachments/%d" % (funded.id, report_id, attachment_id)
         assert client.get(staff_url).status_code in (401, 403)
+
+
+def test_a_file_with_an_arabic_name_downloads_for_the_team_and_the_admin(
+    client, portal_headers, auth_headers, funded
+):
+    """Production 500: 'latin-1' codec can't encode characters, building the
+    Content-Disposition for an Arabic filename."""
+    name = "تقرير المشروع.pdf"
+    r = client.post(
+        "/api/project-proposals/portal/%d/report" % funded.id, headers=portal_headers,
+        data={"narrative": "Done."}, files=[("files", (name, PDF, "application/pdf"))])
+    assert r.status_code == 201, r.text
+    report = r.json()["report"]
+    attachment_id = report["attachments"][0]["id"]
+
+    team = client.get("/api/project-proposals/portal/%d/report/attachments/%d"
+                      % (funded.id, attachment_id), headers=portal_headers)
+    assert team.status_code == 200
+    assert team.content == PDF
+
+    reports = client.get("/api/project-proposals/%d/reports" % funded.id, headers=auth_headers).json()
+    report_id = reports["reports"][0]["id"]
+    staff = client.get("/api/project-proposals/%d/reports/%d/attachments/%d"
+                       % (funded.id, report_id, attachment_id), headers=auth_headers)
+    assert staff.status_code == 200, staff.text
+    assert staff.content == PDF
+    assert "filename*=UTF-8''" in staff.headers["content-disposition"]
