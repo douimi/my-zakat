@@ -18,7 +18,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import MyProposals from '../MyProposals'
 import {
-  clearPortalToken, fetchMyProposals, hasPortalToken, openReportAttachment, requestPortalCode,
+  clearPortalToken, fetchMyProposals, fetchReportAttachment, hasPortalToken, requestPortalCode,
   submitRevision, verifyPortalCode,
 } from '../../utils/proposalPortalApi'
 
@@ -34,7 +34,7 @@ vi.mock('../../utils/proposalPortalApi', async (importActual) => ({
   requestPortalCode: vi.fn(),
   verifyPortalCode: vi.fn(),
   submitRevision: vi.fn(),
-  openReportAttachment: vi.fn(),
+  fetchReportAttachment: vi.fn(),
   addReportAttachments: vi.fn(),
 }))
 
@@ -488,7 +488,10 @@ describe('MyProposals — the files of a report', () => {
       decision: null, decision_comment: null, decided_at: null, attachments },
   })
 
-  it('opens a file with the session token instead of a bare link', async () => {
+  it('shows a file in the page, fetched with the session token', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:report')
+    URL.revokeObjectURL = vi.fn()
+    vi.mocked(fetchReportAttachment).mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }))
     const user = userEvent.setup()
     tokenPresent = true
     vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [
@@ -498,8 +501,15 @@ describe('MyProposals — the files of a report', () => {
     await user.click(await screen.findByRole('button', { name: /school kits/i }))
     await user.click(screen.getByRole('button', { name: /report\.pdf/i }))
 
-    expect(openReportAttachment).toHaveBeenCalledWith(15, 3, 'report.pdf')
-    expect(screen.queryByRole('link', { name: /report\.pdf/i })).toBeNull()
+    expect(fetchReportAttachment).toHaveBeenCalledWith(15, 3)
+    // In the page, not a new tab: no about:blank to get lost in.
+    const dialog = await screen.findByRole('dialog', { name: 'report.pdf' })
+    expect(dialog.querySelector('iframe')).toHaveAttribute('src', 'blob:report')
+    expect(screen.getByRole('link', { name: /download/i })).toHaveAttribute('download', 'report.pdf')
+
+    await user.click(screen.getByRole('button', { name: /close preview/i }))
+    expect(screen.queryByRole('dialog', { name: 'report.pdf' })).toBeNull()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:report')
   })
 
   it('says plainly when a report carries no file, and offers to add one', async () => {

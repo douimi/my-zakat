@@ -550,11 +550,10 @@ describe('AdminProjectProposals - the files of a report', () => {
     return { user, fetchMock }
   }
 
-  it('opens a file with the admin token, so the PDF is actually readable', async () => {
+  it('shows a file in the page, fetched with the admin token', async () => {
     URL.createObjectURL = vi.fn(() => 'blob:x')
     URL.revokeObjectURL = vi.fn()
-    const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
-    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    const open = vi.spyOn(window, 'open')
     const { user, fetchMock } = await openReport([
       { id: 9, filename: 'report.pdf', content_type: 'application/pdf', kind: 'document', size_bytes: 48 * 1024 * 1024 },
     ])
@@ -566,7 +565,10 @@ describe('AdminProjectProposals - the files of a report', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/reports/5/attachments/9'),
       expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } }))
-    await vi.waitFor(() => expect(tab.location.href).toBe('blob:x'))
+    const dialog = await screen.findByRole('dialog', { name: 'report.pdf' })
+    expect(dialog.querySelector('iframe')).toHaveAttribute('src', 'blob:x')
+    // No new tab: that is what left admins on an empty about:blank page.
+    expect(open).not.toHaveBeenCalled()
   })
 
   it('says so when a report came without any file', async () => {

@@ -11,7 +11,8 @@ import {
   CheckCircle2, XCircle, Search, FileText, Bell,
   Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink, ChevronRight,
 } from 'lucide-react'
-import { PORTAL_HANDOFF_PREFIX, showBlob } from '../../utils/proposalPortalApi'
+import { PORTAL_HANDOFF_PREFIX } from '../../utils/proposalPortalApi'
+import FilePreview, { previewOf, type PreviewFile } from '../../components/FilePreview'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -397,6 +398,8 @@ const AdminProjectProposals = () => {
   const [reportNote, setReportNote] = useState('')
   const [reportBusy, setReportBusy] = useState(false)
   const [sentEmails, setSentEmails] = useState<SentEmail[] | null>(null)
+  const [preview, setPreview] = useState<PreviewFile | null>(null)
+  const [openingFile, setOpeningFile] = useState<number | null>(null)
   const [resending, setResending] = useState(false)
   type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history' | 'emails'
   const [tab, setTab] = useState<DrawerTab>('dossier')
@@ -615,15 +618,14 @@ const AdminProjectProposals = () => {
   }
 
   /**
-   * Open a report file. Fetched with the admin token, not linked to: the
-   * endpoint needs the token in the Authorization header, which a plain link
-   * never sends, so the old link answered "Not authenticated" and admins saw a
-   * report's text but never its PDF. The tab opens before the request, since
-   * one opened after an await is blocked as a pop-up.
+   * Show a report file in the page. Fetched with the admin token, not linked
+   * to: the endpoint needs the token in the Authorization header, which a
+   * plain link never sends ("Not authenticated"). Shown in place rather than
+   * in a new tab, which left an empty about:blank page in real browsers.
    */
   const openAttachment = async (reportId: number, a: ReportAttachment) => {
     if (!selected) return
-    const tab = window.open('', '_blank')
+    setOpeningFile(a.id)
     try {
       const resp = await fetch(
         `${API_URL}/api/project-proposals/${selected.id}/reports/${reportId}/attachments/${a.id}`,
@@ -632,10 +634,11 @@ const AdminProjectProposals = () => {
         const body = await resp.json().catch(() => null)
         throw new Error(body?.detail || 'The file could not be opened.')
       }
-      showBlob(await resp.blob(), a.filename, tab)
+      setPreview(previewOf(await resp.blob(), a.filename, a.content_type))
     } catch (err) {
-      tab?.close()
       showError('Could not open the file', err instanceof Error ? err.message : 'Please try again.')
+    } finally {
+      setOpeningFile(null)
     }
   }
 
@@ -1387,8 +1390,10 @@ const AdminProjectProposals = () => {
                               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 text-gray-800"
                               title={`Open ${a.filename}`}
                             >
-                              {a.kind === 'document' ? <FileText className="w-3.5 h-3.5 text-red-600" /> : <Paperclip className="w-3.5 h-3.5" />}
-                              {a.filename}
+                              {openingFile === a.id
+                                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                : a.kind === 'document' ? <FileText className="w-3.5 h-3.5 text-red-600" /> : <Paperclip className="w-3.5 h-3.5" />}
+                              <span dir="auto">{a.filename}</span>
                               <span className="text-gray-500 font-normal">{formatSize(a.size_bytes)}</span>
                             </button>
                           ))}
@@ -1614,6 +1619,9 @@ const AdminProjectProposals = () => {
           </div>
         </div>
       )}
+
+      {/* Above the drawer (z-50): the file is read while the dossier stays open. */}
+      {preview && <FilePreview file={preview} onClose={() => setPreview(null)} />}
 
       {deleting && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">

@@ -211,47 +211,16 @@ export const addReportAttachments = async (
 }
 
 /**
- * Open one of the team's report files.
+ * Fetch one of the team's report files, for showing in the page.
  *
  * Fetched with the portal token, not linked to: the endpoint requires the
- * token in the Authorization header, which a plain link never sends, so the
- * old link answered "Not authenticated" and the team could not tell whether
- * its file had arrived. The tab is opened before the request, because one
- * opened after an await counts as a pop-up and is blocked.
+ * token in the Authorization header, which a plain link never sends.
  */
-export const openReportAttachment = async (
-  proposalId: number,
-  attachmentId: number,
-  filename: string,
-): Promise<void> => {
-  const tab = window.open('', '_blank')
-  try {
-    const { data } = await portalApi.get(
-      `/api/project-proposals/portal/${proposalId}/report/attachments/${attachmentId}`,
-      { responseType: 'blob' })
-    showBlob(data as Blob, filename, tab)
-  } catch (err) {
-    tab?.close()
-    throw err
-  }
-}
-
-/** Show a downloaded file in the tab opened for it, or save it if there is none. */
-export const showBlob = (blob: Blob, filename: string, tab: Window | null): void => {
-  const url = URL.createObjectURL(blob)
-  if (tab) {
-    tab.opener = null
-    tab.location.href = url
-  } else {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-  }
-  // Long enough for the tab to load it; the tab keeps its own copy after.
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+export const fetchReportAttachment = async (proposalId: number, attachmentId: number): Promise<Blob> => {
+  const { data } = await portalApi.get(
+    `/api/project-proposals/portal/${proposalId}/report/attachments/${attachmentId}`,
+    { responseType: 'blob' })
+  return data as Blob
 }
 
 /** A funded project's report attachment, for the team to re-read. */

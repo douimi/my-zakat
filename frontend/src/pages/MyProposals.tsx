@@ -40,6 +40,7 @@ import {
 import SEOHead from '../components/SEOHead'
 import ReportForm, { type ReportResult } from '../components/proposals/ReportForm'
 import AddReportFiles from '../components/proposals/AddReportFiles'
+import FilePreview, { previewOf, type PreviewFile } from '../components/FilePreview'
 import ProposalForm, {
   EMPTY_PROPOSAL_FORM,
   parseFieldErrors,
@@ -54,7 +55,7 @@ import {
   portalActor,
   hasPortalToken,
   isNoProposalForAddress,
-  openReportAttachment,
+  fetchReportAttachment,
   requestPortalCode,
   submitRevision,
   verifyPortalCode,
@@ -476,13 +477,19 @@ const MyProposals = () => {
     window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }
 
+  const [preview, setPreview] = useState<PreviewFile | null>(null)
+  const [openingFile, setOpeningFile] = useState<number | null>(null)
+
   const openFile = async (proposalId: number, attachmentId: number, filename: string) => {
+    setOpeningFile(attachmentId)
     try {
-      await openReportAttachment(proposalId, attachmentId, filename)
+      setPreview(previewOf(await fetchReportAttachment(proposalId, attachmentId), filename))
     } catch (exc: any) {
       setError(statusOf(exc) === 401
         ? 'Your session has expired. Sign in again to open your files.'
         : 'That file could not be opened. Please try again.')
+    } finally {
+      setOpeningFile(null)
     }
   }
 
@@ -837,8 +844,8 @@ const MyProposals = () => {
                         onClick={() => void openFile(p.id, a.id, a.filename)}
                         className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:border-primary-300 text-gray-700"
                       >
-                        <Paperclip className="w-3 h-3" />
-                        {a.filename}
+                        {openingFile === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+                        <span dir="auto">{a.filename}</span>
                         <span className="text-gray-400">{formatBytes(a.size_bytes)}</span>
                       </button>
                     </li>
@@ -1002,7 +1009,12 @@ const MyProposals = () => {
   if (editing) return shell(<>{alerts}{editPanel}</>)
   if (view === 'not-found') return shell(notFoundPanel)
   if (view === 'code') return shell(<>{alerts}{codePanel}</>)
-  if (view === 'list') return shell(<>{alerts}{listPanel}</>)
+  if (view === 'list') {
+    return shell(<>
+      {alerts}{listPanel}
+      {preview && <FilePreview file={preview} onClose={() => setPreview(null)} />}
+    </>)
+  }
   return shell(<>{alerts}{emailPanel}</>)
 }
 
