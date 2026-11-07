@@ -182,6 +182,7 @@ describe('ReportForm', () => {
     vi.mocked(verifyPortalCode).mockRejectedValueOnce({ response: { status: 401, data: {} } })
     const { user } = setup()
     await describeWork(user)
+    await attach(user, fileOf('report.pdf', 'application/pdf', MB))
     await user.click(screen.getByRole('button', { name: /send report/i }))
 
     await user.type(await screen.findByLabelText(/six-digit code/i), '000000')
@@ -197,6 +198,7 @@ describe('ReportForm', () => {
       { response: { status: 400, data: { detail: 'That file says it is a PDF but its contents are not.' } } })
     const { user } = setup()
     await describeWork(user)
+    await attach(user, fileOf('report.pdf', 'application/pdf', MB))
     await user.click(screen.getByRole('button', { name: /send report/i }))
 
     expect(await screen.findByText(/contents are not/i)).toBeInTheDocument()
@@ -209,10 +211,37 @@ describe('ReportForm — an admin acting for the team', () => {
     vi.mocked(portalTokenSecondsLeft).mockReturnValue(60)
     const { user } = setup({ adminView: true })
     await describeWork(user)
+    await attach(user, fileOf('report.pdf', 'application/pdf', MB))
     await user.click(screen.getByRole('button', { name: /send report/i }))
 
     expect(await screen.findByText(/admin view of this portal has expired/i)).toBeInTheDocument()
     expect(requestPortalCode).not.toHaveBeenCalled()
     expect(submitCompletionReport).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('ReportForm — a report with no file', () => {
+  it('asks before sending a report without any file', async () => {
+    const { user, onSubmitted } = setup()
+    await describeWork(user)
+    await user.click(screen.getByRole('button', { name: /send report/i }))
+
+    expect(screen.getByText(/no file is attached/i)).toBeInTheDocument()
+    expect(submitCompletionReport).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /send without files/i }))
+    await waitFor(() => expect(submitCompletionReport).toHaveBeenCalledWith(7, 'Fed 48 families.', [], expect.any(Function)))
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled())
+  })
+
+  it('drops the question once a file is added', async () => {
+    const { user } = setup()
+    await describeWork(user)
+    await user.click(screen.getByRole('button', { name: /send report/i }))
+    await attach(user, fileOf('report.pdf', 'application/pdf', MB))
+
+    expect(screen.queryByText(/no file is attached/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /send report/i })).toBeEnabled()
   })
 })

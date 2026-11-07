@@ -95,6 +95,9 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
   const [code, setCode] = useState('')
   const [codeNotice, setCodeNotice] = useState('')
   const [dragging, setDragging] = useState(false)
+  // A report without a single file is almost always a mistake (the file was
+  // refused, or forgotten), so sending one takes a second, deliberate click.
+  const [askNoFiles, setAskNoFiles] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const resubmitting = proposal.status === 'report_changes_requested'
@@ -122,6 +125,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
     // through the file dialog.
     setFiles((prev) => [...prev, ...Array.from(picked)])
     setError('')
+    setAskNoFiles(false)
   }
 
   const upload = async () => {
@@ -177,8 +181,13 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
     }
   }
 
-  const send = async () => {
+  const send = async (withoutFiles = false) => {
     if (!canSend) return
+    if (files.length === 0 && !withoutFiles) {
+      setAskNoFiles(true)
+      return
+    }
+    setAskNoFiles(false)
     // Time for the upload at 1 Mbit/s, plus five minutes of slack. Below that
     // the token could expire mid-upload, and the server would refuse the
     // report only once every byte had arrived.
@@ -354,6 +363,25 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
           </form>
         )}
 
+        {askNoFiles && phase === 'editing' && (
+          <div className="ml-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2" role="alert">
+            <p className="text-sm text-amber-900">
+              <strong>No file is attached.</strong> The agreement asks for your receipts, invoices and
+              photographs. Send the report without them?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => { setAskNoFiles(false); inputRef.current?.click() }}
+                className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg">
+                Add files
+              </button>
+              <button type="button" onClick={() => void send(true)}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 rounded-lg">
+                Send without files
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <p className="ml-8 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
@@ -362,10 +390,10 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
 
         {phase !== 'code' && (
           <div className="ml-8 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void send()} disabled={!canSend}
+            <button type="button" onClick={() => void send()} disabled={!canSend || askNoFiles}
               className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
               {phase === 'uploading'
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending {percent}%</>
                 : <><Send className="w-4 h-4" /> Send report</>}
             </button>
             <button type="button" onClick={onCancel} disabled={phase === 'uploading'}

@@ -18,7 +18,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import MyProposals from '../MyProposals'
 import {
-  clearPortalToken, fetchMyProposals, hasPortalToken, requestPortalCode,
+  clearPortalToken, fetchMyProposals, hasPortalToken, openReportAttachment, requestPortalCode,
   submitRevision, verifyPortalCode,
 } from '../../utils/proposalPortalApi'
 
@@ -34,6 +34,8 @@ vi.mock('../../utils/proposalPortalApi', async (importActual) => ({
   requestPortalCode: vi.fn(),
   verifyPortalCode: vi.fn(),
   submitRevision: vi.fn(),
+  openReportAttachment: vi.fn(),
+  addReportAttachments: vi.fn(),
 }))
 
 const APPLICANT = 'amina@example.com'
@@ -474,5 +476,40 @@ describe('MyProposals — each dossier shows its status, details on demand', () 
     const banner = await screen.findByRole('alert')
     expect(banner).toHaveTextContent(/our review team asked for changes/i)
     expect(screen.getAllByRole('button', { name: /fix and resubmit/i })).toHaveLength(1)
+  })
+})
+
+
+describe('MyProposals — the files of a report', () => {
+  const FILED = (attachments: { id: number; filename: string; kind: 'document'; size_bytes: number }[]) => ({
+    ...DOSSIER, id: 15, project_name: 'School Kits', status: 'report_submitted', editable: false,
+    decision_comment: null, may_submit_report: false, awaiting_report_review: true, completed: false,
+    report: { report_no: 1, narrative: 'Kits handed out.', submitted_at: '2026-10-20T10:00:00Z',
+      decision: null, decision_comment: null, decided_at: null, attachments },
+  })
+
+  it('opens a file with the session token instead of a bare link', async () => {
+    const user = userEvent.setup()
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [
+      FILED([{ id: 3, filename: 'report.pdf', kind: 'document', size_bytes: 48 * 1024 * 1024 }])] })
+    renderPortal()
+
+    await user.click(await screen.findByRole('button', { name: /school kits/i }))
+    await user.click(screen.getByRole('button', { name: /report\.pdf/i }))
+
+    expect(openReportAttachment).toHaveBeenCalledWith(15, 3, 'report.pdf')
+    expect(screen.queryByRole('link', { name: /report\.pdf/i })).toBeNull()
+  })
+
+  it('says plainly when a report carries no file, and offers to add one', async () => {
+    const user = userEvent.setup()
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [FILED([])] })
+    renderPortal()
+
+    await user.click(await screen.findByRole('button', { name: /school kits/i }))
+    expect(screen.getByText(/no file is attached to this report/i)).toBeInTheDocument()
+    expect(screen.getByTestId('add-report-files')).toBeInTheDocument()
   })
 })

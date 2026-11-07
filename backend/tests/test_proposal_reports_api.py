@@ -545,3 +545,105 @@ def test_the_portal_listing_has_no_report_before_one_is_filed(
     row = next(i for i in body["items"] if i["id"] == funded.id)
     assert row["report"] is None
     assert row["may_submit_report"] is True
+
+
+# ======================================================================
+# Adding files to a report that is waiting for review
+# ======================================================================
+
+def _file_report(client, headers, proposal_id, files=()):
+    return client.post(
+        "/api/project-proposals/portal/%d/report" % proposal_id,
+        headers=headers, data={"narrative": "Done."}, files=list(files))
+
+
+def _add(client, headers, proposal_id, files):
+    return client.post(
+        "/api/project-proposals/portal/%d/report/attachments" % proposal_id,
+        headers=headers, files=files)
+
+
+def test_a_text_only_report_can_be_completed_with_its_files(
+    client, portal_headers, funded, db_session, _fake_s3
+):
+    """The team whose 50 MB PDF did not make it the first time."""
+    assert _file_report(client, portal_headers, funded.id).status_code == 201
+
+    r = _add(client, portal_headers, funded.id,
+             [("files", ("report.pdf", PDF, "application/pdf"))])
+
+    assert r.status_code == 201, r.text
+    assert r.json()["attachments_stored"] == 1
+    assert [a["filename"] for a in r.json()["report"]["attachments"]] == ["report.pdf"]
+    assert len(_fake_s3) == 1
+    db_session.refresh(funded)
+    assert funded.status == "report_submitted", "adding files is not a new report"
+
+
+def test_added_files_mark_the_report_unread_for_the_admins(
+    client, portal_headers, auth_headers, funded, db_session
+):
+    _file_report(client, portal_headers, funded.id)
+    report = svc.current_report(db_session, funded)
+    funded.admin_seen_report_id = report.id
+    db_session.commit()
+
+    _add(client, portal_headers, funded.id, [("files", ("report.pdf", PDF, "application/pdf"))])
+
+    db_session.refresh(funded)
+    assert funded.admin_seen_report_id is None
+
+
+def test_files_cannot_be_added_once_the_report_was_reviewed(
+    client, portal_headers, auth_headers, funded, _fake_s3
+):
+    _file_report(client, portal_headers, funded.id)
+    client.post("/api/project-proposals/%d/report-decision" % funded.id, headers=auth_headers,
+                json={"decision": "approved"})
+
+    r = _add(client, portal_headers, funded.id, [("files", ("late.pdf", PDF, "application/pdf"))])
+    assert r.status_code == 409
+    assert _fake_s3 == {}
+
+
+def test_files_cannot_be_added_before_any_report(client, portal_headers, funded, _fake_s3):
+    r = _add(client, portal_headers, funded.id, [("files", ("x.pdf", PDF, "application/pdf"))])
+    assert r.status_code == 409
+
+
+def test_adding_files_respects_the_count_already_on_the_report(
+    client, portal_headers, funded, monkeypatch, _fake_s3
+):
+    import report_attachments
+    monkeypatch.setattr(report_attachments, "MAX_ATTACHMENTS_PER_REPORT", 2)
+    _file_report(client, portal_headers, funded.id,
+                 [("files", ("a.pdf", PDF, "application/pdf")),
+                  ("files", ("b.pdf", PDF, "application/pdf"))])
+
+    r = _add(client, portal_headers, funded.id, [("files", ("c.pdf", PDF, "application/pdf"))])
+    assert r.status_code == 400
+    assert len(_fake_s3) == 2
+
+
+def test_adding_files_needs_a_file_and_a_session(client, portal_headers, funded):
+    _file_report(client, portal_headers, funded.id)
+    assert _add(client, portal_headers, funded.id, []).status_code == 400
+    assert _add(client, {}, funded.id,
+                [("files", ("x.pdf", PDF, "application/pdf"))]).status_code in (401, 403)
+
+
+def test_attachment_downloads_require_authentication(client, portal_headers, funded):
+    """Why the console and the portal fetch files with their token instead of
+    linking to them: a plain link carries no Authorization header and is
+    refused, which is how admins came to see a report's text but never its PDF."""
+    r = _file_report(client, portal_headers, funded.id,
+                     [("files", ("report.pdf", PDF, "application/pdf"))])
+    attachment_id = r.json()["report"]["attachments"][0]["id"]
+    report_id = r.json()["report"].get("id")
+
+    team_url = "/api/project-proposals/portal/%d/report/attachments/%d" % (funded.id, attachment_id)
+    assert client.get(team_url).status_code in (401, 403)
+    assert client.get(team_url, headers=portal_headers).content == PDF
+    if report_id:
+        staff_url = "/api/project-proposals/%d/reports/%d/attachments/%d" % (funded.id, report_id, attachment_id)
+        assert client.get(staff_url).status_code in (401, 403)

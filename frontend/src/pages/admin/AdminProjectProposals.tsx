@@ -11,7 +11,7 @@ import {
   CheckCircle2, XCircle, Search, FileText, Bell,
   Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink, ChevronRight,
 } from 'lucide-react'
-import { PORTAL_HANDOFF_PREFIX } from '../../utils/proposalPortalApi'
+import { PORTAL_HANDOFF_PREFIX, showBlob } from '../../utils/proposalPortalApi'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -320,6 +320,9 @@ const EMPTY_AGREEMENT: Agreement = {
 // Statuses that decide the current version, and so email the applicant.
 const DECISION_STATUSES = new Set(['approved', 'rejected', 'changes_requested'])
 
+const formatSize = (bytes: number): string =>
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
 /** "1 family", "50 families", "3 units". The unit comes from the form. */
 const countOf = (n: number | null | undefined, unit: string | null | undefined): string => {
   if (n == null) return '—'
@@ -611,8 +614,30 @@ const AdminProjectProposals = () => {
     finally { setReportBusy(false) }
   }
 
-  const reportAttachmentHref = (reportId: number, attachmentId: number) =>
-    `${API_URL}/api/project-proposals/${selected?.id}/reports/${reportId}/attachments/${attachmentId}`
+  /**
+   * Open a report file. Fetched with the admin token, not linked to: the
+   * endpoint needs the token in the Authorization header, which a plain link
+   * never sends, so the old link answered "Not authenticated" and admins saw a
+   * report's text but never its PDF. The tab opens before the request, since
+   * one opened after an await is blocked as a pop-up.
+   */
+  const openAttachment = async (reportId: number, a: ReportAttachment) => {
+    if (!selected) return
+    const tab = window.open('', '_blank')
+    try {
+      const resp = await fetch(
+        `${API_URL}/api/project-proposals/${selected.id}/reports/${reportId}/attachments/${a.id}`,
+        { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null)
+        throw new Error(body?.detail || 'The file could not be opened.')
+      }
+      showBlob(await resp.blob(), a.filename, tab)
+    } catch (err) {
+      tab?.close()
+      showError('Could not open the file', err instanceof Error ? err.message : 'Please try again.')
+    }
+  }
 
   /** Load the saved agreement, or the pre-filled draft when none exists yet. */
   const loadAgreement = async (p: Proposal) => {
@@ -1350,22 +1375,29 @@ const AdminProjectProposals = () => {
 
                       <LongText text={report.narrative} lines={4} />
 
-                      {report.attachments.length > 0 && (
+                      {/* The files, where the reviewer looks first: what the team
+                          sent is the evidence the report is judged on. */}
+                      {report.attachments.length > 0 ? (
                         <div className="flex flex-wrap gap-2 pt-1">
                           {report.attachments.map((a) => (
-                            <a
+                            <button
                               key={a.id}
-                              href={reportAttachmentHref(report.id, a.id)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-50 border border-gray-200 rounded hover:border-primary-300 text-gray-700"
-                              title={`${a.content_type} · ${Math.round(a.size_bytes / 1024)} KB`}
+                              type="button"
+                              onClick={() => void openAttachment(report.id, a)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 text-gray-800"
+                              title={`Open ${a.filename}`}
                             >
-                              <Paperclip className="w-3 h-3" />
+                              {a.kind === 'document' ? <FileText className="w-3.5 h-3.5 text-red-600" /> : <Paperclip className="w-3.5 h-3.5" />}
                               {a.filename}
-                            </a>
+                              <span className="text-gray-500 font-normal">{formatSize(a.size_bytes)}</span>
+                            </button>
                           ))}
                         </div>
+                      ) : (
+                        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                          No file was attached to this report. The team can still add files while it waits
+                          for review, or you can add one they sent you through "Open portal as applicant".
+                        </p>
                       )}
 
                       {report.decision_comment && (

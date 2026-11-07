@@ -254,6 +254,128 @@ def _own_dossier(db: Session, proposal_id: int, email: str) -> ProjectProposal:
     return dossier
 
 
+async def _stage_uploads(files, existing_sizes=()) -> list:
+    """Validate a batch of uploads before anything is written, or raise 400.
+
+    Each file is judged on its leading bytes and its measured size. The
+    multipart parser has already spooled every file to disk, so measuring is a
+    seek, and the cap applies to bytes the server actually received rather than
+    to a Content-Length a client chose. Reading whole files here would hold the
+    entire batch, up to 300 MB, in memory at once.
+
+    `existing_sizes` are the files the report already carries: adding to a
+    report must not get past the count and total caps a single upload obeys.
+    """
+    try:
+        report_attachments.check_batch(list(existing_sizes) + list(files or []))
+        sizes = [_measured_size(upload) for upload in files or []]
+        report_attachments.check_total_size(list(existing_sizes) + sizes)
+        staged = []
+        for upload, size in zip(files or [], sizes):
+            head = await upload.read(report_attachments.SNIFF_BYTES)
+            await upload.seek(0)
+            checked = report_attachments.check_attachment(
+                filename=upload.filename,
+                declared_content_type=upload.content_type,
+                content=head,
+                size=size,
+            )
+            staged.append((checked, upload))
+        return staged
+    except AttachmentRejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+async def _store_staged(db: Session, dossier: ProjectProposal, report, staged) -> int:
+    """Write validated files to S3 and record them; returns how many landed.
+
+    A file that fails to store is logged and skipped rather than undoing the
+    others, or the report: losing the narrative because one photo failed would
+    be worse than an incomplete set the team can top up.
+    """
+    stored = 0
+    for checked, upload in staged:
+        object_key = s3_service.generate_object_key(
+            "proposal-reports/%d" % dossier.id, checked.filename)
+        try:
+            # One file in memory at a time, released before the next is read.
+            content = await upload.read()
+            s3_service.upload_file(
+                content, object_key, content_type=checked.content_type,
+                metadata={"proposal_id": str(dossier.id),
+                          "report_no": str(report.report_no)},
+            )
+        except Exception as exc:
+            logger.event(
+                ev.REPORT_SUBMITTED, "an attachment could not be stored",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_UNEXPECTED, proposal_id=dossier.id,
+                report_no=report.report_no, filename=checked.filename,
+            )
+            continue
+        proposal_service.add_report_attachment(
+            db, report, checked=checked, object_key=object_key)
+        stored += 1
+    return stored
+
+
+@router.post("/{proposal_id}/report/attachments", status_code=status.HTTP_201_CREATED)
+async def add_report_attachments(
+    proposal_id: int,
+    files: list[UploadFile] = File(default_factory=list),
+    email: str = Depends(get_portal_email),
+    acting_staff: Optional[str] = Depends(get_portal_actor),
+    db: Session = Depends(get_db),
+):
+    """Add files to the report that is waiting for review.
+
+    For the team whose files did not make it the first time: a 50 MB PDF
+    refused under the old limit, an upload cut off by the old 60-second proxy
+    timeout, or a report simply sent before the invoices were scanned. Without
+    this, a text-only report could only be completed by an admin sending it
+    back. Once the report has been reviewed, it is closed to additions; a
+    report sent back is answered with a new one.
+
+    New files mark the report unread for the admins, since there is new
+    evidence to look at.
+    """
+    dossier = _own_dossier(db, proposal_id, email)
+    report = proposal_service.current_report(db, dossier)
+    if (dossier.status != proposal_service.REPORT_SUBMITTED
+            or report is None or report.decision is not None):
+        raise HTTPException(
+            status_code=409,
+            detail="Files can only be added to a report that is waiting for review.",
+        )
+    if not files:
+        raise HTTPException(status_code=400, detail="Choose at least one file to add.")
+
+    existing = proposal_service.attachments_for(db, [report.id]).get(report.id, [])
+    staged = await _stage_uploads(files, existing_sizes=[a.size_bytes for a in existing])
+    stored = await _store_staged(db, dossier, report, staged)
+
+    if stored:
+        dossier.admin_seen_report_id = None
+        db.commit()
+
+    logger.event(
+        ev.REPORT_SUBMITTED, "files were added to a report awaiting review",
+        proposal_id=dossier.id, report_no=report.report_no,
+        attachments=stored, attachments_offered=len(staged),
+        email=mask_email(dossier.email),
+        on_behalf_by=mask_email(acting_staff) if acting_staff else None,
+    )
+
+    attachments = proposal_service.attachments_for(db, [report.id]).get(report.id, [])
+    return {
+        "proposal_id": dossier.id,
+        "status": dossier.status,
+        "attachments_stored": stored,
+        "attachments_offered": len(staged),
+        "report": proposal_service.serialize_portal_report(report, attachments=attachments),
+    }
+
+
 @router.post("/{proposal_id}/report", status_code=status.HTTP_201_CREATED)
 async def submit_completion_report(
     proposal_id: int,
@@ -275,30 +397,7 @@ async def submit_completion_report(
     must not leave a report row with half its evidence.
     """
     dossier = _own_dossier(db, proposal_id, email)
-
-    try:
-        report_attachments.check_batch(files)
-        # Validate everything up front, on each file's leading bytes and its
-        # measured size. The multipart parser has already spooled every file to
-        # disk, so measuring is a seek, and the size cap is enforced on bytes
-        # the server actually received rather than on a Content-Length a client
-        # chose. Reading whole files here instead would hold the entire batch —
-        # up to 300 MB — in memory at once.
-        sizes = [_measured_size(upload) for upload in files or []]
-        report_attachments.check_total_size(sizes)
-        staged = []
-        for upload, size in zip(files or [], sizes):
-            head = await upload.read(report_attachments.SNIFF_BYTES)
-            await upload.seek(0)
-            checked = report_attachments.check_attachment(
-                filename=upload.filename,
-                declared_content_type=upload.content_type,
-                content=head,
-                size=size,
-            )
-            staged.append((checked, upload))
-    except AttachmentRejected as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    staged = await _stage_uploads(files)
 
     try:
         report = proposal_service.submit_report(
@@ -312,32 +411,7 @@ async def submit_completion_report(
     except proposal_service.ProposalError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    stored = 0
-    for checked, upload in staged:
-        object_key = s3_service.generate_object_key(
-            "proposal-reports/%d" % dossier.id, checked.filename)
-        try:
-            # One file in memory at a time, released before the next is read.
-            content = await upload.read()
-            s3_service.upload_file(
-                content, object_key, content_type=checked.content_type,
-                metadata={"proposal_id": str(dossier.id),
-                          "report_no": str(report.report_no)},
-            )
-        except Exception as exc:
-            # The report itself is already saved, deliberately: losing the
-            # narrative because one photo failed to upload would be worse than
-            # an incomplete attachment set the team can top up by resubmitting.
-            logger.event(
-                ev.REPORT_SUBMITTED, "an attachment could not be stored",
-                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
-                reason=ev.REASON_UNEXPECTED, proposal_id=dossier.id,
-                report_no=report.report_no, filename=checked.filename,
-            )
-            continue
-        proposal_service.add_report_attachment(
-            db, report, checked=checked, object_key=object_key)
-        stored += 1
+    stored = await _store_staged(db, dossier, report, staged)
 
     logger.event(
         ev.REPORT_SUBMITTED, "a completion report was filed",

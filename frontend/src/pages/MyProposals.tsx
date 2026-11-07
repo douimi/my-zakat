@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
 import ReportForm, { type ReportResult } from '../components/proposals/ReportForm'
+import AddReportFiles from '../components/proposals/AddReportFiles'
 import ProposalForm, {
   EMPTY_PROPOSAL_FORM,
   parseFieldErrors,
@@ -53,7 +54,7 @@ import {
   portalActor,
   hasPortalToken,
   isNoProposalForAddress,
-  reportAttachmentUrl,
+  openReportAttachment,
   requestPortalCode,
   submitRevision,
   verifyPortalCode,
@@ -444,6 +445,14 @@ const MyProposals = () => {
 
   const closeReportForm = () => setReportFor(null)
 
+  /** Says exactly which files arrived: "is my PDF there?" is the question
+   *  teams were left asking. */
+  const receivedFiles = (result: ReportResult): string => {
+    const files = result.report?.attachments || []
+    if (files.length === 0) return 'No file is attached to it.'
+    return `Files received: ${files.map((a) => `${a.filename} (${formatBytes(a.size_bytes)})`).join(', ')}.`
+  }
+
   const onReportSubmitted = async (result: ReportResult) => {
     closeReportForm()
     await loadList()
@@ -452,10 +461,29 @@ const MyProposals = () => {
       missing > 0
         // Said plainly rather than hidden: the report is filed, but they
         // need to know some evidence did not arrive.
-        ? `Report submitted — but ${missing} of ${result.attachments_offered} files could not be stored. Please submit again with those files.`
-        : 'Your completion report has been submitted. We will be in touch once it has been reviewed.',
+        ? `Report submitted, but ${missing} of ${result.attachments_offered} files could not be stored. ${receivedFiles(result)} Add the missing ones from the report below.`
+        : `Your completion report has been submitted. ${receivedFiles(result)} We will be in touch once it has been reviewed.`,
     )
     window.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
+
+  const onFilesAdded = async (result: ReportResult) => {
+    await loadList()
+    const missing = result.attachments_offered - result.attachments_stored
+    setFlash(missing > 0
+      ? `${missing} of ${result.attachments_offered} files could not be stored. Please try those again. ${receivedFiles(result)}`
+      : `Added to your report. ${receivedFiles(result)}`)
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
+
+  const openFile = async (proposalId: number, attachmentId: number, filename: string) => {
+    try {
+      await openReportAttachment(proposalId, attachmentId, filename)
+    } catch (exc: any) {
+      setError(statusOf(exc) === 401
+        ? 'Your session has expired. Sign in again to open your files.'
+        : 'That file could not be opened. Please try again.')
+    }
   }
 
   // Arriving from an email link: once the list is in, go to that dossier, and
@@ -804,19 +832,29 @@ const MyProposals = () => {
                 <ul className="flex flex-wrap gap-2">
                   {p.report.attachments.map((a) => (
                     <li key={a.id}>
-                      <a
-                        href={reportAttachmentUrl(p.id, a.id)}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void openFile(p.id, a.id, a.filename)}
                         className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:border-primary-300 text-gray-700"
                       >
                         <Paperclip className="w-3 h-3" />
                         {a.filename}
                         <span className="text-gray-400">{formatBytes(a.size_bytes)}</span>
-                      </a>
+                      </button>
                     </li>
                   ))}
                 </ul>
+              )}
+              {p.report.attachments.length === 0 && (
+                <p className="text-xs text-amber-800">No file is attached to this report.</p>
+              )}
+              {p.awaiting_report_review && !p.report.decision && (
+                <AddReportFiles
+                  proposalId={p.id}
+                  existingCount={p.report.attachments.length}
+                  existingBytes={p.report.attachments.reduce((sum, a) => sum + a.size_bytes, 0)}
+                  onAdded={(result) => void onFilesAdded(result)}
+                />
               )}
               {/* The reason it was sent back. The only thing telling them what
                   to fix, so it is never collapsed behind anything. */}

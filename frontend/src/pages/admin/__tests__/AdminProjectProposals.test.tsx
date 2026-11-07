@@ -519,3 +519,58 @@ describe('AdminProjectProposals - the agreement after approval, and acting for t
     expect(tab.opener).toBeNull()
   })
 })
+
+describe('AdminProjectProposals - the files of a report', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const reportWith = (attachments: unknown[]) => ({
+    id: 5, report_no: 1, narrative: 'Kits handed out.', submitted_at: '2026-10-20T10:00:00',
+    decision: null, decision_comment: null, decided_at: null, internal_note: null,
+    submitted_ip: null, submitted_by_staff: null, attachments,
+  })
+
+  const openReport = async (attachments: unknown[]) => {
+    const user = userEvent.setup()
+    const row = lifecycleRow('report_submitted', { has_report: true, awaiting_report_review: true })
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/attachments/')) return { ok: true, blob: async () => new Blob(['%PDF']) }
+      if (url.endsWith('/reports')) return { ok: true, json: async () => ({ reports: [reportWith(attachments)] }) }
+      if (url.includes('/notifications')) return { ok: true, json: async () => ({ items: [] }) }
+      if (init?.method === 'POST') return { ok: true, json: async () => ({ unread_count: 0 }) }
+      if (url.match(/project-proposals\/(\?|$)/)) return { ok: true, json: async () => ({ items: [row], total: 1 }) }
+      return { ok: true, json: async () => ({}) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+    await user.click(await screen.findByTitle(/review/i))
+    await user.click(screen.getByRole('tab', { name: /^report/i }))
+    return { user, fetchMock }
+  }
+
+  it('opens a file with the admin token, so the PDF is actually readable', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    const { user, fetchMock } = await openReport([
+      { id: 9, filename: 'report.pdf', content_type: 'application/pdf', kind: 'document', size_bytes: 48 * 1024 * 1024 },
+    ])
+
+    const file = await screen.findByRole('button', { name: /report\.pdf/i })
+    expect(file).toHaveTextContent('48.0 MB')
+    await user.click(file)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/reports/5/attachments/9'),
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } }))
+    await vi.waitFor(() => expect(tab.location.href).toBe('blob:x'))
+  })
+
+  it('says so when a report came without any file', async () => {
+    await openReport([])
+    expect(await screen.findByText(/no file was attached to this report/i)).toBeInTheDocument()
+  })
+})
