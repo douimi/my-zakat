@@ -96,6 +96,9 @@ PROPOSAL_FUNDED = "proposal.funded"            # the approved funds were release
 REPORT_SUBMITTED = "report.submitted"          # the team filed a completion report
 REPORT_DECIDED = "report.decided"              # accepted, or sent back for more
 PROPOSAL_BLOCKED = "proposal.blocked"          # a new application refused: report outstanding
+# An admin re-sent the email for the dossier's current status, by hand. Logged
+# because "we told them" is a claim a dispute will rest on.
+PROPOSAL_NOTIFICATION_RESENT = "proposal.notification_resent"
 
 # The funding agreement issued after approval.
 AGREEMENT_SAVED = "agreement.saved"            # draft created or edited

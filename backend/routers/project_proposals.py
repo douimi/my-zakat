@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import io
 import logging
+import secrets
 from types import SimpleNamespace
 from typing import Optional
 
@@ -45,7 +46,8 @@ from auth_utils import get_current_manager_or_admin
 from database import get_db
 from logging_config import get_logger, mask_email
 from agreement_pdf import render_agreement_pdf
-from models import ProjectProposal, ProposalVersion, User
+from marketing.compliance import is_suppressed
+from models import EmailOutbox, ProjectProposal, ProposalVersion, User
 from proposal_pdf import render_proposal_pdf, safe_slug
 from proposal_service import (
     AgreementIncomplete,
@@ -649,6 +651,148 @@ async def mark_proposal_funded(
             )
 
     return proposal_service.serialize_for_admin(dossier, version, db=db)
+
+
+# ── Notifications: resend and history ────────────────────────────────
+
+# The email that goes with each status, and whether it is about the dossier's
+# current version or its current report. One row per status, so "resend" can
+# only ever repeat what the dossier's state already says. It cannot be used to
+# send an approval for a dossier that was rejected.
+#
+# under_review sends the acknowledgement: it has no email of its own, and the
+# question a team asks at that stage is "did you get it?".
+_NOTIFICATION_FOR_STATUS = {
+    "submitted":                ("send_proposal_received", "version", "Submission received"),
+    "under_review":             ("send_proposal_received", "version", "Submission received"),
+    "changes_requested":        ("send_proposal_changes_requested", "version", "Changes requested"),
+    "rejected":                 ("send_proposal_rejected", "version", "Decision: not funded"),
+    "approved":                 ("send_proposal_approved", "version", "Approved"),
+    "funded":                   ("send_proposal_funded", "version", "Funded: how to send the report"),
+    "report_submitted":         ("send_report_received", "report", "Report received"),
+    "report_changes_requested": ("send_report_changes_requested", "report", "Report needs more detail"),
+    "completed":                ("send_proposal_completed", "report", "Project closed"),
+}
+
+# Every template the dossier's history can show. The access code is included
+# on purpose: a team asking for code after code is a team that is stuck, and
+# that is the first thing worth knowing before resending anything.
+_PROPOSAL_TEMPLATES = frozenset({
+    "proposal_received", "proposal_changes_requested", "proposal_rejected",
+    "proposal_approved", "proposal_funded", "report_received",
+    "report_changes_requested", "proposal_completed", "proposal_access_code",
+})
+
+
+@router.post("/{proposal_id}/resend-notification")
+async def resend_proposal_notification(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Send the applicant, again, the email that matches the dossier's status.
+
+    For the team who lost it, never got it, or cannot find the portal. The
+    email is queued under a fresh idempotency key; the original one is unique
+    in the outbox and would be refused.
+
+    A suppressed address (bounced, complained, unsubscribed) is refused here,
+    with the reason, rather than "sent": the mailer would skip it silently,
+    and an admin who believes it went out tells the team to check their inbox.
+    """
+    dossier = _load(db, proposal_id)
+    entry = _NOTIFICATION_FOR_STATUS.get(dossier.status)
+    if entry is None:
+        raise HTTPException(
+            status_code=409,
+            detail="There is no notification for a dossier in this status.")
+    sender_name, subject_of, label = entry
+
+    version = proposal_service.current_version(db, dossier)
+    if version is None:
+        raise HTTPException(status_code=409, detail="This dossier has no version to notify about.")
+
+    # The scope proposal emails are sent under; an "all" row matches it too.
+    if is_suppressed(db, dossier.email, scope="transactional"):
+        raise HTTPException(
+            status_code=409,
+            detail=("%s is on the suppression list (an earlier email bounced, or was marked "
+                    "as spam), so nothing can be sent to it. Contact the team another way and "
+                    "check the address." % dossier.email),
+        )
+
+    kwargs = dict(
+        email=dossier.email,
+        name=version.full_name,
+        proposal_id=dossier.id,
+        project_name=version.project_name,
+        resend_tag=secrets.token_hex(6),
+    )
+    if subject_of == "version":
+        kwargs["version_no"] = version.version_no
+        if sender_name != "send_proposal_received" and sender_name != "send_proposal_funded":
+            kwargs["comment"] = version.decision_comment or ""
+    else:
+        report = proposal_service.current_report(db, dossier)
+        if report is None:
+            raise HTTPException(status_code=409, detail="This dossier has no report to notify about.")
+        kwargs["report_no"] = report.report_no
+        if sender_name != "send_report_received":
+            kwargs["comment"] = report.decision_comment or ""
+
+    # Looked up on the module at call time, so tests can stub one sender.
+    queued = getattr(email_service, sender_name)(**kwargs)
+    logger.event(
+        ev.PROPOSAL_NOTIFICATION_RESENT, "an admin re-sent the status email",
+        level=logging.INFO if queued else logging.ERROR,
+        outcome=ev.OUTCOME_SUCCESS if queued else ev.OUTCOME_FAILURE,
+        proposal_id=dossier.id, status=dossier.status, notification=sender_name,
+        email=mask_email(dossier.email), actor=mask_email(current_user.email),
+    )
+    if not queued:
+        raise HTTPException(status_code=502, detail="The email could not be queued. Please try again.")
+    return {"queued": True, "notification": label, "to": dossier.email}
+
+
+@router.get("/{proposal_id}/notifications")
+async def list_proposal_notifications(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """Every email this dossier's applicant was sent, newest first, with its
+    delivery state. What to read before deciding to resend.
+
+    Never returns bodies or context: the access-code emails carry live sign-in
+    codes, and nothing here needs them.
+    """
+    dossier = _load(db, proposal_id)
+    rows = (
+        db.query(EmailOutbox)
+        .filter(EmailOutbox.to_email == dossier.email.strip().lower(),
+                EmailOutbox.template_slug.in_(_PROPOSAL_TEMPLATES))
+        .order_by(EmailOutbox.created_at.desc(), EmailOutbox.id.desc())
+        .limit(200)
+        .all()
+    )
+    # The same applicant may have several dossiers. Keep the ones about this
+    # one, plus the sign-in codes, which belong to the address, not a dossier.
+    items = [
+        {
+            "id": row.id,
+            "template": row.template_slug,
+            "subject": row.subject,
+            "status": row.status,
+            "error": row.error,
+            "resent": "-resend-" in (row.idempotency_key or ""),
+            "created_at": row.created_at,
+            "sent_at": row.sent_at,
+        }
+        for row in rows
+        if row.template_slug == "proposal_access_code"
+        or (row.context or {}).get("proposal_id") == dossier.id
+    ][:50]
+    return {"email": dossier.email, "items": items}
 
 
 # ── Completion reports ───────────────────────────────────────────────

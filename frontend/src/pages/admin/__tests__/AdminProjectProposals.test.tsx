@@ -304,3 +304,92 @@ describe('AdminProjectProposals - the reworked list', () => {
     expect(screen.queryByText(/Changed/)).not.toBeInTheDocument()
   })
 })
+
+describe('AdminProjectProposals - resending the status email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const SENT = [
+    { id: 9, template: 'proposal_access_code', subject: 'Your sign-in code', status: 'sent',
+      error: null, resent: false, created_at: '2026-11-06T09:00:00', sent_at: '2026-11-06T09:00:05' },
+    { id: 8, template: 'proposal_funded', subject: 'Your project #2 has been funded — MyZakat',
+      status: 'failed', error: 'Mailbox unavailable', resent: false,
+      created_at: '2026-11-01T09:00:00', sent_at: null },
+  ]
+
+  /** Answer each endpoint the drawer calls with its own shape. */
+  const mockApi = (row: Record<string, unknown>, opts: { resend?: { ok: boolean; body: unknown } } = {}) => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/resend-notification')) {
+        const r = opts.resend ?? { ok: true, body: { queued: true, notification: 'Funded: how to send the report', to: 'amina@example.com' } }
+        return { ok: r.ok, json: async () => r.body }
+      }
+      if (url.includes('/notifications')) return { ok: true, json: async () => ({ email: 'amina@example.com', items: SENT }) }
+      if (init?.method === 'POST') return { ok: true, json: async () => ({ unread_count: 0 }) }
+      if (url.match(/project-proposals\/(\?|$)/)) return { ok: true, json: async () => ({ items: [row], total: 1 }) }
+      return { ok: true, json: async () => ({}) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  const open = async (status: string) => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi(lifecycleRow(status))
+    renderPage()
+    await user.click(await screen.findByTitle(/review/i))
+    return { user, fetchMock }
+  }
+
+  it('says what was last sent, and how it went, next to the button', async () => {
+    await open('funded')
+    expect(await screen.findByText(/last email: "your project #2 has been funded/i))
+      .toHaveTextContent(/failed/i)
+  })
+
+  it('resends the email for the current status after confirming', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { user, fetchMock } = await open('funded')
+
+    await user.click(await screen.findByRole('button', { name: /resend "funded: how to send the report"/i }))
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('amina@example.com'))
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/project-proposals/2/resend-notification'),
+      expect.objectContaining({ method: 'POST' }))
+    expect(showSuccess).toHaveBeenCalledWith('Email queued', expect.stringContaining('amina@example.com'))
+  })
+
+  it('sends nothing when the admin cancels', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { user, fetchMock } = await open('funded')
+    await user.click(await screen.findByRole('button', { name: /resend/i }))
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('resend-notification'))).toBe(false)
+  })
+
+  it('shows the server reason when the address is blocked', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    mockApi(lifecycleRow('funded'), {
+      resend: { ok: false, body: { detail: 'amina@example.com is on the suppression list.' } },
+    })
+    renderPage()
+    await user.click(await screen.findByTitle(/review/i))
+
+    await user.click(await screen.findByRole('button', { name: /resend/i }))
+
+    expect(showError).toHaveBeenCalledWith('Not sent', 'amina@example.com is on the suppression list.')
+  })
+
+  it('lists every email, sign-in codes included, in the history tab', async () => {
+    const { user } = await open('funded')
+    await user.click(screen.getByRole('button', { name: /history/i }))
+
+    const list = await screen.findByTestId('sent-emails')
+    expect(list).toHaveTextContent('Sign-in code')
+    expect(list).toHaveTextContent('Failed')
+    expect(list).toHaveTextContent('Mailbox unavailable')
+  })
+})

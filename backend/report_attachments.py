@@ -23,12 +23,23 @@ from media_library_service import (
     sniff_content_type,
 )
 
-# Per file. Generous enough for a phone photo or a scanned multi-page invoice,
-# small enough that a portal session cannot fill the bucket: the per-report cap
-# below is the one that actually bounds a submission.
-MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024        # 25 MB
+# Per file. A completion report is typically ONE PDF that bundles every invoice
+# and photograph, and those run to 50 MB; 25 MB refused exactly the file the
+# contract asks for. 100 MB matches the media library's video ceiling, so a
+# phone video of the distribution fits too.
+#
+# Files are validated on their leading bytes and measured size, then sent to S3
+# one at a time, so memory per request is bounded by one file, not the batch.
+MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024       # 100 MB
+# Per submission. This, not the per-file cap, is what keeps one portal session
+# from filling the bucket.
+MAX_REPORT_BYTES = 300 * 1024 * 1024           # 300 MB
 MAX_ATTACHMENTS_PER_REPORT = 20
 MAX_FILENAME_LENGTH = 255
+
+# How much of a file the type checks need. The image/video sniffers read at most
+# the first 16 bytes and the PDF check the first 1 KB; 8 KB covers both with room.
+SNIFF_BYTES = 8 * 1024
 
 PDF_CONTENT_TYPE = "application/pdf"
 
@@ -77,13 +88,19 @@ def safe_filename(name: Optional[str]) -> str:
 
 
 def check_attachment(
-    *, filename: Optional[str], declared_content_type: Optional[str], content: bytes
+    *, filename: Optional[str], declared_content_type: Optional[str], content: bytes,
+    size: Optional[int] = None,
 ) -> CheckedAttachment:
     """Accept or refuse one uploaded file.
 
+    `content` may be the whole file or only its first SNIFF_BYTES; `size` is the
+    file's measured length when only the head is passed. Measured on the bytes
+    the server actually received, never taken from a client header.
+
     Raises AttachmentRejected with a message meant for the uploader.
     """
-    size = len(content or b"")
+    if size is None:
+        size = len(content or b"")
     if size == 0:
         raise AttachmentRejected("That file is empty.")
     if size > MAX_ATTACHMENT_BYTES:
@@ -145,4 +162,15 @@ def check_batch(files) -> None:
         raise AttachmentRejected(
             "A report can carry at most %d attachments; this one has %d."
             % (MAX_ATTACHMENTS_PER_REPORT, count)
+        )
+
+
+def check_total_size(sizes) -> None:
+    """Refuse a submission whose files add up to more than MAX_REPORT_BYTES."""
+    total = sum(sizes or [])
+    if total > MAX_REPORT_BYTES:
+        raise AttachmentRejected(
+            "These files add up to %.0f MB; a report can carry at most %d MB in total. "
+            "Please send the largest files in a second report."
+            % (total / (1024 * 1024), MAX_REPORT_BYTES // (1024 * 1024))
         )

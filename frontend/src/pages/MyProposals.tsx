@@ -31,13 +31,14 @@
  * types six digits and their work goes through; they never see the form reset.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle, ArrowLeft, Banknote, CheckCircle2, Clock, Eye, FileText, Inbox,
-  KeyRound, Loader2, Mail, MessageSquare, Paperclip, PencilLine, Send, Trash2,
+  KeyRound, Loader2, Mail, MessageSquare, Paperclip, PencilLine,
   Upload, XCircle,
 } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
+import ReportForm, { type ReportResult } from '../components/proposals/ReportForm'
 import ProposalForm, {
   EMPTY_PROPOSAL_FORM,
   parseFieldErrors,
@@ -52,7 +53,6 @@ import {
   isNoProposalForAddress,
   reportAttachmentUrl,
   requestPortalCode,
-  submitCompletionReport,
   submitRevision,
   verifyPortalCode,
   type PortalProposal,
@@ -167,15 +167,18 @@ const MyProposals = () => {
   const [flash, setFlash] = useState('')
 
   const [items, setItems] = useState<PortalProposal[]>([])
-  // Which dossier's report form is open, and its contents. One at a time,
-  // keyed by id: two half-typed reports would be easy to file against the
-  // wrong project.
+  // Which dossier's report form is open. One at a time, keyed by id: two
+  // half-typed reports would be easy to file against the wrong project. The
+  // form owns its own contents (see components/proposals/ReportForm).
   const [reportFor, setReportFor] = useState<number | null>(null)
-  const [reportText, setReportText] = useState('')
-  const [reportFiles, setReportFiles] = useState<File[]>([])
-  const [reportBusy, setReportBusy] = useState(false)
-  const [reportError, setReportError] = useState('')
   const [editing, setEditing] = useState<PortalProposal | null>(null)
+
+  // `?proposal=ID`, the link in the funding and report emails. After sign-in
+  // the portal goes straight to that dossier and, if a report is what it
+  // needs, opens the form, instead of leaving the team to find its own way.
+  const [searchParams] = useSearchParams()
+  const focusId = Number(searchParams.get('proposal')) || null
+  const focusedRef = useRef(false)
 
   // The revision the applicant already submitted once, held across a
   // re-authentication so we can replay it without touching the form.
@@ -390,62 +393,47 @@ const MyProposals = () => {
     setView('edit')
   }
 
+  const scrollToDossier = (id: number) => {
+    // After render, so the open form is part of what scrolls into view.
+    // Optional call: jsdom and some old browsers lack scrollIntoView.
+    window.setTimeout(() => {
+      document.getElementById(`proposal-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
   const openReportForm = (proposal: PortalProposal) => {
     setReportFor(proposal.id)
-    setReportText('')
-    setReportFiles([])
-    setReportError('')
+    setFlash('')
+    scrollToDossier(proposal.id)
   }
 
-  const closeReportForm = () => {
-    setReportFor(null)
-    setReportText('')
-    setReportFiles([])
-    setReportError('')
+  const closeReportForm = () => setReportFor(null)
+
+  const onReportSubmitted = async (result: ReportResult) => {
+    closeReportForm()
+    await loadList()
+    const missing = result.attachments_offered - result.attachments_stored
+    setFlash(
+      missing > 0
+        // Said plainly rather than hidden: the report is filed, but they
+        // need to know some evidence did not arrive.
+        ? `Report submitted — but ${missing} of ${result.attachments_offered} files could not be stored. Please submit again with those files.`
+        : 'Your completion report has been submitted. We will be in touch once it has been reviewed.',
+    )
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }
 
-  const addReportFiles = (picked: FileList | null) => {
-    if (!picked) return
-    // Append rather than replace: people pick receipts and photos in separate
-    // trips through the file dialog, and a second pick replacing the first is
-    // a silent loss of what they already chose.
-    setReportFiles((prev) => [...prev, ...Array.from(picked)])
-  }
-
-  const removeReportFile = (index: number) =>
-    setReportFiles((prev) => prev.filter((_, i) => i !== index))
-
-  const sendReport = async (proposalId: number) => {
-    if (!reportText.trim()) {
-      setReportError('Please describe what was done before submitting.')
-      return
-    }
-    setReportBusy(true)
-    setReportError('')
-    try {
-      const result = await submitCompletionReport(proposalId, reportText.trim(), reportFiles)
-      closeReportForm()
-      await loadList()
-      const missing = result.attachments_offered - result.attachments_stored
-      setFlash(
-        missing > 0
-          // Said plainly rather than hidden: the report is filed, but they
-          // need to know some evidence did not arrive.
-          ? `Report submitted — but ${missing} of ${result.attachments_offered} files could not be stored. Please submit again with those files.`
-          : 'Your completion report has been submitted. We will be in touch once it has been reviewed.',
-      )
-    } catch (err: any) {
-      if (statusOf(err) === 401) {
-        // Same reasoning as the revision path: do not throw away typed work.
-        setReportError('Your session expired. Request a new code, then submit again.')
-      } else {
-        const detail = detailOf(err)
-        setReportError(typeof detail === 'string' ? detail : 'Could not submit the report.')
-      }
-    } finally {
-      setReportBusy(false)
-    }
-  }
+  // Arriving from an email link: once the list is in, go to that dossier, and
+  // open the report form if a report is what it is waiting for. Once only, so
+  // closing the form is not undone by the next list refresh.
+  useEffect(() => {
+    if (view !== 'list' || !focusId || focusedRef.current) return
+    const target = items.find((p) => p.id === focusId)
+    if (!target) return
+    focusedRef.current = true
+    if (target.may_submit_report) setReportFor(target.id)
+    scrollToDossier(target.id)
+  }, [view, items, focusId])
 
   const backToEmail = () => {
     clearPortalToken()
@@ -475,7 +463,8 @@ const MyProposals = () => {
           </Link>
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">My Proposals</h1>
           <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
-            Check where your application stands and send in the changes our review team asked for.
+            Check where your application stands, send the changes our review team asked for,
+            and submit your completion report once a funded project is done.
             No account needed — we email you a sign-in code.
           </p>
         </div>
@@ -508,6 +497,14 @@ const MyProposals = () => {
         <Mail className="w-5 h-5" />
         <h2 className="text-lg font-bold text-gray-900">Sign in to your proposals</h2>
       </div>
+      {focusId && (
+        // Arrived from an email link. The one thing that trips people here is
+        // typing a different address from the one the dossier is filed under.
+        <p className="text-sm text-gray-700 bg-primary-50 border border-primary-100 rounded-lg p-3">
+          Sign in with the address our email reached you at. We will send you a six-digit code,
+          then take you straight to proposal #{focusId}.
+        </p>
+      )}
       <form onSubmit={handleEmailSubmit} className="space-y-4">
         <div>
           <label htmlFor="portal-email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -669,8 +666,32 @@ const MyProposals = () => {
         </div>
       )}
 
+      {/* What the team has to do, before anything else on the page. A funded
+          team owes a report, and the button for it used to sit at the bottom
+          of a card among others. */}
+      {items.filter((p) => p.may_submit_report && reportFor !== p.id).map((p) => (
+        <div key={`action-${p.id}`} role="alert"
+          className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-amber-900">
+            <p className="font-semibold">
+              Action needed: {p.status === 'report_changes_requested' ? 'send a corrected report' : 'send your completion report'}
+            </p>
+            <p>
+              {p.project_name || 'Untitled proposal'} (#{p.id}). You cannot apply for another
+              project until it has been accepted.
+            </p>
+          </div>
+          <button onClick={() => openReportForm(p)}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg inline-flex items-center gap-2">
+            <Upload className="w-4 h-4" /> {p.status === 'report_changes_requested' ? 'Send the corrected report' : 'Send the report'}
+          </button>
+        </div>
+      ))}
+
       {items.map((p) => (
-        <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
+        <div key={p.id} id={`proposal-${p.id}`}
+          className={`bg-white rounded-xl shadow-sm border p-6 space-y-3 scroll-mt-6 ${
+            focusId === p.id || reportFor === p.id ? 'border-primary-400 ring-2 ring-primary-100' : 'border-gray-200'}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-gray-900">{p.project_name || 'Untitled proposal'}</h2>
@@ -765,98 +786,18 @@ const MyProposals = () => {
                 className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg inline-flex items-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                {p.status === 'report_changes_requested' ? 'Submit a corrected report' : 'Submit completion report'}
+                {p.status === 'report_changes_requested' ? 'Send the corrected report' : 'Send the completion report'}
               </button>
             </div>
           )}
 
           {reportFor === p.id && (
-            <div className="pt-3 border-t border-gray-100 space-y-3">
-              <div>
-                <label htmlFor={`report-${p.id}`} className="block text-sm font-semibold text-gray-800 mb-1">
-                  What was done
-                </label>
-                <p className="text-xs text-gray-500 mb-2">
-                  Please cover: how many beneficiaries were served, what was distributed,
-                  what was actually spent, any funds left over, and anything that differed
-                  from the approved plan.
-                </p>
-                <textarea
-                  id={`report-${p.id}`}
-                  rows={8}
-                  value={reportText}
-                  onChange={(e) => setReportText(e.target.value)}
-                  disabled={reportBusy}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
-                  placeholder="We distributed food parcels to 48 of the 50 planned families…"
-                />
-              </div>
-
-              <div>
-                <span className="block text-sm font-semibold text-gray-800 mb-1">
-                  Receipts, invoices and photographs
-                </span>
-                <label className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg cursor-pointer">
-                  <Paperclip className="w-4 h-4" /> Add files
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*,application/pdf"
-                    onChange={(e) => { addReportFiles(e.target.files); e.target.value = '' }}
-                    disabled={reportBusy}
-                    className="hidden"
-                  />
-                </label>
-                <span className="ml-2 text-xs text-gray-500">
-                  Photos, videos or PDFs · up to 25 MB each · 20 files max
-                </span>
-
-                {reportFiles.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {reportFiles.map((file, i) => (
-                      <li key={`${file.name}-${i}`} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-2 py-1">
-                        <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        <span className="truncate flex-1" title={file.name}>{file.name}</span>
-                        <span className="text-xs text-gray-400">{formatBytes(file.size)}</span>
-                        <button
-                          onClick={() => removeReportFile(i)}
-                          disabled={reportBusy}
-                          aria-label={`Remove ${file.name}`}
-                          className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 disabled:opacity-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {reportError && (
-                <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {reportError}
-                </p>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => sendReport(p.id)}
-                  disabled={reportBusy || !reportText.trim()}
-                  className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2"
-                >
-                  {reportBusy
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
-                    : <><Send className="w-4 h-4" /> Submit report</>}
-                </button>
-                <button
-                  onClick={closeReportForm}
-                  disabled={reportBusy}
-                  className="px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold rounded-lg disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <ReportForm
+              proposal={p}
+              email={email}
+              onSubmitted={(result) => void onReportSubmitted(result)}
+              onCancel={closeReportForm}
+            />
           )}
 
           {p.editable && (

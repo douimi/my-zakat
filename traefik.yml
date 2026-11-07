@@ -13,6 +13,19 @@ entryPoints:
           permanent: true
   websecure:
     address: ":443"
+    # Traefik v3 cuts any request whose body takes longer than 60 s to arrive.
+    # A 50 MB completion report (invoices and photos bundled into one PDF) needs
+    # about 7 Mbit/s of upload to beat that, which field teams rarely have, so
+    # the upload died part-way with no useful error. 30 minutes covers a 100 MB
+    # file at roughly 0.5 Mbit/s.
+    #
+    # The cost: a client that trickles a request body in slowly can now hold a
+    # connection for up to 30 minutes instead of 60 s. That is the price of
+    # accepting real uploads over slow links; it is bounded, and it applies to
+    # this entry point only.
+    transport:
+      respondingTimeouts:
+        readTimeout: 30m
 
 certificatesResolvers:
   letsencrypt:

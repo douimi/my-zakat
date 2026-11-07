@@ -10,7 +10,20 @@
     </td>
   </tr>
 </table>
-<p>You can submit a corrected report from your portal. Your previous one is kept, so you are adding to the record rather than replacing it.</p>
-<p><a href="{{ portal_url }}" style="color:#1e3a8a;">Submit a corrected report</a></p>
+<p>Your previous report is kept, so you are adding to the record rather than replacing it.</p>
+<p style="margin: 22px 0 8px 0;"><strong>How to send the corrected report</strong></p>
+<ol style="margin: 0 0 18px 0; padding-left: 20px; color: #374151;">
+  <li style="margin-bottom: 6px;">Click the button below.</li>
+  {% if email %}<li style="margin-bottom: 6px;">Sign in with <strong>{{ email }}</strong>, the address this message was sent to.</li>{% else %}<li style="margin-bottom: 6px;">Sign in with the address this message was sent to.</li>{% endif %}
+  <li style="margin-bottom: 6px;">Enter the six-digit code we email you.</li>
+  <li style="margin-bottom: 6px;">The report form opens on its own: add what was asked for above, and send.</li>
+</ol>
+<table role="presentation" cellspacing="0" cellpadding="0" style="margin: 8px 0 22px 0;">
+  <tr>
+    <td style="background: #b45309; border-radius: 8px;">
+      <a href="{{ dossier_url }}" style="display: inline-block; padding: 12px 22px; color: #ffffff; font-weight: bold; text-decoration: none;">Send the corrected report</a>
+    </td>
+  </tr>
+</table>
 <p>With gratitude,<br><strong>The MyZakat Team</strong></p>
 {% endblock %}

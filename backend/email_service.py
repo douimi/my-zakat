@@ -214,7 +214,8 @@ PROPOSAL_PORTAL_URL = f"{FRONTEND_URL}/my-proposals"
 
 
 def _proposal_context(
-    name: str, proposal_id: int, version_no: int, project_name: str, comment: str = ""
+    name: str, proposal_id: int, version_no: int, project_name: str, comment: str = "",
+    *, email: str = "",
 ) -> dict:
     return {
         "name": name,
@@ -223,11 +224,29 @@ def _proposal_context(
         "project_name": project_name,
         "comment": comment,
         "portal_url": PROPOSAL_PORTAL_URL,
+        # Lands on this dossier after sign-in, with the report form already
+        # open when a report is what it needs. A team that had to find its own
+        # way from the portal's front door was getting lost.
+        "dossier_url": f"{PROPOSAL_PORTAL_URL}?proposal={proposal_id}",
+        # Signing in means typing the address the dossier was filed under. The
+        # email says which one, because a team often has several.
+        "email": email,
     }
 
 
+def _key(base: str, resend_tag: Optional[str]) -> str:
+    """The idempotency key: the event's own, or a distinct one for a resend.
+
+    Keys are unique in the outbox, so re-queueing an email under its original
+    key is refused by the database. A deliberate resend from the admin must
+    carry its own key; an accidental double trigger must not.
+    """
+    return f"{base}-resend-{resend_tag}" if resend_tag else base
+
+
 def send_proposal_received(
-    *, email: str, name: str, proposal_id: int, version_no: int, project_name: str
+    *, email: str, name: str, proposal_id: int, version_no: int, project_name: str,
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Acknowledge a submission — the first one and every revision."""
     return _enqueue(
@@ -235,15 +254,16 @@ def send_proposal_received(
         to_email=email,
         to_name=name,
         subject=f"We received your proposal #{proposal_id} — MyZakat",
-        context=_proposal_context(name, proposal_id, version_no, project_name),
+        context=_proposal_context(name, proposal_id, version_no, project_name, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-v{version_no}-received",
+        idempotency_key=_key(f"proposal-{proposal_id}-v{version_no}-received", resend_tag),
     )
 
 
 def send_proposal_changes_requested(
     *, email: str, name: str, proposal_id: int, version_no: int,
     project_name: str, comment: str,
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Ask the applicant for changes, quoting the reviewer's message."""
     return _enqueue(
@@ -251,15 +271,16 @@ def send_proposal_changes_requested(
         to_email=email,
         to_name=name,
         subject=f"Changes requested on your proposal #{proposal_id} — MyZakat",
-        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-v{version_no}-changes_requested",
+        idempotency_key=_key(f"proposal-{proposal_id}-v{version_no}-changes_requested", resend_tag),
     )
 
 
 def send_proposal_rejected(
     *, email: str, name: str, proposal_id: int, version_no: int,
     project_name: str, comment: str,
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Tell the applicant the request was declined, with the reason."""
     return _enqueue(
@@ -267,15 +288,16 @@ def send_proposal_rejected(
         to_email=email,
         to_name=name,
         subject=f"Decision on your proposal #{proposal_id} — MyZakat",
-        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-v{version_no}-rejected",
+        idempotency_key=_key(f"proposal-{proposal_id}-v{version_no}-rejected", resend_tag),
     )
 
 
 def send_proposal_approved(
     *, email: str, name: str, proposal_id: int, version_no: int,
     project_name: str, comment: str = "",
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Confirm an approval."""
     return _enqueue(
@@ -283,15 +305,16 @@ def send_proposal_approved(
         to_email=email,
         to_name=name,
         subject=f"Your proposal #{proposal_id} has been approved — MyZakat",
-        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-v{version_no}-approved",
+        idempotency_key=_key(f"proposal-{proposal_id}-v{version_no}-approved", resend_tag),
     )
 
 
 def send_proposal_funded(
     *, email: str, name: str, proposal_id: int, version_no: int,
     project_name: str, comment: str = "",
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Tell the team the money has been released -- and what they owe in return.
 
@@ -304,14 +327,15 @@ def send_proposal_funded(
         to_email=email,
         to_name=name,
         subject=f"Your project #{proposal_id} has been funded — MyZakat",
-        context=_proposal_context(name, proposal_id, version_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, version_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-funded",
+        idempotency_key=_key(f"proposal-{proposal_id}-funded", resend_tag),
     )
 
 
 def send_report_received(
-    *, email: str, name: str, proposal_id: int, report_no: int, project_name: str
+    *, email: str, name: str, proposal_id: int, report_no: int, project_name: str,
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Acknowledge a completion report -- the first one and every resubmission.
 
@@ -323,15 +347,16 @@ def send_report_received(
         to_email=email,
         to_name=name,
         subject=f"We have your completion report for #{proposal_id} — MyZakat",
-        context=_proposal_context(name, proposal_id, report_no, project_name),
+        context=_proposal_context(name, proposal_id, report_no, project_name, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-report{report_no}-received",
+        idempotency_key=_key(f"proposal-{proposal_id}-report{report_no}-received", resend_tag),
     )
 
 
 def send_report_changes_requested(
     *, email: str, name: str, proposal_id: int, report_no: int,
     project_name: str, comment: str = "",
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Send a report back with what is missing.
 
@@ -343,15 +368,16 @@ def send_report_changes_requested(
         to_email=email,
         to_name=name,
         subject=f"More detail needed on your report for #{proposal_id} — MyZakat",
-        context=_proposal_context(name, proposal_id, report_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, report_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-report{report_no}-changes",
+        idempotency_key=_key(f"proposal-{proposal_id}-report{report_no}-changes", resend_tag),
     )
 
 
 def send_proposal_completed(
     *, email: str, name: str, proposal_id: int, report_no: int,
     project_name: str, comment: str = "",
+    resend_tag: Optional[str] = None,
 ) -> bool:
     """Close the project, and say plainly that they may apply again."""
     return _enqueue(
@@ -359,9 +385,9 @@ def send_proposal_completed(
         to_email=email,
         to_name=name,
         subject=f"Project #{proposal_id} is closed — thank you — MyZakat",
-        context=_proposal_context(name, proposal_id, report_no, project_name, comment),
+        context=_proposal_context(name, proposal_id, report_no, project_name, comment, email=email),
         category="transactional",
-        idempotency_key=f"proposal-{proposal_id}-report{report_no}-completed",
+        idempotency_key=_key(f"proposal-{proposal_id}-report{report_no}-completed", resend_tag),
     )
 
 

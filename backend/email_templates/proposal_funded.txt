@@ -8,13 +8,20 @@ A note from the team
 {{ comment }}
 {% endif %}
 
-WHEN THE PROJECT IS COMPLETE, SUBMIT YOUR COMPLETION REPORT through the portal:
-the narrative of what was done, plus receipts, invoices and photographs.
+WHEN THE PROJECT IS COMPLETE, SEND US YOUR COMPLETION REPORT: what was done,
+with your receipts, invoices and photographs. A single PDF that bundles
+everything is fine, up to 100 MB.
 
 Please note: until that report has been submitted and accepted, you will not be
 able to apply for another project.
 
-Open your portal: {{ portal_url }}
+How to send your report
+-----------------------
+1. Open this link: {{ dossier_url }}
+2. Sign in with {% if email %}{{ email }}, {% endif %}the address this message was sent to.
+3. Enter the six-digit code we email you.
+4. The report form opens on its own: describe what was done, attach your
+   files, and send.
 
 With gratitude,
 The MyZakat Team

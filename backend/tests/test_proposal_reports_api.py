@@ -221,6 +221,54 @@ def test_submitting_a_report_with_attachments(client, portal_headers, funded,
     assert len(_fake_s3) == 2
 
 
+def test_a_30_mb_pdf_report_goes_through_whole(client, portal_headers, funded,
+                                               _fake_s3):
+    """Over the old 25 MB cap. Stored byte for byte: validating on the head and
+    re-reading for storage must not truncate or shift the file."""
+    big = PDF + bytes(range(256)) * (30 * 1024 * 4)  # ~30 MB, non-uniform bytes
+    r = client.post(
+        "/api/project-proposals/portal/%d/report" % funded.id,
+        headers=portal_headers, data={"narrative": "Everything is in the PDF."},
+        files=[("files", ("report.pdf", big, "application/pdf"))],
+    )
+    assert r.status_code == 201, r.text
+    attachment = r.json()["report"]["attachments"][0]
+    assert attachment["size_bytes"] == len(big)
+    assert list(_fake_s3.values()) == [big]
+
+
+def test_the_size_cap_is_measured_on_the_bytes_received(
+    client, portal_headers, funded, db_session, _fake_s3, monkeypatch
+):
+    import report_attachments
+    monkeypatch.setattr(report_attachments, "MAX_ATTACHMENT_BYTES", 1024)
+    r = client.post(
+        "/api/project-proposals/portal/%d/report" % funded.id,
+        headers=portal_headers, data={"narrative": "x"},
+        files=[("files", ("report.pdf", PDF + b"\0" * 2048, "application/pdf"))],
+    )
+    assert r.status_code == 400, r.text
+    assert svc.current_report(db_session, funded) is None
+    assert _fake_s3 == {}
+
+
+def test_a_batch_over_the_total_cap_is_refused_before_anything_is_saved(
+    client, portal_headers, funded, db_session, _fake_s3, monkeypatch
+):
+    import report_attachments
+    monkeypatch.setattr(report_attachments, "MAX_REPORT_BYTES", len(PDF) + 10)
+    r = client.post(
+        "/api/project-proposals/portal/%d/report" % funded.id,
+        headers=portal_headers, data={"narrative": "x"},
+        files=[("files", ("a.pdf", PDF, "application/pdf")),
+               ("files", ("b.pdf", PDF, "application/pdf"))],
+    )
+    assert r.status_code == 400, r.text
+    assert "in total" in r.json()["detail"]
+    assert svc.current_report(db_session, funded) is None
+    assert _fake_s3 == {}
+
+
 def test_the_stored_type_is_what_the_bytes_are_not_what_was_declared(
     client, portal_headers, funded
 ):

@@ -33,6 +33,7 @@ from database import get_db
 from logging_config import get_logger, mask_email
 import log_events as ev
 import logging
+import os
 import io as _io
 import email_service
 import report_attachments
@@ -211,6 +212,21 @@ async def submit_revision(
     return proposal_service.serialize_for_portal(dossier, version)
 
 
+def _measured_size(upload: UploadFile) -> int:
+    """The number of bytes the server received for this file.
+
+    Measured by seeking the spooled file, not read from UploadFile.size or any
+    header: it is exact whatever the Starlette version, and nothing the client
+    said is involved.
+    """
+    handle = upload.file
+    position = handle.tell()
+    handle.seek(0, os.SEEK_END)
+    size = handle.tell()
+    handle.seek(position)
+    return size
+
+
 def _own_dossier(db: Session, proposal_id: int, email: str) -> ProjectProposal:
     """One of this address's dossiers, or 404.
 
@@ -254,18 +270,25 @@ async def submit_completion_report(
 
     try:
         report_attachments.check_batch(files)
-        # Read and validate everything up front. An UploadFile is a stream, so
-        # this is also what lets the size cap be enforced on actual bytes
-        # rather than on a Content-Length a client chose.
+        # Validate everything up front, on each file's leading bytes and its
+        # measured size. The multipart parser has already spooled every file to
+        # disk, so measuring is a seek, and the size cap is enforced on bytes
+        # the server actually received rather than on a Content-Length a client
+        # chose. Reading whole files here instead would hold the entire batch —
+        # up to 300 MB — in memory at once.
+        sizes = [_measured_size(upload) for upload in files or []]
+        report_attachments.check_total_size(sizes)
         staged = []
-        for upload in files or []:
-            content = await upload.read()
+        for upload, size in zip(files or [], sizes):
+            head = await upload.read(report_attachments.SNIFF_BYTES)
+            await upload.seek(0)
             checked = report_attachments.check_attachment(
                 filename=upload.filename,
                 declared_content_type=upload.content_type,
-                content=content,
+                content=head,
+                size=size,
             )
-            staged.append((checked, content))
+            staged.append((checked, upload))
     except AttachmentRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -281,10 +304,12 @@ async def submit_completion_report(
         raise HTTPException(status_code=400, detail=str(exc))
 
     stored = 0
-    for checked, content in staged:
+    for checked, upload in staged:
         object_key = s3_service.generate_object_key(
             "proposal-reports/%d" % dossier.id, checked.filename)
         try:
+            # One file in memory at a time, released before the next is read.
+            content = await upload.read()
             s3_service.upload_file(
                 content, object_key, content_type=checked.content_type,
                 metadata={"proposal_id": str(dossier.id),

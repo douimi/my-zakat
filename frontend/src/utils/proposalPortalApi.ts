@@ -26,6 +26,37 @@ portalApi.interceptors.request.use((config) => {
 export const hasPortalToken = (): boolean => Boolean(sessionStorage.getItem(PORTAL_TOKEN_KEY))
 export const clearPortalToken = (): void => sessionStorage.removeItem(PORTAL_TOKEN_KEY)
 
+/**
+ * Seconds until the portal token expires, or null when there is none or it
+ * cannot be read.
+ *
+ * Needed because the server only checks the token AFTER it has received the
+ * whole request body: a team that spent twenty-five minutes writing would
+ * upload its 50 MB report and only then be told the session had lapsed. Reading
+ * the expiry first lets the form ask for a fresh code before the upload starts.
+ * This decodes, it does not verify: the server remains the judge.
+ */
+export const portalTokenSecondsLeft = (now: number = Date.now()): number | null => {
+  const token = sessionStorage.getItem(PORTAL_TOKEN_KEY)
+  if (!token) return null
+  try {
+    const payload = token.split('.')[1]
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    if (typeof json.exp !== 'number') return null
+    return json.exp - Math.floor(now / 1000)
+  } catch {
+    return null
+  }
+}
+
+/** The server's limits (backend/report_attachments.py), checked before upload so
+ *  a file that will be refused is flagged at once, not after minutes of sending. */
+export const REPORT_LIMITS = {
+  maxFileBytes: 100 * 1024 * 1024,
+  maxTotalBytes: 300 * 1024 * 1024,
+  maxFiles: 20,
+}
+
 export interface PortalReportAttachment {
   id: number
   filename: string
@@ -108,12 +139,19 @@ export const submitCompletionReport = async (
   proposalId: number,
   narrative: string,
   files: File[],
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<{ status: string; attachments_stored: number; attachments_offered: number; report: PortalReport }> => {
   const form = new FormData()
   form.append('narrative', narrative)
   files.forEach((file) => form.append('files', file))
   const { data } = await portalApi.post(
-    `/api/project-proposals/portal/${proposalId}/report`, form)
+    `/api/project-proposals/portal/${proposalId}/report`, form, {
+      // A 50 MB report takes minutes on a field connection. Without visible
+      // progress, "Submitting…" looks frozen and people close the tab.
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) onProgress(event.loaded, event.total)
+      },
+    })
   return data
 }
 

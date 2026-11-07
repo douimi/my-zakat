@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
   CheckCircle2, XCircle, Search, FileText, Bell,
-  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight,
+  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -315,6 +315,39 @@ const EMPTY_AGREEMENT: Agreement = {
 // Statuses that decide the current version, and so email the applicant.
 const DECISION_STATUSES = new Set(['approved', 'rejected', 'changes_requested'])
 
+/** The email "Resend" sends for each status. Mirrors _NOTIFICATION_FOR_STATUS
+ *  in routers/project_proposals.py, which is what actually decides. */
+const NOTIFICATION_LABEL: Record<string, string> = {
+  submitted: 'Submission received',
+  under_review: 'Submission received',
+  changes_requested: 'Changes requested',
+  rejected: 'Decision: not funded',
+  approved: 'Approved',
+  funded: 'Funded: how to send the report',
+  report_submitted: 'Report received',
+  report_changes_requested: 'Report needs more detail',
+  completed: 'Project closed',
+}
+
+interface SentEmail {
+  id: number
+  template: string
+  subject: string
+  status: string
+  error: string | null
+  resent: boolean
+  created_at: string
+  sent_at: string | null
+}
+
+const EMAIL_STATUS: Record<string, { label: string; className: string }> = {
+  sent: { label: 'Sent', className: 'bg-green-100 text-green-800' },
+  pending: { label: 'Queued', className: 'bg-gray-100 text-gray-700' },
+  sending: { label: 'Sending', className: 'bg-gray-100 text-gray-700' },
+  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
+  suppressed: { label: 'Blocked', className: 'bg-amber-100 text-amber-900' },
+}
+
 const AdminProjectProposals = () => {
   const [rows, setRows] = useState<Proposal[]>([])
   const [total, setTotal] = useState(0)
@@ -336,6 +369,8 @@ const AdminProjectProposals = () => {
   const [reportComment, setReportComment] = useState('')
   const [reportNote, setReportNote] = useState('')
   const [reportBusy, setReportBusy] = useState(false)
+  const [sentEmails, setSentEmails] = useState<SentEmail[] | null>(null)
+  const [resending, setResending] = useState(false)
   type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history'
   const [tab, setTab] = useState<DrawerTab>('dossier')
 
@@ -378,6 +413,7 @@ const AdminProjectProposals = () => {
     markSeen(p)
     loadAgreement(p)
     loadReports(p)
+    loadSentEmails(p)
   }
   const closeDetail = () => {
     setSelected(null)
@@ -391,6 +427,39 @@ const AdminProjectProposals = () => {
     setReports(null)
     setReportComment('')
     setReportNote('')
+    setSentEmails(null)
+  }
+
+  /** What the applicant has actually been sent, and whether it arrived. Read
+   *  before resending: a blocked address will not be fixed by trying again. */
+  const loadSentEmails = async (p: Proposal) => {
+    setSentEmails(null)
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${p.id}/notifications`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) throw new Error('fetch failed')
+      setSentEmails((await resp.json()).items || [])
+    } catch { setSentEmails([]) }
+  }
+
+  const resendNotification = async () => {
+    if (!selected) return
+    const label = NOTIFICATION_LABEL[selected.status]
+    if (!label) return
+    if (!window.confirm(`Send ${selected.email} the "${label}" email again?`)) return
+    setResending(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/resend-notification`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const body = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The email could not be sent.')
+      showSuccess('Email queued', `"${body.notification}" is on its way to ${body.to}.`)
+      loadSentEmails(selected)
+    } catch (err) {
+      showError('Not sent', err instanceof Error ? err.message : 'The email could not be sent.')
+    } finally {
+      setResending(false)
+    }
   }
 
   /**
@@ -885,6 +954,27 @@ const AdminProjectProposals = () => {
                         <button onClick={() => changeStatus('under_review')} className="text-sm px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded inline-flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Reopen for review</button>
                       </div>
                     )}
+
+                    {/* For the team who lost the email, never got it, or cannot
+                        find the portal. Says what was last sent first, so a
+                        blocked address is seen before anyone clicks. */}
+                    {NOTIFICATION_LABEL[selected.status] && (
+                      <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-gray-600 min-w-0" data-testid="last-email">
+                          {(() => {
+                            if (sentEmails === null) return 'Checking emails sent…'
+                            const last = sentEmails.find((e) => e.template !== 'proposal_access_code')
+                            if (!last) return 'No status email on record for this dossier.'
+                            const state = EMAIL_STATUS[last.status]?.label || last.status
+                            return `Last email: "${last.subject}", ${state.toLowerCase()} ${formatDate(last.sent_at || last.created_at)}.`
+                          })()}
+                        </p>
+                        <button onClick={resendNotification} disabled={resending}
+                          className="text-sm px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 rounded inline-flex items-center gap-1.5 disabled:opacity-50">
+                          <Mail className="w-3.5 h-3.5" /> {resending ? 'Sending…' : `Resend "${NOTIFICATION_LABEL[selected.status]}"`}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })()}
@@ -1078,6 +1168,33 @@ const AdminProjectProposals = () => {
                     )}
                   </div>
                 ))}
+              </Section>
+
+              <Section title="Emails sent to the applicant">
+                {sentEmails === null ? (
+                  <p className="text-sm text-gray-500">Loading…</p>
+                ) : sentEmails.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nothing on record for {selected.email}.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100" data-testid="sent-emails">
+                    {sentEmails.map((e) => {
+                      const state = EMAIL_STATUS[e.status] || { label: e.status, className: 'bg-gray-100 text-gray-700' }
+                      return (
+                        <li key={e.id} className="py-2 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-gray-900">
+                              {e.template === 'proposal_access_code' ? 'Sign-in code' : e.subject}
+                            </span>
+                            {e.resent && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">resent</span>}
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${state.className}`}>{state.label}</span>
+                            <span className="text-xs text-gray-500 ml-auto">{formatDate(e.sent_at || e.created_at)}</span>
+                          </div>
+                          {e.error && <p className="text-xs text-red-700 mt-0.5">{e.error}</p>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
               </Section>
 
               </>)}

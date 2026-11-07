@@ -11,8 +11,10 @@ from report_attachments import (
     AttachmentRejected,
     MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENTS_PER_REPORT,
+    MAX_REPORT_BYTES,
     check_attachment,
     check_batch,
+    check_total_size,
     safe_filename,
 )
 
@@ -107,19 +109,45 @@ def test_an_empty_file_is_refused():
     assert "empty" in str(err.value).lower()
 
 
+# The size tests pass the file's head plus its measured size, exactly as the
+# router does, rather than allocating 100 MB of bytes per test.
+
 def test_an_oversized_file_is_refused_with_the_limit_in_the_message():
-    too_big = PNG + b"\x00" * (MAX_ATTACHMENT_BYTES + 1)
     with pytest.raises(AttachmentRejected) as err:
-        accept(content=too_big)
-    assert "25 MB" in str(err.value)
+        accept(content=PNG, size=MAX_ATTACHMENT_BYTES + 1)
+    assert "100 MB" in str(err.value)
 
 
 def test_a_file_exactly_at_the_limit_is_accepted():
     """Off-by-one on a size cap is the classic way a valid upload gets
     refused."""
-    padded = PNG + b"\x00" * (MAX_ATTACHMENT_BYTES - len(PNG))
-    assert len(padded) == MAX_ATTACHMENT_BYTES
-    assert accept(content=padded).size_bytes == MAX_ATTACHMENT_BYTES
+    assert accept(content=PNG, size=MAX_ATTACHMENT_BYTES).size_bytes == MAX_ATTACHMENT_BYTES
+
+
+def test_without_a_size_the_length_of_the_content_is_judged():
+    """Whole-file callers need not pass `size`."""
+    assert accept(content=PNG).size_bytes == len(PNG)
+
+
+def test_a_50_mb_pdf_of_invoices_and_photos_is_accepted():
+    """The file the contract actually asks for. 25 MB used to refuse it."""
+    checked = accept(content=PDF, size=50 * 1024 * 1024, filename="report.pdf")
+    assert checked.kind == "document"
+    assert checked.size_bytes == 50 * 1024 * 1024
+
+
+def test_a_small_head_does_not_hide_a_large_file():
+    """The router passes only the first bytes plus the real size; a large file
+    must not slip through because its head is small."""
+    with pytest.raises(AttachmentRejected):
+        accept(content=PDF, size=MAX_ATTACHMENT_BYTES + 1)
+
+
+def test_a_submission_over_the_total_cap_is_refused():
+    check_total_size([MAX_REPORT_BYTES])  # exactly at the cap is fine
+    with pytest.raises(AttachmentRejected) as err:
+        check_total_size([MAX_REPORT_BYTES // 2, MAX_REPORT_BYTES // 2 + 1])
+    assert "300 MB" in str(err.value)
 
 
 # ── Batch guard ──────────────────────────────────────────────────────

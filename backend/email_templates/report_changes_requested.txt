@@ -7,10 +7,15 @@ What is needed
 ---------------
 {{ comment }}
 
-You can submit a corrected report from your portal. Your previous one is kept,
-so you are adding to the record rather than replacing it.
+Your previous report is kept, so you are adding to the record rather than
+replacing it.
 
-Submit a corrected report: {{ portal_url }}
+How to send the corrected report
+--------------------------------
+1. Open this link: {{ dossier_url }}
+2. Sign in with {% if email %}{{ email }}, {% endif %}the address this message was sent to.
+3. Enter the six-digit code we email you.
+4. The report form opens on its own: add what was asked for above, and send.
 
 With gratitude,
 The MyZakat Team

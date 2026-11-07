@@ -347,3 +347,66 @@ describe('MyProposals — an address with no dossier', () => {
     expect(screen.queryByLabelText(/six-digit code/i)).not.toBeInTheDocument()
   })
 })
+
+describe('MyProposals — a funded team sending its report', () => {
+  const FUNDED = {
+    ...DOSSIER,
+    id: 7,
+    project_name: 'Rice Distribution',
+    status: 'funded',
+    editable: false,
+    decision_comment: null,
+    may_submit_report: true,
+    awaiting_report_review: false,
+    completed: false,
+  }
+
+  const renderAt = (path: string) =>
+    render(
+      <HelmetProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <MyProposals />
+        </MemoryRouter>
+      </HelmetProvider>,
+    )
+
+  it('puts the report at the top of the page as the thing to do', async () => {
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [FUNDED] })
+    renderAt('/my-proposals')
+
+    const banner = await screen.findByRole('alert')
+    expect(banner).toHaveTextContent(/action needed: send your completion report/i)
+    expect(banner).toHaveTextContent('Rice Distribution')
+    expect(screen.queryByTestId('report-form')).toBeNull()
+  })
+
+  it('opens the report form straight away when arriving from the email link', async () => {
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [FUNDED] })
+    renderAt('/my-proposals?proposal=7')
+
+    expect(await screen.findByTestId('report-form')).toBeInTheDocument()
+    // The banner pointing at the form is gone once the form itself is open.
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('says which address to sign in with when the link is opened signed out', async () => {
+    renderAt('/my-proposals?proposal=7')
+    expect(await screen.findByText(/sign in with the address our email reached you at/i))
+      .toHaveTextContent('#7')
+  })
+
+  it('does not reopen a form the team closed', async () => {
+    const user = userEvent.setup()
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [FUNDED] })
+    renderAt('/my-proposals?proposal=7')
+
+    await screen.findByTestId('report-form')
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(screen.queryByTestId('report-form')).toBeNull()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+})
