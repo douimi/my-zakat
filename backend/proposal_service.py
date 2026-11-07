@@ -186,8 +186,12 @@ def add_revision(
     submitted_ip: str,
     sms_consent: bool,
     sms_consent_text: str | None,
+    submitted_by_staff: str | None = None,
 ) -> ProposalVersion:
     """Append the next version and send the dossier back for review.
+
+    `submitted_by_staff` is the admin who filed it from the portal on the
+    team's behalf, if one did.
 
     The dossier's email is authoritative and overrides whatever the payload
     carried: it is the identity key and the portal's access key, so a revision
@@ -214,6 +218,7 @@ def add_revision(
         proposal_id=proposal.id,
         version_no=next_no,
         submitted_ip=submitted_ip or None,
+        submitted_by_staff=submitted_by_staff or None,
         **fields,
         **_consent_fields(sms_consent, sms_consent_text),
     )
@@ -390,6 +395,7 @@ def serialize_version_summary(version: ProposalVersion) -> dict[str, Any]:
         "version_no": version.version_no,
         "submitted_at": version.submitted_at,
         "submitted_ip": version.submitted_ip,
+        "submitted_by_staff": version.submitted_by_staff,
         "decision": version.decision,
         "decision_comment": version.decision_comment,
         "internal_note": version.internal_note,
@@ -1006,8 +1012,12 @@ def submit_report(
     *,
     narrative: str,
     submitted_ip: str = None,
+    submitted_by_staff: str | None = None,
 ):
     """Append the next completion report and send the dossier for review.
+
+    `submitted_by_staff` is the admin who filed it from the portal on the
+    team's behalf, if one did.
 
     Allowed only from `funded` or `report_changes_requested`: before funding
     there is nothing to report on, and after `completed` the dossier is closed.
@@ -1044,6 +1054,7 @@ def submit_report(
         report_no=(highest or 0) + 1,
         narrative=text,
         submitted_ip=submitted_ip or None,
+        submitted_by_staff=submitted_by_staff or None,
     )
     db.add(report)
     db.flush()
@@ -1176,5 +1187,6 @@ def serialize_report(report, *, attachments=None, staff: bool = False) -> dict[s
         out["internal_note"] = report.internal_note
         out["decided_by"] = report.decided_by
         out["submitted_ip"] = report.submitted_ip
+        out["submitted_by_staff"] = report.submitted_by_staff
     return out
 

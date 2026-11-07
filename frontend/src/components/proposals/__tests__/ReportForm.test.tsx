@@ -203,3 +203,16 @@ describe('ReportForm', () => {
     expect(screen.getByRole('button', { name: /send report/i })).toBeEnabled()
   })
 })
+
+describe('ReportForm — an admin acting for the team', () => {
+  it('never emails the team a code; it tells the admin to reopen the view', async () => {
+    vi.mocked(portalTokenSecondsLeft).mockReturnValue(60)
+    const { user } = setup({ adminView: true })
+    await describeWork(user)
+    await user.click(screen.getByRole('button', { name: /send report/i }))
+
+    expect(await screen.findByText(/admin view of this portal has expired/i)).toBeInTheDocument()
+    expect(requestPortalCode).not.toHaveBeenCalled()
+    expect(submitCompletionReport).not.toHaveBeenCalled()
+  })
+})

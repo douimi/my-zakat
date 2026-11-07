@@ -741,6 +741,9 @@ class ProposalVersion(Base):
     # ── This submission's own metadata ─────────────────────
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     submitted_ip = Column(String(45), nullable=True)
+    # Set when a staff member filed this from the portal on the team's behalf
+    # (the admin's email); NULL when the team filed it. See migration 38.
+    submitted_by_staff = Column(String(255), nullable=True)
 
     # 10DLC / TCR proof-of-consent belongs to the submission act, not to the
     # dossier: it records what this applicant agreed to, at this moment.
@@ -856,6 +859,9 @@ class ProposalReport(Base):
 
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     submitted_ip = Column(String(45), nullable=True)
+    # Set when a staff member filed this from the portal on the team's behalf
+    # (the admin's email); NULL when the team filed it. See migration 38.
+    submitted_by_staff = Column(String(255), nullable=True)
 
     # NULL = awaiting review | approved | changes_requested
     decision = Column(String(20), nullable=True)

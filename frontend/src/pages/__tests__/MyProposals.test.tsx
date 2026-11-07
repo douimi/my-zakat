@@ -11,7 +11,7 @@
  * it and lets a test make a token appear (a verified code) or vanish (a lapsed
  * session) exactly where the real one would.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -408,5 +408,37 @@ describe('MyProposals — a funded team sending its report', () => {
 
     expect(screen.queryByTestId('report-form')).toBeNull()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+})
+
+describe('MyProposals — an admin acting for the team', () => {
+  const adminToken = () =>
+    `h.${btoa(JSON.stringify({ sub: APPLICANT, typ: 'proposal_portal', act: 'admin@myzakat.org' }))}.sig`
+
+  beforeEach(() => {
+    sessionStorage.setItem('proposal_portal_token', adminToken())
+  })
+  afterEach(() => sessionStorage.clear())
+
+  it('says plainly whose portal this is and who will be recorded as sending', async () => {
+    tokenPresent = true
+    vi.mocked(fetchMyProposals).mockResolvedValue({ email: APPLICANT, items: [DOSSIER] })
+    renderPortal()
+
+    const banner = await screen.findByText(/admin view\./i)
+    expect(banner.closest('[role="status"]')).toHaveTextContent(APPLICANT)
+    expect(banner.closest('[role="status"]')).toHaveTextContent('admin@myzakat.org')
+  })
+
+  it('never emails the team a code when the admin view lapses mid-revision', async () => {
+    const user = userEvent.setup()
+    vi.mocked(submitRevision).mockRejectedValue(httpError(401))
+    await openRevision(user)
+    await toBudgetStep(user)
+
+    await user.click(screen.getByRole('button', { name: /resubmit/i }))
+
+    expect(await screen.findByText(/admin view of this portal has expired/i)).toBeInTheDocument()
+    expect(requestPortalCode).not.toHaveBeenCalled()
   })
 })

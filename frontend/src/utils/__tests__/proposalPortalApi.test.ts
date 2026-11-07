@@ -81,3 +81,40 @@ describe('proposalPortalApi', () => {
     })
   })
 })
+
+describe('the admin hand-off into the portal', () => {
+  const jwt = (claims: Record<string, unknown>) =>
+    `h.${btoa(JSON.stringify(claims))}.sig`
+
+  beforeEach(() => {
+    sessionStorage.clear()
+    window.history.replaceState(null, '', '/my-proposals?proposal=7')
+  })
+
+  it('adopts an admin-minted token from the fragment and wipes it from the address bar', async () => {
+    const { adoptPortalTokenFromHash, portalActor } = await import('../proposalPortalApi')
+    const token = jwt({ sub: 'team@example.com', typ: 'proposal_portal', act: 'admin@myzakat.org' })
+    window.location.hash = `portal_token=${encodeURIComponent(token)}`
+
+    expect(adoptPortalTokenFromHash()).toBe(true)
+    expect(sessionStorage.getItem(PORTAL_TOKEN_KEY)).toBe(token)
+    expect(window.location.hash).toBe('')
+    expect(window.location.search).toBe('?proposal=7')
+    expect(portalActor()).toBe('admin@myzakat.org')
+  })
+
+  it('refuses an ordinary applicant token passed in a link', async () => {
+    const { adoptPortalTokenFromHash } = await import('../proposalPortalApi')
+    window.location.hash = `portal_token=${jwt({ sub: 'someone@example.com', typ: 'proposal_portal' })}`
+
+    expect(adoptPortalTokenFromHash()).toBe(false)
+    expect(sessionStorage.getItem(PORTAL_TOKEN_KEY)).toBeNull()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('reports no actor for a team session', async () => {
+    const { portalActor } = await import('../proposalPortalApi')
+    sessionStorage.setItem(PORTAL_TOKEN_KEY, jwt({ sub: 'team@example.com', typ: 'proposal_portal' }))
+    expect(portalActor()).toBeNull()
+  })
+})

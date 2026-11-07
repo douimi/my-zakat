@@ -37,16 +37,51 @@ export const clearPortalToken = (): void => sessionStorage.removeItem(PORTAL_TOK
  * This decodes, it does not verify: the server remains the judge.
  */
 export const portalTokenSecondsLeft = (now: number = Date.now()): number | null => {
-  const token = sessionStorage.getItem(PORTAL_TOKEN_KEY)
+  const exp = tokenClaims(sessionStorage.getItem(PORTAL_TOKEN_KEY))?.exp
+  if (typeof exp !== 'number') return null
+  return exp - Math.floor(now / 1000)
+}
+
+const tokenClaims = (token: string | null): Record<string, unknown> | null => {
   if (!token) return null
   try {
     const payload = token.split('.')[1]
-    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
-    if (typeof json.exp !== 'number') return null
-    return json.exp - Math.floor(now / 1000)
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
   } catch {
     return null
   }
+}
+
+/**
+ * The admin acting through this tab's portal session, or null for the team.
+ * Read from the token's signed `act` claim; the server is what enforces it,
+ * this only drives the banner.
+ */
+export const portalActor = (): string | null => {
+  const act = tokenClaims(sessionStorage.getItem(PORTAL_TOKEN_KEY))?.act
+  return typeof act === 'string' && act ? act : null
+}
+
+/** Where the admin console puts the token when it opens the portal as an applicant. */
+export const PORTAL_HANDOFF_PREFIX = '#portal_token='
+
+/**
+ * Take a portal token the admin console handed over in the URL fragment.
+ *
+ * The fragment, because it never leaves the browser: it is not sent to the
+ * server, so it is not in Traefik's access log, and it is wiped from the
+ * address bar here before anything else runs. Only an admin-minted token
+ * (one with an `act` claim) is accepted, so a crafted link cannot silently
+ * sign someone into an ordinary applicant session that is not theirs.
+ */
+export const adoptPortalTokenFromHash = (): boolean => {
+  const { hash, pathname, search } = window.location
+  if (!hash.startsWith(PORTAL_HANDOFF_PREFIX)) return false
+  const token = decodeURIComponent(hash.slice(PORTAL_HANDOFF_PREFIX.length))
+  window.history.replaceState(null, '', pathname + search)
+  if (typeof tokenClaims(token)?.act !== 'string') return false
+  sessionStorage.setItem(PORTAL_TOKEN_KEY, token)
+  return true
 }
 
 /** The server's limits (backend/report_attachments.py), checked before upload so

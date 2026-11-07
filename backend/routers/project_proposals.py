@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 import email_service
 import proposal_service
-from auth_utils import get_current_manager_or_admin
+from auth_utils import PORTAL_TOKEN_MINUTES, create_portal_token, get_current_manager_or_admin
 from database import get_db
 from logging_config import get_logger, mask_email
 from agreement_pdf import render_agreement_pdf
@@ -752,6 +752,38 @@ async def resend_proposal_notification(
     if not queued:
         raise HTTPException(status_code=502, detail="The email could not be queued. Please try again.")
     return {"queued": True, "notification": label, "to": dossier.email}
+
+
+@router.post("/{proposal_id}/portal-session")
+async def open_portal_as_applicant(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_manager_or_admin),
+):
+    """A portal token for this dossier's applicant, minted for an admin.
+
+    For the team that cannot sign in: codes not arriving, mailbox lost, or
+    simply lost in the portal. The admin sees the portal exactly as the team
+    does, every dossier under that address, and can file the report or
+    revision for them. No email is involved, which matters because a failing
+    email is the usual reason a team is stuck.
+
+    The token carries the admin's email in its signed `act` claim, so anything
+    filed with it is recorded as filed by that admin (submitted_by_staff), and
+    the portal shows the admin a banner saying whose view they are in.
+    """
+    dossier = _load(db, proposal_id)
+    token = create_portal_token(dossier.email, acting_staff=current_user.email)
+    logger.event(
+        ev.PROPOSAL_PORTAL_OPENED_BY_STAFF, "an admin opened the portal as the applicant",
+        proposal_id=dossier.id, email=mask_email(dossier.email),
+        actor=mask_email(current_user.email),
+    )
+    return {
+        "token": token,
+        "email": dossier.email,
+        "expires_in_minutes": PORTAL_TOKEN_MINUTES,
+    }
 
 
 @router.get("/{proposal_id}/notifications")

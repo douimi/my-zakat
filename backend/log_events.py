@@ -99,6 +99,10 @@ PROPOSAL_BLOCKED = "proposal.blocked"          # a new application refused: repo
 # An admin re-sent the email for the dossier's current status, by hand. Logged
 # because "we told them" is a claim a dispute will rest on.
 PROPOSAL_NOTIFICATION_RESENT = "proposal.notification_resent"
+# An admin opened the submitter portal AS the applicant, to act for a team that
+# cannot sign in. Every one is logged: it is the one path by which staff can
+# file a report in a team's name.
+PROPOSAL_PORTAL_OPENED_BY_STAFF = "proposal.portal_opened_by_staff"
 
 # The funding agreement issued after approval.
 AGREEMENT_SAVED = "agreement.saved"            # draft created or edited

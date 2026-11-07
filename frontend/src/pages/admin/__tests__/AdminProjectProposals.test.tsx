@@ -393,3 +393,93 @@ describe('AdminProjectProposals - resending the status email', () => {
     expect(list).toHaveTextContent('Mailbox unavailable')
   })
 })
+
+describe('AdminProjectProposals - the agreement after approval, and acting for the team', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const AGREEMENT = {
+    project_title: 'Community Water Well', location: 'Northern camp',
+    field_representative: 'Amina Yusuf', approved_funding_usd: 5000, target_count: 250,
+    target_label: 'families', distribution_per_beneficiary: '', total_planned_distribution: '',
+    extra_fund_uses: '', issued_at: '2026-10-01T10:00:00',
+  }
+
+  const mockApi = (row: Record<string, unknown>, agreementExists = true) => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/agreement/pdf')) return { ok: true, blob: async () => new Blob(['%PDF']) }
+      if (url.endsWith('/agreement')) {
+        return { ok: true, json: async () => ({ exists: agreementExists, version_drifted: false, agreement: AGREEMENT }) }
+      }
+      if (url.endsWith('/portal-session')) {
+        return { ok: true, json: async () => ({ token: 'tok.en', email: 'amina@example.com', expires_in_minutes: 30 }) }
+      }
+      if (url.includes('/notifications')) return { ok: true, json: async () => ({ items: [] }) }
+      if (init?.method === 'POST') return { ok: true, json: async () => ({ unread_count: 0 }) }
+      if (url.match(/project-proposals\/(\?|$)/)) return { ok: true, json: async () => ({ items: [row], total: 1 }) }
+      return { ok: true, json: async () => ({}) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  const openAgreement = async (status: string, agreementExists = true) => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi(lifecycleRow(status), agreementExists)
+    renderPage()
+    await user.click(await screen.findByTitle(/review/i))
+    await user.click(screen.getByRole('button', { name: /^agreement$/i }))
+    return { user, fetchMock }
+  }
+
+  it.each(['funded', 'report_submitted', 'report_changes_requested', 'completed'])(
+    'loads the agreement on a %s dossier and downloads it as stored',
+    async (status) => {
+      URL.createObjectURL = vi.fn(() => 'blob:x')
+      URL.revokeObjectURL = vi.fn()
+      const { user, fetchMock } = await openAgreement(status)
+
+      expect(await screen.findByText(/this agreement is locked/i)).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Community Water Well')).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /download agreement pdf/i }))
+
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/agreement\/pdf$/), expect.anything())
+      // No save first: the server refuses edits after approval, and that
+      // refusal used to cancel the download.
+      expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toBe(false)
+    },
+  )
+
+  it('says so when a funded dossier never had an agreement saved', async () => {
+    await openAgreement('funded', false)
+    expect(await screen.findByText(/no agreement was saved before this project was funded/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /download agreement pdf/i })).not.toBeInTheDocument()
+  })
+
+  it('still lets an approved agreement be edited and saved', async () => {
+    await openAgreement('approved')
+    expect(await screen.findByDisplayValue('Community Water Well')).toBeEnabled()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
+  })
+
+  it('opens the portal as the applicant in a new tab, with the token in the fragment', async () => {
+    const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    const user = userEvent.setup()
+    const fetchMock = mockApi(lifecycleRow('funded'))
+    renderPage()
+    await user.click(await screen.findByTitle(/review/i))
+
+    await user.click(screen.getByRole('button', { name: /open portal as applicant/i }))
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/project-proposals/2/portal-session'),
+      expect.objectContaining({ method: 'POST' }))
+    await vi.waitFor(() => expect(tab.location.href).toContain('/my-proposals?proposal=2#portal_token=tok.en'))
+    expect(tab.opener).toBeNull()
+  })
+})

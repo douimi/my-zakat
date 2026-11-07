@@ -39,6 +39,9 @@ interface ReportFormProps {
   email: string
   onSubmitted: (result: ReportResult) => void
   onCancel: () => void
+  /** An admin acting for the team. A lapsed session must then never email the
+   *  team a sign-in code; the admin reopens the view from the console. */
+  adminView?: boolean
 }
 
 type Phase = 'editing' | 'uploading' | 'code'
@@ -83,7 +86,7 @@ export const problemWith = (file: File): string | null => {
 const statusOf = (error: any): number | undefined => error?.response?.status
 const detailOf = (error: any): unknown => error?.response?.data?.detail
 
-const ReportForm = ({ proposal, email, onSubmitted, onCancel }: ReportFormProps) => {
+const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false }: ReportFormProps) => {
   const [text, setText] = useState(() => readDraft(proposal.id))
   const [files, setFiles] = useState<File[]>([])
   const [phase, setPhase] = useState<Phase>('editing')
@@ -146,6 +149,12 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel }: ReportFormProps)
   }
 
   const startReauth = async (reason: 'expiring' | 'expired') => {
+    if (adminView) {
+      setError('Your admin view of this portal has expired (or is about to). Reopen it from the '
+        + 'dossier in the admin console. Your text is saved on this device; add the files again there.')
+      setPhase('editing')
+      return
+    }
     if (!email.trim()) {
       setError('Your sign-in session has expired. Your text is saved on this device: sign out, '
         + 'sign in again, and add your files once more.')

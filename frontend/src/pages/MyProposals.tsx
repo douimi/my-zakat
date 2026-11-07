@@ -47,8 +47,10 @@ import ProposalForm, {
   type buildProposalPayload,
 } from '../components/proposals/ProposalForm'
 import {
+  adoptPortalTokenFromHash,
   clearPortalToken,
   fetchMyProposals,
+  portalActor,
   hasPortalToken,
   isNoProposalForAddress,
   reportAttachmentUrl,
@@ -205,9 +207,12 @@ const MyProposals = () => {
       setView('list')
     } catch (exc: any) {
       if (statusOf(exc) === 401) {
+        const wasAdminView = portalActor() !== null
         clearPortalToken()
         setView('email')
-        setError('Your sign-in session has expired. Please request a new code.')
+        setError(wasAdminView
+          ? 'Your admin view of this portal has expired. Reopen it from the dossier in the admin console.'
+          : 'Your sign-in session has expired. Please request a new code.')
       } else {
         // Set the view explicitly. Leaving it alone let the render chain fall
         // through to the sign-in panel, so an applicant holding a perfectly
@@ -224,8 +229,10 @@ const MyProposals = () => {
 
   // A token already in sessionStorage (a reload within the same tab) skips
   // straight to the list.
+  // So does an admin arriving from the console's "Open portal as applicant",
+  // whose token comes in the URL fragment.
   useEffect(() => {
-    if (hasPortalToken()) void loadList()
+    if (adoptPortalTokenFromHash() || hasPortalToken()) void loadList()
   }, [loadList])
 
   // ── Step: ask for a code ─────────────────────────────────────────────
@@ -281,6 +288,14 @@ const MyProposals = () => {
       await loadList()
     } catch (exc: any) {
       const status = statusOf(exc)
+      if (status === 401 && portalActor() !== null) {
+        // An admin acting for the team. Asking for a code here would email
+        // the TEAM a code they never asked for, and the admin could not read
+        // it anyway. The form stays on screen with everything in it.
+        setGenericError('Your admin view of this portal has expired, so nothing was sent. '
+          + 'Reopen it from the dossier in the admin console; your changes are still on screen to copy across.')
+        return
+      }
       if (status === 401) {
         // The thirty minutes ran out mid-edit. Hold on to everything the
         // applicant just wrote, get a fresh code, and replay it after.
@@ -473,8 +488,24 @@ const MyProposals = () => {
     </div>
   )
 
+  const actor = portalActor()
+
   const alerts = (
     <>
+      {actor && (
+        // Impossible to miss, because everything filed from here goes into the
+        // team's record under the admin's name.
+        <div role="status" className="bg-indigo-50 border border-indigo-300 rounded-lg p-4 text-sm text-indigo-900 flex flex-wrap items-start justify-between gap-3">
+          <span>
+            <strong>Admin view.</strong> You are seeing the portal as <strong>{email || 'this applicant'}</strong>.
+            Anything you send from here is filed in their record as sent by <strong>{actor}</strong> on their behalf.
+          </span>
+          <button onClick={() => { backToEmail(); window.close() }}
+            className="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg text-indigo-800 font-semibold hover:bg-indigo-100">
+            Leave admin view
+          </button>
+        </div>
+      )}
       {flash && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-900 flex items-start gap-2">
           <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -797,6 +828,7 @@ const MyProposals = () => {
               email={email}
               onSubmitted={(result) => void onReportSubmitted(result)}
               onCancel={closeReportForm}
+              adminView={actor !== null}
             />
           )}
 

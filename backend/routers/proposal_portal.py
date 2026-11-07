@@ -17,6 +17,8 @@ Three rules hold everywhere in this file:
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import (
     APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status,
 )
@@ -28,7 +30,9 @@ from sqlalchemy.orm import Session
 import email_service
 import proposal_otp
 import proposal_service
-from auth_utils import PORTAL_TOKEN_MINUTES, create_portal_token, get_portal_email
+from auth_utils import (
+    PORTAL_TOKEN_MINUTES, create_portal_token, get_portal_actor, get_portal_email,
+)
 from database import get_db
 from logging_config import get_logger, mask_email
 import log_events as ev
@@ -163,6 +167,7 @@ async def submit_revision(
     payload: ProposalSubmit,
     request: Request,
     email: str = Depends(get_portal_email),
+    acting_staff: Optional[str] = Depends(get_portal_actor),
     db: Session = Depends(get_db),
 ):
     """Append the next version of one of this address's dossiers.
@@ -190,6 +195,7 @@ async def submit_revision(
             submitted_ip=client_ip(request),
             sms_consent=bool(data.get("sms_consent")),
             sms_consent_text=data.get("sms_consent_text"),
+            submitted_by_staff=acting_staff,
         )
     except ProposalNotEditable as exc:
         raise HTTPException(status_code=409, detail=str(exc))
@@ -201,6 +207,7 @@ async def submit_revision(
         proposal_id=dossier.id, version_no=version.version_no,
         email=mask_email(dossier.email),
         project=(version.project_name or "")[:80],
+        on_behalf_by=mask_email(acting_staff) if acting_staff else None,
     )
     email_service.send_proposal_received(
         email=dossier.email,
@@ -254,6 +261,7 @@ async def submit_completion_report(
     narrative: str = Form(...),
     files: list[UploadFile] = File(default_factory=list),
     email: str = Depends(get_portal_email),
+    acting_staff: Optional[str] = Depends(get_portal_actor),
     db: Session = Depends(get_db),
 ):
     """File a completion report for a funded project.
@@ -297,6 +305,7 @@ async def submit_completion_report(
             db, dossier,
             narrative=narrative,
             submitted_ip=client_ip(request),
+            submitted_by_staff=acting_staff,
         )
     except proposal_service.ProposalNotFunded as exc:
         raise HTTPException(status_code=409, detail=str(exc))
@@ -335,6 +344,7 @@ async def submit_completion_report(
         proposal_id=dossier.id, report_no=report.report_no,
         attachments=stored, attachments_offered=len(staged),
         email=mask_email(dossier.email),
+        on_behalf_by=mask_email(acting_staff) if acting_staff else None,
     )
 
     version = proposal_service.current_version(db, dossier)

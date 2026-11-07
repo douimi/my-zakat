@@ -9,8 +9,9 @@ import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
   CheckCircle2, XCircle, Search, FileText, Bell,
-  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail,
+  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink,
 } from 'lucide-react'
+import { PORTAL_HANDOFF_PREFIX } from '../../utils/proposalPortalApi'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -20,6 +21,8 @@ interface ProposalVersionSummary {
   version_no: number
   submitted_at: string
   submitted_ip: string | null
+  /** The admin who filed this from the portal for the team; null if the team did. */
+  submitted_by_staff?: string | null
   decision: string | null
   decision_comment: string | null
   internal_note: string | null
@@ -288,6 +291,8 @@ interface CompletionReport {
   decided_at: string | null
   internal_note: string | null
   submitted_ip: string | null
+  /** The admin who filed this from the portal for the team; null if the team did. */
+  submitted_by_staff?: string | null
   attachments: ReportAttachment[]
 }
 
@@ -314,6 +319,11 @@ const EMPTY_AGREEMENT: Agreement = {
 
 // Statuses that decide the current version, and so email the applicant.
 const DECISION_STATUSES = new Set(['approved', 'rejected', 'changes_requested'])
+
+/** Every status from approval on carries the agreement. Only `approved` may
+ *  still change it: once funded, the money left under those terms, and the
+ *  server refuses edits (proposal_service.save_agreement). */
+const AGREEMENT_STATUSES = new Set(['approved', 'funded', 'report_submitted', 'report_changes_requested', 'completed'])
 
 /** The email "Resend" sends for each status. Mirrors _NOTIFICATION_FOR_STATUS
  *  in routers/project_proposals.py, which is what actually decides. */
@@ -373,6 +383,8 @@ const AdminProjectProposals = () => {
   const [resending, setResending] = useState(false)
   type DrawerTab = 'dossier' | 'report' | 'agreement' | 'history'
   const [tab, setTab] = useState<DrawerTab>('dossier')
+  // Past approval the funds left under these terms; the server refuses edits.
+  const agreementLocked = !!selected && selected.status !== 'approved'
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
@@ -439,6 +451,35 @@ const AdminProjectProposals = () => {
       if (!resp.ok) throw new Error('fetch failed')
       setSentEmails((await resp.json()).items || [])
     } catch { setSentEmails([]) }
+  }
+
+  /**
+   * Open the submitter portal as this dossier's applicant, in a new tab, to
+   * act for a team that cannot sign in. The tab is opened before the request,
+   * synchronously with the click, because a window opened after an await is
+   * treated as a pop-up and blocked.
+   */
+  const openPortalAsApplicant = async () => {
+    if (!selected) return
+    const tab = window.open('', '_blank')
+    try {
+      const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/portal-session`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const body = await resp.json().catch(() => ({}))
+      if (!resp.ok || !body.token) throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not open the portal.')
+      // The token rides in the fragment: never sent to a server, so never in a log.
+      const url = `${window.location.origin}/my-proposals?proposal=${selected.id}${PORTAL_HANDOFF_PREFIX}${encodeURIComponent(body.token)}`
+      if (tab) {
+        tab.opener = null
+        tab.location.href = url
+      } else {
+        showError('Pop-up blocked', 'Allow pop-ups for this site, then try again.')
+      }
+    } catch (err) {
+      tab?.close()
+      showError('Error', err instanceof Error ? err.message : 'Could not open the portal.')
+    }
   }
 
   const resendNotification = async () => {
@@ -565,7 +606,9 @@ const AdminProjectProposals = () => {
     setAgreement(null)
     setAgreementExists(false)
     setVersionDrifted(false)
-    if (p.status !== 'approved') return
+    // Not only `approved`: from funding on, the tab used to sit on "Loading…"
+    // for good, and the contract could no longer be downloaded at all.
+    if (!AGREEMENT_STATUSES.has(p.status)) return
     try {
       const resp = await fetch(`${API_URL}/api/project-proposals/${p.id}/agreement`, { headers: { Authorization: `Bearer ${token}` } })
       if (!resp.ok) return
@@ -616,7 +659,10 @@ const AdminProjectProposals = () => {
    */
   const downloadAgreementPdf = async () => {
     if (!selected) return
-    if (!(await saveAgreement())) return
+    // A locked agreement is downloaded as stored. Saving first, as the
+    // editable one must, is refused by the server after approval, and that
+    // refusal used to cancel the download.
+    if (selected.status === 'approved' && !(await saveAgreement())) return
     setAgreementBusy(true)
     try {
       const resp = await fetch(`${API_URL}/api/project-proposals/${selected.id}/agreement/pdf`, { headers: { Authorization: `Bearer ${token}` } })
@@ -893,6 +939,7 @@ const AdminProjectProposals = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[selected.status]}`}>{STATUS_LABEL[selected.status]}</span>
+                <button onClick={openPortalAsApplicant} title="See the portal as this applicant sees it, and act for them" className="text-xs inline-flex items-center gap-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded"><ExternalLink className="w-3.5 h-3.5" /> Open portal as applicant</button>
                 <button onClick={() => downloadPdf(selected)} className="text-xs inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded"><Download className="w-3.5 h-3.5" /> PDF</button>
                 <button onClick={closeDetail} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
               </div>
@@ -1118,6 +1165,11 @@ const AdminProjectProposals = () => {
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-800">current</span>
                       )}
                       <span className="text-xs text-gray-500">{formatDate(v.submitted_at)}</span>
+                      {v.submitted_by_staff && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800">
+                          Filed by {v.submitted_by_staff} for the applicant
+                        </span>
+                      )}
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v.decision ? (STATUS_BADGE[v.decision] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600'}`}>
                         {v.decision ? (STATUS_LABEL[v.decision] || v.decision) : 'Awaiting review'}
                       </span>
@@ -1242,6 +1294,11 @@ const AdminProjectProposals = () => {
                           Report {report.report_no}
                         </span>
                         <span className="text-xs text-gray-500">{formatDate(report.submitted_at)}</span>
+                        {report.submitted_by_staff && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800">
+                            Filed by {report.submitted_by_staff} for the team
+                          </span>
+                        )}
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${report.decision ? (STATUS_BADGE[report.decision] || 'bg-gray-100 text-gray-600') : 'bg-indigo-100 text-indigo-800'}`}>
                           {report.decision === 'approved' ? 'Accepted'
                             : report.decision === 'changes_requested' ? 'Sent back'
@@ -1354,7 +1411,14 @@ const AdminProjectProposals = () => {
                           </p>
                         </div>
                       )}
-                      {agreement.issued_at ? (
+                      {selected.status !== 'approved' ? (
+                        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">
+                          {agreementExists
+                            ? <>The project is funded, so this agreement is locked: the funds were released under these terms.
+                              {agreement.issued_at && <> First issued on {formatDate(agreement.issued_at)}.</>}</>
+                            : <>No agreement was saved before this project was funded, so there is no contract on file to download.</>}
+                        </p>
+                      ) : agreement.issued_at ? (
                         <p className="text-xs text-gray-500">
                           Issued on {formatDate(agreement.issued_at)}. Re-generating produces an updated document.
                         </p>
@@ -1366,21 +1430,23 @@ const AdminProjectProposals = () => {
                       )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Field label="Project" value={agreement.project_title} onChange={(v) => setAgreementField('project_title', v)} />
-                        <Field label="Location" value={agreement.location} onChange={(v) => setAgreementField('location', v)} />
-                        <Field label="Field representative" value={agreement.field_representative} onChange={(v) => setAgreementField('field_representative', v)} />
-                        <Field label="Approved funding (USD)" type="number" value={String(agreement.approved_funding_usd ?? '')} onChange={(v) => setAgreementField('approved_funding_usd', v)} />
-                        <Field label="Target count" type="number" value={String(agreement.target_count ?? '')} onChange={(v) => setAgreementField('target_count', v)} />
-                        <Field label="Target label" hint="e.g. displaced families" value={agreement.target_label} onChange={(v) => setAgreementField('target_label', v)} />
+                        <Field disabled={agreementLocked} label="Project" value={agreement.project_title} onChange={(v) => setAgreementField('project_title', v)} />
+                        <Field disabled={agreementLocked} label="Location" value={agreement.location} onChange={(v) => setAgreementField('location', v)} />
+                        <Field disabled={agreementLocked} label="Field representative" value={agreement.field_representative} onChange={(v) => setAgreementField('field_representative', v)} />
+                        <Field disabled={agreementLocked} label="Approved funding (USD)" type="number" value={String(agreement.approved_funding_usd ?? '')} onChange={(v) => setAgreementField('approved_funding_usd', v)} />
+                        <Field disabled={agreementLocked} label="Target count" type="number" value={String(agreement.target_count ?? '')} onChange={(v) => setAgreementField('target_count', v)} />
+                        <Field disabled={agreementLocked} label="Target label" hint="e.g. displaced families" value={agreement.target_label} onChange={(v) => setAgreementField('target_label', v)} />
                       </div>
 
                       <Field
+                        disabled={agreementLocked}
                         label="Distribution per beneficiary"
                         hint="e.g. 10 kg rice + 10 kg potatoes — leave blank to omit this line"
                         value={agreement.distribution_per_beneficiary}
                         onChange={(v) => setAgreementField('distribution_per_beneficiary', v)}
                       />
                       <Field
+                        disabled={agreementLocked}
                         label="Total planned distribution"
                         hint="e.g. 500 kg rice + 500 kg potatoes"
                         value={agreement.total_planned_distribution}
@@ -1393,28 +1459,33 @@ const AdminProjectProposals = () => {
                         <textarea
                           rows={2}
                           value={agreement.extra_fund_uses}
+                          disabled={agreementLocked}
                           onChange={(e) => setAgreementField('extra_fund_uses', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-600"
                           placeholder="Purchase of rice and potatoes"
                         />
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          onClick={saveAgreement}
-                          disabled={agreementBusy}
-                          className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50"
-                        >
-                          {agreementExists ? 'Save changes' : 'Save draft'}
-                        </button>
-                        <button
-                          onClick={downloadAgreementPdf}
-                          disabled={agreementBusy}
-                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-50"
-                        >
-                          <FileText className="w-4 h-4" />
-                          {agreementBusy ? 'Working…' : 'Generate agreement PDF'}
-                        </button>
+                        {!agreementLocked && (
+                          <button
+                            onClick={saveAgreement}
+                            disabled={agreementBusy}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50"
+                          >
+                            {agreementExists ? 'Save changes' : 'Save draft'}
+                          </button>
+                        )}
+                        {(!agreementLocked || agreementExists) && (
+                          <button
+                            onClick={downloadAgreementPdf}
+                            disabled={agreementBusy}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-50"
+                          >
+                            {agreementLocked ? <Download className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                            {agreementBusy ? 'Working…' : agreementLocked ? 'Download agreement PDF' : 'Generate agreement PDF'}
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
@@ -1464,12 +1535,13 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 )
 
 /** One labelled single-line input for the agreement form. */
-const Field = ({ label, value, onChange, hint, type = 'text' }: {
+const Field = ({ label, value, onChange, hint, type = 'text', disabled = false }: {
   label: string
   value: string
   onChange: (v: string) => void
   hint?: string
   type?: string
+  disabled?: boolean
 }) => (
   <div>
     <label className="block text-xs text-gray-500 mb-1">
@@ -1478,8 +1550,9 @@ const Field = ({ label, value, onChange, hint, type = 'text' }: {
     <input
       type={type}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-600"
     />
   </div>
 )

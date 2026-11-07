@@ -110,10 +110,24 @@ def verify_token(token: str):
         return None
 
 
-def create_portal_token(email: str, expires_delta: Optional[timedelta] = None) -> str:
-    """Mint a submitter-portal token: short-lived, and not a user session."""
+def create_portal_token(
+    email: str,
+    expires_delta: Optional[timedelta] = None,
+    *,
+    acting_staff: Optional[str] = None,
+) -> str:
+    """Mint a submitter-portal token: short-lived, and not a user session.
+
+    `acting_staff` is the email of an admin opening the portal AS this
+    applicant, from the admin console. It travels in the signed `act` claim, so
+    it cannot be added or changed by the holder, and whatever is filed under
+    the token records who actually filed it.
+    """
+    claims = {"sub": email, "typ": PORTAL_TOKEN_TYPE}
+    if acting_staff:
+        claims["act"] = acting_staff
     return create_access_token(
-        {"sub": email, "typ": PORTAL_TOKEN_TYPE},
+        claims,
         expires_delta=expires_delta or timedelta(minutes=PORTAL_TOKEN_MINUTES),
     )
 
@@ -145,6 +159,25 @@ def get_portal_email(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return email
+
+
+def get_portal_actor(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Optional[str]:
+    """The admin acting through this portal token, or None for the team itself.
+
+    Used alongside get_portal_email, which does the authentication; this only
+    reads the signed `act` claim, so an invalid token yields None here and is
+    refused there.
+    """
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("typ") != PORTAL_TOKEN_TYPE:
+        return None
+    actor = payload.get("act")
+    return actor if isinstance(actor, str) and actor else None
 
 
 def get_current_user(
