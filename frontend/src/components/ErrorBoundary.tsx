@@ -1,6 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertCircle, RefreshCw, Home } from 'lucide-react'
-import { Link } from 'react-router-dom'
 
 interface Props {
   children: ReactNode
@@ -39,13 +38,13 @@ class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <div role="alert" className="card max-w-md w-full text-center">
+            <AlertCircle aria-hidden="true" className="w-12 h-12 text-red-600 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Something went wrong</h1>
             <p className="text-gray-600 mb-6">
-              We're sorry, but something unexpected happened. Please try refreshing the page.
+              An unexpected error stopped this page. Reloading usually fixes it.
             </p>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="text-left mb-4 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-40">
                 <summary className="font-semibold mb-2 cursor-pointer">Error Details</summary>
                 <pre className="whitespace-pre-wrap break-words">
@@ -55,20 +54,16 @@ class ErrorBoundary extends Component<Props, State> {
               </details>
             )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button
-                onClick={this.handleReload}
-                className="flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
+              <button type="button" onClick={this.handleReload} className="btn-primary gap-2">
+                <RefreshCw aria-hidden="true" className="w-4 h-4" />
                 Reload Page
               </button>
-              <Link
-                to="/"
-                className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors"
-              >
-                <Home className="w-4 h-4" />
+              {/* A full page load, not a router <Link>: the boundary sits above the routes and
+                  would keep showing this screen after a client-side navigation. */}
+              <a href="/" className="btn-secondary gap-2">
+                <Home aria-hidden="true" className="w-4 h-4" />
                 Go Home
-              </Link>
+              </a>
             </div>
           </div>
         </div>

@@ -1,181 +1,110 @@
 import { Link } from 'react-router-dom'
-import { Heart, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Youtube } from 'lucide-react'
+import { Mail, Phone, MapPin } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+
+/**
+ * Official social profiles. Empty on purpose: the old icons pointed at the bare
+ * facebook.com / twitter.com / instagram.com / youtube.com home pages. Add the
+ * real profile URLs here and the row of icons comes back, e.g.
+ *   { name: 'Facebook', href: 'https://www.facebook.com/<page>', Icon: Facebook }
+ */
+const SOCIAL_LINKS: { name: string; href: string; Icon: LucideIcon }[] = []
+
+const LINK_GROUPS: { title: string; links: { to: string; label: string }[] }[] = [
+  {
+    title: 'Quick Links',
+    links: [
+      { to: '/donate', label: 'Donate' },
+      { to: '/projects', label: 'Projects' },
+      { to: '/programs', label: 'Programs' },
+      { to: '/zakat-calculator', label: 'Zakat Calculator' },
+      { to: '/nisab', label: 'Nisab' },
+      { to: '/about', label: 'About' },
+      { to: '/stories', label: 'Stories' },
+      { to: '/contact', label: 'Contact' },
+    ],
+  },
+  {
+    title: 'Apply for Funding',
+    links: [
+      { to: '/submit-proposal', label: 'Submit a project proposal' },
+      { to: '/my-proposals', label: 'Check my application' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { to: '/privacy-policy', label: 'Privacy Policy' },
+      { to: '/donation-policy', label: 'Donation Policy' },
+      { to: '/terms-of-service', label: 'Terms of Service' },
+      { to: '/sms-opt-in', label: 'SMS Subscription' },
+    ],
+  },
+]
+
+const headingClass = 'mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400'
+const linkClass = 'text-gray-300 transition-colors hover:text-white'
 
 const Footer = () => {
   return (
     <footer className="bg-gray-900 text-white">
       <div className="section-container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
-          {/* Brand */}
-          <div className="lg:col-span-2">
-            <Link to="/" className="inline-flex items-center mb-6 bg-white rounded-lg p-0.5 md:p-1">
-              <img 
-                src="/logo.png" 
-                alt="MyZakat Logo" 
-                className="h-16 md:h-20 lg:h-24 w-auto object-contain"
-              />
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-4 lg:grid-cols-5">
+          {/* Brand + contact */}
+          <div className="col-span-2 md:col-span-4 lg:col-span-2">
+            <Link to="/" className="mb-4 inline-flex rounded-lg bg-white p-1">
+              <img src="/logo.png" alt="MyZakat home" width={48} height={48} className="h-12 w-12 object-contain" />
             </Link>
-            <p className="text-gray-300 mb-6 max-w-md leading-relaxed">
-              Empowering communities through Zakat, Sadaqa, and compassion. 
-              Join us in making a meaningful difference in the lives of those in need.
+            <p className="mb-5 max-w-sm text-gray-300">
+              Zakat and sadaqah, delivered to families in need.
             </p>
-            <div className="flex space-x-4">
-              <a
-                href="https://facebook.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
-                aria-label="Facebook"
-              >
-                <Facebook className="w-5 h-5" />
-              </a>
-              <a
-                href="https://twitter.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
-                aria-label="Twitter"
-              >
-                <Twitter className="w-5 h-5" />
-              </a>
-              <a
-                href="https://instagram.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
-                aria-label="Instagram"
-              >
-                <Instagram className="w-5 h-5" />
-              </a>
-              <a
-                href="https://youtube.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:text-primary-400 hover:bg-gray-700 transition-all duration-200"
-                aria-label="YouTube"
-              >
-                <Youtube className="w-5 h-5" />
-              </a>
-            </div>
-          </div>
-
-          {/* Quick Links */}
-          <div>
-            <h4 className="text-lg font-bold mb-6 text-white">Quick Links</h4>
-            <ul className="space-y-3">
-              <li>
-                <Link to="/" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Home
-                </Link>
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-center gap-3">
+                <Mail aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-primary-300" />
+                <a href="mailto:info@myzakat.org" className={linkClass}>info@myzakat.org</a>
               </li>
-              <li>
-                <Link to="/about" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  About
-                </Link>
+              <li className="flex items-center gap-3">
+                <Phone aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-primary-300" />
+                <a href="tel:+18336992528" className={linkClass}>1-833-MYZAKAT</a>
               </li>
-              <li>
-                <Link to="/donate" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Donate
-                </Link>
-              </li>
-              <li>
-                <Link to="/zakat-calculator" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Zakat Calculator
-                </Link>
-              </li>
-              <li>
-                <Link to="/stories" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Stories
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Contact
-                </Link>
-              </li>
-              <li>
-                <Link to="/submit-proposal" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Submit a Project Proposal
-                </Link>
-              </li>
-              <li>
-                <Link to="/my-proposals" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  My Proposals
-                </Link>
+              <li className="flex items-start gap-3">
+                <MapPin aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary-300" />
+                <span className="text-gray-300">P.O. BOX 2250, Winchester, VA 22604</span>
               </li>
             </ul>
+            {SOCIAL_LINKS.length > 0 && (
+              <div className="mt-5 flex gap-3">
+                {SOCIAL_LINKS.map(({ name, href, Icon }) => (
+                  <a
+                    key={name}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={name}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+                  >
+                    <Icon aria-hidden="true" className="h-5 w-5" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Legal & Contact */}
-          <div>
-            <h4 className="text-lg font-bold mb-6 text-white">Legal & Contact</h4>
-            <ul className="space-y-3 mb-6">
-              <li>
-                <Link to="/privacy-policy" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/donation-policy" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Donation Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/terms-of-service" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  Terms of Service
-                </Link>
-              </li>
-              <li>
-                <Link to="/sms-opt-in" className="text-gray-300 hover:text-white transition-colors duration-200 inline-block">
-                  SMS Subscription
-                </Link>
-              </li>
-            </ul>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3">
-                <Mail className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <a href="mailto:info@myzakat.org" className="text-gray-300 hover:text-white transition-colors duration-200">
-                  info@myzakat.org
-                </a>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Phone className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                <a href="tel:+18336992528" className="text-gray-300 hover:text-white transition-colors duration-200">
-                  1-833-MYZAKAT
-                </a>
-              </div>
-              <div className="flex items-start space-x-3">
-                <MapPin className="w-4 h-4 text-primary-400 flex-shrink-0 mt-1" />
-                <span className="text-gray-300">P.O. BOX 2250<br />Winchester, VA 22604</span>
-              </div>
+          {LINK_GROUPS.map((group) => (
+            <div key={group.title} className={group.title === 'Quick Links' ? 'col-span-2 md:col-span-2 lg:col-span-1' : undefined}>
+              <h2 className={headingClass}>{group.title}</h2>
+              <ul className={group.title === 'Quick Links' ? 'grid grid-cols-2 gap-x-4 gap-y-2 text-sm lg:grid-cols-1' : 'space-y-2 text-sm'}>
+                {group.links.map((link) => (
+                  <li key={link.to}>
+                    <Link to={link.to} className={linkClass}>{link.label}</Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Newsletter Signup */}
-        <div className="mt-12 pt-8 border-t border-gray-800">
-          <div className="max-w-md mx-auto text-center">
-            <h4 className="text-lg font-semibold mb-2">Stay Updated</h4>
-            <p className="text-gray-300 mb-4">Subscribe to our newsletter for updates on our work.</p>
-            <form className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-white placeholder-gray-400"
-                required
-              />
-              <button
-                type="submit"
-                className="btn-primary whitespace-nowrap"
-              >
-                Subscribe
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Bottom */}
-        <div className="mt-12 pt-8 border-t border-gray-800 text-center text-gray-400">
+        <div className="mt-10 border-t border-gray-800 pt-6 text-center text-sm text-gray-400">
           <p>&copy; {new Date().getFullYear()} MyZakat Distribution Foundation. All rights reserved.</p>
         </div>
       </div>

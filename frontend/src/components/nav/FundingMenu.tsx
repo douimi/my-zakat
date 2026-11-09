@@ -8,8 +8,8 @@
  *
  * Two renderings, one source of truth for the destinations:
  *   FundingMenu        — the desktop dropdown.
- *   FundingMenuMobile  — a card pinned above the mobile accordion, so the
- *                        destinations cost neither a scroll nor an expand.
+ *   FundingMenuMobile  — the first group of the mobile menu, always expanded,
+ *                        so the destinations cost neither a scroll nor an expand.
  *                        Applicants who are not comfortable with the web do
  *                        not explore an accordion; they give up.
  *
@@ -19,15 +19,16 @@
  * three weeks ago is looking for where their request stands, not for a list of
  * their proposals.
  *
- * Unlike the four dropdowns already in Header.tsx, this one is reachable by
- * keyboard and announced to a screen reader: aria-haspopup / aria-expanded,
- * Escape closes and returns focus, role="menu" / role="menuitem". Those four
- * are deliberately left alone -- reworking them is a separate job.
+ * It is reachable by keyboard and announced to a screen reader: aria-haspopup /
+ * aria-expanded, Escape closes and returns focus, role="menu" / role="menuitem".
+ * The other header dropdowns share its behaviour through NavDropdown, and its
+ * trigger wears the same classes (navItemClass) so the top bar reads as one row.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ChevronDown, FilePlus2, FileSearch, HeartHandshake } from 'lucide-react'
+import { ChevronDown, FilePlus2, FileSearch } from 'lucide-react'
 import clsx from 'clsx'
+import { navItemClass } from './NavDropdown'
 
 export const FUNDING_ROUTES = ['/submit-proposal', '/my-proposals'] as const
 
@@ -97,32 +98,22 @@ const FundingMenu = () => {
         aria-haspopup="menu"
         aria-expanded={isOpen}
         data-active={isActive}
-        className={clsx(
-          'flex items-center space-x-1 xl:space-x-1.5 min-[1700px]:space-x-2 px-1 xl:px-1.5 min-[1700px]:px-3 py-2 rounded-lg text-xs xl:text-sm font-semibold transition-all duration-300 whitespace-nowrap flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-          isActive
-            ? 'text-primary-600 bg-primary-50 shadow-sm'
-            : 'text-gray-700 hover:text-primary-600 hover:bg-primary-50/50',
-        )}
+        className={navItemClass(isActive || isOpen)}
       >
-        <HeartHandshake className="w-3 xl:w-3.5 min-[1700px]:w-4 h-3 xl:h-3.5 min-[1700px]:h-4 flex-shrink-0" />
-        {/* The full label only appears from 1700px up. The header had no horizontal
-            slack left before this entry existed, so below 1700px it wears the
-            short one -- "Apply for Funding" is ~187px against ~97px, and that
-            difference is most of what kept Contact and the account control on
-            screen at 1366 and 1440. */}
-        <span className="hidden min-[1700px]:inline">Apply for Funding</span>
-        <span className="min-[1700px]:hidden">Funding</span>
-        <ChevronDown className={clsx(
-          'w-2.5 xl:w-3.5 h-2.5 xl:h-3.5 transition-transform duration-300 flex-shrink-0',
-          isOpen && 'transform rotate-180',
-        )} />
+        {/* The top bar lost five entries in the 2026-11 rework, so the full label fits
+            from 1024px up; the short "Funding" variant is gone. */}
+        <span>Apply for Funding</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={clsx('h-4 w-4 flex-shrink-0 transition-transform', isOpen && 'rotate-180')}
+        />
       </button>
 
       {isOpen && (
         <div
           role="menu"
           aria-label="Apply for Funding"
-          className="absolute left-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50"
+          className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-gray-200 bg-white py-2 shadow-lg"
         >
           {DESTINATIONS.map(({ to, title, subtitle, Icon }) => (
             <Link
@@ -130,12 +121,12 @@ const FundingMenu = () => {
               to={to}
               role="menuitem"
               onClick={() => setIsOpen(false)}
-              className="flex items-start space-x-3 px-3 py-2.5 text-sm transition-all duration-200 rounded-lg mx-1 text-gray-700 hover:text-primary-600 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="mx-2 flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-primary-700"
             >
-              <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary-700" />
               <span className="flex flex-col">
                 <span className="font-semibold">{title}</span>
-                <span className="text-xs text-gray-500 leading-snug">{subtitle}</span>
+                <span className="text-xs text-gray-600 leading-snug">{subtitle}</span>
               </span>
             </Link>
           ))}
@@ -146,18 +137,16 @@ const FundingMenu = () => {
 }
 
 export const FundingMenuMobile = ({ onNavigate }: { onNavigate: () => void }) => (
-  <div className="mx-2 mb-2 rounded-xl border border-primary-200 bg-primary-50/70 p-3">
-    <p className="px-1 pb-2 text-xs font-bold uppercase tracking-wide text-primary-800">
-      Apply for Funding
-    </p>
+  <div>
+    <p className="eyebrow px-3 pb-1">Apply for Funding</p>
     {DESTINATIONS.map(({ to, title, subtitle, Icon }) => (
       <Link
         key={to}
         to={to}
         onClick={onNavigate}
-        className="flex items-start space-x-3 rounded-lg px-2 py-2.5 text-sm text-gray-800 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
       >
-        <Icon className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary-700" />
+        <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary-700" />
         <span className="flex flex-col">
           <span className="font-semibold">{title}</span>
           <span className="text-xs text-gray-600 leading-snug">{subtitle}</span>

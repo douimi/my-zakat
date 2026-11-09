@@ -28,13 +28,13 @@ const ToastComponent = ({ toast, onClose }: ToastProps) => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+        return <CheckCircle aria-hidden="true" className="w-5 h-5 text-green-600 flex-shrink-0" />
       case 'error':
-        return <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+        return <XCircle aria-hidden="true" className="w-5 h-5 text-red-600 flex-shrink-0" />
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+        return <AlertCircle aria-hidden="true" className="w-5 h-5 text-amber-600 flex-shrink-0" />
       case 'info':
-        return <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
+        return <Info aria-hidden="true" className="w-5 h-5 text-primary-600 flex-shrink-0" />
     }
   }
 
@@ -45,14 +45,21 @@ const ToastComponent = ({ toast, onClose }: ToastProps) => {
       case 'error':
         return 'bg-red-50 border-red-200 text-red-800'
       case 'warning':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800'
+        return 'bg-amber-50 border-amber-200 text-amber-900'
       case 'info':
-        return 'bg-blue-50 border-blue-200 text-blue-800'
+        return 'bg-primary-50 border-primary-200 text-primary-900'
     }
   }
 
   return (
-    <div className={`max-w-sm w-full min-w-[300px] shadow-lg rounded-lg border ${getStyles()} transform transition-all duration-300 ease-in-out`}>
+    // Errors interrupt (role=alert, assertive); everything else waits its turn (role=status, polite).
+    // Donate's validation errors are toast-only, so this is how a screen reader hears them.
+    <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
+      className={`w-[calc(100vw-2rem)] max-w-sm sm:w-auto sm:min-w-[300px] shadow-lg rounded-lg border ${getStyles()} transition-all duration-300 ease-in-out`}
+    >
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0">
@@ -70,11 +77,12 @@ const ToastComponent = ({ toast, onClose }: ToastProps) => {
           </div>
           <div className="flex-shrink-0">
             <button
-              className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+              type="button"
+              className="-m-1 inline-flex rounded p-1 text-gray-500 transition-colors hover:text-gray-700"
               onClick={() => onClose(toast.id)}
               aria-label="Close notification"
             >
-              <X className="w-4 h-4" />
+              <X aria-hidden="true" className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 
 interface ConfirmationModalProps {
@@ -12,6 +13,24 @@ interface ConfirmationModalProps {
   isLoading?: boolean
 }
 
+const variantStyles = {
+  danger: {
+    icon: 'text-red-600',
+    iconBg: 'bg-red-100',
+    button: 'btn-danger',
+  },
+  warning: {
+    icon: 'text-amber-600',
+    iconBg: 'bg-amber-100',
+    button: 'btn bg-amber-600 text-white hover:bg-amber-700',
+  },
+  info: {
+    icon: 'text-primary-600',
+    iconBg: 'bg-primary-100',
+    button: 'btn-primary',
+  },
+}
+
 const ConfirmationModal = ({
   isOpen,
   onClose,
@@ -23,71 +42,109 @@ const ConfirmationModal = ({
   variant = 'danger',
   isLoading = false
 }: ConfirmationModalProps) => {
-  if (!isOpen) return null
+  const titleId = useId()
+  const messageId = useId()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // Read through a ref so a parent passing a new onClose each render does not re-run the effect
+  // (which would pull focus back to Cancel).
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  const loadingRef = useRef(isLoading)
+  loadingRef.current = isLoading
 
-  const variantStyles = {
-    danger: {
-      icon: 'text-red-600',
-      button: 'bg-red-600 hover:bg-red-700 text-white',
-      iconBg: 'bg-red-100'
-    },
-    warning: {
-      icon: 'text-yellow-600',
-      button: 'bg-yellow-600 hover:bg-yellow-700 text-white',
-      iconBg: 'bg-yellow-100'
-    },
-    info: {
-      icon: 'text-blue-600',
-      button: 'bg-blue-600 hover:bg-blue-700 text-white',
-      iconBg: 'bg-blue-100'
+  // Focus the safe choice on open, keep Tab inside the dialog, close on Escape,
+  // and give focus back to whatever opened the dialog.
+  useEffect(() => {
+    if (!isOpen) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    cancelRef.current?.focus()
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (!loadingRef.current) closeRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'),
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
-  }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus?.()
+    }
+  }, [isOpen])
+
+  if (!isOpen) return null
 
   const styles = variantStyles[variant]
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-      onClick={onClose}
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={isLoading ? undefined : onClose}
     >
-      <div 
-        className="bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all"
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        className="bg-white rounded-xl shadow-xl max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">
-          <div className="flex items-start mb-4">
-            <div className={`${styles.iconBg} rounded-full p-3 mr-4`}>
-              <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />
+          <div className="flex items-start gap-4">
+            <div className={`${styles.iconBg} rounded-full p-3 flex-shrink-0`}>
+              <AlertTriangle aria-hidden="true" className={`w-6 h-6 ${styles.icon}`} />
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <div className="flex-1 min-w-0">
+              <h2 id={titleId} className="text-lg font-semibold text-gray-900 mb-2">
                 {title}
-              </h3>
-              <p className="text-gray-600">
+              </h2>
+              <p id={messageId} className="text-gray-600">
                 {message}
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+              aria-label="Close"
+              className="-m-1 p-1 rounded text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
             >
-              <X className="w-5 h-5" />
+              <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
-          
-          <div className="flex justify-end space-x-3 mt-6">
+
+          <div className="flex justify-end gap-3 mt-6">
             <button
+              ref={cancelRef}
+              type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="btn-secondary btn-sm"
             >
               {cancelText}
             </button>
             <button
+              type="button"
               onClick={onConfirm}
               disabled={isLoading}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${styles.button}`}
+              className={`${styles.button} btn-sm`}
             >
               {isLoading ? 'Processing...' : confirmText}
             </button>
@@ -99,11 +156,3 @@ const ConfirmationModal = ({
 }
 
 export default ConfirmationModal
-
-
-
-
-
-
-
-

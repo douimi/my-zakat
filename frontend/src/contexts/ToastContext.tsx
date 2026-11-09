@@ -64,7 +64,8 @@ export const ToastProvider = ({ children }: ToastProviderProps) => {
       {children}
       
       {/* Toast Container - Positioned below header with proper spacing */}
-      <div className="fixed top-20 right-4 z-[100] space-y-2 max-h-[calc(100vh-6rem)] overflow-y-auto">
+      {/* Each toast carries its own role=alert/status; the region only names the area. */}
+      <div role="region" aria-label="Notifications" className="fixed top-20 right-4 z-[100] space-y-2 max-h-[calc(100vh-6rem)] overflow-y-auto">
         {toasts.map(toast => (
           <ToastComponent
             key={toast.id}

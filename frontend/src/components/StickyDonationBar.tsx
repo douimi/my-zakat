@@ -1,7 +1,32 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Heart, X, Sparkles, ArrowRight } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { X } from 'lucide-react'
 import { settingsAPI } from '../utils/api'
+
+/**
+ * Pages where the bar would compete with the page's own primary action (the
+ * donation form, a calculator result, a proposal form) or has no business
+ * (legal pages, opt-in / opt-out forms).
+ */
+const HIDDEN_ON = [
+  '/donate',
+  '/donation-success',
+  '/zakat-calculator',
+  '/kaffarah-calculator',
+  '/zakat-al-fitr-calculator',
+  '/privacy-policy',
+  '/terms-of-service',
+  '/donation-policy',
+  '/sms-opt-in',
+  '/unsubscribe',
+  '/submit-proposal',
+  '/my-proposals',
+]
+
+const isHiddenOn = (pathname: string) =>
+  HIDDEN_ON.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+
+const quickAmounts = [25, 50, 100, 250]
 
 const StickyDonationBar = () => {
   const [isEnabled, setIsEnabled] = useState(false)
@@ -10,6 +35,7 @@ const StickyDonationBar = () => {
   const [amount, setAmount] = useState<string>('')
   const [frequency, setFrequency] = useState<string>('One-Time')
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   useEffect(() => {
     fetchSetting()
@@ -48,125 +74,112 @@ const StickyDonationBar = () => {
 
   const handleDonate = () => {
     const params = new URLSearchParams()
-    
-    // Add amount if provided
+
     if (amount && parseFloat(amount) > 0) {
       params.set('amount', amount)
     }
-    
-    // Add frequency if provided and valid
+
     if (frequency && ['One-Time', 'Monthly', 'Annually'].includes(frequency)) {
       params.set('frequency', frequency)
     }
-    
-    // Navigate to donate page with query parameters
+
     navigate(`/donate${params.toString() ? `?${params.toString()}` : ''}`)
-    
-    // Scroll to top after navigation
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const quickAmounts = [25, 50, 100, 250]
-
-  if (!isEnabled || isDismissed || !isVisible) {
+  if (!isEnabled || isDismissed || !isVisible || isHiddenOn(pathname)) {
     return null
   }
 
   return (
-    <div
-      className={`fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out ${
-        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-      }`}
-    >
-      <div className="bg-primary-600/90 backdrop-blur-sm border-t border-primary-500/50 shadow-lg">
-        <div className="section-container">
-          <div className="py-3 px-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              {/* Left side - Message */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Heart className="w-4 h-4 text-white fill-white" />
-                <p className="text-sm font-semibold text-white whitespace-nowrap">Make a Difference</p>
-              </div>
+    <>
+      {/* In-flow spacer so the fixed bar never covers the end of the footer. */}
+      <div aria-hidden="true" className="h-14 sm:h-16" />
 
-              {/* Middle - Quick Amount Buttons */}
-              <div className="flex items-center gap-2 flex-wrap justify-center flex-1">
-                {quickAmounts.map((quickAmount) => (
-                  <button
-                    key={quickAmount}
-                    onClick={() => setAmount(quickAmount.toString())}
-                    className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
-                      amount === quickAmount.toString()
-                        ? 'bg-white text-primary-600 shadow-sm'
-                        : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
-                    }`}
-                  >
-                    ${quickAmount}
-                  </button>
-                ))}
-              </div>
+      <aside
+        aria-label="Quick donation"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-800 bg-primary-700 text-white shadow-lg"
+      >
+        <form
+          className="section-container flex h-14 items-center gap-2 sm:h-16 sm:gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleDonate()
+          }}
+        >
+          <p className="hidden flex-shrink-0 text-sm font-semibold min-[360px]:block">Give now</p>
 
-              {/* Right side - Amount Input, Frequency, and Donate Button */}
-              <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-                {/* Custom Amount Input */}
-                <div className="relative min-w-[90px]">
-                  <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none z-10" style={{ backdropFilter: 'none' }}>
-                    <span className="text-white/90 font-medium text-xs">$</span>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full pl-6 pr-2 py-1.5 bg-white/20 backdrop-blur-sm border border-white/30 rounded-md text-white placeholder-white/60 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/30 focus:border-white/50 transition-all"
-                  />
-                </div>
-
-                {/* Frequency Selector */}
-                <div className="relative">
-                  <select
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value)}
-                    className="px-2.5 py-1.5 pr-7 bg-white/20 backdrop-blur-sm border border-white/30 rounded-md text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/30 focus:border-white/50 cursor-pointer transition-all appearance-none"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 6px center',
-                      backgroundSize: '10px 6px'
-                    }}
-                  >
-                    <option value="One-Time" className="bg-primary-600 text-white">One-Time</option>
-                    <option value="Monthly" className="bg-primary-600 text-white">Monthly</option>
-                    <option value="Annually" className="bg-primary-600 text-white">Annually</option>
-                  </select>
-                </div>
-
-                {/* Donate Button */}
-                <button
-                  onClick={handleDonate}
-                  disabled={!amount || parseFloat(amount) <= 0}
-                  className="flex items-center justify-center gap-1.5 bg-white hover:bg-white/90 text-primary-600 font-semibold px-4 py-1.5 rounded-md transition-all duration-200 text-xs whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Donate</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Close Button */}
-                <button
-                  onClick={handleDismiss}
-                  className="p-1.5 hover:bg-white/20 rounded-md transition-colors duration-200"
-                  aria-label="Dismiss"
-                >
-                  <X className="w-4 h-4 text-white" />
-                </button>
-              </div>
-            </div>
+          {/* Quick amounts: from sm up only, to keep the bar one row (about 56px) on phones. */}
+          <div className="hidden flex-1 items-center justify-center gap-2 sm:flex">
+            {quickAmounts.map((quickAmount) => (
+              <button
+                key={quickAmount}
+                type="button"
+                onClick={() => setAmount(quickAmount.toString())}
+                aria-pressed={amount === quickAmount.toString()}
+                className={`min-h-[36px] rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  amount === quickAmount.toString()
+                    ? 'bg-white text-primary-700'
+                    : 'border border-white/40 text-white hover:bg-white/15'
+                }`}
+              >
+                ${quickAmount}
+              </button>
+            ))}
           </div>
-        </div>
-      </div>
-    </div>
+
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <div className="relative w-28">
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-sm text-white/90">
+                $
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                inputMode="decimal"
+                placeholder="Amount"
+                aria-label="Donation amount"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-9 w-full rounded-md border border-white/40 bg-white/10 pl-6 pr-2 text-sm text-white placeholder-white/80 focus:border-white focus:bg-white/20 focus:outline-none"
+              />
+            </div>
+
+            <select
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value)}
+              aria-label="Frequency"
+              className="hidden h-9 cursor-pointer appearance-none rounded-md border border-white/40 bg-white/10 pl-2.5 pr-7 text-sm text-white focus:border-white focus:outline-none sm:block"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                backgroundSize: '10px 6px',
+              }}
+            >
+              <option value="One-Time" className="text-gray-900">One-Time</option>
+              <option value="Monthly" className="text-gray-900">Monthly</option>
+              <option value="Annually" className="text-gray-900">Annually</option>
+            </select>
+
+            {/* Without an amount it still goes to /donate, where the amount is chosen. */}
+            <button type="submit" className="btn-inverse btn-sm px-4">
+              Donate
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/15"
+              aria-label="Dismiss"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </div>
+        </form>
+      </aside>
+    </>
   )
 }
 
