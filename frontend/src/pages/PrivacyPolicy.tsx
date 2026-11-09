@@ -42,7 +42,7 @@ const PrivacyPolicy = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Personal Information</h3>
                   <p>We may collect personal information that you voluntarily provide to us, including:</p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>Name and contact information (email address, phone number, mailing address)</li>
                     <li>Payment information (processed securely through third-party payment processors)</li>
                     <li>Account credentials and profile information</li>
@@ -52,7 +52,7 @@ const PrivacyPolicy = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Automatically Collected Information</h3>
                   <p>When you visit our website, we may automatically collect certain information, including:</p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>IP address and browser type</li>
                     <li>Device information and operating system</li>
                     <li>Pages visited and time spent on our website</li>
@@ -71,7 +71,7 @@ const PrivacyPolicy = () => {
               <p className="text-gray-600 leading-relaxed mb-4">
                 We use the information we collect to:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li>Process and manage your donations</li>
                 <li>Send you donation receipts and tax documents</li>
                 <li>Communicate with you about our programs and impact</li>
@@ -91,7 +91,7 @@ const PrivacyPolicy = () => {
               <p className="text-gray-600 leading-relaxed mb-4">
                 We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following circumstances:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li><strong>Service Providers:</strong> We may share information with trusted third-party service providers who assist us in operating our website and conducting our operations (e.g., payment processors, email service providers)</li>
                 <li><strong>Legal Requirements:</strong> We may disclose information if required by law or in response to valid legal requests</li>
                 <li><strong>Protection of Rights:</strong> We may share information to protect our rights, property, or safety, or that of our users</li>
@@ -120,7 +120,7 @@ const PrivacyPolicy = () => {
               <p className="text-gray-600 leading-relaxed mb-4">
                 If you opt in to receive text (SMS) messages from MyZakat, the following terms apply:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li>
                   <strong>Program description:</strong> By opting in you agree to receive
                   recurring transactional and informational text messages from MyZakat —
@@ -186,7 +186,7 @@ const PrivacyPolicy = () => {
                     following ways. We will never add your phone number to our SMS list
                     without one of these explicit, affirmative actions:
                   </p>
-                  <ul className="list-disc list-inside text-gray-600 space-y-1 ml-4">
+                  <ul className="list-disc list-inside text-gray-600 space-y-1 ms-4">
                     <li>
                       Submitting your mobile number through our SMS opt-in form on the
                       MyZakat website and <strong>checking the consent box</strong> that
@@ -210,7 +210,7 @@ const PrivacyPolicy = () => {
                     You may opt out of MyZakat text messages at any time, free of charge,
                     using any of the following methods:
                   </p>
-                  <ul className="list-disc list-inside text-gray-600 space-y-1 ml-4">
+                  <ul className="list-disc list-inside text-gray-600 space-y-1 ms-4">
                     <li>
                       Reply <strong>STOP</strong> to any text message you receive from us.
                       You will receive one final confirmation message acknowledging your
@@ -280,7 +280,7 @@ const PrivacyPolicy = () => {
               <p className="text-gray-600 leading-relaxed mb-4">
                 Depending on your location, you may have certain rights regarding your personal information, including:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li>The right to access your personal information</li>
                 <li>The right to correct inaccurate information</li>
                 <li>The right to request deletion of your information</li>

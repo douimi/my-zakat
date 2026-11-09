@@ -80,7 +80,7 @@ const ProgressBar = ({ percent, animate, label }: { percent: number; animate: bo
         />
       </div>
       {/* Milestone ticks — 25 / 50 / 75 % */}
-      <div className="absolute inset-y-0 left-0 w-full pointer-events-none" aria-hidden="true">
+      <div className="absolute inset-y-0 start-0 w-full pointer-events-none" aria-hidden="true">
         {[25, 50, 75].map((tick) => (
           <div
             key={tick}
@@ -154,7 +154,7 @@ export const ProjectCard = ({ project }: { project: Project }) => {
         )}
 
         {(project.category || status) && (
-          <div className="absolute top-3 left-3 right-3 flex flex-wrap gap-2">
+          <div className="absolute top-3 start-3 end-3 flex flex-wrap gap-2">
             {project.category && (
               <span className="badge bg-white/95 text-gray-800 shadow-sm">{project.category}</span>
             )}

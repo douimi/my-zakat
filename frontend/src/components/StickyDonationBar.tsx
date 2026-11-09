@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { settingsAPI } from '../utils/api'
+import { useFormat, useT } from '../i18n'
+import { C } from '../i18n/common'
 
 /**
  * Pages where the bar would compete with the page's own primary action (the
@@ -21,6 +23,9 @@ const HIDDEN_ON = [
   '/unsubscribe',
   '/submit-proposal',
   '/my-proposals',
+  '/sponsor',
+  '/my-sponsorships',
+  '/my-requests',
 ]
 
 const isHiddenOn = (pathname: string) =>
@@ -36,6 +41,8 @@ const StickyDonationBar = () => {
   const [frequency, setFrequency] = useState<string>('One-Time')
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const t = useT()
+  const { money } = useFormat()
 
   useEffect(() => {
     fetchSetting()
@@ -97,7 +104,7 @@ const StickyDonationBar = () => {
       <div aria-hidden="true" className="h-14 sm:h-16" />
 
       <aside
-        aria-label="Quick donation"
+        aria-label={t(C.quickDonation)}
         className="fixed inset-x-0 bottom-0 z-40 border-t border-primary-800 bg-primary-700 text-white shadow-lg"
       >
         <form
@@ -107,7 +114,7 @@ const StickyDonationBar = () => {
             handleDonate()
           }}
         >
-          <p className="hidden flex-shrink-0 text-sm font-semibold min-[360px]:block">Give now</p>
+          <p className="hidden flex-shrink-0 text-sm font-semibold min-[360px]:block">{t(C.giveNow)}</p>
 
           {/* Quick amounts: from sm up only, to keep the bar one row (about 56px) on phones. */}
           <div className="hidden flex-1 items-center justify-center gap-2 sm:flex">
@@ -123,14 +130,14 @@ const StickyDonationBar = () => {
                     : 'border border-white/40 text-white hover:bg-white/15'
                 }`}
               >
-                ${quickAmount}
+                {money(quickAmount * 100)}
               </button>
             ))}
           </div>
 
-          <div className="ml-auto flex min-w-0 items-center gap-2">
+          <div className="ms-auto flex min-w-0 items-center gap-2">
             <div className="relative w-28">
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-sm text-white/90">
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-2.5 text-sm text-white/90">
                 $
               </span>
               <input
@@ -138,19 +145,19 @@ const StickyDonationBar = () => {
                 step="0.01"
                 min="1"
                 inputMode="decimal"
-                placeholder="Amount"
-                aria-label="Donation amount"
+                placeholder={t(C.amount)}
+                aria-label={t(C.donationAmount)}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="h-9 w-full rounded-md border border-white/40 bg-white/10 pl-6 pr-2 text-sm text-white placeholder-white/80 focus:border-white focus:bg-white/20 focus:outline-none"
+                className="h-9 w-full rounded-md border border-white/40 bg-white/10 ps-6 pe-2 text-sm text-white placeholder-white/80 focus:border-white focus:bg-white/20 focus:outline-none"
               />
             </div>
 
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
-              aria-label="Frequency"
-              className="hidden h-9 cursor-pointer appearance-none rounded-md border border-white/40 bg-white/10 pl-2.5 pr-7 text-sm text-white focus:border-white focus:outline-none sm:block"
+              aria-label={t(C.frequency)}
+              className="hidden h-9 cursor-pointer appearance-none rounded-md border border-white/40 bg-white/10 ps-2.5 pe-7 text-sm text-white focus:border-white focus:outline-none sm:block"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
                 backgroundRepeat: 'no-repeat',
@@ -158,21 +165,21 @@ const StickyDonationBar = () => {
                 backgroundSize: '10px 6px',
               }}
             >
-              <option value="One-Time" className="text-gray-900">One-Time</option>
-              <option value="Monthly" className="text-gray-900">Monthly</option>
-              <option value="Annually" className="text-gray-900">Annually</option>
+              <option value="One-Time" className="text-gray-900">{t(C.oneTime)}</option>
+              <option value="Monthly" className="text-gray-900">{t(C.monthly)}</option>
+              <option value="Annually" className="text-gray-900">{t(C.annually)}</option>
             </select>
 
             {/* Without an amount it still goes to /donate, where the amount is chosen. */}
             <button type="submit" className="btn-inverse btn-sm px-4">
-              Donate
+              {t(C.donate)}
             </button>
 
             <button
               type="button"
               onClick={handleDismiss}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/15"
-              aria-label="Dismiss"
+              aria-label={t(C.dismiss)}
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </button>

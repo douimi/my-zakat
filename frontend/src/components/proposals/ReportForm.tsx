@@ -236,7 +236,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
           <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs flex items-center justify-center">1</span>
           Describe what was done
         </label>
-        <p className="text-xs text-gray-500 pl-8">
+        <p className="text-xs text-gray-500 ps-8">
           How many beneficiaries were served, what was distributed, what was actually spent,
           any funds left over, and anything that differed from the approved plan.
         </p>
@@ -261,7 +261,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
           onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); if (!busy) addFiles(e.dataTransfer.files) }}
-          className={`ml-8 border-2 border-dashed rounded-lg p-4 text-center ${dragging ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
+          className={`ms-8 border-2 border-dashed rounded-lg p-4 text-center ${dragging ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
         >
           <UploadCloud className="w-7 h-7 text-gray-400 mx-auto mb-1" />
           <p className="text-sm text-gray-700">
@@ -288,7 +288,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         </div>
 
         {files.length > 0 && (
-          <ul className="ml-8 space-y-1">
+          <ul className="ms-8 space-y-1">
             {files.map((file, i) => (
               <li key={`${file.name}-${i}`}
                 className={`text-sm rounded px-2 py-1 border ${problems[i] ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -324,7 +324,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         </p>
 
         {phase === 'uploading' && progress && (
-          <div className="ml-8 space-y-1" role="status" aria-live="polite">
+          <div className="ms-8 space-y-1" role="status" aria-live="polite">
             <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
               <div className="h-full bg-primary-600 transition-all" style={{ width: `${percent}%` }} />
             </div>
@@ -337,7 +337,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         )}
 
         {phase === 'code' && (
-          <form onSubmit={confirmCode} className="ml-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+          <form onSubmit={confirmCode} className="ms-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
             <p className="text-sm text-amber-900 flex items-start gap-2">
               <KeyRound className="w-4 h-4 mt-0.5 shrink-0" /> {codeNotice}
             </p>
@@ -364,7 +364,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         )}
 
         {askNoFiles && phase === 'editing' && (
-          <div className="ml-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2" role="alert">
+          <div className="ms-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2" role="alert">
             <p className="text-sm text-amber-900">
               <strong>No file is attached.</strong> The agreement asks for your receipts, invoices and
               photographs. Send the report without them?
@@ -383,13 +383,13 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         )}
 
         {error && (
-          <p className="ml-8 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3 flex items-start gap-2">
+          <p className="ms-8 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
           </p>
         )}
 
         {phase !== 'code' && (
-          <div className="ml-8 flex flex-wrap gap-2">
+          <div className="ms-8 flex flex-wrap gap-2">
             <button type="button" onClick={() => void send()} disabled={!canSend || askNoFiles}
               className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
               {phase === 'uploading'
@@ -403,7 +403,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
           </div>
         )}
         {phase === 'editing' && !text.trim() && (
-          <p className="ml-8 text-xs text-gray-500">Write a short description in step 1 to enable sending.</p>
+          <p className="ms-8 text-xs text-gray-500">Write a short description in step 1 to enable sending.</p>
         )}
       </section>
     </div>

@@ -47,7 +47,7 @@ const UmrahGuidelines = () => {
 
           <section className="alert-info block" aria-labelledby="umrah-reminders">
             <h2 id="umrah-reminders" className="font-semibold mb-2">Important Reminders</h2>
-            <ul className="list-disc pl-5 space-y-1">
+            <ul className="list-disc ps-5 space-y-1">
               {REMINDERS.map((reminder) => (
                 <li key={reminder}>{reminder}</li>
               ))}

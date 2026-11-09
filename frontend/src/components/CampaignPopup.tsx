@@ -138,7 +138,7 @@ const CampaignPopup = () => {
           ref={closeButtonRef}
           type="button"
           onClick={dismiss}
-          className="absolute top-3 right-3 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white shadow-lg transition-colors"
+          className="absolute top-3 end-3 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white shadow-lg transition-colors"
           aria-label="Close"
         >
           <X aria-hidden="true" className="w-5 h-5" />

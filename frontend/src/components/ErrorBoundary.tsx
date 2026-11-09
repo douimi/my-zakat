@@ -45,7 +45,7 @@ class ErrorBoundary extends Component<Props, State> {
               An unexpected error stopped this page. Reloading usually fixes it.
             </p>
             {import.meta.env.DEV && this.state.error && (
-              <details className="text-left mb-4 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-40">
+              <details className="text-start mb-4 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-40">
                 <summary className="font-semibold mb-2 cursor-pointer">Error Details</summary>
                 <pre className="whitespace-pre-wrap break-words">
                   {this.state.error.toString()}

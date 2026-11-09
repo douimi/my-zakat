@@ -74,7 +74,7 @@ const DonationPolicy = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Payment Methods</h3>
                   <p>We accept donations through various secure payment methods, including:</p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>Credit and debit cards</li>
                     <li>Bank transfers</li>
                     <li>Online payment processors</li>
@@ -110,7 +110,7 @@ const DonationPolicy = () => {
                 MyZakat – Zakat Distribution Foundation is committed to using donations efficiently and effectively. 
                 Donations are used for:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li>Direct assistance to beneficiaries (food, shelter, healthcare, education)</li>
                 <li>Emergency relief and disaster response</li>
                 <li>Orphan care and support programs</li>
@@ -146,7 +146,7 @@ const DonationPolicy = () => {
                 Donations are generally considered final and non-refundable. However, we understand that errors may occur. 
                 Refund requests will be considered in the following circumstances:
               </p>
-              <ul className="list-disc list-inside text-gray-600 space-y-2 ml-4">
+              <ul className="list-disc list-inside text-gray-600 space-y-2 ms-4">
                 <li>Accidental duplicate donations</li>
                 <li>Processing errors</li>
                 <li>Unauthorized transactions</li>

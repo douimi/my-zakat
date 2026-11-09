@@ -187,7 +187,7 @@ const Testimonials = () => {
                       <p className="font-semibold text-gray-900 text-lg mb-1">{testimonial.name}</p>
                       {testimonial.country && (
                         <p className="flex items-center justify-center text-sm text-gray-600">
-                          <MapPin className="w-4 h-4 mr-1" aria-hidden="true" />
+                          <MapPin className="w-4 h-4 me-1" aria-hidden="true" />
                           <span>{testimonial.country}</span>
                         </p>
                       )}

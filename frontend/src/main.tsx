@@ -5,6 +5,22 @@ import { QueryClient, QueryClientProvider } from 'react-query'
 import { HelmetProvider } from 'react-helmet-async'
 import App from './App.tsx'
 import './index.css'
+import { LOCALES, LocaleProvider, detectLocale } from './i18n'
+
+// The locale is the URL's first segment, read once: /ar/... is the Arabic site.
+// Mounting the router under basename "/ar" makes every existing <Link to="/x">
+// resolve to /ar/x, so no link in the app needs to know about languages.
+const locale = detectLocale(window.location.pathname)
+const { dir, htmlLang, prefix } = LOCALES[locale]
+document.documentElement.lang = htmlLang
+document.documentElement.dir = dir
+if (locale === 'ar') {
+  // Loaded only for Arabic readers: the English site pays nothing for it.
+  const font = document.createElement('link')
+  font.rel = 'stylesheet'
+  font.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'
+  document.head.appendChild(font)
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,9 +49,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <LocaleProvider locale={locale}>
+          <BrowserRouter basename={prefix || undefined}>
+            <App />
+          </BrowserRouter>
+        </LocaleProvider>
       </QueryClientProvider>
     </HelmetProvider>
   </React.StrictMode>,

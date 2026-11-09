@@ -139,7 +139,7 @@ const TermsOfService = () => {
               <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed">
                 <p>You agree not to:</p>
-                <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                   <li>Use the Services for any unlawful purpose or in violation of these Terms</li>
                   <li>Submit fraudulent payment information or donations on behalf of someone else without authorization</li>
                   <li>Attempt to gain unauthorized access to any part of the Services or our infrastructure</li>
@@ -306,7 +306,7 @@ const TermsOfService = () => {
                     If you have consented to receive text messages from MyZakat, you may receive
                     messages related to the following:
                   </p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>Customer care</li>
                   </ul>
                   <p className="mt-3 italic">
@@ -335,7 +335,7 @@ const TermsOfService = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">17.5 Opt-In Method</h3>
                   <p>You may opt in to receive SMS messages from MyZakat in the following ways:</p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>By submitting the online form on our <a href="/sms-opt-in" className="text-primary-600 hover:underline">SMS Subscription page</a></li>
                     <li>By checking the SMS consent box on our project proposal form or any other online form that collects a phone number</li>
                   </ul>
@@ -369,7 +369,7 @@ const TermsOfService = () => {
 
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">17.8 Standard Messaging Disclosures</h3>
-                  <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
+                  <ul className="list-disc list-inside mt-2 space-y-1 ms-4">
                     <li>Message and data rates may apply.</li>
                     <li>You can opt out at any time by texting <strong>STOP</strong>.</li>
                     <li>For assistance, text <strong>HELP</strong> or contact us at info@myzakat.org.</li>

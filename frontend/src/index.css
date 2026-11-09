@@ -9,7 +9,7 @@
  * Component classes (all in @layer components, so Tailwind utilities on the element still win):
  *   Buttons   .btn (base) .btn-primary .btn-secondary .btn-outline (= .btn-secondary, legacy alias)
  *             .btn-ghost .btn-inverse (white button on a dark band) .btn-danger   sizes: .btn-sm .btn-lg
- *             The base has no gap: add `gap-2` yourself, or keep the icon's `mr-2`.
+ *             The base has no gap: add `gap-2` yourself, or keep the icon's `me-2`.
  *   Links     .link
  *   Surfaces  .card (padded panel) .card-media (image card, no padding) .card-body .card-tinted .card-title
  *   Layout    .section-container .section .section-alt .section-head .section-title .section-lead .eyebrow
@@ -52,6 +52,55 @@
   :focus-visible {
     outline: 2px solid theme('colors.primary.600');
     outline-offset: 2px;
+  }
+
+  /* ---------- Right-to-left (the /ar site) ----------
+   * Layout direction comes from logical utilities (ms-/me-/ps-/pe-/start-/end-/text-start),
+   * which are identical in LTR and mirror in RTL. What they cannot express lives here.
+   * :dir(rtl), not [dir="rtl"] ancestors: an English-only block (dir="ltr") inside the
+   * Arabic site must keep its icons and spacing as they are. */
+
+  /* Letter-spacing breaks the joins of Arabic script, and Arabic has no case. */
+  .eyebrow:dir(rtl),
+  [class*="tracking-"]:dir(rtl) {
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* Arabic glyphs are taller; body copy needs more room between lines. */
+  html[dir="rtl"] body {
+    line-height: 1.7;
+  }
+
+  /* Directional icons point the other way. `scale`, not `transform`, so a
+   * Tailwind rotate-90 on the same icon (disclosures) still composes. */
+  .lucide-arrow-right:dir(rtl),
+  .lucide-arrow-left:dir(rtl),
+  .lucide-chevron-right:dir(rtl),
+  .lucide-chevron-left:dir(rtl),
+  .lucide-chevrons-right:dir(rtl),
+  .lucide-chevrons-left:dir(rtl),
+  .lucide-arrow-up-right:dir(rtl),
+  .lucide-external-link:dir(rtl),
+  .lucide-log-out:dir(rtl),
+  .lucide-send:dir(rtl),
+  .lucide-reply:dir(rtl),
+  .rtl-mirror:dir(rtl) {
+    scale: -1 1;
+  }
+
+  /* space-x-* puts its margin on the physical left; flip it. */
+  [class*="space-x-"]:dir(rtl) > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-x-reverse: 1;
+  }
+
+  /* Numbers, emails, phone numbers and codes read left-to-right inside Arabic text. */
+  .ltr-nums:dir(rtl),
+  input[type="email"]:dir(rtl),
+  input[type="tel"]:dir(rtl),
+  input[inputmode="numeric"]:dir(rtl) {
+    direction: ltr;
+    text-align: end;
   }
 
   /* Programmatic focus targets (e.g. <main tabIndex={-1}>) do not need a ring. */
@@ -263,7 +312,7 @@
 
   .disclosure > summary {
     @apply flex cursor-pointer list-none items-start justify-between gap-4 rounded-xl px-5 py-4
-      text-left hover:bg-gray-50;
+      text-start hover:bg-gray-50;
   }
 
   .disclosure > summary::-webkit-details-marker {
@@ -274,6 +323,7 @@
   .disclosure > summary::after {
     content: '';
     @apply mt-1.5 h-2 w-2 shrink-0 border-b-2 border-r-2 border-gray-500 transition-transform duration-150;
+    /* Physical on purpose: a rotated corner pointing down, which needs no mirroring. */
     transform: rotate(45deg);
   }
 
@@ -341,11 +391,11 @@
   }
 
   .prose ul {
-    @apply list-disc pl-6 space-y-1;
+    @apply list-disc ps-6 space-y-1;
   }
 
   .prose ol {
-    @apply list-decimal pl-6 space-y-1;
+    @apply list-decimal ps-6 space-y-1;
   }
 
   .prose li > ul,
@@ -362,7 +412,7 @@
   }
 
   .prose blockquote {
-    @apply border-l-4 border-primary-200 pl-4 italic text-gray-600;
+    @apply border-s-4 border-primary-200 ps-4 italic text-gray-600;
   }
 
   .prose img {
@@ -378,11 +428,11 @@
   }
 
   .prose table {
-    @apply w-full text-left text-sm;
+    @apply w-full text-start text-sm;
   }
 
   .prose th {
-    @apply border-b border-gray-300 py-2 pr-4 font-semibold text-gray-900;
+    @apply border-b border-gray-300 py-2 pe-4 font-semibold text-gray-900;
   }
 
   .prose td {
@@ -404,7 +454,7 @@
   /* ---------- Accessibility ---------- */
   /* Off-screen until focused; put it first in the layout: <a href="#main" className="skip-link">Skip to content</a> */
   .skip-link {
-    @apply fixed left-2 top-2 z-[100] rounded-lg bg-primary-700 px-4 py-2 font-semibold text-white shadow-md
+    @apply fixed start-2 top-2 z-[100] rounded-lg bg-primary-700 px-4 py-2 font-semibold text-white shadow-md
       -translate-y-[200%] focus:translate-y-0 transition-transform;
   }
 

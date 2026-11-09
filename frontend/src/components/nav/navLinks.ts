@@ -6,32 +6,35 @@
  * Knowledge, Book of Duas, Charity in Islam, Umrah Guidelines, Quick Links,
  * Testimonials.
  */
+import type { Message } from '../../i18n'
+import { C } from '../../i18n/common'
+
 export interface NavLinkItem {
   to: string
-  label: string
+  label: Message
 }
 
 export interface NavGroup {
-  title: string
+  title: Message
   items: NavLinkItem[]
 }
 
 /** The "Zakat" dropdown: the tools first, then the guides. */
 export const ZAKAT_GROUPS: NavGroup[] = [
   {
-    title: 'Calculators',
+    title: C.calculators,
     items: [
-      { to: '/zakat-calculator', label: 'Zakat Calculator' },
-      { to: '/zakat-al-fitr-calculator', label: 'Zakat al-Fitr Calculator' },
-      { to: '/kaffarah-calculator', label: 'Kaffarah Calculator' },
+      { to: '/zakat-calculator', label: C.zakatCalculator },
+      { to: '/zakat-al-fitr-calculator', label: C.zakatAlFitrCalculator },
+      { to: '/kaffarah-calculator', label: C.kaffarahCalculator },
     ],
   },
   {
-    title: 'Guides',
+    title: C.guides,
     items: [
-      { to: '/nisab', label: 'Nisab' },
-      { to: '/zakat-on-gold', label: 'Zakat on Gold' },
-      { to: '/zakat-education', label: 'Zakat Education' },
+      { to: '/nisab', label: C.nisab },
+      { to: '/zakat-on-gold', label: C.zakatOnGold },
+      { to: '/zakat-education', label: C.zakatEducation },
     ],
   },
 ]
@@ -40,11 +43,11 @@ export const ZAKAT_PATHS = ZAKAT_GROUPS.flatMap((group) => group.items.map((item
 
 /** The "About" dropdown. */
 export const ABOUT_LINKS: NavLinkItem[] = [
-  { to: '/about', label: 'About us' },
-  { to: '/stories', label: 'Stories' },
-  { to: '/events', label: 'Events' },
-  { to: '/volunteer', label: 'Volunteer' },
-  { to: '/contact', label: 'Contact' },
+  { to: '/about', label: C.aboutUs },
+  { to: '/stories', label: C.stories },
+  { to: '/events', label: C.events },
+  { to: '/volunteer', label: C.volunteer },
+  { to: '/contact', label: C.contact },
 ]
 
 /** Routes that light up the About trigger (Testimonials has no nav entry but belongs to this section). */
@@ -53,3 +56,16 @@ export const ABOUT_PATHS = [...ABOUT_LINKS.map((link) => link.to), '/testimonial
 /** True when `pathname` is `path` or one of its sub-pages. */
 export const matchesPath = (pathname: string, path: string) =>
   pathname === path || pathname.startsWith(`${path}/`)
+
+/** The donor side of sponsorship: browse, learn how it works, follow your own. */
+export const SPONSOR_LINKS: { to: string; title: Message; subtitle: Message }[] = [
+  { to: '/sponsor/orphans', title: C.sponsorAnOrphan, subtitle: C.sponsorAnOrphanSub },
+  { to: '/sponsor/families', title: C.sponsorAFamily, subtitle: C.sponsorAFamilySub },
+  { to: '/sponsor', title: C.howSponsorshipWorks, subtitle: C.howSponsorshipWorksSub },
+  { to: '/my-sponsorships', title: C.mySponsorships, subtitle: C.mySponsorshipsSub },
+]
+
+/** Routes that light up the Sponsor trigger. The applicant side (/sponsor/apply) belongs to Apply for Funding. */
+export const isSponsorPath = (pathname: string) =>
+  (matchesPath(pathname, '/sponsor') && !matchesPath(pathname, '/sponsor/apply')) ||
+  matchesPath(pathname, '/my-sponsorships')

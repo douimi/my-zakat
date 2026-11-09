@@ -178,7 +178,7 @@ const KaffarahCalculator = () => {
               stays open, directly above the tool. */}
           <section className="alert-warning block p-6 text-base" aria-labelledby="kaffarah-not">
             <h2 id="kaffarah-not" className="flex items-center text-lg font-heading font-bold text-amber-900 mb-2">
-              <AlertCircle className="w-5 h-5 text-amber-700 mr-2 shrink-0" aria-hidden="true" />
+              <AlertCircle className="w-5 h-5 text-amber-700 me-2 shrink-0" aria-hidden="true" />
               What kaffarah is not
             </h2>
             <p className="text-amber-900 leading-relaxed">
@@ -232,7 +232,7 @@ const KaffarahCalculator = () => {
                       value="monetary"
                       checked={calculationMethod === 'monetary'}
                       onChange={() => setCalculationMethod('monetary')}
-                      className="mr-3"
+                      className="me-3"
                     />
                     <span className="text-gray-700">Monetary Payment (the value of the food, in cash)</span>
                   </label>
@@ -243,7 +243,7 @@ const KaffarahCalculator = () => {
                       value="feeding"
                       checked={calculationMethod === 'feeding'}
                       onChange={() => setCalculationMethod('feeding')}
-                      className="mr-3"
+                      className="me-3"
                     />
                     <span className="text-gray-700">Feeding Poor People</span>
                   </label>
@@ -260,7 +260,7 @@ const KaffarahCalculator = () => {
                   Cost to Feed One Person (in USD)
                 </label>
                 <div className="relative max-w-xs">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
                     <DollarSign className="w-5 h-5 text-gray-500" aria-hidden="true" />
                   </div>
                   <input
@@ -270,7 +270,7 @@ const KaffarahCalculator = () => {
                     step="0.01"
                     value={foodCostPerPerson}
                     onChange={(e) => setFoodCostPerPerson(parseFloat(e.target.value) || 10)}
-                    className="input-field pl-10 w-full"
+                    className="input-field ps-10 w-full"
                     placeholder="10.00"
                   />
                 </div>
@@ -469,7 +469,7 @@ const KaffarahCalculator = () => {
               </p>
               <Link to="/zakat-calculator" className="link inline-flex items-center">
                 Zakat on wealth is a separate obligation — work that out here
-                <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+                <ArrowRight className="ms-2 w-4 h-4" aria-hidden="true" />
               </Link>
             </Disclosure>
           </section>

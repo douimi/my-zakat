@@ -227,12 +227,12 @@ const UserLogin = () => {
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" aria-hidden="true"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white me-2" aria-hidden="true"></div>
                   Signing in...
                 </>
               ) : (
                 <>
-                  <LogIn className="w-5 h-5 mr-2" aria-hidden="true" />
+                  <LogIn className="w-5 h-5 me-2" aria-hidden="true" />
                   Sign In
                 </>
               )}

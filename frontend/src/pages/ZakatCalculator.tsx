@@ -353,7 +353,7 @@ const ZakatCalculator = () => {
                 {formSections.map((section) => (
                   <div key={section.title} className="border-b border-gray-200 pb-8 last:border-b-0">
                     <div className="flex items-center mb-6">
-                      <section.icon className="w-5 h-5 text-primary-600 mr-3" aria-hidden="true" />
+                      <section.icon className="w-5 h-5 text-primary-600 me-3" aria-hidden="true" />
                       <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
                     </div>
 
@@ -371,7 +371,7 @@ const ZakatCalculator = () => {
                             {field.label}
                           </label>
                           <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
                               <span className="text-gray-500 text-sm">
                                 {field.unit === 'usd' ? '$' : 'g'}
                               </span>
@@ -383,7 +383,7 @@ const ZakatCalculator = () => {
                               min="0"
                               placeholder={field.placeholder}
                               {...register(field.name, { valueAsNumber: true, min: 0 })}
-                              className="input-field pl-7"
+                              className="input-field ps-7"
                             />
                           </div>
                         </div>
@@ -442,7 +442,7 @@ const ZakatCalculator = () => {
                 result, so the threshold is never implicit. */}
             <div className="card">
               <div className="flex items-center mb-4">
-                <Scale className="w-5 h-5 text-primary-600 mr-3" aria-hidden="true" />
+                <Scale className="w-5 h-5 text-primary-600 me-3" aria-hidden="true" />
                 <h2 className="text-lg font-semibold text-gray-900">What your total is compared against</h2>
               </div>
 
@@ -489,7 +489,7 @@ const ZakatCalculator = () => {
 
                   <Link to="/nisab" className="link inline-flex items-center">
                     How the nisab is worked out
-                    <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+                    <ArrowRight className="ms-2 w-4 h-4" aria-hidden="true" />
                   </Link>
                 </div>
               )}
@@ -699,7 +699,7 @@ const ZakatCalculator = () => {
 
             <Link to="/zakat-education" className="link inline-flex items-center pt-1">
               Zakat explained, from the beginning
-              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+              <ArrowRight className="ms-2 w-4 h-4" aria-hidden="true" />
             </Link>
           </section>
 
@@ -839,31 +839,31 @@ const ZakatCalculator = () => {
                       {result.wealth > 0 && (
                         <>
                           <span>Wealth Zakat</span>
-                          <span className="text-right font-medium">{formatUSD(result.wealth)}</span>
+                          <span className="text-end font-medium">{formatUSD(result.wealth)}</span>
                         </>
                       )}
                       {result.gold > 0 && (
                         <>
                           <span>Gold Zakat</span>
-                          <span className="text-right font-medium">{formatUSD(result.gold)}</span>
+                          <span className="text-end font-medium">{formatUSD(result.gold)}</span>
                         </>
                       )}
                       {result.silver > 0 && (
                         <>
                           <span>Silver Zakat</span>
-                          <span className="text-right font-medium">{formatUSD(result.silver)}</span>
+                          <span className="text-end font-medium">{formatUSD(result.silver)}</span>
                         </>
                       )}
                       {result.business_goods > 0 && (
                         <>
                           <span>Business Zakat</span>
-                          <span className="text-right font-medium">{formatUSD(result.business_goods)}</span>
+                          <span className="text-end font-medium">{formatUSD(result.business_goods)}</span>
                         </>
                       )}
                       {result.agriculture > 0 && (
                         <>
                           <span>Agriculture Zakat</span>
-                          <span className="text-right font-medium">{formatUSD(result.agriculture)}</span>
+                          <span className="text-end font-medium">{formatUSD(result.agriculture)}</span>
                         </>
                       )}
                     </div>

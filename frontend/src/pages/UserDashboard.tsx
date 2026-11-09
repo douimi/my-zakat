@@ -337,7 +337,7 @@ const UserDashboard = () => {
 
           {/* One compact summary row instead of three stat cards */}
           {stats && (
-            <dl className="mt-5 pt-5 border-t border-gray-200 grid grid-cols-3 gap-3 text-center sm:text-left">
+            <dl className="mt-5 pt-5 border-t border-gray-200 grid grid-cols-3 gap-3 text-center sm:text-start">
               <div>
                 <dt className="text-xs sm:text-sm text-gray-600">Total Donated</dt>
                 <dd className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{formatMoney(stats.total_donated)}</dd>
@@ -422,16 +422,16 @@ const UserDashboard = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                   <tr>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Date
                     </th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider hidden sm:table-cell">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider hidden sm:table-cell">
                       Type
                     </th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Certificate
                     </th>
                   </tr>

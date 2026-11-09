@@ -146,7 +146,7 @@ const SmsOptIn = () => {
           {/* What you'll get */}
           <div className="card mb-6">
             <h2 className="text-base font-semibold text-gray-900 mb-3 flex items-center">
-              <ShieldCheck className="w-5 h-5 text-primary-600 mr-2" aria-hidden="true" />
+              <ShieldCheck className="w-5 h-5 text-primary-600 me-2" aria-hidden="true" />
               What you can expect
             </h2>
             <ul className="text-sm text-gray-700 space-y-2 leading-relaxed">
@@ -187,14 +187,14 @@ const SmsOptIn = () => {
                 Mobile phone number <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                <Phone className="w-4 h-4 text-gray-500 absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                 <input
                   id="optin-phone"
                   type="tel"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="input-field pl-9"
+                  className="input-field ps-9"
                   placeholder="(555) 123-4567"
                   autoComplete="tel-national"
                   inputMode="tel"

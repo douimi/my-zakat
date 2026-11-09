@@ -270,7 +270,7 @@ const Donate = () => {
 
                   {/* Custom Amount */}
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
                       <span className="text-gray-500 text-lg">$</span>
                     </div>
                     <input
@@ -281,7 +281,7 @@ const Donate = () => {
                       placeholder="Enter custom amount"
                       data-testid="donate-amount-input"
                       {...register('amount', { required: 'Please enter an amount', min: { value: 1, message: 'Minimum donation is $1' }, valueAsNumber: true })}
-                      className={`input-field pl-8 text-lg ${errors.amount ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
+                      className={`input-field ps-8 text-lg ${errors.amount ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value)
                         setSelectedAmount(isNaN(value) ? null : value)
@@ -331,7 +331,7 @@ const Donate = () => {
                           value={freq}
                           data-testid={`donate-freq-${freq.toLowerCase()}`}
                           {...register('frequency')}
-                          className="mr-3 text-primary-600"
+                          className="me-3 text-primary-600"
                         />
                         <span className="text-gray-700">{freq}</span>
                       </label>
@@ -449,20 +449,20 @@ const Donate = () => {
                 "100% transparent usage", and the receipt is an email receipt. */}
             <div className="card">
               <div className="flex items-center mb-3">
-                <ShieldCheck className="w-5 h-5 text-accent-700 mr-2" aria-hidden="true" />
+                <ShieldCheck className="w-5 h-5 text-accent-700 me-2" aria-hidden="true" />
                 <h3 className="text-base font-semibold text-gray-900">Secure & Trusted</h3>
               </div>
               <ul className="space-y-2 text-sm text-gray-600">
                 <li className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
                   256-bit SSL encryption
                 </li>
                 <li className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
                   PCI DSS compliant
                 </li>
                 <li className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
                   Receipt by email
                 </li>
               </ul>

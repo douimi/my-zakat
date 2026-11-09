@@ -131,7 +131,7 @@ const StoryCard = ({ story, featured = false }: StoryCardProps) => {
           {story.video_filename && (
             <div className="absolute inset-0 bg-black/30 flex items-center justify-center" aria-hidden="true">
               <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center">
-                <Play className="w-6 h-6 text-primary-700 ml-0.5" />
+                <Play className="w-6 h-6 text-primary-700 ms-0.5" />
               </div>
             </div>
           )}

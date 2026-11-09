@@ -333,7 +333,7 @@ const Home = () => {
                           }}
                         />
                         {isToday && (
-                          <span className="badge-danger absolute top-3 left-3 shadow-sm">Today</span>
+                          <span className="badge-danger absolute top-3 start-3 shadow-sm">Today</span>
                         )}
                       </div>
                     )}
@@ -347,7 +347,7 @@ const Home = () => {
                       <p className="mt-2 text-gray-600 line-clamp-2">{event.description}</p>
                       <div className="mt-4 space-y-1.5 text-sm text-gray-600">
                         <p className="flex items-center">
-                          <Calendar className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
+                          <Calendar className="w-4 h-4 me-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
                           {eventDate.toLocaleDateString('en-US', {
                             weekday: 'short',
                             year: 'numeric',
@@ -357,7 +357,7 @@ const Home = () => {
                         </p>
                         {event.location && (
                           <p className="flex items-center">
-                            <MapPin className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
+                            <MapPin className="w-4 h-4 me-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
                             <span className="truncate">{event.location}</span>
                           </p>
                         )}
@@ -604,7 +604,7 @@ const GallerySection = () => {
                   {item.type === 'video' && item.thumbnail && (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/20" aria-hidden="true">
                       <span className="bg-white/90 rounded-full p-3 shadow-md">
-                        <Play className="w-7 h-7 text-primary-700 ml-0.5" />
+                        <Play className="w-7 h-7 text-primary-700 ms-0.5" />
                       </span>
                     </span>
                   )}
@@ -641,7 +641,7 @@ const GallerySection = () => {
                         e.stopPropagation()
                         goToPrevious()
                       }}
-                      className="absolute left-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
+                      className="absolute start-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
                       aria-label="Previous"
                     >
                       <ChevronLeft className="w-8 h-8" aria-hidden="true" />
@@ -678,7 +678,7 @@ const GallerySection = () => {
                         e.stopPropagation()
                         goToNext()
                       }}
-                      className="absolute right-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
+                      className="absolute end-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
                       aria-label="Next"
                     >
                       <ChevronRight className="w-8 h-8" aria-hidden="true" />
@@ -689,7 +689,7 @@ const GallerySection = () => {
                   <button
                     type="button"
                     onClick={close}
-                    className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/75 transition-colors z-10"
+                    className="absolute top-4 end-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/75 transition-colors z-10"
                     aria-label="Close"
                   >
                     <X className="w-6 h-6" aria-hidden="true" />

@@ -192,17 +192,17 @@ const ZakatOnGold = () => {
             <div className="mt-6 overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 uppercase tracking-wide text-xs">
-                    <th className="py-2 pr-4 font-medium">Karat</th>
-                    <th className="py-2 pr-4 font-medium">Gold content</th>
+                  <tr className="text-start text-gray-500 uppercase tracking-wide text-xs">
+                    <th className="py-2 pe-4 font-medium">Karat</th>
+                    <th className="py-2 pe-4 font-medium">Gold content</th>
                     <th className="py-2 font-medium">Typically</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {KARATS.map((row) => (
                     <tr key={row.karat}>
-                      <td className="py-2 pr-4 font-semibold text-gray-900">{row.karat}</td>
-                      <td className="py-2 pr-4 text-gray-700">{row.purity}</td>
+                      <td className="py-2 pe-4 font-semibold text-gray-900">{row.karat}</td>
+                      <td className="py-2 pe-4 text-gray-700">{row.purity}</td>
                       <td className="py-2 text-gray-600">{row.note}</td>
                     </tr>
                   ))}
@@ -231,7 +231,7 @@ const ZakatOnGold = () => {
             </p>
             <Link to="/nisab" className="link mt-4 inline-flex items-center">
               How the nisab is worked out, with the current figures
-              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+              <ArrowRight className="ms-2 w-4 h-4" aria-hidden="true" />
             </Link>
           </section>
 

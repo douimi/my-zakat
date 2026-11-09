@@ -36,8 +36,11 @@ export default {
         // `secondary` (a slate copy) was removed: it had 0 uses. Use gray-* for neutrals.
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        heading: ['Poppins', 'system-ui', 'sans-serif'],
+        // Neither Inter nor Poppins has Arabic glyphs, so the browser falls
+        // through to IBM Plex Sans Arabic for Arabic text only (loaded on the
+        // /ar site by main.tsx), and Latin text keeps its usual face.
+        sans: ['Inter', '"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'],
+        heading: ['Poppins', '"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'],
       },
       animation: {
         // `both` keeps the first frame during an animation-delay (no flash before a staggered fade).

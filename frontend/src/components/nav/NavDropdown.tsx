@@ -125,7 +125,7 @@ const NavDropdown = ({
           id={panelId}
           className={clsx(
             'absolute top-full z-50 mt-2 rounded-xl border border-gray-200 bg-white py-2 shadow-lg',
-            align === 'right' ? 'right-0' : 'left-0',
+            align === 'right' ? 'end-0' : 'start-0',
             panelClassName,
           )}
           onClick={(event) => {

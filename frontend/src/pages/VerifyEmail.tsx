@@ -145,12 +145,12 @@ const VerifyEmail = () => {
                   >
                     {resending ? (
                       <>
-                        <Loader className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />
+                        <Loader className="w-5 h-5 me-2 animate-spin" aria-hidden="true" />
                         Sending...
                       </>
                     ) : (
                       <>
-                        <Mail className="w-5 h-5 mr-2" aria-hidden="true" />
+                        <Mail className="w-5 h-5 me-2" aria-hidden="true" />
                         Resend Verification Email
                       </>
                     )}

@@ -197,7 +197,7 @@ export function buildProposalPayload(form: ProposalFormValues, smsConsent: boole
 const Field = ({ label, required, children, hint, htmlFor }: { label: string; required?: boolean; children: React.ReactNode; hint?: string; htmlFor?: string }) => (
   <div>
     <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">
-      {label}{required && <span className="text-red-500 ml-1">*</span>}
+      {label}{required && <span className="text-red-500 ms-1">*</span>}
     </label>
     {children}
     {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
@@ -393,12 +393,12 @@ const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit
                   </span>
                 </label>
                 {restatingConsent && (
-                  <p className="text-xs text-gray-600 mt-2 ml-7">
+                  <p className="text-xs text-gray-600 mt-2 ms-7">
                     You opted in to SMS messages on your previous submission, so
                     this box starts ticked. Untick it to withdraw your consent.
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-2 ml-7">
+                <p className="text-xs text-gray-500 mt-2 ms-7">
                   You can submit your proposal without opting in.
                 </p>
               </div>
@@ -561,13 +561,13 @@ const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit
                   <AlertCircle className="w-4 h-4" />
                   Please fix {fieldErrors.length === 1 ? 'this item' : `these ${fieldErrors.length} items`} before submitting:
                 </div>
-                <ul className="text-red-800 space-y-1 pl-6">
+                <ul className="text-red-800 space-y-1 ps-6">
                   {fieldErrors.map((e, i) => (
                     <li key={i} className="list-disc">
                       <button
                         type="button"
                         onClick={() => setStep(e.step)}
-                        className="text-left underline hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
+                        className="text-start underline hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
                       >
                         <strong>Step {e.step} · {e.label}:</strong> {e.msg}
                       </button>

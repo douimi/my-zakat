@@ -105,7 +105,7 @@ const LazyVideo = ({
             />
           ) : (
             <div className="w-14 h-14 bg-white/90 rounded-full flex items-center justify-center" aria-hidden="true">
-              <Play className="w-7 h-7 text-primary-700 ml-1" />
+              <Play className="w-7 h-7 text-primary-700 ms-1" />
             </div>
           )}
         </div>

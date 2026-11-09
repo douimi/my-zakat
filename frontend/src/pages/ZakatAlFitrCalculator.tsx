@@ -210,7 +210,7 @@ const ZakatAlFitrCalculator = () => {
                       value="monetary"
                       checked={calculationMethod === 'monetary'}
                       onChange={() => setCalculationMethod('monetary')}
-                      className="mr-3"
+                      className="me-3"
                     />
                     <span className="text-gray-700">Monetary Payment (the value of the food, in cash)</span>
                   </label>
@@ -221,7 +221,7 @@ const ZakatAlFitrCalculator = () => {
                       value="food"
                       checked={calculationMethod === 'food'}
                       onChange={() => setCalculationMethod('food')}
-                      className="mr-3"
+                      className="me-3"
                     />
                     <span className="text-gray-700">Food (staple food such as wheat, rice or dates)</span>
                   </label>
@@ -238,7 +238,7 @@ const ZakatAlFitrCalculator = () => {
                   Price of Staple Food per Kilogram (in USD)
                 </label>
                 <div className="relative max-w-xs">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
                     <DollarSign className="w-5 h-5 text-gray-500" aria-hidden="true" />
                   </div>
                   <input
@@ -248,7 +248,7 @@ const ZakatAlFitrCalculator = () => {
                     step="0.01"
                     value={foodPricePerKg}
                     onChange={(e) => setFoodPricePerKg(parseFloat(e.target.value) || 3)}
-                    className="input-field pl-10 w-full"
+                    className="input-field ps-10 w-full"
                     placeholder="3.00"
                   />
                 </div>
@@ -334,7 +334,7 @@ const ZakatAlFitrCalculator = () => {
           {/* Timing — the part people most often get wrong, so it stays open. */}
           <section className="alert-warning block p-6 text-base" aria-labelledby="fitr-deadline">
             <h2 id="fitr-deadline" className="flex items-center text-lg font-heading font-bold text-amber-900 mb-2">
-              <AlertCircle className="w-5 h-5 text-amber-700 mr-2 shrink-0" aria-hidden="true" />
+              <AlertCircle className="w-5 h-5 text-amber-700 me-2 shrink-0" aria-hidden="true" />
               When it has to be paid
             </h2>
             <p className="text-amber-900 leading-relaxed">
@@ -448,7 +448,7 @@ const ZakatAlFitrCalculator = () => {
               </p>
               <Link to="/nisab" className="link inline-flex items-center">
                 How the nisab works for zakat on wealth — a different obligation
-                <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+                <ArrowRight className="ms-2 w-4 h-4" aria-hidden="true" />
               </Link>
             </Disclosure>
           </section>

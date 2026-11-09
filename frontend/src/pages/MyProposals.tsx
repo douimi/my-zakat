@@ -794,7 +794,7 @@ const MyProposals = () => {
           className={`bg-white rounded-xl shadow-sm border scroll-mt-6 ${
             focusId === p.id || reportFor === p.id ? 'border-primary-400 ring-2 ring-primary-100' : 'border-gray-200'}`}>
           <button type="button" onClick={() => toggle(p.id)} aria-expanded={open}
-            className="w-full text-left p-5 sm:p-6 flex items-start justify-between gap-3 hover:bg-gray-50 rounded-xl">
+            className="w-full text-start p-5 sm:p-6 flex items-start justify-between gap-3 hover:bg-gray-50 rounded-xl">
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-gray-900">{p.project_name || 'Untitled proposal'}</h2>
               <p className="text-sm text-gray-500 mt-0.5">
@@ -813,7 +813,7 @@ const MyProposals = () => {
           <div className="px-5 sm:px-6 pb-6 space-y-3">
 
           {p.decision_comment && (
-            <blockquote className="border-l-4 border-amber-300 bg-amber-50 rounded-r-lg p-3 text-sm text-amber-900">
+            <blockquote className="border-s-4 border-amber-300 bg-amber-50 rounded-e-lg p-3 text-sm text-amber-900">
               <span className="flex items-center gap-1.5 font-semibold mb-1">
                 <MessageSquare className="w-3.5 h-3.5" /> From the review team
               </span>
@@ -864,7 +864,7 @@ const MyProposals = () => {
               {/* The reason it was sent back. The only thing telling them what
                   to fix, so it is never collapsed behind anything. */}
               {p.report.decision === 'changes_requested' && p.report.decision_comment && (
-                <blockquote className="border-l-4 border-orange-300 bg-orange-50 rounded-r-lg p-3 text-sm text-orange-900">
+                <blockquote className="border-s-4 border-orange-300 bg-orange-50 rounded-e-lg p-3 text-sm text-orange-900">
                   <span className="flex items-center gap-1.5 font-semibold mb-1">
                     <MessageSquare className="w-3.5 h-3.5" /> What still needs to be added
                   </span>
@@ -964,7 +964,7 @@ const MyProposals = () => {
             <StatusBadge status={editing.status} />
           </div>
           {editing.decision_comment ? (
-            <blockquote className="border-l-4 border-amber-300 bg-amber-50 rounded-r-lg p-3 text-sm text-amber-900">
+            <blockquote className="border-s-4 border-amber-300 bg-amber-50 rounded-e-lg p-3 text-sm text-amber-900">
               <span className="flex items-center gap-1.5 font-semibold mb-1">
                 <MessageSquare className="w-3.5 h-3.5" /> What the review team asked for
               </span>

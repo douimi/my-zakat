@@ -136,12 +136,12 @@ const UserRegister = () => {
                 >
                   {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-2" aria-hidden="true"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 me-2" aria-hidden="true"></div>
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Mail className="w-5 h-5 mr-2" aria-hidden="true" />
+                      <Mail className="w-5 h-5 me-2" aria-hidden="true" />
                       Resend Verification Email
                     </>
                   )}
@@ -282,12 +282,12 @@ const UserRegister = () => {
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" aria-hidden="true"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white me-2" aria-hidden="true"></div>
                   Creating account...
                 </>
               ) : (
                 <>
-                  <UserPlus className="w-5 h-5 mr-2" aria-hidden="true" />
+                  <UserPlus className="w-5 h-5 me-2" aria-hidden="true" />
                   Create Account
                 </>
               )}

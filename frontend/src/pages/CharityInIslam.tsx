@@ -43,7 +43,7 @@ const CharityInIslam = () => {
 
           <Link to="/zakat-education" className="link inline-flex items-center mt-6">
             Zakat in detail
-            <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+            <ArrowRight className="w-4 h-4 ms-2" aria-hidden="true" />
           </Link>
         </div>
       </div>

@@ -146,7 +146,7 @@ const ZakatEducation = () => {
                 </div>
                 <Link to="/nisab" className="link inline-flex items-center mt-4">
                   The current nisab, and how it is worked out
-                  <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+                  <ArrowRight className="w-4 h-4 ms-2" aria-hidden="true" />
                 </Link>
               </div>
             </div>
@@ -166,7 +166,7 @@ const ZakatEducation = () => {
           <div className="space-y-3">
             <Disclosure title="Who receives zakat" summary="Eight groups named in the Qur'an (9:60)">
               <p className="text-gray-700">The Qur'an (9:60) names eight groups:</p>
-              <ul className="list-disc pl-6 space-y-1 text-gray-700">
+              <ul className="list-disc ps-6 space-y-1 text-gray-700">
                 {RECIPIENTS.map((group) => (
                   <li key={group}>{group}</li>
                 ))}

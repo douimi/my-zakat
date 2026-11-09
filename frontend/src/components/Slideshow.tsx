@@ -200,7 +200,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
           <button
             type="button"
             onClick={goToPrevious}
-            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
+            className="absolute start-2 sm:start-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
             aria-label="Previous slide"
           >
             <ChevronLeft className="w-6 h-6" aria-hidden="true" />
@@ -208,14 +208,14 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
           <button
             type="button"
             onClick={goToNext}
-            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
+            className="absolute end-2 sm:end-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
             aria-label="Next slide"
           >
             <ChevronRight className="w-6 h-6" aria-hidden="true" />
           </button>
 
           {/* Pause / play + slide indicators */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 rounded-full bg-black/40 px-2 pr-3 sm:pr-2">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 rounded-full bg-black/40 px-2 pe-3 sm:pe-2">
             <button
               type="button"
               onClick={() => setIsPlaying((p) => !p)}

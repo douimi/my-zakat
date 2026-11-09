@@ -11,6 +11,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import ScrollToTop from './components/ScrollToTop'
 import { useAuthStore } from './store/authStore'
 import PageLoader from './components/PageLoader'
+import EnglishOnly from './components/i18n/EnglishOnly'
+import { useLocale } from './i18n'
 
 // Lazy load all pages for code splitting - reduces initial bundle size
 const Home = lazy(() => import('./pages/Home'))
@@ -80,6 +82,19 @@ const AdminMarketingWizard = lazy(() => import('./pages/admin/AdminMarketingWiza
 const AdminFundraisingProjects = lazy(() => import('./pages/admin/AdminFundraisingProjects'))
 const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAnalytics'))
 
+// Sponsorship (families and orphans). Bilingual from day one.
+const SponsorLanding = lazy(() => import('./pages/sponsorship/SponsorLanding'))
+const SponsorBrowse = lazy(() => import('./pages/sponsorship/SponsorBrowse'))
+const SponsorProfile = lazy(() => import('./pages/sponsorship/SponsorProfile'))
+const SponsorThankYou = lazy(() => import('./pages/sponsorship/SponsorThankYou'))
+const SponsorApply = lazy(() => import('./pages/sponsorship/SponsorApply'))
+const MyRequests = lazy(() => import('./pages/sponsorship/MyRequests'))
+const MySponsorships = lazy(() => import('./pages/sponsorship/MySponsorships'))
+const AdminSponsorshipOverview = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipOverview'))
+const AdminSponsorshipCases = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCases'))
+const AdminSponsorshipCase = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCase'))
+const AdminSponsorships = lazy(() => import('./pages/admin/sponsorship/AdminSponsorships'))
+
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
 
@@ -94,7 +109,27 @@ const AdminIndex = () => {
   return <AdminDashboard />
 }
 
+/**
+ * The admin console is a staff tool and stays English. Reached from the
+ * Arabic site (/ar/admin...), it reloads at the same path without the prefix.
+ */
+const LeaveArabicForAdmin = () => {
+  useEffect(() => {
+    const { pathname, search, hash } = window.location
+    window.location.replace(`${pathname.replace(/^\/ar(?=\/|$)/, '') || '/'}${search}${hash}`)
+  }, [])
+  return <PageLoader />
+}
+
+/**
+ * A page not translated yet: on the Arabic site it renders its English
+ * content left-to-right under a one-line note (see EnglishOnly). Remove the
+ * wrapper from a route once its page has its own messages.
+ */
+const en = (page: JSX.Element) => <EnglishOnly>{page}</EnglishOnly>
+
 function App() {
+  const locale = useLocale()
   const initFromStorage = useAuthStore((state) => state.initFromStorage)
   const logout = useAuthStore((state) => state.logout)
 
@@ -123,52 +158,62 @@ function App() {
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="about" element={<About />} />
-                <Route path="donate" element={<Donate />} />
-                <Route path="donation-success" element={<DonationSuccess />} />
-                <Route path="zakat-calculator" element={<ZakatCalculator />} />
-                <Route path="zakat-education" element={<ZakatEducation />} />
-                <Route path="stories" element={<Stories />} />
-                <Route path="stories/:id" element={<StoryDetail />} />
-                <Route path="events" element={<Events />} />
-                <Route path="events/:id" element={<EventDetail />} />
-                <Route path="programs" element={<Programs />} />
-                <Route path="programs/:slug" element={<ProgramDetail />} />
-                <Route path="categories/:slug" element={<CategoryDetail />} />
-                <Route path="contact" element={<Contact />} />
-                <Route path="volunteer" element={<Volunteer />} />
-                <Route path="testimonials" element={<Testimonials />} />
-                <Route path="urgent-needs/:slug" element={<UrgentNeedDetail />} />
-                <Route path="quick-links" element={<QuickLinks />} />
-                <Route path="islamic-knowledge" element={<IslamicKnowledge />} />
-                <Route path="book-of-duas" element={<BookOfDuas />} />
-                <Route path="charity-in-islam" element={<CharityInIslam />} />
-                <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
-                <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
-                <Route path="zakat-on-gold" element={<ZakatOnGold />} />
-                <Route path="nisab" element={<Nisab />} />
-                <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
-                <Route path="privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="donation-policy" element={<DonationPolicy />} />
-                <Route path="terms-of-service" element={<TermsOfService />} />
-                <Route path="sms-opt-in" element={<SmsOptIn />} />
-                <Route path="unsubscribe" element={<Unsubscribe />} />
-                <Route path="submit-proposal" element={<SubmitProposal />} />
-                <Route path="my-proposals" element={<MyProposals />} />
-                <Route path="projects" element={<AllProjects />} />
+                <Route index element={en(<Home />)} />
+                <Route path="about" element={en(<About />)} />
+                <Route path="donate" element={en(<Donate />)} />
+                <Route path="donation-success" element={en(<DonationSuccess />)} />
+                <Route path="zakat-calculator" element={en(<ZakatCalculator />)} />
+                <Route path="zakat-education" element={en(<ZakatEducation />)} />
+                <Route path="stories" element={en(<Stories />)} />
+                <Route path="stories/:id" element={en(<StoryDetail />)} />
+                <Route path="events" element={en(<Events />)} />
+                <Route path="events/:id" element={en(<EventDetail />)} />
+                <Route path="programs" element={en(<Programs />)} />
+                <Route path="programs/:slug" element={en(<ProgramDetail />)} />
+                <Route path="categories/:slug" element={en(<CategoryDetail />)} />
+                <Route path="contact" element={en(<Contact />)} />
+                <Route path="volunteer" element={en(<Volunteer />)} />
+                <Route path="testimonials" element={en(<Testimonials />)} />
+                <Route path="urgent-needs/:slug" element={en(<UrgentNeedDetail />)} />
+                <Route path="quick-links" element={en(<QuickLinks />)} />
+                <Route path="islamic-knowledge" element={en(<IslamicKnowledge />)} />
+                <Route path="book-of-duas" element={en(<BookOfDuas />)} />
+                <Route path="charity-in-islam" element={en(<CharityInIslam />)} />
+                <Route path="kaffarah-calculator" element={en(<KaffarahCalculator />)} />
+                <Route path="zakat-al-fitr-calculator" element={en(<ZakatAlFitrCalculator />)} />
+                <Route path="zakat-on-gold" element={en(<ZakatOnGold />)} />
+                <Route path="nisab" element={en(<Nisab />)} />
+                <Route path="umrah-guidelines" element={en(<UmrahGuidelines />)} />
+                <Route path="privacy-policy" element={en(<PrivacyPolicy />)} />
+                <Route path="donation-policy" element={en(<DonationPolicy />)} />
+                <Route path="terms-of-service" element={en(<TermsOfService />)} />
+                <Route path="sms-opt-in" element={en(<SmsOptIn />)} />
+                <Route path="unsubscribe" element={en(<Unsubscribe />)} />
+                <Route path="submit-proposal" element={en(<SubmitProposal />)} />
+                <Route path="my-proposals" element={en(<MyProposals />)} />
+                <Route path="projects" element={en(<AllProjects />)} />
+                <Route path="sponsor" element={<SponsorLanding />} />
+                <Route path="sponsor/orphans" element={<SponsorBrowse kind="orphan" />} />
+                <Route path="sponsor/families" element={<SponsorBrowse kind="family" />} />
+                <Route path="sponsor/thank-you" element={<SponsorThankYou />} />
+                <Route path="sponsor/apply" element={<SponsorApply />} />
+                <Route path="sponsor/apply/:kind" element={<SponsorApply />} />
+                <Route path="sponsor/:ref" element={<SponsorProfile />} />
+                <Route path="my-requests" element={<MyRequests />} />
+                <Route path="my-sponsorships" element={<MySponsorships />} />
               </Route>
 
               {/* User authentication routes */}
-              <Route path="/login" element={<UserLogin />} />
-              <Route path="/register" element={<UserRegister />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/login" element={en(<UserLogin />)} />
+              <Route path="/register" element={en(<UserRegister />)} />
+              <Route path="/verify-email" element={en(<VerifyEmail />)} />
               
               {/* User dashboard route */}
-              <Route path="/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />
+              <Route path="/dashboard" element={<UserRoute>{en(<UserDashboard />)}</UserRoute>} />
 
               {/* Admin routes */}
-              <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+              {locale === 'ar' && <Route path="/admin/*" element={<LeaveArabicForAdmin />} />}
+              <Route path="/admin" element={locale === 'ar' ? <LeaveArabicForAdmin /> : <AdminRoute><AdminLayout /></AdminRoute>}>
                 <Route index element={<AdminIndex />} />
                 <Route path="donations" element={<AdminDonations />} />
                 <Route path="users" element={<AdminUsers />} />
@@ -193,6 +238,11 @@ function App() {
                 <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
                 <Route path="marketing-campaigns/new" element={<AdminMarketingWizard />} />
                 <Route path="project-proposals" element={<AdminProjectProposals />} />
+                <Route path="sponsorship" element={<AdminSponsorshipOverview />} />
+                <Route path="sponsorship/families" element={<AdminSponsorshipCases kind="family" />} />
+                <Route path="sponsorship/orphans" element={<AdminSponsorshipCases kind="orphan" />} />
+                <Route path="sponsorship/cases/:id" element={<AdminSponsorshipCase />} />
+                <Route path="sponsorship/sponsors" element={<AdminSponsorships />} />
                 <Route path="fundraising-projects" element={<AdminFundraisingProjects />} />
                 <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
                 <Route path="cleanup" element={<AdminCleanup />} />
