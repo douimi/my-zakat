@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
-import { DollarSign, Heart, CreditCard, Calendar, X, LogOut, User as UserIcon, Shield, Home, Download, Mail } from 'lucide-react'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Heart, X, LogOut, Shield, Download, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirmation } from '../hooks/useConfirmation'
+import SEOHead from '../components/SEOHead'
 
 interface DashboardStats {
   total_donated: number
@@ -51,6 +52,8 @@ const UserDashboard = () => {
   const { user, token, isAuthenticated, isAdmin, isStaff, logout } = useAuthStore()
   const navigate = useNavigate()
   const { showSuccess, showError } = useToast()
+  // Called before any early return so the hook order never changes between renders.
+  const { confirm, ConfirmationDialog } = useConfirmation()
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -121,8 +124,6 @@ const UserDashboard = () => {
       setIsLoading(false)
     }
   }
-
-  const { confirm, ConfirmationDialog } = useConfirmation()
 
   const handleCancelSubscription = async (subscriptionId: number) => {
     const confirmed = await confirm({
@@ -271,170 +272,166 @@ const UserDashboard = () => {
     })
   }
 
+
+  const formatMoney = (value: number) =>
+    `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  // This page renders outside the site layout (no header), so it carries its own way back.
+  const topBar = (
+    <div className="flex items-center justify-between gap-4 mb-6">
+      <Link to="/" className="inline-flex items-center">
+        <img src="/logo.png" alt="MyZakat home" className="h-10" />
+      </Link>
+      <Link to="/" className="link text-sm">Back to the website</Link>
+    </div>
+  )
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
+        <span className="sr-only">Loading your dashboard</span>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-full flex items-center justify-center mr-3 sm:mr-4 flex-shrink-0">
-                <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                  Welcome back, {user?.name || 'User'}!
-                </h1>
-                <p className="text-xs sm:text-sm text-gray-600 truncate">{user?.email}</p>
-              </div>
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-8">
+      <SEOHead title="My donations" canonicalPath="/dashboard" noindex />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        {topBar}
+
+        {/* Header: who, what they gave, and the next thing to do */}
+        <div className="card mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-heading font-bold text-gray-900 truncate">
+                Welcome back, {user?.name || 'User'}!
+              </h1>
+              <p className="text-sm text-gray-600 truncate">{user?.email}</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-              <button
-                onClick={() => navigate('/')}
-                className="flex items-center justify-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200"
-              >
-                <Home className="w-4 h-4" />
-                <span>Back to Home</span>
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to="/donate" className="btn-primary btn-sm gap-2">
+                <Heart className="w-4 h-4" aria-hidden="true" /> {donations.length > 0 ? 'Donate again' : 'Donate'}
+              </Link>
               {isStaff && (
                 <button
+                  type="button"
                   onClick={() => navigate('/admin')}
-                  className="flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200"
+                  className="btn-secondary btn-sm gap-2"
                 >
-                  <Shield className="w-4 h-4" />
-                  <span>{isAdmin ? 'Admin Console' : 'Manager Console'}</span>
+                  <Shield className="w-4 h-4" aria-hidden="true" />
+                  {isAdmin ? 'Admin Console' : 'Manager Console'}
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleLogout}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200 flex items-center justify-center"
+                className="btn-ghost btn-sm gap-2"
               >
-                <LogOut className="w-4 h-4 mr-2" />
+                <LogOut className="w-4 h-4" aria-hidden="true" />
                 Logout
               </button>
             </div>
           </div>
+
+          {/* One compact summary row instead of three stat cards */}
+          {stats && (
+            <dl className="mt-5 pt-5 border-t border-gray-200 grid grid-cols-3 gap-3 text-center sm:text-left">
+              <div>
+                <dt className="text-xs sm:text-sm text-gray-600">Total Donated</dt>
+                <dd className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{formatMoney(stats.total_donated)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs sm:text-sm text-gray-600">Donations Made</dt>
+                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{stats.donation_count}</dd>
+              </div>
+              <div>
+                <dt className="text-xs sm:text-sm text-gray-600">Active Subscriptions</dt>
+                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{stats.active_subscriptions}</dd>
+              </div>
+            </dl>
+          )}
         </div>
-
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Donated</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-blue-600 truncate">
-                    ${stats.total_donated.toFixed(2)}
-                  </p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Donations Made</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.donation_count}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Active Subscriptions</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.active_subscriptions}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Active Subscriptions */}
         {subscriptions.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-8">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" />
+          <section className="card mb-6" aria-labelledby="dashboard-subscriptions">
+            <h2 id="dashboard-subscriptions" className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
               Active Subscriptions
             </h2>
-            <div className="space-y-4">
+            <ul className="space-y-3">
               {subscriptions.map((subscription) => (
-                <div
+                <li
                   key={subscription.id}
                   className="border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
                 >
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-900 break-words">{subscription.purpose}</h3>
-                    <div className="mt-2 text-xs sm:text-sm text-gray-600 space-y-1">
-                      <p>Amount: <span className="font-medium">${subscription.amount}</span> / {subscription.interval}</p>
-                      <p>Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>
-                        {subscription.status}
-                      </span></p>
+                    <div className="mt-2 text-sm text-gray-600 space-y-1">
+                      <p>
+                        Amount: <span className="font-medium text-gray-900">${subscription.amount}</span> / {subscription.interval}
+                      </p>
+                      <p className="flex items-center gap-2">
+                        Status:{' '}
+                        <span className={subscription.status === 'active' ? 'badge-success' : 'badge-warning'}>
+                          {subscription.status}
+                        </span>
+                      </p>
                       {subscription.next_payment_date && (
                         <p>Next Payment: {formatDate(subscription.next_payment_date)}</p>
                       )}
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleCancelSubscription(subscription.id)}
                     disabled={cancellingId === subscription.id}
-                    className="bg-red-100 hover:bg-red-200 text-red-700 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition duration-200 flex items-center justify-center w-full sm:w-auto"
+                    className="btn btn-sm gap-1 bg-red-50 text-red-700 hover:bg-red-100 w-full sm:w-auto"
                   >
                     {cancellingId === subscription.id ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700"></div>
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700" aria-hidden="true"></div>
+                        <span className="sr-only">Cancelling</span>
+                      </>
                     ) : (
                       <>
-                        <X className="w-4 h-4 mr-1" />
+                        <X className="w-4 h-4" aria-hidden="true" />
                         Cancel
                       </>
                     )}
                   </button>
-                </div>
+                </li>
               ))}
-            </div>
-          </div>
+            </ul>
+          </section>
         )}
 
         {/* Donation History */}
-        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-600" />
+        <section className="card" aria-labelledby="dashboard-history">
+          <h2 id="dashboard-history" className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
             Donation History
           </h2>
           {donations.length === 0 ? (
-            <p className="text-gray-600 text-center py-8 text-sm sm:text-base">No donations yet</p>
+            <div className="text-center py-8 space-y-4">
+              <p className="text-gray-600">No donations yet</p>
+              <Link to="/donate" className="btn-primary btn-sm">Make your first donation</Link>
+            </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-2 sm:mx-0">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                   <tr>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider hidden sm:table-cell">
                       Type
                     </th>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Certificate
                     </th>
                   </tr>
@@ -442,43 +439,48 @@ const UserDashboard = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {donations.map((donation) => (
                     <tr key={donation.id}>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         {formatDate(donation.donated_at)}
+                        <span className="block text-xs text-gray-500 sm:hidden">{donation.frequency}</span>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-blue-600">
-                        ${donation.amount.toFixed(2)}
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {formatMoney(donation.amount)}
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 hidden sm:table-cell">
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm text-gray-600 hidden sm:table-cell">
                         {donation.frequency}
                       </td>
-                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
-                        {/* Certificates are now generated on-the-fly, so they're always available */}
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:space-x-3">
+                      <td className="px-2 sm:px-4 py-3 text-sm">
+                        {/* Certificates are generated on the fly, so they're always available.
+                            Icon-only on phones; the text stays for screen readers. */}
+                        <div className="flex items-center gap-1 sm:gap-3">
                           <button
+                            type="button"
                             onClick={() => handleDownloadCertificate(donation.id)}
-                            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 font-medium"
+                            className="inline-flex items-center gap-1 p-2 -m-1 sm:p-0 sm:m-0 rounded text-primary-700 hover:text-primary-800 font-medium"
+                            title="Download certificate"
                           >
-                            <Download className="w-4 h-4" />
-                            <span>Download</span>
+                            <Download className="w-4 h-4" aria-hidden="true" />
+                            <span className="sr-only sm:not-sr-only">Download</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleEmailCertificate(donation.id)}
                             disabled={emailingId === donation.id}
-                            className="flex items-center space-x-1 text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                            className="inline-flex items-center gap-1 p-2 -m-1 sm:p-0 sm:m-0 rounded text-primary-700 hover:text-primary-800 font-medium disabled:opacity-50"
+                            title="Email certificate"
                           >
                             {emailingId === donation.id ? (
                               <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
-                                <span>Sending...</span>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" aria-hidden="true"></div>
+                                <span className="sr-only sm:not-sr-only">Sending...</span>
                               </>
                             ) : (
                               <>
-                                <Mail className="w-4 h-4" />
-                                <span>Email</span>
+                                <Mail className="w-4 h-4" aria-hidden="true" />
+                                <span className="sr-only sm:not-sr-only">Email</span>
                               </>
                             )}
                           </button>
-                          <span className="text-xs text-gray-500 sm:hidden">({donation.frequency})</span>
                         </div>
                       </td>
                     </tr>
@@ -487,7 +489,7 @@ const UserDashboard = () => {
               </table>
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       <ConfirmationDialog />
@@ -496,4 +498,3 @@ const UserDashboard = () => {
 }
 
 export default UserDashboard
-

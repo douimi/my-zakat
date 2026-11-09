@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, Navigate, useLocation } from 'react-router-dom'
-import { LogIn, Mail, Lock } from 'lucide-react'
+import { LogIn } from 'lucide-react'
 import { useAuthStore, User } from '../store/authStore'
+import SEOHead from '../components/SEOHead'
 
 interface LoginForm {
   email: string
@@ -133,52 +134,58 @@ const UserLogin = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEOHead title="Sign in" canonicalPath="/login" noindex />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-6">
-            <LogIn className="w-8 h-8 text-white" />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
+          <Link to="/" className="inline-block mb-6">
+            <img src="/logo.png" alt="MyZakat home" className="h-12 mx-auto" />
+          </Link>
+          <h1 className="text-3xl font-heading font-bold text-gray-900">Welcome Back</h1>
           <p className="mt-2 text-sm text-gray-600">
             Sign in to manage your donations
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="card sm:p-8">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {successMessage && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+              <div className="alert-success" role="status">
                 {successMessage}
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
-                {error}
-                {unverifiedEmail && (
-                  <div className="mt-3 pt-3 border-t border-red-200">
-                    <p className="mb-2">Need a new verification email?</p>
-                    <button
-                      type="button"
-                      onClick={handleResendVerification}
-                      disabled={resending}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 text-sm"
-                    >
-                      {resending ? 'Sending...' : 'Resend Verification Email'}
-                    </button>
-                  </div>
-                )}
+              <div className="alert-error" role="alert">
+                <div className="flex-1">
+                  {error}
+                  {unverifiedEmail && (
+                    <div className="mt-3 pt-3 border-t border-red-200">
+                      <p className="mb-2">Need a new verification email?</p>
+                      <button
+                        type="button"
+                        onClick={handleResendVerification}
+                        disabled={resending}
+                        className="btn-primary btn-sm w-full"
+                      >
+                        {resending ? 'Sending...' : 'Resend Verification Email'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Mail className="w-4 h-4 inline mr-1" />
+              <label htmlFor="login-email" className="label">
                 Email Address
               </label>
               <input
+                id="login-email"
                 type="email"
+                autoComplete="email"
+                aria-invalid={errors.email ? true : undefined}
+                aria-describedby={errors.email ? 'login-email-error' : undefined}
                 {...register('email', {
                   required: 'Email is required',
                   pattern: {
@@ -186,43 +193,46 @@ const UserLogin = () => {
                     message: 'Invalid email address',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Enter your email"
               />
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                <p id="login-email-error" className="field-error">{errors.email.message}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="w-4 h-4 inline mr-1" />
+              <label htmlFor="login-password" className="label">
                 Password
               </label>
               <input
+                id="login-password"
                 type="password"
+                autoComplete="current-password"
+                aria-invalid={errors.password ? true : undefined}
+                aria-describedby={errors.password ? 'login-password-error' : undefined}
                 {...register('password', { required: 'Password is required' })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Enter your password"
               />
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                <p id="login-password-error" className="field-error">{errors.password.message}</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+              className="btn-primary w-full"
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" aria-hidden="true"></div>
                   Signing in...
                 </>
               ) : (
                 <>
-                  <LogIn className="w-5 h-5 mr-2" />
+                  <LogIn className="w-5 h-5 mr-2" aria-hidden="true" />
                   Sign In
                 </>
               )}
@@ -232,11 +242,22 @@ const UserLogin = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link to="/register" className="link">
                 Create one
               </Link>
             </p>
           </div>
+        </div>
+
+        {/* Partner teams who applied for funding land here too: point them to their portal. */}
+        <div className="text-center space-y-2 text-sm text-gray-600">
+          <p>
+            Applied for project funding?{' '}
+            <Link to="/my-proposals" className="link">Check your proposal</Link>
+          </p>
+          <p>
+            <Link to="/" className="link">Back to the website</Link>
+          </p>
         </div>
       </div>
     </div>

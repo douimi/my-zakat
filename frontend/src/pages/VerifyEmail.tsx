@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { Mail, CheckCircle, XCircle, Loader } from 'lucide-react'
+import SEOHead from '../components/SEOHead'
 
 const VerifyEmail = () => {
   const [searchParams] = useSearchParams()
@@ -80,40 +81,42 @@ const VerifyEmail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEOHead title="Verify your email" canonicalPath="/verify-email" noindex />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-6 ${
-            status === 'success' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-blue-600'
-          }`}>
-            {status === 'loading' && <Loader className="w-8 h-8 text-white animate-spin" />}
-            {status === 'success' && <CheckCircle className="w-8 h-8 text-white" />}
-            {status === 'error' && <XCircle className="w-8 h-8 text-white" />}
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900">
-            {status === 'loading' && 'Verifying Email...'}
-            {status === 'success' && 'Email Verified!'}
-            {status === 'error' && 'Verification Failed'}
-          </h2>
+          <Link to="/" className="inline-block mb-6">
+            <img src="/logo.png" alt="MyZakat home" className="h-12 mx-auto" />
+          </Link>
+          <h1 className="text-3xl font-heading font-bold text-gray-900 inline-flex items-center gap-2">
+            {status === 'loading' && <Loader className="w-7 h-7 text-primary-600 animate-spin" aria-hidden="true" />}
+            {status === 'success' && <CheckCircle className="w-7 h-7 text-green-700" aria-hidden="true" />}
+            {status === 'error' && <XCircle className="w-7 h-7 text-red-700" aria-hidden="true" />}
+            <span>
+              {status === 'loading' && 'Verifying Email...'}
+              {status === 'success' && 'Email Verified!'}
+              {status === 'error' && 'Verification Failed'}
+            </span>
+          </h1>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="card sm:p-8">
           {status === 'loading' && (
-            <div className="text-center">
+            <div className="text-center" role="status">
               <p className="text-gray-600">Please wait while we verify your email address...</p>
             </div>
           )}
 
           {status === 'success' && (
-            <div className="text-center space-y-4">
-              <p className="text-green-600 font-medium">{message}</p>
+            <div className="text-center space-y-4" role="status">
+              <p className="text-green-800 font-medium">{message}</p>
               <p className="text-sm text-gray-600">Redirecting to login page...</p>
             </div>
           )}
 
           {status === 'error' && (
             <div className="space-y-4">
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              <div className="alert-error" role="alert">
                 {message}
               </div>
 
@@ -121,46 +124,47 @@ const VerifyEmail = () => {
                 <p className="text-sm text-gray-600 mb-4">Didn't receive the verification email?</p>
                 <form onSubmit={handleResendVerification} className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      <Mail className="w-4 h-4 inline mr-1" />
+                    <label htmlFor="verify-resend-email" className="label">
                       Email Address
                     </label>
                     <input
+                      id="verify-resend-email"
                       type="email"
+                      autoComplete="email"
                       value={resendEmail}
                       onChange={(e) => setResendEmail(e.target.value)}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="input-field"
                       placeholder="Enter your email"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={resending}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+                    className="btn-primary w-full"
                   >
                     {resending ? (
                       <>
-                        <Loader className="w-5 h-5 mr-2 animate-spin" />
+                        <Loader className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />
                         Sending...
                       </>
                     ) : (
                       <>
-                        <Mail className="w-5 h-5 mr-2" />
+                        <Mail className="w-5 h-5 mr-2" aria-hidden="true" />
                         Resend Verification Email
                       </>
                     )}
                   </button>
                 </form>
                 {resendSuccess && (
-                  <div className="mt-3 bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+                  <div className="mt-3 alert-success" role="status">
                     Verification email sent! Please check your inbox.
                   </div>
                 )}
               </div>
 
               <div className="mt-6 text-center">
-                <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+                <Link to="/login" className="link">
                   Back to Login
                 </Link>
               </div>
@@ -173,4 +177,3 @@ const VerifyEmail = () => {
 }
 
 export default VerifyEmail
-

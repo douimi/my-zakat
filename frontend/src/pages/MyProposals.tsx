@@ -534,9 +534,7 @@ const MyProposals = () => {
           </Link>
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">My Proposals</h1>
           <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
-            Check where your application stands, send the changes our review team asked for,
-            and submit your completion report once a funded project is done.
-            No account needed — we email you a sign-in code.
+            Track your application, send requested changes and your completion report. We email you a sign-in code.
           </p>
         </div>
         {children}
@@ -709,7 +707,7 @@ const MyProposals = () => {
         </button>
         <button type="button" onClick={backToEmail} className="hover:underline">
           Use a different email address
-          {reauthenticating && <span className="block text-gray-400">(discards the edits in progress)</span>}
+          {reauthenticating && <span className="block text-gray-500">(discards the edits in progress)</span>}
         </button>
       </div>
     </div>
@@ -846,7 +844,7 @@ const MyProposals = () => {
                       >
                         {openingFile === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
                         <span dir="auto">{a.filename}</span>
-                        <span className="text-gray-400">{formatBytes(a.size_bytes)}</span>
+                        <span className="text-gray-500">{formatBytes(a.size_bytes)}</span>
                       </button>
                     </li>
                   ))}
@@ -896,11 +894,8 @@ const MyProposals = () => {
             <div className="pt-2 border-t border-gray-100 space-y-2">
               <p className="text-sm text-gray-600">
                 {p.status === 'report_changes_requested'
-                  ? 'Submit a corrected report. Your previous one is kept — you are adding to the record, not replacing it.'
-                  : 'Once the project is complete, submit your report: what was done, with receipts, invoices and photographs.'}
-              </p>
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded p-2">
-                You cannot apply for another project until this report has been submitted and accepted.
+                  ? 'Send a corrected report; your previous one stays on record.'
+                  : 'Send what was done, with receipts, invoices and photographs.'}
               </p>
               <button
                 onClick={() => openReportForm(p)}

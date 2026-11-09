@@ -1,24 +1,36 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
-import { Calendar, User, ArrowRight, Play, BookOpen, Heart } from 'lucide-react'
+import { ArrowRight, Play } from 'lucide-react'
 import { storiesAPI } from '../utils/api'
 import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { Story } from '../types'
-import VideoThumbnail from '../components/VideoThumbnail'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+
+const PAGE_TITLE = 'Stories of Impact'
+const PAGE_LEAD = 'What your donations paid for, told by the families who received them.'
 
 const Stories = () => {
-  const { data: stories, isLoading, error } = useQuery('public-stories', () => 
+  const { data: stories, isLoading, error } = useQuery('public-stories', () =>
     storiesAPI.getAll(true, false) // Get active stories, not just featured
+  )
+
+  const seo = (
+    <SEOHead
+      title="Impact Stories"
+      description="Read real stories of how Zakat and Sadaqa donations have transformed lives. See the tangible impact of your charitable giving through MyZakat programs."
+      canonicalPath="/stories"
+    />
   )
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-          </div>
+      <div className="min-h-screen bg-white">
+        {seo}
+        <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
+        <div className="flex items-center justify-center py-20" role="status">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true" />
+          <span className="sr-only">Loading stories</span>
         </div>
       </div>
     )
@@ -26,12 +38,11 @@ const Stories = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="text-center py-20">
-            <h1 className="text-4xl font-heading font-bold mb-4">Stories of Impact</h1>
-            <p className="text-red-600">Error loading stories. Please try again later.</p>
-          </div>
+      <div className="min-h-screen bg-white">
+        {seo}
+        <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
+        <div className="section-container section">
+          <p className="alert-error" role="alert">Error loading stories. Please try again later.</p>
         </div>
       </div>
     )
@@ -39,161 +50,53 @@ const Stories = () => {
 
   const featuredStories = stories?.filter((story: Story) => story.is_featured) || []
   const regularStories = stories?.filter((story: Story) => !story.is_featured) || []
+  const hasStories = featuredStories.length + regularStories.length > 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <SEOHead
-        title="Impact Stories"
-        description="Read real stories of how Zakat and Sadaqa donations have transformed lives. See the tangible impact of your charitable giving through MyZakat programs."
-        canonicalPath="/stories"
-      />
-      {/* Hero Section */}
-      <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
-        <div className="section-container">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl font-heading font-bold mb-6">Stories of Impact</h1>
-            <p className="text-xl text-primary-100 leading-relaxed">
-              Read inspiring stories from those whose lives have been changed through your generosity. 
-              Every donation creates ripples of hope and transformation in communities around the world.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-white">
+      {seo}
+      <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
 
-      {/* Main Content */}
-      <div className="section-container py-16">
-        {/* Featured Stories */}
+      <div className="section-container section space-y-14">
+        {/* Featured stories: every one of them (a featured story is never repeated in "All stories"). */}
         {featuredStories.length > 0 && (
-          <div className="mb-16">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">Featured Stories</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Highlighted stories that showcase the incredible impact of your support
-              </p>
-            </div>
-
+          <section aria-labelledby="featured-stories">
+            <h2 id="featured-stories" className="section-title mb-8">Featured Stories</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {featuredStories.slice(0, 2).map((story: Story) => (
-                <FeaturedStoryCard key={story.id} story={story} />
+              {featuredStories.map((story: Story) => (
+                <StoryCard key={story.id} story={story} featured />
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* All Stories */}
         {regularStories.length > 0 && (
-          <div>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">All Stories</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Discover more stories of hope, resilience, and transformation
-              </p>
-            </div>
-
+          <section aria-labelledby="all-stories">
+            <h2 id="all-stories" className="section-title mb-8">
+              {featuredStories.length > 0 ? 'More Stories' : 'All Stories'}
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {regularStories.map((story: Story) => (
                 <StoryCard key={story.id} story={story} />
               ))}
             </div>
+          </section>
+        )}
+
+        {!hasStories && (
+          <div className="text-center py-12">
+            <h2 className="text-xl font-semibold text-gray-900">No stories published yet.</h2>
+            <p className="mt-2 text-gray-600">Check back soon.</p>
           </div>
         )}
 
-        {/* No Stories */}
-        {(!stories || stories.length === 0) && (
-          <div className="text-center py-20">
-            <BookOpen className="w-24 h-24 mx-auto text-gray-300 mb-8" />
-            <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">No Stories Yet</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto mb-8">
-              We're working on sharing inspiring stories from our community. Check back soon for updates!
-            </p>
-            <Link 
-              to="/donate" 
-              className="btn-primary inline-flex items-center"
-            >
-              Make a Difference Today
-              <ArrowRight className="w-4 h-4 ml-2" />
+        {hasStories && (
+          <div className="flex justify-center border-t border-gray-200 pt-10">
+            <Link to="/donate" className="btn-primary gap-2">
+              Donate <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Link>
           </div>
         )}
-      </div>
-
-      {/* Call to Action */}
-      <div className="bg-primary-50 py-16">
-        <div className="section-container text-center">
-          <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">
-            Your Story Could Be Next
-          </h2>
-          <p className="text-gray-600 max-w-3xl mx-auto mb-8">
-            Every donation, no matter the size, creates stories of hope and transformation. 
-            Join us in writing the next chapter of positive change.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/donate" className="btn-primary">
-              Donate Now
-            </Link>
-            <Link to="/volunteer" className="btn-outline">
-              Volunteer With Us
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface FeaturedStoryCardProps {
-  story: Story
-}
-
-const FeaturedStoryCard = ({ story }: FeaturedStoryCardProps) => {
-  const imageUrl = getOptimizedImageUrl(story.image_filename, IMAGE_WIDTHS.CARD, 'stories')
-
-  return (
-    <div className="card hover:shadow-xl transition-shadow duration-300 overflow-hidden">
-      {/* Story Image/Video */}
-      {imageUrl && (
-        <div className="aspect-video bg-gray-200 relative overflow-hidden">
-          <img 
-            src={imageUrl} 
-            alt={story.title}
-            className="w-full h-full object-cover"
-            crossOrigin={imageUrl?.startsWith('http://') || imageUrl?.startsWith('https://') ? 'anonymous' : undefined}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-            }}
-          />
-          {story.video_filename && (
-            <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
-              <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
-                <Play className="w-8 h-8 text-primary-600 ml-1" />
-              </div>
-            </div>
-          )}
-          <div className="absolute top-4 left-4">
-            <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-              Featured
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className="p-8">
-        <h3 className="text-2xl font-heading font-bold text-gray-900 mb-4">{story.title}</h3>
-        <p className="text-gray-600 mb-6 text-lg leading-relaxed">{story.summary}</p>
-        
-        <div className="flex items-center justify-between">
-          <div className="flex items-center text-sm text-gray-500">
-            <Calendar className="w-4 h-4 mr-2" />
-            <span>Published recently</span>
-          </div>
-          <Link 
-            to={`/stories/${story.id}`}
-            className="btn-primary inline-flex items-center"
-          >
-            Read Full Story
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Link>
-        </div>
       </div>
     </div>
   )
@@ -201,53 +104,57 @@ const FeaturedStoryCard = ({ story }: FeaturedStoryCardProps) => {
 
 interface StoryCardProps {
   story: Story
+  featured?: boolean
 }
 
-const StoryCard = ({ story }: StoryCardProps) => {
-  const imageUrl = getOptimizedImageUrl(story.image_filename, IMAGE_WIDTHS.THUMB, 'stories')
+const StoryCard = ({ story, featured = false }: StoryCardProps) => {
+  const imageUrl = getOptimizedImageUrl(
+    story.image_filename,
+    featured ? IMAGE_WIDTHS.CARD : IMAGE_WIDTHS.THUMB,
+    'stories',
+  )
 
   return (
-    <div className="card hover:shadow-lg transition-shadow duration-300">
-      {/* Story Image */}
+    <article className="card-media">
       {imageUrl && (
-        <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden relative">
-          <img 
-            src={imageUrl} 
-            alt={story.title}
+        <div className="aspect-video bg-gray-100 relative overflow-hidden">
+          <img
+            src={imageUrl}
+            alt=""
+            loading="lazy"
             className="w-full h-full object-cover"
-            crossOrigin={imageUrl?.startsWith('http://') || imageUrl?.startsWith('https://') ? 'anonymous' : undefined}
+            crossOrigin={imageUrl.startsWith('http://') || imageUrl.startsWith('https://') ? 'anonymous' : undefined}
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}
           />
           {story.video_filename && (
-            <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
-              <div className="w-12 h-12 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
-                <Play className="w-6 h-6 text-primary-600 ml-0.5" />
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center" aria-hidden="true">
+              <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center">
+                <Play className="w-6 h-6 text-primary-700 ml-0.5" />
               </div>
             </div>
           )}
         </div>
       )}
 
-      <div className="p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-3">{story.title}</h3>
-        <p className="text-gray-600 mb-4 line-clamp-3">{story.summary}</p>
-        
-        <div className="flex items-center justify-between">
-          <div className="flex items-center text-sm text-gray-500">
-            <Heart className="w-4 h-4 mr-1 text-red-500" />
-            <span>Impact Story</span>
+      <div className="card-body">
+        {(featured || story.video_filename) && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {featured && <span className="badge-primary">Featured</span>}
+            {story.video_filename && <span className="badge-neutral">Video</span>}
           </div>
-          <Link 
-            to={`/stories/${story.id}`}
-            className="btn-outline text-sm"
-          >
-            Read More
+        )}
+        <h3 className={featured ? 'card-title text-xl sm:text-2xl' : 'card-title'}>{story.title}</h3>
+        <p className={`mt-2 text-gray-600 ${featured ? '' : 'line-clamp-3'}`}>{story.summary}</p>
+        <div className="mt-auto pt-5">
+          <Link to={`/stories/${story.id}`} className="link inline-flex items-center gap-1">
+            Read the story <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            <span className="sr-only">: {story.title}</span>
           </Link>
         </div>
       </div>
-    </div>
+    </article>
   )
 }
 

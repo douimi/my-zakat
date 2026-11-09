@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, Check, User as UserIcon, ClipboardList, ListChecks,
-  DollarSign, Loader2, Info, Send, AlertCircle,
+  DollarSign, Loader2, Send, AlertCircle,
 } from 'lucide-react'
 
 export type StepIndex = 1 | 2 | 3 | 4
@@ -300,23 +300,26 @@ const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit
   return (
     <div className="space-y-6" data-testid="proposal-form" data-mode={mode}>
 
-        {/* Step indicator */}
-        <ol className="grid grid-cols-4 gap-2 text-xs sm:text-sm">
+        {/* Step indicator. On phones the other steps shrink to their number,
+            so the current one has room for its name. */}
+        <ol className="flex gap-2 text-xs sm:text-sm">
           {steps.map(({ n, label, icon: Icon }) => {
             const active = step === n
             const done = step > n
             return (
-              <li key={n} className={`flex items-center gap-2 rounded-lg p-3 border ${
-                active ? 'border-primary-500 bg-primary-50 text-primary-800'
-                : done ? 'border-green-300 bg-green-50 text-green-800'
-                : 'border-gray-200 bg-white text-gray-500'
+              <li key={n} aria-current={active ? 'step' : undefined}
+                className={`items-center gap-2 rounded-lg p-2 sm:p-3 border flex ${
+                  active ? 'flex-1 min-w-0' : 'flex-none sm:flex-1'} ${
+                  active ? 'border-primary-500 bg-primary-50 text-primary-800'
+                  : done ? 'border-green-300 bg-green-50 text-green-800'
+                  : 'border-gray-200 bg-white text-gray-600'
               }`}>
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center font-semibold ${
+                <span className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center font-semibold ${
                   active ? 'bg-primary-600 text-white' : done ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
-                }`}>{done ? <Check className="w-4 h-4" /> : n}</span>
-                <span className="flex flex-col leading-tight">
-                  <span className="font-semibold flex items-center gap-1"><Icon className="w-3.5 h-3.5" /> Step {n}</span>
-                  <span className="hidden sm:inline">{label}</span>
+                }`}>{done ? <><Check className="w-4 h-4" aria-hidden="true" /><span className="sr-only">Step {n} done</span></> : n}</span>
+                <span className={`flex-col leading-tight min-w-0 ${active ? 'flex' : 'hidden sm:flex'}`}>
+                  <span className="font-semibold flex items-center gap-1"><Icon className="w-3.5 h-3.5" aria-hidden="true" /> Step {n}</span>
+                  <span className="truncate">{label}</span>
                 </span>
               </li>
             )
@@ -468,7 +471,7 @@ const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Project plan</h2>
-              <p className="text-sm text-gray-500 mt-1">How you'll actually run it. For bullet lists, put each item on its own line — we'll format it in the PDF.</p>
+              <p className="text-sm text-gray-500 mt-1">How you'll run it.</p>
             </div>
             <Field htmlFor="proposal-implementation_steps" label="Implementation steps" required hint="One step per line. The PDF will render these as a bulleted list.">
               <textarea id="proposal-implementation_steps" required rows={5} value={form.implementation_steps} onChange={(e) => set('implementation_steps')(e.target.value)} className="input-field" placeholder={"Planning and identifying target families\nPurchasing supplies\nDistributing parcels\nDocumenting the project"} />
@@ -574,10 +577,9 @@ const ProposalForm = ({ mode, initialValues, initialSmsConsent = false, onSubmit
               </div>
             )}
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 flex items-start gap-2">
-              <Info className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" />
-              <span>By submitting you confirm the information is accurate. Our team will review your proposal and reach out via <strong>{form.email || 'the email above'}</strong>.</span>
-            </div>
+            <p className="text-xs text-gray-600">
+              By submitting you confirm the information is accurate. Our team will review your proposal and reach out via <strong>{form.email || 'the email above'}</strong>.
+            </p>
 
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
               <button onClick={() => setStep(3)} className="px-4 py-2 text-gray-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>

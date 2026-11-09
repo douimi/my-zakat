@@ -1,23 +1,49 @@
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
-import { Calendar, MapPin, Clock, ArrowRight } from 'lucide-react'
+import { Calendar, MapPin, ArrowRight } from 'lucide-react'
 import { eventsAPI } from '../utils/api'
 import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { Event } from '../types'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
+
+const PAGE_TITLE = 'Our Events'
+const PAGE_LEAD = 'Fundraisers and community gatherings we run or join.'
+
+const startOfToday = () => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+const formatLong = (date: Date) =>
+  date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+
+const formatShort = (date: Date) =>
+  date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 
 const Events = () => {
-  const { data: events, isLoading, error } = useQuery('public-events', () => 
+  const { data: events, isLoading, error } = useQuery('public-events', () =>
     eventsAPI.getAll(false) // Get all events, not just upcoming
+  )
+
+  const seo = (
+    <SEOHead
+      title="Community Events"
+      description="Join MyZakat community events. Find upcoming gatherings, fundraisers, and Islamic educational events near you."
+      canonicalPath="/events"
+    />
   )
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-          </div>
+      <div className="min-h-screen bg-white">
+        {seo}
+        <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
+        <div className="flex items-center justify-center py-20" role="status">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true" />
+          <span className="sr-only">Loading events</span>
         </div>
       </div>
     )
@@ -25,145 +51,80 @@ const Events = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="text-center py-20">
-            <h1 className="text-4xl font-heading font-bold mb-4">Events</h1>
-            <p className="text-red-600">Error loading events. Please try again later.</p>
-          </div>
+      <div className="min-h-screen bg-white">
+        {seo}
+        <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
+        <div className="section-container section">
+          <p className="alert-error" role="alert">Error loading events. Please try again later.</p>
         </div>
       </div>
     )
   }
 
-  const upcomingEvents = events?.filter((event: Event) => 
-    new Date(event.date) >= new Date()
-  ) || []
-  
-  const pastEvents = events?.filter((event: Event) => 
-    new Date(event.date) < new Date()
-  ) || []
+  // An event dated today still counts as upcoming for the whole day.
+  const today = startOfToday()
+  const all = (events || []) as Event[]
+  const upcomingEvents = all
+    .filter((event) => new Date(event.date) >= today)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // soonest first
+  const pastEvents = all
+    .filter((event) => new Date(event.date) < today)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // newest first
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <SEOHead
-        title="Community Events"
-        description="Join MyZakat community events. Find upcoming gatherings, fundraisers, and Islamic educational events near you."
-        canonicalPath="/events"
-      />
-      {/* Hero Section */}
-      <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
-        <div className="section-container">
-          <div className="text-center">
-            <h1 className="text-5xl font-heading font-bold mb-6">Our Events</h1>
-            <p className="text-xl text-primary-100 max-w-3xl mx-auto">
-              Join us in making a difference through community events, fundraisers, and educational programs
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-white">
+      {seo}
+      <PageHeader title={PAGE_TITLE} description={PAGE_LEAD} />
 
-      {/* Main Content */}
-      <div className="section-container py-16">
-        {/* Upcoming Events */}
-        {upcomingEvents.length > 0 && (
-          <div className="mb-16">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">Upcoming Events</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Don't miss out on these exciting upcoming events where you can contribute to our cause
-              </p>
-            </div>
-
+      <div className="section-container section space-y-12">
+        <section aria-labelledby="upcoming-events">
+          <h2 id="upcoming-events" className="section-title mb-6">Upcoming Events</h2>
+          {upcomingEvents.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {upcomingEvents.map((event: Event) => (
-                <EventCard key={event.id} event={event} isUpcoming={true} />
+              {upcomingEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-gray-600">
+              No upcoming events right now.{' '}
+              <Link to="/contact" className="link">Contact us</Link> if you would like to host one with us.
+            </p>
+          )}
+        </section>
 
-        {/* Past Events */}
         {pastEvents.length > 0 && (
-          <div>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">Past Events</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Look back at the amazing events we've organized and the impact we've made together
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {pastEvents.map((event: Event) => (
-                <EventCard key={event.id} event={event} isUpcoming={false} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* No Events */}
-        {(!events || events.length === 0) && (
-          <div className="text-center py-20">
-            <Calendar className="w-24 h-24 mx-auto text-gray-300 mb-8" />
-            <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">No Events Yet</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto mb-8">
-              We're planning exciting events to bring our community together. Check back soon for updates!
-            </p>
-            <Link 
-              to="/contact" 
-              className="btn-primary inline-flex items-center"
+          <section aria-label="Past events">
+            <Disclosure
+              title={`Past events (${pastEvents.length})`}
+              summary={`Most recent: ${formatShort(new Date(pastEvents[0].date))}`}
             >
-              Get Notified About Events
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Link>
-          </div>
+              <ul className="divide-y divide-gray-200">
+                {pastEvents.map((event) => (
+                  <PastEventRow key={event.id} event={event} />
+                ))}
+              </ul>
+            </Disclosure>
+          </section>
         )}
-      </div>
-
-      {/* Call to Action */}
-      <div className="bg-primary-50 py-16">
-        <div className="section-container text-center">
-          <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">
-            Want to Get Involved?
-          </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto mb-8">
-            Join our community and be the first to know about upcoming events, volunteer opportunities, and ways to make a difference.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/volunteer" className="btn-primary">
-              Volunteer With Us
-            </Link>
-            <Link to="/contact" className="btn-outline">
-              Contact Us
-            </Link>
-          </div>
-        </div>
       </div>
     </div>
   )
 }
 
-interface EventCardProps {
-  event: Event
-  isUpcoming: boolean
-}
-
-const EventCard = ({ event, isUpcoming }: EventCardProps) => {
+const EventCard = ({ event }: { event: Event }) => {
   const eventDate = new Date(event.date)
   const isToday = eventDate.toDateString() === new Date().toDateString()
-
   const imageUrl = getOptimizedImageUrl(event.image, IMAGE_WIDTHS.THUMB, 'events')
 
   return (
-    <div className={`card hover:shadow-lg transition-shadow duration-300 ${
-      !isUpcoming ? 'opacity-75' : ''
-    }`}>
-      {/* Event Image */}
+    <article className="card-media">
       {imageUrl && (
-        <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden">
-          <img 
-            src={imageUrl} 
-            alt={event.title}
+        <div className="aspect-video bg-gray-100 overflow-hidden">
+          <img
+            src={imageUrl}
+            alt=""
+            loading="lazy"
             className="w-full h-full object-cover"
             onError={(e) => {
               e.currentTarget.style.display = 'none'
@@ -172,57 +133,57 @@ const EventCard = ({ event, isUpcoming }: EventCardProps) => {
         </div>
       )}
 
-      <div className="p-6">
-        {/* Event Status */}
-        {isUpcoming && (
-          <div className="flex items-center justify-between mb-4">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              isToday 
-                ? 'bg-red-100 text-red-800' 
-                : 'bg-green-100 text-green-800'
-            }`}>
-              {isToday ? 'Today' : 'Upcoming'}
-            </span>
-          </div>
-        )}
-
-        {/* Event Title */}
-        <h3 className="text-xl font-semibold text-gray-900 mb-3">{event.title}</h3>
-
-        {/* Event Description */}
-        <p className="text-gray-600 mb-4 line-clamp-3">{event.description}</p>
-
-        {/* Event Details */}
-        <div className="space-y-2 mb-6">
-          <div className="flex items-center text-sm text-gray-600">
-            <Calendar className="w-4 h-4 mr-2 text-primary-500" />
-            <span>
-              {eventDate.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </span>
-          </div>
-          
-          <div className="flex items-center text-sm text-gray-600">
-            <MapPin className="w-4 h-4 mr-2 text-primary-500" />
-            <span>{event.location}</span>
-          </div>
+      <div className="card-body">
+        <div className="mb-3">
+          <span className={isToday ? 'badge-danger' : 'badge-success'}>{isToday ? 'Today' : 'Upcoming'}</span>
         </div>
+        <h3 className="card-title">{event.title}</h3>
+        <p className="mt-2 text-gray-600 line-clamp-3">{event.description}</p>
 
-        {/* Action Button */}
-        <Link 
-          to={`/events/${event.id}`}
-          className={`btn-outline w-full text-center ${
-            !isUpcoming ? 'opacity-50' : ''
-          }`}
-        >
-          {isUpcoming ? 'Learn More' : 'View Details'}
-        </Link>
+        <dl className="mt-4 space-y-2 text-sm text-gray-700">
+          <div>
+            <dt className="sr-only">Date</dt>
+            <dd className="flex items-start gap-2">
+              <Calendar className="w-4 h-4 mt-0.5 shrink-0 text-primary-700" aria-hidden="true" />
+              {formatLong(eventDate)}
+            </dd>
+          </div>
+          {event.location && (
+            <div>
+              <dt className="sr-only">Location</dt>
+              <dd className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-primary-700" aria-hidden="true" />
+                {event.location}
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <div className="mt-auto pt-5">
+          <Link to={`/events/${event.id}`} className="btn-secondary w-full gap-2">
+            Event details <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            <span className="sr-only">: {event.title}</span>
+          </Link>
+        </div>
       </div>
-    </div>
+    </article>
+  )
+}
+
+const PastEventRow = ({ event }: { event: Event }) => {
+  const eventDate = new Date(event.date)
+  return (
+    <li className="py-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-6">
+      <time dateTime={isNaN(eventDate.getTime()) ? undefined : eventDate.toISOString()} className="text-sm text-gray-500 sm:w-32 shrink-0">
+        {formatShort(eventDate)}
+      </time>
+      <div className="min-w-0">
+        <Link to={`/events/${event.id}`} className="font-medium text-gray-900 hover:text-primary-700 hover:underline">
+          {event.title}
+        </Link>
+        {event.location && <p className="text-sm text-gray-600">{event.location}</p>}
+      </div>
+    </li>
   )
 }
 

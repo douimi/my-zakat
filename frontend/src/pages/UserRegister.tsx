@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { UserPlus, Mail, Lock, User, CheckCircle } from 'lucide-react'
+import { UserPlus, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import SEOHead from '../components/SEOHead'
 
 interface RegisterForm {
   email: string
@@ -87,60 +88,67 @@ const UserRegister = () => {
     }
   }
 
+  const logo = (
+    <Link to="/" className="inline-block mb-6">
+      <img src="/logo.png" alt="MyZakat home" className="h-12 mx-auto" />
+    </Link>
+  )
+
   // Show verification message after successful registration
   if (registeredEmail) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <SEOHead title="Check your email" canonicalPath="/register" noindex />
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-6">
-              <CheckCircle className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900">Registration Successful!</h2>
+            {logo}
+            <h1 className="text-3xl font-heading font-bold text-gray-900">Registration Successful!</h1>
             <p className="mt-2 text-sm text-gray-600">
               Please verify your email address to continue
             </p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md p-8">
+          <div className="card sm:p-8">
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-                <p className="font-medium mb-2">We've sent a verification email to:</p>
-                <p className="font-semibold">{registeredEmail}</p>
+              <div className="alert-info">
+                <div>
+                  <p className="font-medium mb-1">We've sent a verification email to:</p>
+                  <p className="font-semibold break-all">{registeredEmail}</p>
+                </div>
               </div>
 
               <p className="text-gray-600 text-sm">
-                Please check your inbox and click on the verification link to activate your account. 
-                The link will expire in 7 days.
+                Click the link in that email to activate your account. The link expires in 7 days.
               </p>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                <div className="alert-error" role="alert">
                   {error}
                 </div>
               )}
 
               <div className="space-y-3">
                 <button
+                  type="button"
                   onClick={handleResendVerification}
                   disabled={isLoading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+                  className="btn-secondary w-full"
                 >
                   {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mr-2" aria-hidden="true"></div>
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Mail className="w-5 h-5 mr-2" />
+                      <Mail className="w-5 h-5 mr-2" aria-hidden="true" />
                       Resend Verification Email
                     </>
                   )}
                 </button>
 
                 <div className="text-center">
-                  <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                  <Link to="/login" className="link text-sm">
                     Back to Login
                   </Link>
                 </div>
@@ -153,49 +161,54 @@ const UserRegister = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEOHead title="Create an account" canonicalPath="/register" noindex />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-6">
-            <UserPlus className="w-8 h-8 text-white" />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900">Create Account</h2>
+          {logo}
+          <h1 className="text-3xl font-heading font-bold text-gray-900">Create Account</h1>
           <p className="mt-2 text-sm text-gray-600">
             Join us to manage your donations and subscriptions
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="card sm:p-8">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              <div className="alert-error" role="alert">
                 {error}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <User className="w-4 h-4 inline mr-1" />
+              <label htmlFor="register-name" className="label">
                 Full Name
               </label>
               <input
+                id="register-name"
                 type="text"
+                autoComplete="name"
+                aria-invalid={errors.name ? true : undefined}
+                aria-describedby={errors.name ? 'register-name-error' : undefined}
                 {...register('name', { required: 'Name is required' })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Enter your full name"
               />
               {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+                <p id="register-name-error" className="field-error">{errors.name.message}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Mail className="w-4 h-4 inline mr-1" />
+              <label htmlFor="register-email" className="label">
                 Email Address
               </label>
               <input
+                id="register-email"
                 type="email"
+                autoComplete="email"
+                aria-invalid={errors.email ? true : undefined}
+                aria-describedby={errors.email ? 'register-email-error' : undefined}
                 {...register('email', {
                   required: 'Email is required',
                   pattern: {
@@ -203,21 +216,24 @@ const UserRegister = () => {
                     message: 'Invalid email address',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Enter your email"
               />
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                <p id="register-email-error" className="field-error">{errors.email.message}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="w-4 h-4 inline mr-1" />
+              <label htmlFor="register-password" className="label">
                 Password
               </label>
               <input
+                id="register-password"
                 type="password"
+                autoComplete="new-password"
+                aria-invalid={errors.password ? true : undefined}
+                aria-describedby={errors.password ? 'register-password-error' : undefined}
                 {...register('password', {
                   required: 'Password is required',
                   minLength: {
@@ -229,46 +245,49 @@ const UserRegister = () => {
                     message: 'Password cannot exceed 72 characters',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Create a password (6-72 characters)"
               />
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                <p id="register-password-error" className="field-error">{errors.password.message}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="w-4 h-4 inline mr-1" />
+              <label htmlFor="register-confirm-password" className="label">
                 Confirm Password
               </label>
               <input
+                id="register-confirm-password"
                 type="password"
+                autoComplete="new-password"
+                aria-invalid={errors.confirmPassword ? true : undefined}
+                aria-describedby={errors.confirmPassword ? 'register-confirm-password-error' : undefined}
                 {...register('confirmPassword', {
                   required: 'Please confirm your password',
                   validate: (value) => value === password || 'Passwords do not match',
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input-field"
                 placeholder="Confirm your password"
               />
               {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
+                <p id="register-confirm-password-error" className="field-error">{errors.confirmPassword.message}</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+              className="btn-primary w-full"
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" aria-hidden="true"></div>
                   Creating account...
                 </>
               ) : (
                 <>
-                  <UserPlus className="w-5 h-5 mr-2" />
+                  <UserPlus className="w-5 h-5 mr-2" aria-hidden="true" />
                   Create Account
                 </>
               )}
@@ -278,16 +297,19 @@ const UserRegister = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link to="/login" className="link">
                 Sign in
               </Link>
             </p>
           </div>
         </div>
+
+        <p className="text-center text-sm text-gray-600">
+          <Link to="/" className="link">Back to the website</Link>
+        </p>
       </div>
     </div>
   )
 }
 
 export default UserRegister
-
