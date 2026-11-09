@@ -27,7 +27,7 @@ const MediaFilters = ({ query, onChange, showStatusFilter }: MediaFiltersProps) 
   }, [searchText])
 
   const selectClass =
-    'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500'
+    'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -43,7 +43,7 @@ const MediaFilters = ({ query, onChange, showStatusFilter }: MediaFiltersProps) 
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             placeholder="Search name, title, description or tags"
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
       </div>

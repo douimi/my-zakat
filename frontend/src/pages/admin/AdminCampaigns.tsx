@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, Plus, Pencil, Trash2, X, Power, PowerOff, ExternalLink, AlertTriangle } from 'lucide-react'
+import { Megaphone, Plus, Pencil, Trash2, Power, PowerOff, ExternalLink } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { PageHeader, LoadingBlock, ErrorState, EmptyState, StatusBadge, Modal } from '../../components/admin'
 
 interface Campaign {
   id: number
@@ -39,18 +41,19 @@ const EMPTY_FORM: FormState = {
 const AdminCampaigns = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   const fetchCampaigns = async () => {
+    setLoadError(false)
     try {
       const resp = await fetch(`${API_URL}/api/campaigns/`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -58,10 +61,12 @@ const AdminCampaigns = () => {
       if (resp.ok) {
         setCampaigns(await resp.json())
       } else {
-        showError('Error', 'Failed to load campaigns')
+        setLoadError(true)
+        showError('Error', 'Failed to load popups')
       }
     } catch {
-      showError('Error', 'Network error while loading campaigns')
+      setLoadError(true)
+      showError('Error', 'Network error while loading popups')
     } finally {
       setLoading(false)
     }
@@ -133,12 +138,12 @@ const AdminCampaigns = () => {
         body: JSON.stringify(body),
       })
       if (resp.ok) {
-        showSuccess('Success', editingId ? 'Campaign updated' : 'Campaign created')
+        showSuccess('Success', editingId ? 'Popup updated' : 'Popup created')
         closeForm()
         fetchCampaigns()
       } else {
         const err = await resp.json().catch(() => ({ detail: 'Failed' }))
-        showError('Error', err.detail || 'Failed to save campaign')
+        showError('Error', err.detail || 'Failed to save popup')
       }
     } catch {
       showError('Error', 'Network error while saving campaign')
@@ -158,103 +163,83 @@ const AdminCampaigns = () => {
         showSuccess(
           'Success',
           camp.is_active
-            ? 'Campaign deactivated'
-            : 'Campaign activated — any other active campaign was turned off',
+            ? 'Popup deactivated'
+            : 'Popup activated — any other live popup was turned off',
         )
         fetchCampaigns()
       } else {
         const err = await resp.json().catch(() => ({ detail: 'Failed' }))
-        showError('Error', err.detail || 'Failed to toggle campaign')
+        showError('Error', err.detail || 'Failed to toggle popup')
       }
     } catch {
       showError('Error', 'Network error')
     }
   }
 
-  const confirmDelete = async () => {
-    if (!deleteTarget) return
-    setDeleting(true)
+  const confirmDelete = async (camp: Campaign) => {
+    const ok = await confirm({
+      title: 'Delete popup?',
+      message: `"${camp.title}"${camp.is_active ? ' (currently live)' : ''} will be permanently deleted. This cannot be undone.`,
+      confirmText: 'Delete',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
-      const resp = await fetch(`${API_URL}/api/campaigns/${deleteTarget.id}`, {
+      const resp = await fetch(`${API_URL}/api/campaigns/${camp.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
       if (resp.ok) {
-        showSuccess('Success', 'Campaign deleted')
-        setDeleteTarget(null)
+        showSuccess('Success', 'Popup deleted')
         fetchCampaigns()
       } else {
         const err = await resp.json().catch(() => ({ detail: 'Failed' }))
-        showError('Error', err.detail || 'Failed to delete campaign')
+        showError('Error', err.detail || 'Failed to delete popup')
       }
     } catch {
       showError('Error', 'Network error while deleting')
-    } finally {
-      setDeleting(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  if (loading) return <LoadingBlock />
 
   const activeCount = campaigns.filter((c) => c.is_active).length
 
+  const newButton = (
+    <button onClick={openCreate} className="btn-primary gap-2">
+      <Plus className="w-4 h-4" aria-hidden="true" />
+      New popup
+    </button>
+  )
+
   return (
-    <div className="space-y-6 px-4 sm:px-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Megaphone className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-purple-600" />
-          Campaigns
-          <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-            {campaigns.length}
-          </span>
-          {activeCount > 0 && (
-            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">
-              {activeCount} live
-            </span>
-          )}
-        </h1>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          New Campaign
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Homepage popups"
+        icon={Megaphone}
+        count={campaigns.length}
+        badge={activeCount > 0 ? <StatusBadge tone="success">{activeCount} live</StatusBadge> : undefined}
+        description="One popup can be live at a time; activating one turns off the others."
+        actions={newButton}
+      />
 
-      <p className="text-sm text-gray-600">
-        Only <strong>one campaign</strong> can be active at a time. When you activate a new one,
-        any currently active campaign is automatically turned off. The active campaign appears
-        as a centered popup on the homepage for visitors.
-      </p>
+      {loadError && <ErrorState message="Could not load popups." onRetry={fetchCampaigns} />}
 
-      {/* Campaigns list */}
       {campaigns.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-lg shadow-sm">
-          <Megaphone className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No campaigns yet</h3>
-          <p className="text-gray-500 mb-4">Create your first campaign — e.g. Eid Al Adha, Ramadan, Emergency Relief.</p>
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            New Campaign
-          </button>
-        </div>
+        !loadError && (
+          <EmptyState
+            icon={Megaphone}
+            title="No popups yet"
+            body="For example Eid Al Adha, Ramadan or an emergency appeal."
+            action={newButton}
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {campaigns.map((camp) => (
             <div
               key={camp.id}
-              className={`bg-white rounded-lg shadow-sm border-2 overflow-hidden flex flex-col ${
+              className={`bg-white rounded-lg border-2 overflow-hidden flex flex-col ${
                 camp.is_active ? 'border-green-400' : 'border-gray-200'
               }`}
             >
@@ -265,17 +250,13 @@ const AdminCampaigns = () => {
               )}
               <div className="p-4 flex-1 flex flex-col">
                 <div className="flex items-start justify-between mb-2 gap-2">
-                  <h3 className="font-semibold text-gray-900 text-lg leading-tight">
+                  <h2 className="font-semibold text-gray-900 text-lg leading-tight">
                     {camp.title}
-                  </h3>
+                  </h2>
                   {camp.is_active ? (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold whitespace-nowrap">
-                      ● Live
-                    </span>
+                    <StatusBadge tone="success">● Live</StatusBadge>
                   ) : (
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full whitespace-nowrap">
-                      Inactive
-                    </span>
+                    <StatusBadge tone="neutral">Inactive</StatusBadge>
                   )}
                 </div>
                 {camp.description && (
@@ -291,7 +272,7 @@ const AdminCampaigns = () => {
                 </div>
                 {camp.redirect_url && (
                   <p className="text-xs text-gray-500 mb-3 flex items-center gap-1 break-all">
-                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                     {camp.redirect_url}
                   </p>
                 )}
@@ -304,22 +285,24 @@ const AdminCampaigns = () => {
                         : 'bg-green-100 hover:bg-green-200 text-green-800'
                     }`}
                   >
-                    {camp.is_active ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                    {camp.is_active ? <PowerOff className="w-3.5 h-3.5" aria-hidden="true" /> : <Power className="w-3.5 h-3.5" aria-hidden="true" />}
                     {camp.is_active ? 'Deactivate' : 'Activate'}
                   </button>
                   <button
                     onClick={() => openEdit(camp)}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                    className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
                     title="Edit"
+                    aria-label={`Edit ${camp.title}`}
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-4 h-4" aria-hidden="true" />
                   </button>
                   <button
-                    onClick={() => setDeleteTarget(camp)}
+                    onClick={() => confirmDelete(camp)}
                     className="p-1.5 text-red-600 hover:bg-red-50 rounded"
                     title="Delete"
+                    aria-label={`Delete ${camp.title}`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -328,169 +311,120 @@ const AdminCampaigns = () => {
         </div>
       )}
 
-      {/* Create / Edit form modal */}
+      {/* Create / Edit form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <form onSubmit={submitForm} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Megaphone className="w-5 h-5 mr-2 text-purple-600" />
-                  {editingId ? 'Edit Campaign' : 'New Campaign'}
-                </h3>
-                <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <Modal
+          title={editingId ? 'Edit popup' : 'New popup'}
+          onClose={closeForm}
+          footer={
+            <>
+              <button type="button" onClick={closeForm} className="btn-secondary">Cancel</button>
+              <button type="submit" form="popup-form" disabled={saving} className="btn-primary">
+                {saving ? 'Saving...' : editingId ? 'Save changes' : 'Create popup'}
+              </button>
+            </>
+          }
+        >
+          <form id="popup-form" onSubmit={submitForm} className="space-y-4">
+            <div>
+              <label htmlFor="popup-title" className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+              <input
+                id="popup-title"
+                type="text"
+                required
+                maxLength={200}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="input-field"
+                placeholder="e.g. Eid Al Adha — Qurban 2026"
+              />
+            </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={200}
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    className="input-field"
-                    placeholder="e.g. Eid Al Adha — Qurban 2026"
-                  />
-                </div>
+            <div>
+              <label htmlFor="popup-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                id="popup-description"
+                rows={3}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="input-field"
+                placeholder="Short message shown in the popup body"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    rows={3}
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    className="input-field"
-                    placeholder="Short message shown in the popup body"
-                  />
-                </div>
+            <div>
+              <label htmlFor="popup-image" className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+              <input
+                id="popup-image"
+                type="url"
+                value={form.image_url}
+                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                className="input-field"
+                placeholder="https://... (use the Gallery / S3 browser to copy a URL)"
+              />
+              {form.image_url && (
+                <img src={form.image_url} alt="" className="mt-2 max-h-32 rounded border border-gray-200" />
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                  <input
-                    type="url"
-                    value={form.image_url}
-                    onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                    className="input-field"
-                    placeholder="https://... (use the Gallery / S3 browser to copy a URL)"
-                  />
-                  {form.image_url && (
-                    <img src={form.image_url} alt="" className="mt-2 max-h-32 rounded border border-gray-200" />
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Donation amount (USD)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.amount}
-                      onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                      className="input-field"
-                      placeholder="300"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Pre-fills the donation page. Use 0 to skip.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Button text *</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={100}
-                      value={form.cta_text}
-                      onChange={(e) => setForm({ ...form, cta_text: e.target.value })}
-                      className="input-field"
-                      placeholder="Donate Now"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Custom redirect URL (optional)</label>
-                  <input
-                    type="text"
-                    value={form.redirect_url}
-                    onChange={(e) => setForm({ ...form, redirect_url: e.target.value })}
-                    className="input-field"
-                    placeholder="/donate or https://... (defaults to /donate?amount=X&purpose=<title>)"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer pt-2">
-                  <input
-                    type="checkbox"
-                    checked={form.is_active}
-                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                    className="w-4 h-4 text-green-600 rounded"
-                  />
-                  <span className="text-sm text-gray-700">
-                    Make this the active campaign (any other active campaign will be turned off)
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Campaign'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirmation */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="popup-amount" className="block text-sm font-medium text-gray-700 mb-1">Donation amount (USD)</label>
+                <input
+                  id="popup-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  className="input-field"
+                  placeholder="300"
+                />
+                <p className="text-xs text-gray-500 mt-1">Pre-fills the donation page. Use 0 to skip.</p>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Delete Campaign</h3>
-                <p className="text-sm text-gray-500 mt-1">This action cannot be undone.</p>
+                <label htmlFor="popup-cta" className="block text-sm font-medium text-gray-700 mb-1">Button text *</label>
+                <input
+                  id="popup-cta"
+                  type="text"
+                  required
+                  maxLength={100}
+                  value={form.cta_text}
+                  onChange={(e) => setForm({ ...form, cta_text: e.target.value })}
+                  className="input-field"
+                  placeholder="Donate Now"
+                />
               </div>
             </div>
-            <p className="text-sm text-gray-700 mb-6">
-              You are about to permanently delete <strong>{deleteTarget.title}</strong>
-              {deleteTarget.is_active && ' (currently live)'}.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-medium inline-flex items-center"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+
+            <div>
+              <label htmlFor="popup-redirect" className="block text-sm font-medium text-gray-700 mb-1">Custom redirect URL (optional)</label>
+              <input
+                id="popup-redirect"
+                type="text"
+                value={form.redirect_url}
+                onChange={(e) => setForm({ ...form, redirect_url: e.target.value })}
+                className="input-field"
+                placeholder="/donate or https://... (defaults to /donate?amount=X&purpose=<title>)"
+              />
             </div>
-          </div>
-        </div>
+
+            <label className="flex items-center gap-2 cursor-pointer pt-2">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                className="w-4 h-4 text-primary-600 rounded"
+              />
+              <span className="text-sm text-gray-700">
+                Make this the live popup (any other live popup is turned off)
+              </span>
+            </label>
+          </form>
+        </Modal>
       )}
+
+      <ConfirmationDialog />
     </div>
   )
 }

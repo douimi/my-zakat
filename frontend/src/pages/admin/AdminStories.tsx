@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Eye, EyeOff, Star, CheckCircle2, Clock, LibraryBig } from 'lucide-react'
+import { Plus, Edit, Trash2, BookOpen, Image as ImageIcon, Video, Star, CheckCircle2, Clock, LibraryBig } from 'lucide-react'
 import { storiesAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
@@ -9,6 +9,9 @@ import type { Story } from '../../types'
 import axios from 'axios'
 import MediaInput from '../../components/MediaInput'
 import MediaPickerDialog from '../../components/media/MediaPickerDialog'
+import {
+  PageHeader, Modal, Collapsible, LoadingBlock, ErrorState, EmptyState, StatusBadge, LongText,
+} from '../../components/admin'
 
 interface StoryFormData {
   title: string
@@ -24,6 +27,7 @@ interface StoryFormData {
 
 const AdminStories = () => {
   const [showForm, setShowForm] = useState(false)
+  const [tab, setTab] = useState<'all' | 'pending' | 'published'>('all')
   const [editingStory, setEditingStory] = useState<Story | null>(null)
   // Which form field a "Choose from media library" click is filling in.
   const [mediaLibraryTarget, setMediaLibraryTarget] = useState<'image' | 'video' | null>(null)
@@ -45,7 +49,7 @@ const AdminStories = () => {
   const { isAdmin, user: currentUser } = useAuthStore()
 
   // Staff listing returns: admins → everything; managers → approved stories + their own pending ones.
-  const { data: stories, isLoading } = useQuery('admin-stories', () =>
+  const { data: stories, isLoading, isError, refetch } = useQuery('admin-stories', () =>
     storiesAPI.getAllForStaff(false)
   )
 
@@ -158,6 +162,7 @@ const AdminStories = () => {
       is_active: true,
       is_featured: false,
       video_file: null,
+      video_url: '',
       image_url: '',
       remove_video: false
     })
@@ -252,51 +257,82 @@ const AdminStories = () => {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    )
-  }
+  const saving = createMutation.isLoading || updateMutation.isLoading
+  const allStories: Story[] = stories || []
+  const pendingCount = allStories.filter((s) => s.is_pending_approval).length
+  const tabs: { key: typeof tab; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: allStories.length },
+    { key: 'pending', label: 'Pending approval', count: pendingCount },
+    { key: 'published', label: 'Published', count: allStories.length - pendingCount },
+  ]
+  const visibleStories = allStories.filter((s) =>
+    tab === 'pending' ? s.is_pending_approval : tab === 'published' ? !s.is_pending_approval : true,
+  )
+
+  const addButton = (
+    <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
+      <Plus className="w-4 h-4" aria-hidden="true" />
+      Add New Story
+    </button>
+  )
 
   return (
-    <div>
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Manage Stories</h1>
-            <p className="text-gray-600 mt-2">Create and manage inspiring stories</p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="btn-primary flex items-center"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add New Story
-          </button>
+    <div className="space-y-6">
+      <PageHeader title="Stories" icon={BookOpen} actions={addButton} />
+      {!isAdmin && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+          <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <span>Your stories go live after an admin approves them. Editing a published story sends it back for review.</span>
         </div>
-        {!isAdmin && (
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
-            <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>
-              Stories you create are submitted for admin review and won't appear on
-              the public site until an admin approves them. Editing an already-approved
-              story sends it back to pending.
-            </span>
-          </div>
-        )}
+      )}
+
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <div role="tablist" aria-label="Filter stories" className="-mb-px flex gap-6 sm:gap-8">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                tab === t.key
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {t.label} ({t.count})
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Story Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {editingStory ? 'Edit Story' : 'Add New Story'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+          title={editingStory ? 'Edit Story' : 'Add New Story'}
+          // The library picker opens on top of this form; Escape there must not discard the form.
+          onClose={() => { if (mediaLibraryTarget === null) resetForm() }}
+          size="xl"
+          footer={
+            <>
+              <button type="button" onClick={resetForm} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="story-form" disabled={saving} className="btn-primary gap-2">
+                {saving ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" aria-hidden="true" />
+                    {editingStory ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  editingStory ? 'Update Story' : 'Create Story'
+                )}
+              </button>
+            </>
+          }
+        >
+            <form id="story-form" onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Title *
@@ -338,6 +374,14 @@ const AdminStories = () => {
                 />
               </div>
 
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+              <Collapsible
+                title="Media"
+                preview={[
+                  formData.image_url ? 'Photo set' : 'No photo',
+                  formData.video_file || formData.video_url || (editingStory?.video_filename && !formData.remove_video) ? 'Video set' : 'No video',
+                ].join(' · ')}
+              >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <MediaInput
@@ -350,9 +394,9 @@ const AdminStories = () => {
                   <button
                     type="button"
                     onClick={() => setMediaLibraryTarget('image')}
-                    className="mt-2 btn-outline flex items-center text-sm"
+                    className="mt-2 btn-secondary btn-sm gap-2"
                   >
-                    <LibraryBig className="w-4 h-4 mr-2" />
+                    <LibraryBig className="w-4 h-4" aria-hidden="true" />
                     Choose from media library
                   </button>
                 </div>
@@ -368,9 +412,9 @@ const AdminStories = () => {
                   <button
                     type="button"
                     onClick={() => setMediaLibraryTarget('video')}
-                    className="mt-2 btn-outline flex items-center text-sm"
+                    className="mt-2 btn-secondary btn-sm gap-2"
                   >
-                    <LibraryBig className="w-4 h-4 mr-2" />
+                    <LibraryBig className="w-4 h-4" aria-hidden="true" />
                     Choose from media library
                   </button>
                   <div className="mt-3">
@@ -417,6 +461,7 @@ const AdminStories = () => {
                         }}
                         className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
                         title="Delete video"
+                        aria-label="Delete video"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -428,6 +473,8 @@ const AdminStories = () => {
                     </div>
                   )}
                 </div>
+              </div>
+              </Collapsible>
               </div>
 
               <div className="flex items-center space-x-6">
@@ -452,40 +499,17 @@ const AdminStories = () => {
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="btn-outline"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
-                  className="btn-primary flex items-center"
-                >
-                  {(createMutation.isLoading || updateMutation.isLoading) ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {editingStory ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                    <>
-                      {editingStory ? 'Update Story' : 'Create Story'}
-                    </>
-                  )}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Stories Table */}
-      <div className="card">
-        {stories && stories.length > 0 ? (
-          <div className="overflow-x-auto">
+      {isLoading ? (
+        <LoadingBlock />
+      ) : isError ? (
+        <ErrorState message="Could not load stories." onRetry={() => refetch()} />
+      ) : visibleStories.length > 0 ? (
+          <div className="card overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -496,43 +520,25 @@ const AdminStories = () => {
                 </tr>
               </thead>
               <tbody>
-                {stories.map((story: Story) => (
+                {visibleStories.map((story: Story) => (
                   <tr key={story.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-4 px-4">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{story.title}</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {story.summary.length > 100 
-                            ? `${story.summary.substring(0, 100)}...`
-                            : story.summary
-                          }
-                        </p>
+                    <td className="py-4 px-4 min-w-[16rem]">
+                      <p className="font-semibold text-gray-900">{story.title}</p>
+                      <div className="mt-1">
+                        <LongText text={story.summary} lines={2} />
                       </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1">
                         {story.is_pending_approval ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-1 rounded-full w-fit">
-                            <Clock className="w-3.5 h-3.5" />
-                            Pending approval
-                          </span>
+                          <StatusBadge tone="warning" icon={Clock} className="w-fit">Pending approval</StatusBadge>
                         ) : (
-                          <div className="flex items-center">
-                            {story.is_active ? (
-                              <Eye className="w-4 h-4 text-green-600" />
-                            ) : (
-                              <EyeOff className="w-4 h-4 text-gray-400" />
-                            )}
-                            <span className={`ml-1 text-sm ${story.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                              {story.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </div>
+                          <StatusBadge tone={story.is_active ? 'success' : 'neutral'} className="w-fit">
+                            {story.is_active ? 'Active' : 'Inactive'}
+                          </StatusBadge>
                         )}
                         {story.is_featured && (
-                          <div className="flex items-center text-yellow-600">
-                            <Star className="w-4 h-4" />
-                            <span className="ml-1 text-sm">Featured</span>
-                          </div>
+                          <StatusBadge tone="accent" icon={Star} className="w-fit">Featured</StatusBadge>
                         )}
                       </div>
                     </td>
@@ -557,8 +563,8 @@ const AdminStories = () => {
                           </div>
                         )}
                         {story.video_filename && (
-                          <div className="flex items-center text-purple-600">
-                            <Video className="w-4 h-4" />
+                          <div className="flex items-center text-primary-700">
+                            <Video className="w-4 h-4" aria-hidden="true" />
                             <span className="ml-1 text-sm">Video</span>
                           </div>
                         )}
@@ -572,6 +578,7 @@ const AdminStories = () => {
                             disabled={approveMutation.isLoading}
                             className="text-green-700 hover:text-green-800 p-2 rounded-lg hover:bg-green-50 disabled:opacity-50"
                             title="Approve story"
+                            aria-label="Approve story"
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </button>
@@ -589,6 +596,7 @@ const AdminStories = () => {
                                     : 'text-gray-300 p-2 cursor-not-allowed'
                                 }
                                 title={canEdit ? 'Edit story' : 'Only the creator or an admin can edit'}
+                                aria-label={canEdit ? 'Edit story' : 'Only the creator or an admin can edit'}
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
@@ -601,6 +609,7 @@ const AdminStories = () => {
                                     : 'text-gray-300 p-2 cursor-not-allowed'
                                 }
                                 title={canEdit ? 'Delete story' : 'Only the creator or an admin can delete'}
+                                aria-label={canEdit ? 'Delete story' : 'Only the creator or an admin can delete'}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -614,21 +623,19 @@ const AdminStories = () => {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="text-center py-12">
-            <BookOpen className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No stories yet</h3>
-            <p className="text-gray-600 mb-4">Create your first inspiring story to get started</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="btn-primary flex items-center mx-auto"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Story
-            </button>
-          </div>
-        )}
-      </div>
+      ) : tab !== 'all' && allStories.length > 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title={tab === 'pending' ? 'Nothing waiting for approval' : 'No published stories'}
+        />
+      ) : (
+        <EmptyState
+          icon={BookOpen}
+          title="No stories yet"
+          body="Create your first story to get started."
+          action={addButton}
+        />
+      )}
 
       <MediaPickerDialog
         open={mediaLibraryTarget !== null}

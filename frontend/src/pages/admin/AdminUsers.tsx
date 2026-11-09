@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Users, Eye, Trash2, UserCheck, UserX, X, UserPlus, Edit2, Key } from 'lucide-react'
+import { Users, Eye, Trash2, UserCheck, UserX, UserPlus, Edit2, Key } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import {
+  PageHeader, FilterBar, Modal, Collapsible, LoadingBlock, ErrorState, EmptyState, StatusBadge, type StatusTone,
+} from '../../components/admin'
 
 type Role = 'admin' | 'manager' | 'field_staff' | 'user'
 
@@ -24,11 +28,11 @@ const ROLE_LABEL: Record<Role, string> = {
   user: 'User',
 }
 
-const ROLE_BADGE: Record<Role, string> = {
-  admin: 'bg-purple-100 text-purple-800',
-  manager: 'bg-amber-100 text-amber-800',
-  field_staff: 'bg-teal-100 text-teal-800',
-  user: 'bg-gray-100 text-gray-800',
+const ROLE_TONE: Record<Role, StatusTone> = {
+  admin: 'info',
+  manager: 'warning',
+  field_staff: 'accent',
+  user: 'neutral',
 }
 
 interface UserDetails {
@@ -60,13 +64,11 @@ const AdminUsers = () => {
   const [selectedUser, setSelectedUser] = useState<UserDetails | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  // A failed list load shows inline (with a retry), so it never looks like "no users".
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [confirmAction, setConfirmAction] = useState<{
-    userId: number
-    userName: string
-    action: string
-  } | null>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<Role | ''>('')
+  const { confirm, ConfirmationDialog } = useConfirmation()
 
   // Create-user modal
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -114,11 +116,11 @@ const AdminUsers = () => {
           return
         }
         const errorData = await response.json().catch(() => ({ detail: 'Failed to fetch users' }))
-        showError('Error', errorData.detail || 'Failed to fetch users')
+        setError(errorData.detail || 'Failed to fetch users')
       }
     } catch (error) {
       console.error('Error fetching users:', error)
-      showError('Error', 'Network error while fetching users')
+      setError('Network error while fetching users')
     } finally {
       setIsLoading(false)
     }
@@ -186,14 +188,14 @@ const AdminUsers = () => {
     }
 
     const user = users.find(u => u.id === userId)
-    
-    // Show confirmation modal instead of browser confirm
-    setConfirmAction({
-      userId,
-      userName: user?.name || user?.email || 'this user',
-      action: 'delete'
+    const confirmed = await confirm({
+      title: 'Delete user',
+      message: `Are you sure you want to delete ${user?.name || user?.email || 'this user'}? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger',
     })
-    return
+    if (confirmed) executeDeleteUser(userId)
   }
 
   const executeDeleteUser = async (userId: number) => {
@@ -334,49 +336,60 @@ const AdminUsers = () => {
     })
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  const q = search.trim().toLowerCase()
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch = !q || (u.name || '').toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    const matchesRole = !roleFilter || roleOf(u) === roleFilter
+    return matchesSearch && matchesRole
+  })
+
+  const inputClass = 'input-field'
 
   return (
-    <div className="space-y-6 px-4 sm:px-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Users className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-blue-600" />
-          User Management
-          <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-            {users.length}
-          </span>
-        </h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+    <div className="space-y-6">
+      <PageHeader
+        title="Users"
+        icon={Users}
+        count={users.length}
+        actions={
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary gap-2">
+            <UserPlus className="w-5 h-5" aria-hidden="true" />
+            Create User
+          </button>
+        }
+      />
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search by name or email..."
+        trailing={(q || roleFilter) ? `${filteredUsers.length} of ${users.length} shown` : undefined}
+      >
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value as Role | '')}
+          className="input-field sm:w-48"
+          aria-label="Role"
         >
-          <UserPlus className="w-5 h-5" />
-          Create User
-        </button>
-      </div>
+          <option value="">All roles</option>
+          {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+          ))}
+        </select>
+      </FilterBar>
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
-          {successMessage}
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
+      {isLoading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => { setIsLoading(true); fetchUsers() }} />
+      ) : filteredUsers.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={users.length === 0 ? 'No users yet' : 'No matching users'}
+          body={users.length === 0 ? undefined : 'Try a different name, email or role.'}
+        />
+      ) : (
+      <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -401,7 +414,11 @@ const AdminUsers = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
+              {filteredUsers.map((user) => {
+                const isSelf = currentUser?.id === user.id
+                const toggleTitle = isSelf ? 'Cannot modify your own account' : user.is_active ? 'Deactivate' : 'Activate'
+                const deleteTitle = isSelf ? 'Cannot delete your own account' : 'Delete User'
+                return (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-3 sm:px-6 py-4">
                     <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
@@ -415,333 +432,247 @@ const AdminUsers = () => {
                     <div className="text-xs sm:text-sm text-gray-600 break-words">{user.email}</div>
                   </td>
                   <td className="px-3 sm:px-6 py-4">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${
-                        user.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
+                    <StatusBadge tone={user.is_active ? 'success' : 'danger'}>
                       {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    </StatusBadge>
                   </td>
                   <td className="px-3 sm:px-6 py-4">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${ROLE_BADGE[roleOf(user)]}`}
-                    >
-                      {ROLE_LABEL[roleOf(user)]}
-                    </span>
+                    <StatusBadge tone={ROLE_TONE[roleOf(user)]}>{ROLE_LABEL[roleOf(user)]}</StatusBadge>
                   </td>
                   <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 hidden md:table-cell">
                     {formatDate(user.created_at)}
                   </td>
-                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium space-x-1 sm:space-x-2">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium">
+                    <div className="flex items-center gap-1">
                     <button
                       onClick={() => fetchUserDetails(user.id)}
-                      className="text-blue-600 hover:text-blue-900"
+                      className="p-1.5 rounded text-primary-600 hover:text-primary-900 hover:bg-primary-50"
                       title="View Details"
+                      aria-label="View Details"
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => {
                         setEditUser(user)
                         setEditForm({ email: user.email, name: user.name || '', role: roleOf(user) })
                       }}
-                      className="text-indigo-600 hover:text-indigo-900"
+                      className="p-1.5 rounded text-primary-600 hover:text-primary-900 hover:bg-primary-50"
                       title="Edit User"
+                      aria-label="Edit User"
                     >
-                      <Edit2 className="w-4 h-4" />
+                      <Edit2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => {
                         setResetUser(user)
                         setResetPassword('')
                       }}
-                      className="text-orange-600 hover:text-orange-900"
+                      className="p-1.5 rounded text-orange-600 hover:text-orange-900 hover:bg-orange-50"
                       title="Reset Password"
+                      aria-label="Reset Password"
                     >
-                      <Key className="w-4 h-4" />
+                      <Key className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => toggleUserActive(user.id)}
-                      disabled={currentUser?.id === user.id}
+                      disabled={isSelf}
                       className={
-                        currentUser?.id === user.id
-                          ? 'text-gray-400 cursor-not-allowed'
-                          : user.is_active 
-                            ? 'text-yellow-600 hover:text-yellow-900' 
-                            : 'text-green-600 hover:text-green-900'
+                        isSelf
+                          ? 'p-1.5 text-gray-400 cursor-not-allowed'
+                          : user.is_active
+                            ? 'p-1.5 rounded text-yellow-700 hover:text-yellow-900 hover:bg-yellow-50'
+                            : 'p-1.5 rounded text-green-600 hover:text-green-900 hover:bg-green-50'
                       }
-                      title={
-                        currentUser?.id === user.id
-                          ? 'Cannot modify your own account'
-                          : user.is_active ? 'Deactivate' : 'Activate'
-                      }
+                      title={toggleTitle}
+                      aria-label={toggleTitle}
                     >
-                      {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                      {user.is_active ? <UserX className="w-4 h-4" aria-hidden="true" /> : <UserCheck className="w-4 h-4" aria-hidden="true" />}
                     </button>
                     <button
                       onClick={() => deleteUser(user.id)}
-                      disabled={currentUser?.id === user.id}
+                      disabled={isSelf}
                       className={
-                        currentUser?.id === user.id
-                          ? 'text-gray-400 cursor-not-allowed'
-                          : 'text-red-600 hover:text-red-900'
+                        isSelf
+                          ? 'p-1.5 text-gray-400 cursor-not-allowed'
+                          : 'p-1.5 rounded text-red-600 hover:text-red-900 hover:bg-red-50'
                       }
-                      title={
-                        currentUser?.id === user.id
-                          ? 'Cannot delete your own account'
-                          : 'Delete User'
-                      }
+                      title={deleteTitle}
+                      aria-label={deleteTitle}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
+                    </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
-        </div>
       </div>
+      )}
 
       {/* User Details Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-full sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto p-4 sm:p-6">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">User Details</h2>
-                <button
-                  onClick={() => setSelectedUser(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
+        <Modal title="User Details" onClose={() => setSelectedUser(null)} size="xl" closeOnOverlayClick>
               {isLoadingDetails ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                </div>
+                <LoadingBlock />
               ) : (
                 <div className="space-y-6">
                   {/* User Info */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold mb-3">User Information</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Name</p>
-                        <p className="font-medium">{selectedUser.user.name || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Email</p>
-                        <p className="font-medium">{selectedUser.user.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Status</p>
-                        <p className="font-medium">
-                          {selectedUser.user.is_active ? '✅ Active' : '❌ Inactive'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Role</p>
-                        <span
-                          className={`inline-flex items-center mt-0.5 px-2 py-1 text-xs font-semibold rounded-full ${ROLE_BADGE[roleOf(selectedUser.user)]}`}
-                        >
+                  <dl className="bg-gray-50 p-4 rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <dt className="text-sm text-gray-600">Name</dt>
+                      <dd className="font-medium">{selectedUser.user.name || 'N/A'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm text-gray-600">Email</dt>
+                      <dd className="font-medium break-words">{selectedUser.user.email}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm text-gray-600">Status</dt>
+                      <dd className="mt-0.5">
+                        <StatusBadge tone={selectedUser.user.is_active ? 'success' : 'danger'}>
+                          {selectedUser.user.is_active ? 'Active' : 'Inactive'}
+                        </StatusBadge>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm text-gray-600">Role</dt>
+                      <dd className="mt-0.5">
+                        <StatusBadge tone={ROLE_TONE[roleOf(selectedUser.user)]}>
                           {ROLE_LABEL[roleOf(selectedUser.user)]}
-                        </span>
-                      </div>
+                        </StatusBadge>
+                      </dd>
                     </div>
-                  </div>
+                  </dl>
 
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg text-center">
-                      <p className="text-sm text-gray-600 mb-1">Total Donated</p>
-                      <p className="text-2xl font-bold text-blue-600">
-                        ${selectedUser.stats.total_donated.toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg text-center">
-                      <p className="text-sm text-gray-600 mb-1">Donations</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {selectedUser.stats.donation_count}
-                      </p>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-lg text-center">
-                      <p className="text-sm text-gray-600 mb-1">Active Subscriptions</p>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {selectedUser.stats.active_subscriptions}
-                      </p>
-                    </div>
-                  </div>
+                  {/* Giving, in one line */}
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold text-gray-900">${selectedUser.stats.total_donated.toFixed(2)}</span> donated
+                    {' · '}{selectedUser.stats.donation_count} donation{selectedUser.stats.donation_count === 1 ? '' : 's'}
+                    {' · '}{selectedUser.stats.active_subscriptions} active subscription{selectedUser.stats.active_subscriptions === 1 ? '' : 's'}
+                  </p>
 
-                  {/* Donations */}
-                  {selectedUser.donations.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3">Recent Donations</h3>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {selectedUser.donations.slice(0, 5).map((donation) => (
-                              <tr key={donation.id}>
-                                <td className="px-4 py-2 text-sm">{formatDate(donation.donated_at)}</td>
-                                <td className="px-4 py-2 text-sm font-medium text-blue-600">
-                                  ${donation.amount.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-2 text-sm text-gray-600">{donation.frequency}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Subscriptions */}
-                  {selectedUser.subscriptions.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3">Subscriptions</h3>
-                      <div className="space-y-2">
-                        {selectedUser.subscriptions.map((sub) => (
-                          <div key={sub.id} className="border border-gray-200 rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium">{sub.purpose}</p>
-                                <p className="text-sm text-gray-600">
-                                  ${sub.amount} / {sub.interval}
-                                </p>
-                              </div>
-                              <span
-                                className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                  sub.status === 'active'
-                                    ? 'bg-green-100 text-green-800'
-                                    : sub.status === 'canceled'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-yellow-100 text-yellow-800'
-                                }`}
-                              >
-                                {sub.status}
-                              </span>
-                            </div>
+                  {(selectedUser.donations.length > 0 || selectedUser.subscriptions.length > 0) && (
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      {selectedUser.donations.length > 0 && (
+                        <Collapsible
+                          title={`Recent donations (${Math.min(selectedUser.donations.length, 5)})`}
+                          preview={`Latest: $${selectedUser.donations[0].amount.toFixed(2)} on ${formatDate(selectedUser.donations[0].donated_at)}`}
+                        >
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {selectedUser.donations.slice(0, 5).map((donation) => (
+                                  <tr key={donation.id}>
+                                    <td className="px-4 py-2 text-sm">{formatDate(donation.donated_at)}</td>
+                                    <td className="px-4 py-2 text-sm font-medium text-primary-700">
+                                      ${donation.amount.toFixed(2)}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm text-gray-600">{donation.frequency}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                        ))}
-                      </div>
+                        </Collapsible>
+                      )}
+                      {selectedUser.subscriptions.length > 0 && (
+                        <Collapsible title={`Subscriptions (${selectedUser.subscriptions.length})`}>
+                          <div className="space-y-2">
+                            {selectedUser.subscriptions.map((sub) => (
+                              <div key={sub.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-medium">{sub.purpose}</p>
+                                  <p className="text-sm text-gray-600">${sub.amount} / {sub.interval}</p>
+                                </div>
+                                <StatusBadge tone={sub.status === 'active' ? 'success' : sub.status === 'canceled' ? 'danger' : 'warning'}>
+                                  {sub.status}
+                                </StatusBadge>
+                              </div>
+                            ))}
+                          </div>
+                        </Collapsible>
+                      )}
                     </div>
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
-      {confirmAction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-full sm:max-w-md w-full mx-2 sm:mx-auto p-4 sm:p-6">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Confirm Action
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to {confirmAction.action} <strong>{confirmAction.userName}</strong>?
-                <span className="block mt-2 text-red-600 font-medium">
-                  This action cannot be undone.
-                </span>
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    executeDeleteUser(confirmAction.userId)
-                    setConfirmAction(null)
-                  }}
-                  className="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <form onSubmit={handleCreateUser} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <UserPlus className="w-5 h-5 mr-2 text-blue-600" />
-                  Create New User
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
+        <Modal
+          title="Create New User"
+          onClose={() => setShowCreateModal(false)}
+          size="sm"
+          footer={
+            <>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="create-user-form" disabled={creating} className="btn-primary">
+                {creating ? 'Creating...' : 'Create User'}
+              </button>
+            </>
+          }
+        >
+            <form id="create-user-form" onSubmit={handleCreateUser} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <label htmlFor="create-user-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
                   <input
+                    id="create-user-email"
                     type="email"
                     required
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                     placeholder="user@example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label htmlFor="create-user-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                   <input
+                    id="create-user-name"
                     type="text"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                     placeholder="Full name (optional)"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <label htmlFor="create-user-password" className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
                   <input
+                    id="create-user-password"
                     type="password"
                     required
                     minLength={8}
                     value={createForm.password}
                     onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                     placeholder="At least 8 characters"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                  <label htmlFor="create-user-role" className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                   <select
+                    id="create-user-role"
                     value={createForm.role}
                     onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                   >
                     <option value="user">User — public donor / signup</option>
                     <option value="manager">Manager — contacts, volunteers, stories (with approval)</option>
@@ -749,77 +680,59 @@ const AdminUsers = () => {
                     <option value="admin">Admin — full access</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {creating ? 'Creating...' : 'Create User'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Edit User Modal */}
       {editUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <form onSubmit={handleUpdateUser} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Edit2 className="w-5 h-5 mr-2 text-indigo-600" />
-                  Edit User
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setEditUser(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
+        <Modal
+          title="Edit User"
+          onClose={() => setEditUser(null)}
+          size="sm"
+          footer={
+            <>
+              <button type="button" onClick={() => setEditUser(null)} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="edit-user-form" disabled={updating} className="btn-primary">
+                {updating ? 'Saving...' : 'Save Changes'}
+              </button>
+            </>
+          }
+        >
+            <form id="edit-user-form" onSubmit={handleUpdateUser} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label htmlFor="edit-user-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                   <input
+                    id="edit-user-email"
                     type="email"
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label htmlFor="edit-user-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                   <input
+                    id="edit-user-name"
                     type="text"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={inputClass}
                     placeholder="Full name"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <label htmlFor="edit-user-role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                   <select
+                    id="edit-user-role"
                     value={editForm.role}
                     onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
                     disabled={currentUser?.id === editUser?.id}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                    className={`${inputClass} disabled:bg-gray-100`}
                   >
                     <option value="user">User</option>
                     <option value="manager">Manager</option>
@@ -834,64 +747,45 @@ const AdminUsers = () => {
                 <p className="text-xs text-gray-500">
                   To change the password, use the <strong>Reset Password</strong> action instead.
                 </p>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setEditUser(null)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updating}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {updating ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Reset Password Modal */}
       {resetUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <form onSubmit={handleResetPassword} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Key className="w-5 h-5 mr-2 text-orange-600" />
-                  Reset Password
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => { setResetUser(null); setResetPassword('') }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-                <p className="text-sm text-orange-800">
+        <Modal
+          title="Reset Password"
+          onClose={() => { setResetUser(null); setResetPassword('') }}
+          size="sm"
+          footer={
+            <>
+              <button type="button" onClick={() => { setResetUser(null); setResetPassword('') }} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="reset-password-form" disabled={resetting} className="btn-primary">
+                {resetting ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </>
+          }
+        >
+            <form id="reset-password-form" onSubmit={handleResetPassword} className="space-y-4">
+              <div className="alert-warning">
+                <p className="text-sm">
                   Setting a new password for <strong>{resetUser.name || resetUser.email}</strong>.
                   The user will need this new password to log in.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
+                <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
                 <input
+                  id="reset-password"
                   type="text"
                   required
                   minLength={8}
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className={inputClass}
                   placeholder="At least 8 characters"
                   autoFocus
                 />
@@ -899,27 +793,11 @@ const AdminUsers = () => {
                   Make sure to share this password securely with the user.
                 </p>
               </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => { setResetUser(null); setResetPassword('') }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={resetting}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {resetting ? 'Resetting...' : 'Reset Password'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
+
+      <ConfirmationDialog />
     </div>
   )
 }

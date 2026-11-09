@@ -54,6 +54,8 @@ export type NavEntry = NavLink | NavGroup
 
 export const NAV: readonly NavEntry[] = [
   { kind: 'link', name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  // The main review workflow, top level so its unread badge is always in view.
+  { kind: 'link', name: 'Project Proposals', href: '/admin/project-proposals', icon: FolderKanban },
 
   {
     kind: 'group',
@@ -69,14 +71,13 @@ export const NAV: readonly NavEntry[] = [
   {
     kind: 'group',
     id: 'people',
+    // Label pinned by e2e (/^people$/i).
     label: 'People',
     icon: Users,
     items: [
       { kind: 'link', name: 'Users', href: '/admin/users', icon: UserCog },
       { kind: 'link', name: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
       { kind: 'link', name: 'Volunteers', href: '/admin/volunteers', icon: UserPlus },
-      { kind: 'link', name: 'Testimonials', href: '/admin/testimonials', icon: Star },
-      { kind: 'link', name: 'Project Proposals', href: '/admin/project-proposals', icon: FolderKanban },
     ],
   },
 
@@ -86,12 +87,13 @@ export const NAV: readonly NavEntry[] = [
     label: 'Content',
     icon: Newspaper,
     items: [
-      { kind: 'link', name: 'Stories', href: '/admin/stories', icon: BookOpen },
-      { kind: 'link', name: 'Events', href: '/admin/events', icon: Calendar },
       { kind: 'link', name: 'Slideshow', href: '/admin/slideshow', icon: ImageIcon },
       { kind: 'link', name: 'Urgent Needs', href: '/admin/urgent-needs', icon: AlertCircle },
-      { kind: 'link', name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
-      { kind: 'link', name: 'Fund Projects', href: '/admin/fundraising-projects', icon: HeartHandshake },
+      { kind: 'link', name: 'Fundraising projects', href: '/admin/fundraising-projects', icon: HeartHandshake },
+      { kind: 'link', name: 'Stories', href: '/admin/stories', icon: BookOpen },
+      { kind: 'link', name: 'Testimonials', href: '/admin/testimonials', icon: Star },
+      { kind: 'link', name: 'Events', href: '/admin/events', icon: Calendar },
+      { kind: 'link', name: 'Homepage popups', href: '/admin/campaigns', icon: Megaphone },
     ],
   },
 
@@ -125,7 +127,7 @@ export const NAV: readonly NavEntry[] = [
     label: 'Marketing',
     icon: Send,
     items: [
-      { kind: 'link', name: 'Campaigns', href: '/admin/marketing-campaigns', icon: Rocket },
+      { kind: 'link', name: 'Email campaigns', href: '/admin/marketing-campaigns', icon: Rocket },
       { kind: 'link', name: 'Templates', href: '/admin/email-templates', icon: FileText },
       { kind: 'link', name: 'Audiences', href: '/admin/audiences', icon: Filter },
       { kind: 'link', name: 'Email Log', href: '/admin/email-log', icon: Mail },

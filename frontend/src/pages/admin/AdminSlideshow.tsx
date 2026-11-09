@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useForm } from 'react-hook-form'
-import { Image as ImageIcon, Edit, Trash2, Save, X, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
+import { Image as ImageIcon, Edit, Trash2, Save, Plus, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
+import { PageHeader, LoadingBlock, EmptyState, StatusBadge, Modal } from '../../components/admin'
 import { slideshowAPI } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import { useConfirmation } from '../../hooks/useConfirmation'
@@ -31,6 +32,8 @@ interface SlideForm {
 
 const AdminSlideshow = () => {
   const [editingId, setEditingId] = useState<number | null>(null)
+  // The form lives in a dialog, so the list gets the full width.
+  const [showForm, setShowForm] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
   
@@ -52,6 +55,7 @@ const AdminSlideshow = () => {
       onSuccess: () => {
         queryClient.invalidateQueries('admin-slideshow')
         reset()
+        setShowForm(false)
         showSuccess('Success', 'Slide created successfully')
       },
       onError: () => {
@@ -75,6 +79,7 @@ const AdminSlideshow = () => {
         queryClient.invalidateQueries('admin-slideshow')
         setEditingId(null)
         reset()
+        setShowForm(false)
         showSuccess('Success', 'Slide updated successfully')
       },
       onError: () => {
@@ -179,267 +184,232 @@ const AdminSlideshow = () => {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="section-container">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        </div>
-      </div>
-    )
+  const saving = createMutation.isLoading || updateMutation.isLoading
+
+  const openCreate = () => {
+    setEditingId(null)
+    reset()
+    setShowForm(true)
   }
 
+  const closeForm = () => {
+    handleCancel()
+    setShowForm(false)
+  }
+
+  if (isLoading) {
+    return <LoadingBlock label="Loading slides…" />
+  }
+
+  const newButton = (
+    <button type="button" onClick={openCreate} className="btn-primary gap-2">
+      <Plus className="w-5 h-5" aria-hidden="true" />
+      New slide
+    </button>
+  )
+
   return (
-    <div className="section-container">
-      <div className="mb-8">
-        <div className="flex items-center mb-4">
-          <ImageIcon className="w-8 h-8 text-primary-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-900">Slideshow Management</h1>
-        </div>
-        <p className="text-gray-600">
-          Manage the slideshow displayed on your homepage. Add, edit, and reorder slides.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Slideshow"
+        icon={ImageIcon}
+        count={slides?.length}
+        description="Homepage slides, shown in display order (lowest first)."
+        actions={newButton}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Slides List */}
-        <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Slideshow Slides</h2>
-          <div className="space-y-4">
-            {slides && slides.length > 0 ? (
-              [...slides]
-                .sort((a, b) => a.display_order - b.display_order)
-                .map((slide: SlideshowSlide) => (
-                  <div
-                    key={slide.id}
-                    className={`border rounded-lg p-4 transition-colors ${
-                      slide.is_active
-                        ? 'border-gray-200 bg-white'
-                        : 'border-gray-200 bg-gray-50'
-                    }`}
+      {slides && slides.length > 0 ? (
+        <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+          {[...slides]
+            .sort((a, b) => a.display_order - b.display_order)
+            .map((slide: SlideshowSlide) => (
+              <li key={slide.id} className={`flex items-start gap-3 p-4 ${slide.is_active ? '' : 'bg-gray-50'}`}>
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => handleOrderChange(slide.id, 'up')}
+                    className="p-1 text-gray-500 hover:text-primary-600"
+                    title="Move up"
+                    aria-label={`Move ${slide.title} up`}
                   >
-                    <div className={`flex items-start space-x-4 ${!slide.is_active ? 'opacity-60' : ''}`}>
-                      {/* Image Preview */}
-                      <div className="flex-shrink-0">
-                        {slide.image_url || slide.image_filename ? (
-                          <img
-                            src={slide.image_url || (slide.image_filename ? `/api/uploads/media/images/${slide.image_filename}` : '')}
-                            alt={slide.title}
-                            className={`w-24 h-16 object-cover rounded ${!slide.is_active ? 'grayscale' : ''}`}
-                            onError={(e) => {
-                              e.currentTarget.src = ''
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
-                        ) : (
-                          <div className="w-24 h-16 bg-gray-200 rounded flex items-center justify-center">
-                            <ImageIcon className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
+                    <ArrowUp className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    onClick={() => handleOrderChange(slide.id, 'down')}
+                    className="p-1 text-gray-500 hover:text-primary-600"
+                    title="Move down"
+                    aria-label={`Move ${slide.title} down`}
+                  >
+                    <ArrowDown className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
 
-                      {/* Slide Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-2 gap-2">
-                          <h3 className="font-semibold text-gray-900 truncate flex-1">{slide.title}</h3>
-                          <span
-                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                              slide.is_active
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-200 text-gray-600'
-                            }`}
-                          >
-                            {slide.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                            {slide.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => handleOrderChange(slide.id, 'up')}
-                              className="p-1 text-gray-600 hover:text-primary-600"
-                              title="Move up"
-                            >
-                              <ArrowUp className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleOrderChange(slide.id, 'down')}
-                              className="p-1 text-gray-600 hover:text-primary-600"
-                              title="Move down"
-                            >
-                              <ArrowDown className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        {slide.description && (
-                          <p className="text-sm text-gray-600 mb-2 line-clamp-2">{slide.description}</p>
-                        )}
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <span>Order: {slide.display_order}</span>
-                          {!slide.is_active && (
-                            <span className="italic text-gray-400">Hidden from homepage slideshow</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex flex-col space-y-2">
-                        <button
-                          onClick={() => toggleActiveMutation.mutate({ id: slide.id, is_active: !slide.is_active })}
-                          disabled={toggleActiveMutation.isLoading}
-                          className={`p-2 rounded transition-colors ${
-                            slide.is_active
-                              ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
-                              : 'text-green-600 hover:text-green-700 hover:bg-green-50'
-                          }`}
-                          title={slide.is_active ? 'Disable slide (hide from homepage)' : 'Enable slide (show on homepage)'}
-                        >
-                          {slide.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={() => handleEdit(slide)}
-                          className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded"
-                          title="Edit slide"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(slide.id)}
-                          className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                          title="Delete slide"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                {/* Image Preview */}
+                <div className={`shrink-0 ${!slide.is_active ? 'opacity-60' : ''}`}>
+                  {slide.image_url || slide.image_filename ? (
+                    <img
+                      src={slide.image_url || (slide.image_filename ? `/api/uploads/media/images/${slide.image_filename}` : '')}
+                      alt=""
+                      className={`w-24 h-16 object-cover rounded ${!slide.is_active ? 'grayscale' : ''}`}
+                      onError={(e) => {
+                        e.currentTarget.src = ''
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  ) : (
+                    <div className="w-24 h-16 bg-gray-200 rounded flex items-center justify-center">
+                      <ImageIcon className="w-6 h-6 text-gray-400" aria-hidden="true" />
                     </div>
+                  )}
+                </div>
+
+                {/* Slide Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-gray-900 truncate">{slide.title}</p>
+                    <StatusBadge tone={slide.is_active ? 'success' : 'neutral'} icon={slide.is_active ? Eye : EyeOff}>
+                      {slide.is_active ? 'Active' : 'Inactive'}
+                    </StatusBadge>
                   </div>
-                ))
-            ) : (
-              <p className="text-gray-500 text-center py-8">No slides yet. Create your first slide below.</p>
-            )}
-          </div>
-        </div>
+                  {slide.description && (
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{slide.description}</p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Order {slide.display_order}
+                    {!slide.is_active && ' · Hidden from homepage slideshow'}
+                  </p>
+                </div>
 
-        {/* Create/Edit Form */}
-        <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">
-            {editingId ? 'Edit Slide' : 'Create New Slide'}
-          </h2>
-          
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Title *
-              </label>
-              <input
-                {...register('title', { required: true })}
-                className="input-field"
-                placeholder="Enter slide title"
-              />
-            </div>
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => toggleActiveMutation.mutate({ id: slide.id, is_active: !slide.is_active })}
+                    disabled={toggleActiveMutation.isLoading}
+                    className={`p-2 rounded transition-colors ${
+                      slide.is_active
+                        ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                        : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                    }`}
+                    title={slide.is_active ? 'Disable slide (hide from homepage)' : 'Enable slide (show on homepage)'}
+                    aria-label={slide.is_active ? `Hide ${slide.title} from homepage` : `Show ${slide.title} on homepage`}
+                  >
+                    {slide.is_active ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
+                  </button>
+                  <button
+                    onClick={() => { handleEdit(slide); setShowForm(true) }}
+                    className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded"
+                    title="Edit slide"
+                    aria-label={`Edit ${slide.title}`}
+                  >
+                    <Edit className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(slide.id)}
+                    className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                    title="Delete slide"
+                    aria-label={`Delete ${slide.title}`}
+                  >
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <EmptyState icon={ImageIcon} title="No slides yet." action={newButton} />
+      )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                {...register('description')}
-                rows={3}
-                className="input-field"
-                placeholder="Enter slide description"
-              />
-            </div>
-
-            <MediaInput
-              value={watch('image_url') || ''}
-              onChange={(url) => setValue('image_url', url)}
-              type="images"
-              label="Image URL"
-              placeholder="Enter image URL or select from library"
-              required={true}
+      {/* Create/Edit Form */}
+      <Modal
+        open={showForm}
+        title={editingId ? 'Edit Slide' : 'Create New Slide'}
+        size="lg"
+        onClose={closeForm}
+        footer={
+          <>
+            <button type="button" onClick={closeForm} className="btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" form="slide-form" disabled={saving} className="btn-primary gap-2">
+              <Save className="w-4 h-4" aria-hidden="true" />
+              {saving ? 'Saving...' : editingId ? 'Update Slide' : 'Create Slide'}
+            </button>
+          </>
+        }
+      >
+        <form id="slide-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <div>
+            <label htmlFor="slide-title" className="label">Title *</label>
+            <input
+              id="slide-title"
+              {...register('title', { required: true })}
+              className="input-field"
+              placeholder="Enter slide title"
             />
+          </div>
 
+          <div>
+            <label htmlFor="slide-description" className="label">Description</label>
+            <textarea
+              id="slide-description"
+              {...register('description')}
+              rows={3}
+              className="input-field"
+              placeholder="Enter slide description"
+            />
+          </div>
+
+          <MediaInput
+            value={watch('image_url') || ''}
+            onChange={(url) => setValue('image_url', url)}
+            type="images"
+            label="Image URL"
+            placeholder="Enter image URL or select from library"
+            required={true}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Call-to-Action Button Text
-              </label>
+              <label htmlFor="slide-cta-text" className="label">Call-to-Action Button Text</label>
               <input
+                id="slide-cta-text"
                 {...register('cta_text')}
                 className="input-field"
                 placeholder="e.g., Donate Now"
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Call-to-Action URL
-              </label>
+              <label htmlFor="slide-cta-url" className="label">Call-to-Action URL</label>
               <input
+                id="slide-cta-url"
                 {...register('cta_url')}
                 className="input-field"
                 placeholder="e.g., /donate"
               />
             </div>
+          </div>
 
+          <div className="flex flex-wrap items-end gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Display Order
-              </label>
+              <label htmlFor="slide-order" className="label">Display Order</label>
               <input
+                id="slide-order"
                 type="number"
                 {...register('display_order', { valueAsNumber: true })}
-                className="input-field"
+                className="input-field w-28"
                 placeholder="0"
               />
             </div>
-
-            <div className="flex items-center">
+            <label className="flex items-center gap-2 text-sm text-gray-700 pb-3">
               <input
                 type="checkbox"
                 {...register('is_active')}
                 className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
               />
-              <label className="ml-2 text-sm text-gray-700">Active</label>
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                disabled={createMutation.isLoading || updateMutation.isLoading}
-                className="btn-primary flex items-center"
-              >
-                {(createMutation.isLoading || updateMutation.isLoading) ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {editingId ? 'Update Slide' : 'Create Slide'}
-                  </>
-                )}
-              </button>
-              
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="btn-outline flex items-center"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </button>
-              )}
-            </div>
-          </form>
-
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Enter the full URL of the image you want to use for each slide.
-              Slides are displayed in order of their "Display Order" value (lower numbers appear first).
-            </p>
+              Active
+            </label>
           </div>
-        </div>
-      </div>
+        </form>
+      </Modal>
 
       <ConfirmationDialog />
     </div>

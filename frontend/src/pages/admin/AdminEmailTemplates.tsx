@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileText, Plus, Edit, Trash2, Eye, Send, X, AlertTriangle, Image as ImageIcon } from 'lucide-react'
+import { FileText, Plus, Edit, Trash2, Eye, Send, X, Image as ImageIcon } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 import MediaPicker from '../../components/MediaPicker'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { PageHeader, LoadingBlock, ErrorState, EmptyState, StatusBadge, type StatusTone } from '../../components/admin'
 
 interface Template {
   id: number
@@ -20,10 +22,10 @@ interface Template {
   updated_at: string
 }
 
-const CATEGORY_BADGE: Record<string, string> = {
-  marketing:     'bg-blue-100 text-blue-800',
-  transactional: 'bg-amber-100 text-amber-800',
-  system:        'bg-gray-200 text-gray-700',
+const CATEGORY_TONE: Record<string, StatusTone> = {
+  marketing:     'info',
+  transactional: 'warning',
+  system:        'neutral',
 }
 
 const STARTER_BODY = `<p>Assalamu alaikum {{ first_name | default('friend') }},</p>
@@ -47,9 +49,9 @@ const STARTER_BODY = `<p>Assalamu alaikum {{ first_name | default('friend') }},<
 const AdminEmailTemplates = () => {
   const [items, setItems] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Template | null>(null)
-  const [deleting, setDeleting] = useState<Template | null>(null)
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit')
   const [previewHtml, setPreviewHtml] = useState('')
   const [testEmail, setTestEmail] = useState('')
@@ -68,14 +70,17 @@ const AdminEmailTemplates = () => {
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   const fetchItems = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetch(`${API_URL}/api/marketing/templates`, { headers: { Authorization: `Bearer ${token}` } })
       if (resp.ok) setItems(await resp.json())
-    } catch { showError('Error', 'Failed to load templates') }
+      else setLoadError(true)
+    } catch { setLoadError(true); showError('Error', 'Failed to load templates') }
     finally { setLoading(false) }
   }
 
@@ -143,15 +148,20 @@ const AdminEmailTemplates = () => {
     } catch { showError('Error', 'Network error') }
   }
 
-  const handleDelete = async () => {
-    if (!deleting) return
+  const handleDelete = async (t: Template) => {
+    const ok = await confirm({
+      title: 'Delete template?',
+      message: `"${t.name}" will be removed.`,
+      confirmText: 'Delete',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
-      const resp = await fetch(`${API_URL}/api/marketing/templates/${deleting.id}`, {
+      const resp = await fetch(`${API_URL}/api/marketing/templates/${t.id}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
       })
       if (resp.ok) {
         showSuccess('Deleted', 'Template removed')
-        setDeleting(null)
         fetchItems()
       } else showError('Error', 'Failed to delete')
     } catch { showError('Error', 'Network error') }
@@ -193,59 +203,75 @@ const AdminEmailTemplates = () => {
     } catch { showError('Error', 'Network error') }
   }
 
+  const newButton = (
+    <button onClick={() => { resetForm(); setShowForm(true) }} className="btn-primary gap-2">
+      <Plus className="w-4 h-4" aria-hidden="true" /> New template
+    </button>
+  )
+
   return (
-    <div className="space-y-6 px-4 sm:px-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <FileText className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
-          Email Templates
-          <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
-        </h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium">
-          <Plus className="w-4 h-4" /> New template
-        </button>
-      </div>
-      <p className="text-sm text-gray-600">
-        Reusable email bodies you can attach to marketing campaigns. Templates support Jinja variables
-        ({'{{ first_name }}'}, etc.) and CSS is auto-inlined for email-client compatibility.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Email templates"
+        icon={FileText}
+        count={items.length}
+        description="Reusable email bodies for marketing campaigns."
+        help={
+          <p>
+            Templates support Jinja variables ({'{{ first_name }}'}, etc.) and CSS is auto-inlined for
+            email-client compatibility.
+          </p>
+        }
+        actions={newButton}
+      />
+
+      {loadError && <ErrorState message="Could not load templates." onRetry={fetchItems} />}
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"/></div>
+        <LoadingBlock />
       ) : items.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-lg shadow-sm">
-          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900">No templates yet</h3>
-          <p className="text-gray-500 mt-1">Create your first email template to start composing campaigns.</p>
-        </div>
+        !loadError && (
+          <EmptyState
+            icon={FileText}
+            title="No templates yet"
+            body="Create your first email template to start composing campaigns."
+            action={newButton}
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {items.map((t) => (
-            <div key={t.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col">
+            <div key={t.id} className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
               <div className="flex items-start justify-between mb-2 gap-2">
-                <h3 className="font-semibold text-gray-900 truncate flex-1">{t.name}</h3>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CATEGORY_BADGE[t.category] || 'bg-gray-100'}`}>{t.category}</span>
+                <h2 className="text-base font-semibold text-gray-900 truncate flex-1">{t.name}</h2>
+                <StatusBadge tone={CATEGORY_TONE[t.category] || 'neutral'}>{t.category}</StatusBadge>
               </div>
               <p className="text-xs text-gray-500 mb-2 truncate">slug: {t.slug} · v{t.current_version}</p>
               <p className="text-sm text-gray-700 mb-3 line-clamp-2">{t.subject}</p>
               <div className="mt-auto flex items-center gap-1 pt-2 border-t border-gray-100">
-                <button onClick={() => openEdit(t)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700"><Edit className="w-3.5 h-3.5" /> Edit</button>
-                <button onClick={() => setDeleting(t)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => openEdit(t)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-primary-50 hover:bg-primary-100 text-primary-700">
+                  <Edit className="w-3.5 h-3.5" aria-hidden="true" /> Edit
+                </button>
+                <button onClick={() => handleDelete(t)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Delete" aria-label={`Delete ${t.name}`}>
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Editor modal */}
+      {/* Editor modal. Hand-rolled on purpose, not the shared Modal: the
+          MediaPicker opens on top of it, and the shared Modal's Escape handler
+          would close this editor (and lose the draft) along with the picker. */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">{editing ? `Edit "${editing.name}"` : 'New email template'}</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="template-editor-title" className="bg-white rounded-2xl shadow-xl max-w-5xl w-full max-h-[92vh] flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-gray-200">
+              <h2 id="template-editor-title" className="text-lg font-semibold text-gray-900 min-w-0">{editing ? `Edit "${editing.name}"` : 'New email template'}</h2>
               <div className="flex items-center gap-2">
-                <button onClick={() => setPreviewMode(previewMode === 'edit' ? 'preview' : 'edit')} className="text-sm px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">{previewMode === 'edit' ? 'Show preview' : 'Show editor'}</button>
-                <button onClick={resetForm} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                <button type="button" onClick={() => setPreviewMode(previewMode === 'edit' ? 'preview' : 'edit')} className="btn-secondary btn-sm">{previewMode === 'edit' ? 'Show preview' : 'Show editor'}</button>
+                <button type="button" onClick={resetForm} aria-label="Close" className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"><X className="w-5 h-5" aria-hidden="true" /></button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
@@ -321,9 +347,9 @@ const AdminEmailTemplates = () => {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
-                  <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create template'}</button>
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button type="button" onClick={resetForm} className="btn-secondary">Cancel</button>
+                  <button type="submit" className="btn-primary">{editing ? 'Save changes' : 'Create template'}</button>
                 </div>
               </form>
             </div>
@@ -331,20 +357,7 @@ const AdminEmailTemplates = () => {
         </div>
       )}
 
-      {deleting && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
-              <div><h3 className="text-lg font-bold text-gray-900">Delete template?</h3><p className="text-sm text-gray-500 mt-1">{deleting.name}</p></div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleting(null)} className="px-4 py-2 text-gray-600">Cancel</button>
-              <button onClick={handleDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationDialog />
 
       <MediaPicker
         isOpen={imagePickerOpen}

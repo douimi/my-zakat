@@ -128,7 +128,7 @@ const MediaUploader = ({ onUploaded, projects, projectId = null }: MediaUploader
         onClick={() => inputRef.current?.click()}
         className={clsx(
           'border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition',
-          dragging ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300 hover:border-emerald-400'
+          dragging ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-primary-400'
         )}
       >
         <UploadCloud className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -158,7 +158,7 @@ const MediaUploader = ({ onUploaded, projects, projectId = null }: MediaUploader
               <span className="truncate max-w-[200px] text-gray-700">{item.name}</span>
               {item.state === 'uploading' && (
                 <div className="flex-1 h-1.5 bg-gray-200 rounded overflow-hidden">
-                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${item.percent}%` }} />
+                  <div className="h-full bg-primary-500 transition-all" style={{ width: `${item.percent}%` }} />
                 </div>
               )}
               {item.message && <span className="text-red-600">{item.message}</span>}

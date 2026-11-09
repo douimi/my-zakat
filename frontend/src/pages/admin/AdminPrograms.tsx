@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Plus, Edit2, Trash2, Save, X, Loader2, Eye, Video, Upload, Link as LinkIcon, Image as ImageIcon } from 'lucide-react'
+import { Plus, Edit2, Trash2, Save, Loader2, Eye, Video, Upload, Link as LinkIcon, Image as ImageIcon, TrendingUp } from 'lucide-react'
+import { clsx } from 'clsx'
+import { PageHeader, LoadingBlock, EmptyState, StatusBadge, LongText, Modal } from '../../components/admin'
 import { programsAPI, programCategoriesAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import { isValidImageUrl, isValidVideoUrl } from '../../utils/mediaHelpers'
-import LazyVideo from '../../components/LazyVideo'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import { Link } from 'react-router-dom'
 import type { Program, ProgramCategory } from '../../types'
@@ -215,53 +216,66 @@ const AdminPrograms = () => {
     return categories?.find((c: ProgramCategory) => c.id === categoryId)?.name || 'Unknown'
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    )
+  const resetProgramData = (program: Program) => {
+    setProgramData({
+      ...programData,
+      [program.id]: {
+        title: program.title,
+        slug: program.slug,
+        description: program.description || '',
+        short_description: program.short_description || '',
+        impact_text: program.impact_text || '',
+        image_url: program.image_url || '',
+        display_order: program.display_order,
+        is_active: program.is_active,
+        category_id: program.category_id
+      }
+    })
   }
 
-  const filteredPrograms = selectedCategory 
+  if (isLoading) {
+    return <LoadingBlock label="Loading programs…" />
+  }
+
+  const filteredPrograms = selectedCategory
     ? programs?.filter((p: Program) => p.category_id === selectedCategory)
     : programs
 
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Programs Management</h1>
-          <p className="text-gray-600 mt-2">Manage programs and link them to categories</p>
-        </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Program
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Programs"
+        icon={TrendingUp}
+        count={filteredPrograms?.length}
+        actions={
+          <>
+            <label htmlFor="program-category-filter" className="sr-only">Filter by category</label>
+            <select
+              id="program-category-filter"
+              value={selectedCategory || ''}
+              onChange={(e) => setSelectedCategory(e.target.value ? parseInt(e.target.value) : null)}
+              className="input-field w-auto min-w-[12rem]"
+            >
+              <option value="">All Categories</option>
+              {categories?.map((cat: ProgramCategory) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary gap-2"
+            >
+              <Plus className="w-5 h-5" aria-hidden="true" />
+              Add Program
+            </button>
+          </>
+        }
+      />
 
-      {/* Category Filter */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Category</label>
-        <select
-          value={selectedCategory || ''}
-          onChange={(e) => setSelectedCategory(e.target.value ? parseInt(e.target.value) : null)}
-          className="input-field max-w-xs"
-        >
-          <option value="">All Categories</option>
-          {categories?.map((cat: ProgramCategory) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Programs List */}
-      <div className="space-y-6">
-        {filteredPrograms && filteredPrograms.length > 0 ? (
-          filteredPrograms.map((program: Program) => {
+      {/* Programs List: compact cards; the full form opens only on Edit. */}
+      {filteredPrograms && filteredPrograms.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredPrograms.map((program: Program) => {
             const currentData = programData[program.id] || {
               title: program.title,
               slug: program.slug,
@@ -278,248 +292,176 @@ const AdminPrograms = () => {
             const showImageInput = showUrlInput?.programId === program.id && showUrlInput?.field === 'image'
             const showVideoInput = showUrlInput?.programId === program.id && showUrlInput?.field === 'video'
             const isEditing = editingProgram === program.id
+            const field = (id: string) => `program-${program.id}-${id}`
 
             return (
-              <div key={program.id} className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">{program.title}</h3>
-                    <p className="text-sm text-gray-500">Category: {getCategoryName(program.category_id)}</p>
+              <div
+                key={program.id}
+                className={clsx('bg-white rounded-xl border border-gray-200 shadow-sm p-4', isEditing && 'sm:col-span-2 xl:col-span-3')}
+              >
+                <div className="flex gap-4">
+                  {/* Thumbnail */}
+                  <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {videoUrl ? (
+                      <VideoThumbnail videoSrc={videoUrl} className="w-full h-full" alt={`${program.title} video`} />
+                    ) : imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none' }}
+                      />
+                    ) : (
+                      <ImageIcon className="w-6 h-6 text-gray-300" aria-hidden="true" />
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to={`/programs/${program.slug}`}
-                      target="_blank"
-                      className="btn-outline text-sm flex items-center gap-2"
-                    >
-                      <Eye className="w-4 h-4" />
-                      View
-                    </Link>
-                    <button
-                      onClick={() => handleDeleteProgram(program.id)}
-                      disabled={deleteMutation.isLoading}
-                      className="btn-outline text-sm text-red-600 border-red-300 hover:bg-red-50 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (isEditing) {
-                          handleSaveProgram(program.id)
-                        } else {
-                          setEditingProgram(program.id)
-                        }
-                      }}
-                      disabled={updateMutation.isLoading}
-                      className="btn-primary flex items-center gap-2 text-sm"
-                    >
-                      {updateMutation.isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : isEditing ? (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save
-                        </>
-                      ) : (
-                        <>
-                          <Edit2 className="w-4 h-4" />
-                          Edit
-                        </>
-                      )}
-                    </button>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate" title={program.title}>{program.title}</p>
+                        <p className="text-xs text-gray-500 truncate">{getCategoryName(program.category_id)} · /{program.slug}</p>
+                      </div>
+                      <StatusBadge tone={program.is_active ? 'success' : 'neutral'}>
+                        {program.is_active ? 'Active' : 'Inactive'}
+                      </StatusBadge>
+                    </div>
+                    {!isEditing && (program.short_description || program.description) && (
+                      <div className="mt-2">
+                        <LongText text={program.short_description || program.description} lines={2} />
+                      </div>
+                    )}
+                    {!isEditing && program.impact_text && (
+                      <p className="mt-2"><span className="badge-primary">{program.impact_text}</span></p>
+                    )}
                   </div>
                 </div>
 
-                {/* Media Section */}
-                {videoUrl && !showVideoInput && !showImageInput && (
-                  <div className="mb-4">
-                    <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-200">
-                      <VideoThumbnail
-                        videoSrc={videoUrl}
-                        className="w-full h-full"
-                        alt={`${program.title} video`}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Video (takes priority over image)</p>
-                  </div>
-                )}
-                {!videoUrl && imageUrl && !showImageInput && !showVideoInput && (
-                  <div className="mb-4">
-                    <img
-                      src={imageUrl}
-                      alt={program.title}
-                      className="w-full h-48 object-cover rounded-lg"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Image</p>
-                  </div>
-                )}
-
-                {/* Video/Image Upload/URL */}
-                {isEditing && (
-                  <>
-                    {showVideoInput ? (
-                      <div className="mb-4 space-y-3">
-                        <MediaInput
-                          value={urlValue}
-                          onChange={(url) => setUrlValue(url)}
-                          type="videos"
-                          label="Video URL"
-                          placeholder="Enter video URL or select from library"
-                          showPreview={false}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleUrlSubmit(program.id, 'video')}
-                            disabled={!urlValue.trim() || !isValidVideoUrl(urlValue) || updateMutation.isLoading}
-                            className="btn-primary flex-1 text-sm"
-                          >
-                            <Save className="w-4 h-4 mr-1" />
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setShowUrlInput(null)}
-                            className="btn-outline text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : showImageInput ? (
-                      <div className="mb-4 space-y-3">
-                        <MediaInput
-                          value={urlValue}
-                          onChange={(url) => setUrlValue(url)}
-                          type="images"
-                          label="Image URL"
-                          placeholder="Enter image URL or select from library"
-                          showPreview={false}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleUrlSubmit(program.id, 'image')}
-                            disabled={!urlValue.trim() || !isValidImageUrl(urlValue) || updateMutation.isLoading}
-                            className="btn-primary flex-1 text-sm"
-                          >
-                            <Save className="w-4 h-4 mr-1" />
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setShowUrlInput(null)}
-                            className="btn-outline text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                  <Link
+                    to={`/programs/${program.slug}`}
+                    target="_blank"
+                    className="btn-ghost btn-sm gap-1.5"
+                  >
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                    View
+                  </Link>
+                  <button
+                    onClick={() => handleDeleteProgram(program.id)}
+                    disabled={deleteMutation.isLoading}
+                    className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                    title="Delete program"
+                    aria-label={`Delete ${program.title}`}
+                  >
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  {isEditing && (
+                    <button
+                      onClick={() => { setEditingProgram(null); setShowUrlInput(null); resetProgramData(program) }}
+                      className="btn-secondary btn-sm"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (isEditing) {
+                        handleSaveProgram(program.id)
+                      } else {
+                        setEditingProgram(program.id)
+                      }
+                    }}
+                    disabled={updateMutation.isLoading}
+                    className={clsx(isEditing ? 'btn-primary' : 'btn-secondary', 'btn-sm gap-2')}
+                  >
+                    {updateMutation.isLoading && isEditing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                        Saving...
+                      </>
+                    ) : isEditing ? (
+                      <>
+                        <Save className="w-4 h-4" aria-hidden="true" />
+                        Save
+                      </>
                     ) : (
-                      <div className="mb-4 space-y-3">
-                        <div className="border-2 border-dashed rounded-lg p-3 text-center">
-                          <Video className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                          <p className="text-xs text-gray-600 mb-2">Video (optional, takes priority)</p>
-                          <div className="flex gap-2 justify-center">
-                            <label className="btn-outline text-xs cursor-pointer">
-                              <Upload className="w-3 h-3 mr-1" />
-                              Upload Video
-                              <input
-                                type="file"
-                                accept="video/*"
-                                onChange={(e) => handleFileUpload(program.id, e.target.files?.[0] || null)}
-                                className="hidden"
-                                disabled={uploadingItem === program.id}
-                              />
-                            </label>
-                            <button
-                              onClick={() => {
-                                setUrlValue(program.video_filename || '')
-                                setShowUrlInput({ programId: program.id, field: 'video' })
-                              }}
-                              className="btn-outline text-xs"
-                            >
-                              <LinkIcon className="w-3 h-3 mr-1" />
-                              Video URL
-                            </button>
-                          </div>
-                          {uploadingItem === program.id && (
-                            <div className="mt-2 flex items-center justify-center">
-                              <Loader2 className="w-3 h-3 text-primary-600 animate-spin mr-1" />
-                              <span className="text-xs text-gray-600">Uploading...</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="border-2 border-dashed rounded-lg p-3 text-center">
-                          <ImageIcon className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                          <p className="text-xs text-gray-600 mb-2">Image URL (fallback if no video)</p>
-                          <button
-                            onClick={() => {
-                              setUrlValue(program.image_url || '')
-                              setShowUrlInput({ programId: program.id, field: 'image' })
-                            }}
-                            className="btn-outline text-xs w-full"
-                          >
-                            <LinkIcon className="w-3 h-3 mr-1" />
-                            Set Image URL
-                          </button>
-                        </div>
-                      </div>
+                      <>
+                        <Edit2 className="w-4 h-4" aria-hidden="true" />
+                        Edit
+                      </>
                     )}
-                  </>
-                )}
+                  </button>
+                </div>
 
-                {/* Program Details */}
-                <div className="space-y-4 mt-4">
-                  {isEditing ? (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                        <select
-                          value={currentData.category_id || 0}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, category_id: parseInt(e.target.value) }
-                          })}
-                          className="input-field"
-                        >
-                          <option value="0">Select Category</option>
-                          {categories?.map((cat: ProgramCategory) => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
+                {isEditing && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                    {/* Program Details */}
+                    <div className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label htmlFor={field('category')} className="label">Category</label>
+                          <select
+                            id={field('category')}
+                            value={currentData.category_id || 0}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, category_id: parseInt(e.target.value) }
+                            })}
+                            className="input-field"
+                          >
+                            <option value="0">Select Category</option>
+                            {categories?.map((cat: ProgramCategory) => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor={field('title')} className="label">Title</label>
+                          <input
+                            id={field('title')}
+                            type="text"
+                            value={currentData.title || ''}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, title: e.target.value }
+                            })}
+                            className="input-field"
+                            placeholder="Program title"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={field('slug')} className="label">Slug</label>
+                          <input
+                            id={field('slug')}
+                            type="text"
+                            value={currentData.slug || ''}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }
+                            })}
+                            className="input-field"
+                            placeholder="program-slug"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={field('impact')} className="label">Impact Text</label>
+                          <input
+                            id={field('impact')}
+                            type="text"
+                            value={currentData.impact_text || ''}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, impact_text: e.target.value }
+                            })}
+                            className="input-field"
+                            placeholder="e.g., 'Helped 1,200+ families'"
+                          />
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                        <input
-                          type="text"
-                          value={currentData.title || ''}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, title: e.target.value }
-                          })}
-                          className="input-field"
-                          placeholder="Program title"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
-                        <input
-                          type="text"
-                          value={currentData.slug || ''}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }
-                          })}
-                          className="input-field"
-                          placeholder="program-slug"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+                        <label htmlFor={field('short')} className="label">Short Description</label>
                         <textarea
+                          id={field('short')}
                           value={currentData.short_description || ''}
                           onChange={(e) => setProgramData({
                             ...programData,
@@ -531,8 +473,9 @@ const AdminPrograms = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <label htmlFor={field('description')} className="label">Description</label>
                         <textarea
+                          id={field('description')}
                           value={currentData.description || ''}
                           onChange={(e) => setProgramData({
                             ...programData,
@@ -543,205 +486,281 @@ const AdminPrograms = () => {
                           placeholder="Full description"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Impact Text</label>
-                        <input
-                          type="text"
-                          value={currentData.impact_text || ''}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, impact_text: e.target.value }
-                          })}
-                          className="input-field"
-                          placeholder="e.g., 'Helped 1,200+ families'"
-                        />
+                      <div className="flex flex-wrap items-end gap-6">
+                        <div>
+                          <label htmlFor={field('order')} className="label">Display Order</label>
+                          <input
+                            id={field('order')}
+                            type="number"
+                            value={currentData.display_order || 0}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, display_order: parseInt(e.target.value) || 0 }
+                            })}
+                            className="input-field w-28"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-700 pb-3">
+                          <input
+                            type="checkbox"
+                            checked={currentData.is_active ?? true}
+                            onChange={(e) => setProgramData({
+                              ...programData,
+                              [program.id]: { ...currentData, is_active: e.target.checked }
+                            })}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          Active
+                        </label>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
-                        <input
-                          type="number"
-                          value={currentData.display_order || 0}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, display_order: parseInt(e.target.value) || 0 }
-                          })}
-                          className="input-field"
-                        />
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={currentData.is_active ?? true}
-                          onChange={(e) => setProgramData({
-                            ...programData,
-                            [program.id]: { ...currentData, is_active: e.target.checked }
-                          })}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <label className="ml-2 text-sm text-gray-700">Active</label>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-sm text-gray-600"><strong>Category:</strong> {getCategoryName(program.category_id)}</p>
-                        <p className="text-sm text-gray-600"><strong>Slug:</strong> {program.slug}</p>
-                        {program.short_description && (
-                          <p className="text-gray-600 mt-2">{program.short_description}</p>
-                        )}
-                        {program.description && (
-                          <p className="text-gray-600 mt-2">{program.description}</p>
-                        )}
-                        {program.impact_text && (
-                          <div className="mt-3">
-                            <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
-                              {program.impact_text}
-                            </span>
+                    </div>
+
+                    {/* Video/Image Upload/URL */}
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-gray-700">Media</p>
+                      {showVideoInput || showImageInput ? (
+                        <div className="space-y-3">
+                          <MediaInput
+                            value={urlValue}
+                            onChange={(url) => setUrlValue(url)}
+                            type={showVideoInput ? 'videos' : 'images'}
+                            label={showVideoInput ? 'Video URL' : 'Image URL'}
+                            placeholder={showVideoInput ? 'Enter video URL or select from library' : 'Enter image URL or select from library'}
+                            showPreview={false}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleUrlSubmit(program.id, showVideoInput ? 'video' : 'image')}
+                              disabled={
+                                !urlValue.trim() ||
+                                !(showVideoInput ? isValidVideoUrl(urlValue) : isValidImageUrl(urlValue)) ||
+                                updateMutation.isLoading
+                              }
+                              className="btn-primary btn-sm flex-1 gap-1.5"
+                            >
+                              <Save className="w-4 h-4" aria-hidden="true" />
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setShowUrlInput(null)}
+                              className="btn-secondary btn-sm"
+                            >
+                              Cancel
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="border-2 border-dashed rounded-lg p-3 text-center">
+                            <Video className="w-6 h-6 text-gray-400 mx-auto mb-2" aria-hidden="true" />
+                            <p className="text-xs text-gray-600 mb-2">Video (optional, takes priority)</p>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              <label className="btn-secondary btn-sm gap-1 cursor-pointer">
+                                <Upload className="w-3 h-3" aria-hidden="true" />
+                                Upload Video
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  onChange={(e) => handleFileUpload(program.id, e.target.files?.[0] || null)}
+                                  className="hidden"
+                                  disabled={uploadingItem === program.id}
+                                />
+                              </label>
+                              <button
+                                onClick={() => {
+                                  setUrlValue(program.video_filename || '')
+                                  setShowUrlInput({ programId: program.id, field: 'video' })
+                                }}
+                                className="btn-secondary btn-sm gap-1"
+                              >
+                                <LinkIcon className="w-3 h-3" aria-hidden="true" />
+                                Video URL
+                              </button>
+                            </div>
+                            {uploadingItem === program.id && (
+                              <div className="mt-2 flex items-center justify-center">
+                                <Loader2 className="w-3 h-3 text-primary-600 animate-spin mr-1" aria-hidden="true" />
+                                <span className="text-xs text-gray-600">Uploading...</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="border-2 border-dashed rounded-lg p-3 text-center">
+                            <ImageIcon className="w-6 h-6 text-gray-400 mx-auto mb-2" aria-hidden="true" />
+                            <p className="text-xs text-gray-600 mb-2">Image URL (fallback if no video)</p>
+                            <button
+                              onClick={() => {
+                                setUrlValue(program.image_url || '')
+                                setShowUrlInput({ programId: program.id, field: 'image' })
+                              }}
+                              className="btn-secondary btn-sm gap-1 w-full"
+                            >
+                              <LinkIcon className="w-3 h-3" aria-hidden="true" />
+                              Set Image URL
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )
-          })
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No programs found{selectedCategory ? ' for this category' : ''}.</p>
-          </div>
-        )}
-      </div>
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          icon={TrendingUp}
+          title={`No programs found${selectedCategory ? ' for this category' : ''}.`}
+          action={
+            <button onClick={() => setShowCreateModal(true)} className="btn-primary gap-2">
+              <Plus className="w-5 h-5" aria-hidden="true" />
+              Add Program
+            </button>
+          }
+        />
+      )}
 
       {/* Create Program Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New Program</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                  <select
-                    value={newProgram.category_id}
-                    onChange={(e) => setNewProgram({ ...newProgram, category_id: parseInt(e.target.value) })}
-                    className="input-field"
-                  >
-                    <option value="0">Select Category</option>
-                    {categories?.map((cat: ProgramCategory) => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                  <input
-                    type="text"
-                    value={newProgram.title}
-                    onChange={(e) => setNewProgram({ ...newProgram, title: e.target.value })}
-                    className="input-field"
-                    placeholder="Program title"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug *</label>
-                  <input
-                    type="text"
-                    value={newProgram.slug}
-                    onChange={(e) => setNewProgram({ ...newProgram, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
-                    className="input-field"
-                    placeholder="program-slug"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
-                  <textarea
-                    value={newProgram.short_description}
-                    onChange={(e) => setNewProgram({ ...newProgram, short_description: e.target.value })}
-                    className="input-field"
-                    rows={2}
-                    placeholder="Short description"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    value={newProgram.description}
-                    onChange={(e) => setNewProgram({ ...newProgram, description: e.target.value })}
-                    className="input-field"
-                    rows={4}
-                    placeholder="Full description"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                  <input
-                    type="url"
-                    value={newProgram.image_url}
-                    onChange={(e) => setNewProgram({ ...newProgram, image_url: e.target.value })}
-                    className="input-field"
-                    placeholder="Image URL"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Impact Text</label>
-                  <input
-                    type="text"
-                    value={newProgram.impact_text}
-                    onChange={(e) => setNewProgram({ ...newProgram, impact_text: e.target.value })}
-                    className="input-field"
-                    placeholder="e.g., 'Helped 1,200+ families'"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
-                  <input
-                    type="number"
-                    value={newProgram.display_order}
-                    onChange={(e) => setNewProgram({ ...newProgram, display_order: parseInt(e.target.value) || 0 })}
-                    className="input-field"
-                  />
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={newProgram.is_active}
-                    onChange={(e) => setNewProgram({ ...newProgram, is_active: e.target.checked })}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <label className="ml-2 text-sm text-gray-700">Active</label>
-                </div>
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  onClick={handleCreateProgram}
-                  disabled={createMutation.isLoading || !newProgram.category_id || !newProgram.title || !newProgram.slug}
-                  className="btn-primary flex-1"
-                >
-                  {createMutation.isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Program
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="btn-outline"
-                  disabled={createMutation.isLoading}
-                >
-                  Cancel
-                </button>
-              </div>
+      <Modal
+        open={showCreateModal}
+        title="Create New Program"
+        size="lg"
+        onClose={() => { if (!createMutation.isLoading) setShowCreateModal(false) }}
+        footer={
+          <>
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="btn-secondary"
+              disabled={createMutation.isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateProgram}
+              disabled={createMutation.isLoading || !newProgram.category_id || !newProgram.title || !newProgram.slug}
+              className="btn-primary gap-2"
+            >
+              {createMutation.isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  Create Program
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="new-program-category" className="label">Category *</label>
+              <select
+                id="new-program-category"
+                value={newProgram.category_id}
+                onChange={(e) => setNewProgram({ ...newProgram, category_id: parseInt(e.target.value) })}
+                className="input-field"
+              >
+                <option value="0">Select Category</option>
+                {categories?.map((cat: ProgramCategory) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="new-program-title" className="label">Title *</label>
+              <input
+                id="new-program-title"
+                type="text"
+                value={newProgram.title}
+                onChange={(e) => setNewProgram({ ...newProgram, title: e.target.value })}
+                className="input-field"
+                placeholder="Program title"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-program-slug" className="label">Slug *</label>
+              <input
+                id="new-program-slug"
+                type="text"
+                value={newProgram.slug}
+                onChange={(e) => setNewProgram({ ...newProgram, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                className="input-field"
+                placeholder="program-slug"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-program-impact" className="label">Impact Text</label>
+              <input
+                id="new-program-impact"
+                type="text"
+                value={newProgram.impact_text}
+                onChange={(e) => setNewProgram({ ...newProgram, impact_text: e.target.value })}
+                className="input-field"
+                placeholder="e.g., 'Helped 1,200+ families'"
+              />
             </div>
           </div>
+          <div>
+            <label htmlFor="new-program-short" className="label">Short Description</label>
+            <textarea
+              id="new-program-short"
+              value={newProgram.short_description}
+              onChange={(e) => setNewProgram({ ...newProgram, short_description: e.target.value })}
+              className="input-field"
+              rows={2}
+              placeholder="Short description"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-program-description" className="label">Description</label>
+            <textarea
+              id="new-program-description"
+              value={newProgram.description}
+              onChange={(e) => setNewProgram({ ...newProgram, description: e.target.value })}
+              className="input-field"
+              rows={4}
+              placeholder="Full description"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-program-image" className="label">Image URL</label>
+            <input
+              id="new-program-image"
+              type="url"
+              value={newProgram.image_url}
+              onChange={(e) => setNewProgram({ ...newProgram, image_url: e.target.value })}
+              className="input-field"
+              placeholder="Image URL"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <label htmlFor="new-program-order" className="label">Display Order</label>
+              <input
+                id="new-program-order"
+                type="number"
+                value={newProgram.display_order}
+                onChange={(e) => setNewProgram({ ...newProgram, display_order: parseInt(e.target.value) || 0 })}
+                className="input-field w-28"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 pb-3">
+              <input
+                type="checkbox"
+                checked={newProgram.is_active}
+                onChange={(e) => setNewProgram({ ...newProgram, is_active: e.target.checked })}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Active
+            </label>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal

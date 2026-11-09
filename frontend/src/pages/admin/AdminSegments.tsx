@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Filter, Plus, Edit, Trash2, X, Eye, AlertTriangle, Users } from 'lucide-react'
+import { Filter, Plus, Edit, Trash2, Eye, Users } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirmation } from '../../hooks/useConfirmation'
+import { PageHeader, LoadingBlock, ErrorState, EmptyState, StatusBadge, Modal } from '../../components/admin'
 
 interface Predicate { field: string; op: string; value: any }
 type Operator = 'AND' | 'OR'
@@ -51,9 +53,9 @@ const AdminSegments = () => {
   const [items, setItems] = useState<Segment[]>([])
   const [meta, setMeta] = useState<FieldsMeta | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Segment | null>(null)
-  const [deleting, setDeleting] = useState<Segment | null>(null)
   const [form, setForm] = useState<{ name: string; description: string; operator: Operator; rules: Predicate[] }>({
     name: '', description: '', operator: 'AND', rules: [],
   })
@@ -63,14 +65,17 @@ const AdminSegments = () => {
 
   const token = useAuthStore((s) => s.token)
   const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   const fetchItems = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetch(`${API_URL}/api/marketing/segments`, { headers: { Authorization: `Bearer ${token}` } })
       if (resp.ok) setItems(await resp.json())
-    } catch { showError('Error', 'Failed to load segments') }
+      else setLoadError(true)
+    } catch { setLoadError(true); showError('Error', 'Failed to load audiences') }
     finally { setLoading(false) }
   }
 
@@ -153,63 +158,86 @@ const AdminSegments = () => {
         body: JSON.stringify(body),
       })
       if (resp.ok) {
-        showSuccess('Saved', editing ? 'Segment updated' : 'Segment created')
+        showSuccess('Saved', editing ? 'Audience updated' : 'Audience created')
         resetForm()
         fetchItems()
       } else {
         const err = await resp.json().catch(() => ({ detail: 'Failed' }))
-        showError('Error', err.detail || 'Failed to save segment')
+        showError('Error', err.detail || 'Failed to save audience')
       }
     } catch { showError('Error', 'Network error') }
   }
 
-  const handleDelete = async () => {
-    if (!deleting) return
+  const handleDelete = async (s: Segment) => {
+    const ok = await confirm({
+      title: 'Delete audience?',
+      message: `"${s.name}" will be removed. Campaigns already sent are not affected.`,
+      confirmText: 'Delete',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
-      const resp = await fetch(`${API_URL}/api/marketing/segments/${deleting.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      const resp = await fetch(`${API_URL}/api/marketing/segments/${s.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
       if (resp.ok) {
-        showSuccess('Deleted', 'Segment removed'); setDeleting(null); fetchItems()
+        showSuccess('Deleted', 'Audience removed'); fetchItems()
       } else showError('Error', 'Failed to delete')
     } catch { showError('Error', 'Network error') }
   }
 
+  const newButton = (
+    <button onClick={() => { resetForm(); setShowForm(true) }} className="btn-primary gap-2">
+      <Plus className="w-4 h-4" aria-hidden="true" /> New audience
+    </button>
+  )
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-primary-500'
+
   return (
-    <div className="space-y-6 px-4 sm:px-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-          <Filter className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
-          Audiences
-          <span className="ml-3 text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{items.length}</span>
-        </h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium">
-          <Plus className="w-4 h-4" /> New segment
-        </button>
-      </div>
-      <p className="text-sm text-gray-600">
-        A segment is a reusable audience filter. Build rules over donor history, consent status, or any contact
-        attribute. Suppressed addresses and people who haven't opted in to email are excluded automatically.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Audiences"
+        icon={Filter}
+        count={items.length}
+        description="Reusable recipient lists for email campaigns."
+        help={
+          <p>
+            Build rules over donor history, consent status, or any contact attribute. Suppressed addresses and
+            people who haven't opted in to email are excluded automatically.
+          </p>
+        }
+        actions={newButton}
+      />
+
+      {loadError && <ErrorState message="Could not load audiences." onRetry={fetchItems} />}
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"/></div>
+        <LoadingBlock />
       ) : items.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-lg shadow-sm">
-          <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900">No segments yet</h3>
-        </div>
+        !loadError && (
+          <EmptyState
+            icon={Users}
+            title="No audiences yet"
+            body="Create one to choose who receives a campaign."
+            action={newButton}
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {items.map((s) => (
-            <div key={s.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col">
+            <div key={s.id} className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
               <div className="flex items-start justify-between mb-2 gap-2">
-                <h3 className="font-semibold text-gray-900 truncate flex-1">{s.name}</h3>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-50 text-primary-700">{s.cached_count ?? '—'} recipients</span>
+                <h2 className="text-base font-semibold text-gray-900 truncate flex-1">{s.name}</h2>
+                <StatusBadge tone="info">{s.cached_count ?? '—'} recipients</StatusBadge>
               </div>
               {s.description && <p className="text-sm text-gray-500 mb-2 line-clamp-2">{s.description}</p>}
-              <p className="text-xs text-gray-400 mb-3">{s.definition?.length || 0} rules</p>
+              <p className="text-xs text-gray-500 mb-3">{normalizeDef(s.definition).rules.length} rules</p>
               <div className="mt-auto flex items-center gap-1 pt-2 border-t border-gray-100">
-                <button onClick={() => openEdit(s)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700"><Edit className="w-3.5 h-3.5" /> Edit</button>
-                <button onClick={() => setDeleting(s)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => openEdit(s)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-primary-50 hover:bg-primary-100 text-primary-700">
+                  <Edit className="w-3.5 h-3.5" aria-hidden="true" /> Edit
+                </button>
+                <button onClick={() => handleDelete(s)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Delete" aria-label={`Delete ${s.name}`}>
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
               </div>
             </div>
           ))}
@@ -217,137 +245,129 @@ const AdminSegments = () => {
       )}
 
       {showForm && meta && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">{editing ? `Edit "${editing.name}"` : 'New audience segment'}</h3>
-              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                  <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Major donors (≥ $500)" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" />
-                </div>
-              </div>
-
+        <Modal
+          title={editing ? `Edit "${editing.name}"` : 'New audience'}
+          onClose={resetForm}
+          size="xl"
+          footer={
+            <>
+              <button type="button" onClick={resetForm} className="btn-secondary">Cancel</button>
+              <button type="submit" form="segment-form" className="btn-primary">{editing ? 'Save changes' : 'Create audience'}</button>
+            </>
+          }
+        >
+          <form id="segment-form" onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Rules</label>
-                  <button type="button" onClick={addRule} className="text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Plus className="w-4 h-4" /> Add rule</button>
-                </div>
+                <label htmlFor="segment-name" className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input id="segment-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="Major donors (≥ $500)" />
+              </div>
+              <div>
+                <label htmlFor="segment-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input id="segment-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={inputClass} />
+              </div>
+            </div>
 
-                {/* Match ALL / Match ANY toggle */}
-                <div className="mb-3 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, operator: 'AND' })}
-                    className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'AND' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-                    title="Contact must match every rule"
-                  >
-                    Match ALL rules (AND)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, operator: 'OR' })}
-                    className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'OR' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
-                    title="Contact must match at least one rule"
-                  >
-                    Match ANY rule (OR)
-                  </button>
-                </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="block text-sm font-medium text-gray-700">Rules</span>
+                <button type="button" onClick={addRule} className="text-sm text-primary-700 hover:text-primary-900 inline-flex items-center gap-1"><Plus className="w-4 h-4" aria-hidden="true" /> Add rule</button>
+              </div>
 
-                <div className="space-y-2">
-                  {form.rules.length === 0 && <p className="text-sm text-gray-500 italic">No rules — segment will include everyone with email consent.</p>}
-                  {form.rules.map((r, idx) => {
-                    const field = getField(r.field)
-                    const type = field?.type || 'string'
-                    const needsValue = !NO_VALUE_OPS.has(r.op)
-                    return (
-                      <div key={idx} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
-                        <select value={r.field} onChange={(e) => { const nf = e.target.value; const ops = opsForField(nf); updateRule(idx, { field: nf, op: ops[0] || 'eq', value: '' }) }} className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1">
-                          {meta.fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              {/* Match ALL / Match ANY toggle */}
+              <div className="mb-3 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs" role="group" aria-label="How rules combine">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, operator: 'AND' })}
+                  aria-pressed={form.operator === 'AND'}
+                  className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'AND' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  title="Contact must match every rule"
+                >
+                  Match ALL rules (AND)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, operator: 'OR' })}
+                  aria-pressed={form.operator === 'OR'}
+                  className={`px-3 py-1.5 rounded font-medium transition-colors ${form.operator === 'OR' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  title="Contact must match at least one rule"
+                >
+                  Match ANY rule (OR)
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {form.rules.length === 0 && <p className="text-sm text-gray-500 italic">No rules: the audience is everyone with email consent.</p>}
+                {form.rules.map((r, idx) => {
+                  const field = getField(r.field)
+                  const type = field?.type || 'string'
+                  const needsValue = !NO_VALUE_OPS.has(r.op)
+                  return (
+                    <div key={idx} className="flex flex-wrap items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                      <select aria-label="Field" value={r.field} onChange={(e) => { const nf = e.target.value; const ops = opsForField(nf); updateRule(idx, { field: nf, op: ops[0] || 'eq', value: '' }) }} className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1 min-w-[10rem]">
+                        {meta.fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                      </select>
+                      <select aria-label="Condition" value={r.op} onChange={(e) => updateRule(idx, { op: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded text-sm">
+                        {opsForField(r.field).map((op) => <option key={op} value={op}>{OP_LABEL[op] || op}</option>)}
+                      </select>
+                      {needsValue && type === 'enum' && field?.options ? (
+                        <select
+                          aria-label="Value"
+                          value={r.value ?? ''}
+                          onChange={(e) => updateRule(idx, { value: e.target.value })}
+                          className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1 min-w-[8rem]"
+                        >
+                          <option value="">— pick —</option>
+                          {field.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
-                        <select value={r.op} onChange={(e) => updateRule(idx, { op: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded text-sm">
-                          {opsForField(r.field).map((op) => <option key={op} value={op}>{OP_LABEL[op] || op}</option>)}
-                        </select>
-                        {needsValue && type === 'enum' && field?.options ? (
-                          <select
-                            value={r.value ?? ''}
-                            onChange={(e) => updateRule(idx, { value: e.target.value })}
-                            className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1"
-                          >
-                            <option value="">— pick —</option>
-                            {field.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                        ) : needsValue && (
-                          <input
-                            type={type === 'number' ? 'number' : (type === 'date' ? 'date' : 'text')}
-                            value={r.value ?? ''}
-                            onChange={(e) => updateRule(idx, { value: e.target.value })}
-                            className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1"
-                            placeholder="value"
-                          />
-                        )}
-                        <button type="button" onClick={() => removeRule(idx)} className="text-red-500 hover:text-red-700 p-1"><X className="w-4 h-4" /></button>
-                      </div>
-                    )
-                  })}
-                </div>
+                      ) : needsValue && (
+                        <input
+                          aria-label="Value"
+                          type={type === 'number' ? 'number' : (type === 'date' ? 'date' : 'text')}
+                          value={r.value ?? ''}
+                          onChange={(e) => updateRule(idx, { value: e.target.value })}
+                          className="px-2 py-1.5 border border-gray-300 rounded text-sm flex-1 min-w-[8rem]"
+                          placeholder="value"
+                        />
+                      )}
+                      <button type="button" onClick={() => removeRule(idx)} className="text-red-500 hover:text-red-700 p-1" title="Remove rule" aria-label="Remove rule">
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
+            </div>
 
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-primary-900">Preview</span>
-                  <button type="button" onClick={runPreview} disabled={previewLoading} className="text-sm inline-flex items-center gap-1 bg-white border border-primary-300 hover:bg-primary-100 text-primary-700 px-3 py-1 rounded"><Eye className="w-4 h-4" />{previewLoading ? 'Running…' : 'Run preview'}</button>
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-primary-900">Preview</span>
+                <button type="button" onClick={runPreview} disabled={previewLoading} className="text-sm inline-flex items-center gap-1 bg-white border border-primary-300 hover:bg-primary-100 text-primary-700 px-3 py-1 rounded"><Eye className="w-4 h-4" aria-hidden="true" />{previewLoading ? 'Running…' : 'Run preview'}</button>
+              </div>
+              {previewCount !== null && (
+                <div>
+                  <p className="text-2xl font-bold text-primary-700">{previewCount.toLocaleString()} <span className="text-sm font-normal text-primary-900">recipients match</span></p>
+                  {previewSample.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-primary-900 uppercase tracking-wide mb-1">Sample</p>
+                      <ul className="text-xs text-gray-700 space-y-1">
+                        {previewSample.map((r, i) => (
+                          <li key={i} className="truncate">
+                            <span className="font-medium">{r.name || r.email}</span>
+                            <span className="text-gray-500"> · {r.email} · ${r.total_donated?.toFixed(0) || 0} · {r.donation_count || 0} donations</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-                {previewCount !== null && (
-                  <div>
-                    <p className="text-2xl font-bold text-primary-700">{previewCount.toLocaleString()} <span className="text-sm font-normal text-primary-900">recipients match</span></p>
-                    {previewSample.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs font-semibold text-primary-900 uppercase tracking-wide mb-1">Sample</p>
-                        <ul className="text-xs text-gray-700 space-y-1">
-                          {previewSample.map((r, i) => (
-                            <li key={i} className="truncate">
-                              <span className="font-medium">{r.name || r.email}</span>
-                              <span className="text-gray-500"> · {r.email} · ${r.total_donated?.toFixed(0) || 0} · {r.donation_count || 0} donations</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
-                <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{editing ? 'Save changes' : 'Create segment'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
+              )}
+            </div>
+          </form>
+        </Modal>
       )}
 
-      {deleting && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
-              <div><h3 className="text-lg font-bold text-gray-900">Delete segment?</h3><p className="text-sm text-gray-500 mt-1">{deleting.name}</p></div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleting(null)} className="px-4 py-2 text-gray-600">Cancel</button>
-              <button onClick={handleDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationDialog />
     </div>
   )
 }

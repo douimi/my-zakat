@@ -13,6 +13,7 @@ import { clsx } from 'clsx'
 import { NAV, filterNavForRole, type NavEntry, type NavLink, type NavGroup } from './adminNav'
 
 const STORAGE_KEY = 'myzakat_admin_nav_expanded'
+const COLLAPSED_KEY = 'myzakat_admin_nav_collapsed'
 
 /** How often the sidebar re-checks for proposals nobody has opened yet. */
 const UNREAD_POLL_MS = 60_000
@@ -27,22 +28,34 @@ function isLinkActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
-function findActivePageName(nav: readonly NavEntry[], pathname: string): string | null {
+/** The single nav href the current path belongs to. The most specific match
+ *  wins, so /admin/media/all lights up "All Media", not also "My Workspace". */
+function findActiveHref(nav: readonly NavEntry[], pathname: string): string | null {
+  let best: string | null = null
   for (const entry of nav) {
-    if (entry.kind === 'link' && isLinkActive(pathname, entry.href)) {
-      return entry.name
+    const links = entry.kind === 'link' ? [entry] : entry.items
+    for (const link of links) {
+      if (isLinkActive(pathname, link.href) && (!best || link.href.length > best.length)) best = link.href
     }
+  }
+  return best
+}
+
+function findActivePageName(nav: readonly NavEntry[], activeHref: string | null): string | null {
+  if (!activeHref) return null
+  for (const entry of nav) {
+    if (entry.kind === 'link' && entry.href === activeHref) return entry.name
     if (entry.kind === 'group') {
-      const item = entry.items.find((i) => isLinkActive(pathname, i.href))
-      if (item) return item.name
+      const item = entry.items.find((i) => i.href === activeHref)
+      if (item) return `${entry.label} / ${item.name}`
     }
   }
   return null
 }
 
-function findActiveGroupId(nav: readonly NavEntry[], pathname: string): string | null {
+function findActiveGroupId(nav: readonly NavEntry[], activeHref: string | null): string | null {
   for (const entry of nav) {
-    if (entry.kind === 'group' && entry.items.some((i) => isLinkActive(pathname, i.href))) {
+    if (entry.kind === 'group' && entry.items.some((i) => i.href === activeHref)) {
       return entry.id
     }
   }
@@ -61,6 +74,23 @@ function loadExpanded(): Set<string> {
   }
 }
 
+function loadCollapsed(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function saveCollapsed(value: boolean) {
+  try {
+    window.localStorage.setItem(COLLAPSED_KEY, value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
 function saveExpanded(ids: Set<string>) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]))
@@ -75,7 +105,11 @@ function saveExpanded(ids: Set<string>) {
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState<boolean>(loadCollapsed)
+  const setSidebarCollapsed = (value: boolean) => {
+    setSidebarCollapsedState(value)
+    saveCollapsed(value)
+  }
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const [proposalsUnread, setProposalsUnread] = useState(0)
   const location = useLocation()
@@ -118,14 +152,12 @@ const AdminLayout = () => {
   }, [token, location.pathname])
 
   const nav = useMemo(() => filterNavForRole(NAV, role), [role])
-  const activeGroupId = useMemo(
-    () => findActiveGroupId(nav, location.pathname),
+  const activeHref = useMemo(
+    () => findActiveHref(nav, location.pathname),
     [nav, location.pathname],
   )
-  const activePageName = useMemo(
-    () => findActivePageName(nav, location.pathname),
-    [nav, location.pathname],
-  )
+  const activeGroupId = useMemo(() => findActiveGroupId(nav, activeHref), [nav, activeHref])
+  const activePageName = useMemo(() => findActivePageName(nav, activeHref), [nav, activeHref])
 
   // Auto-open the group containing the active route, once.
   useEffect(() => {
@@ -153,7 +185,7 @@ const AdminLayout = () => {
   // ── Sub-components ─────────────────────────────────────────────
 
   const renderLink = (link: NavLink, indented = false) => {
-    const active = isLinkActive(location.pathname, link.href)
+    const active = link.href === activeHref
     // Only the proposals entry carries a count today; `badge` stays a local
     // lookup rather than a field on NavLink so adminNav.ts remains a pure
     // static structure with no data fetching behind it.
@@ -172,6 +204,7 @@ const AdminLayout = () => {
           indented && !sidebarCollapsed && 'lg:ml-3',
         )}
         title={sidebarCollapsed ? link.name : undefined}
+        aria-current={active ? 'page' : undefined}
       >
         <span className={clsx('relative flex-shrink-0', sidebarCollapsed ? 'lg:mr-0' : 'mr-3')}>
           <link.icon className="w-5 h-5" />
@@ -209,7 +242,7 @@ const AdminLayout = () => {
     }
 
     const isOpen = expanded.has(group.id)
-    const containsActive = group.items.some((i) => isLinkActive(location.pathname, i.href))
+    const containsActive = group.items.some((i) => i.href === activeHref)
 
     return (
       <div key={group.id} className="space-y-0.5">
@@ -300,20 +333,22 @@ const AdminLayout = () => {
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="hidden lg:flex p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
               title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <Menu className="w-4 h-4" />
+              <Menu className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-1 rounded-md text-gray-400 hover:text-gray-700"
+              aria-label="Hide navigation"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1" aria-label="Admin">
           {nav.map((entry) =>
             entry.kind === 'link' ? renderLink(entry) : renderGroup(entry),
           )}
@@ -341,7 +376,7 @@ const AdminLayout = () => {
                 className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 hover:text-gray-900"
               >
                 <Heart className="w-4 h-4 mr-3" />
-                My Donations
+                My account
               </Link>
               <button
                 onClick={logout}
@@ -362,7 +397,8 @@ const AdminLayout = () => {
               <Link
                 to="/dashboard"
                 className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg"
-                title="My Donations"
+                title="My account"
+                aria-label="My account"
               >
                 <Heart className="w-4 h-4" />
               </Link>
@@ -370,6 +406,7 @@ const AdminLayout = () => {
                 onClick={logout}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
                 title="Logout"
+                aria-label="Logout"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -391,9 +428,10 @@ const AdminLayout = () => {
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <h1 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+              {/* Not a heading: every page renders its own single <h1>. */}
+              <p className="text-sm sm:text-base font-medium text-gray-600 truncate">
                 {activePageName || 'Admin'}
-              </h1>
+              </p>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
@@ -410,8 +448,10 @@ const AdminLayout = () => {
           </div>
         </header>
 
-        <main className="py-6">
-          <Outlet />
+        <main className="py-6 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

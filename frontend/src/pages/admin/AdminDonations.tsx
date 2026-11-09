@@ -1,10 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from 'react-query'
-import { Heart, Search, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, X, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Heart, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
 import { useAuthStore } from '../../store/authStore'
+import {
+  PageHeader, FilterBar, Modal, LoadingBlock, ErrorState, EmptyState, StatusBadge, type StatusTone,
+} from '../../components/admin'
 
 type SortField = 'donated_at' | 'amount' | 'name' | 'email' | 'frequency'
 type SortDir = 'asc' | 'desc'
@@ -97,7 +100,7 @@ const AdminDonations = () => {
     }
   }, [detailsDonation, API_URL, token])
 
-  const { data: donations, isLoading } = useQuery(
+  const { data: donations, isLoading, isError, refetch } = useQuery(
     ['admin-donations'],
     () => donationsAPI.getAll()
   )
@@ -399,143 +402,85 @@ const AdminDonations = () => {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="section-container">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        </div>
-      </div>
-    )
+  const STATUS_LABEL: Record<string, string> = {
+    confirmed: 'Confirmed', manual: 'Manual', pending: 'Pending', failed: 'Failed', abandoned: 'Abandoned',
+  }
+  const STATUS_TONE: Record<string, StatusTone> = {
+    confirmed: 'success', manual: 'accent', pending: 'warning', failed: 'danger', abandoned: 'neutral',
   }
 
   return (
-    <div className="section-container">
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex items-center">
-            <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mr-2 sm:mr-3" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Donations</h1>
-            <span className="ml-3 text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-              {filteredDonations.length} {filteredDonations.length === 1 ? 'record' : 'records'}
-            </span>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
+    <div className="space-y-6">
+      <PageHeader
+        title="Donations"
+        icon={Heart}
+        badge={
+          <span className="badge-neutral">
+            {filteredDonations.length} {filteredDonations.length === 1 ? 'record' : 'records'}
+          </span>
+        }
+        description={stats
+          ? `$${(stats.total_donations || 0).toLocaleString()} from ${stats.total_donors || 0} donor${stats.total_donors === 1 ? '' : 's'}.`
+          : undefined}
+        actions={
+          <>
+            <button onClick={() => setShowManualModal(true)} className="btn-primary gap-2">
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              Add Manual Donation
+            </button>
+            <button onClick={exportToCsv} className="btn-secondary gap-2">
+              <Download className="w-4 h-4" aria-hidden="true" />
+              Export CSV
+            </button>
             {window.location.hostname === 'localhost' && (
-              <button
-                onClick={handleSyncStripeData}
-                disabled={syncing}
-                className="btn-secondary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              <button onClick={handleSyncStripeData} disabled={syncing} className="btn-secondary gap-2">
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 {syncing ? 'Syncing...' : 'Sync Stripe'}
               </button>
             )}
-            <button
-              onClick={() => setShowManualModal(true)}
-              className="btn-secondary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Manual Donation
-            </button>
-            <button
-              onClick={exportToCsv}
-              className="btn-primary flex items-center justify-center text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </button>
-          </div>
-        </div>
-        <p className="text-gray-600 text-sm sm:text-base">Manage and track all donations</p>
-      </div>
+          </>
+        }
+      />
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="card">
-            <div className="flex items-center">
-              <Heart className="w-8 h-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Donations</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  ${stats.total_donations?.toLocaleString() || 0}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="flex items-center">
-              <Heart className="w-8 h-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Donors</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.total_donors || 0}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="flex items-center">
-              <Heart className="w-8 h-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Average Donation</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  ${stats.total_donors ? Math.round(stats.total_donations / stats.total_donors) : 0}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10"
-              />
-            </div>
-          </div>
-          <div className="w-full md:w-48">
-            <select
-              value={frequencyFilter}
-              onChange={(e) => setFrequencyFilter(e.target.value)}
-              className="input-field"
-            >
-              <option value="">All Types</option>
-              <option value="One-Time">One-Time</option>
-              <option value="Recurring">Recurring</option>
-            </select>
-          </div>
-          <div className="w-full md:w-48">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="input-field"
-            >
-              <option value="all">All Statuses</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="manual">Manual</option>
-              <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
-              <option value="abandoned">Abandoned</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      <FilterBar search={searchTerm} onSearchChange={setSearchTerm} placeholder="Search by name or email...">
+        <select
+          value={frequencyFilter}
+          onChange={(e) => setFrequencyFilter(e.target.value)}
+          className="input-field sm:w-44"
+          aria-label="Type"
+        >
+          <option value="">All Types</option>
+          <option value="One-Time">One-Time</option>
+          <option value="Recurring">Recurring</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="input-field sm:w-44"
+          aria-label="Status"
+        >
+          <option value="all">All Statuses</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="manual">Manual</option>
+          <option value="pending">Pending</option>
+          <option value="failed">Failed</option>
+          <option value="abandoned">Abandoned</option>
+        </select>
+      </FilterBar>
 
       {/* Donations Table */}
-      <div className="card">
+      {isLoading ? (
+        <LoadingBlock />
+      ) : isError ? (
+        <ErrorState message="Could not load donations." onRetry={() => refetch()} />
+      ) : filteredDonations.length === 0 ? (
+        <EmptyState
+          icon={Heart}
+          title="No donations found"
+          body={searchTerm || frequencyFilter || statusFilter !== 'all' ? 'No donations match your current filters.' : undefined}
+        />
+      ) : (
+      <div className="bg-white rounded-lg border border-gray-200">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -556,8 +501,11 @@ const AdminDonations = () => {
                     Amount <SortIcon field="amount" />
                   </div>
                 </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
                 <th
-                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 hidden md:table-cell"
                   onClick={() => toggleSort('frequency')}
                 >
                   <div className="flex items-center">
@@ -579,31 +527,30 @@ const AdminDonations = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {pagedDonations.map((donation: Donation) => {
-                const { status, label, color } = getStatusInfo(donation.frequency)
+                const { status, label } = getStatusInfo(donation.frequency)
                 const isValid = status === 'confirmed' || status === 'manual'
                 return (
                   <tr key={donation.id} className={`hover:bg-gray-50 ${!isValid ? 'opacity-70' : ''}`}>
                     <td className="px-3 sm:px-6 py-4">
-                      <div>
-                        <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
-                          {donation.name}
-                        </div>
-                        <div className="text-xs sm:text-sm text-gray-500 break-words">
-                          {donation.email}
-                        </div>
+                      <div className="text-xs sm:text-sm font-medium text-gray-900 break-words">
+                        {donation.name}
+                      </div>
+                      <div className="text-xs sm:text-sm text-gray-500 break-words">
+                        {donation.email}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                      <div className={`text-xs sm:text-sm font-medium ${isValid ? 'text-green-600' : 'text-gray-500 line-through'}`}>
+                      <div className={`text-xs sm:text-sm font-medium ${isValid ? 'text-green-700' : 'text-gray-500 line-through'}`}>
                         ${donation.amount.toLocaleString()}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${color}`}>
-                        {label}
-                      </span>
+                      <StatusBadge tone={STATUS_TONE[status] || 'neutral'}>{STATUS_LABEL[status] || status}</StatusBadge>
+                    </td>
+                    <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-700 hidden md:table-cell">
+                      <span className="whitespace-nowrap">{label}</span>
                       {donation.payment_method && (
-                        <span className="ml-2 text-xs text-gray-500">
+                        <span className="block text-xs text-gray-500">
                           via {donation.payment_method}
                         </span>
                       )}
@@ -612,27 +559,30 @@ const AdminDonations = () => {
                       {new Date(donation.donated_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-xs sm:text-sm">
-                      <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setDetailsDonation(donation)}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="p-1.5 rounded text-primary-600 hover:text-primary-800 hover:bg-primary-50"
                           title="View details"
+                          aria-label="View details"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           onClick={() => openEditModal(donation)}
-                          className="text-indigo-600 hover:text-indigo-800"
+                          className="p-1.5 rounded text-primary-600 hover:text-primary-800 hover:bg-primary-50"
                           title="Edit donation"
+                          aria-label="Edit donation"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(donation)}
-                          className="text-red-600 hover:text-red-800"
+                          className="p-1.5 rounded text-red-600 hover:text-red-800 hover:bg-red-50"
                           title="Delete donation"
+                          aria-label="Delete donation"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </td>
@@ -642,14 +592,6 @@ const AdminDonations = () => {
             </tbody>
           </table>
         </div>
-
-        {filteredDonations.length === 0 && (
-          <div className="text-center py-12">
-            <Heart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No donations found</h3>
-            <p className="text-gray-500">No donations match your current filters.</p>
-          </div>
-        )}
 
         {/* Pagination controls */}
         {filteredDonations.length > 0 && (
@@ -725,22 +667,25 @@ const AdminDonations = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Add Manual Donation Modal */}
       {showManualModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <form onSubmit={submitManualDonation} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Plus className="w-5 h-5 mr-2 text-purple-600" />
-                  Add Manual Donation
-                </h3>
-                <button type="button" onClick={() => setShowManualModal(false)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
+        <Modal
+          title="Add Manual Donation"
+          onClose={() => setShowManualModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowManualModal(false)} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="manual-donation-form" disabled={submittingManual} className="btn-primary">
+                {submittingManual ? 'Saving...' : 'Add Donation'}
+              </button>
+            </>
+          }
+        >
+            <form id="manual-donation-form" onSubmit={submitManualDonation}>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -825,7 +770,7 @@ const AdminDonations = () => {
                     type="file"
                     accept="image/*,application/pdf"
                     onChange={(e) => setManualProof(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                    className="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                   />
                   {manualProof && (
                     <p className="text-xs text-gray-500 mt-1">
@@ -837,39 +782,14 @@ const AdminDonations = () => {
                   </p>
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowManualModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingManual}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {submittingManual ? 'Saving...' : 'Add Donation'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Donation Details Modal */}
       {detailsDonation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">Donation Details</h3>
-                <button onClick={() => setDetailsDonation(null)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <Modal title="Donation Details" onClose={() => setDetailsDonation(null)} size="lg" closeOnOverlayClick>
+            <div>
 
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -882,7 +802,7 @@ const AdminDonations = () => {
                 </div>
                 <div>
                   <dt className="text-gray-500">Amount</dt>
-                  <dd className="font-semibold text-green-600">${detailsDonation.amount.toLocaleString()}</dd>
+                  <dd className="font-semibold text-green-700">${detailsDonation.amount.toLocaleString()}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Type</dt>
@@ -934,17 +854,17 @@ const AdminDonations = () => {
                       <button
                         onClick={() => downloadReceipt(detailsDonation)}
                         disabled={downloadingReceipt}
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium text-sm"
+                        className="btn-primary btn-sm gap-2"
                       >
-                        <FileDown className="w-4 h-4 mr-2" />
+                        <FileDown className="w-4 h-4" aria-hidden="true" />
                         {downloadingReceipt ? 'Downloading...' : 'Download PDF'}
                       </button>
                       <button
                         onClick={() => emailReceipt(detailsDonation)}
                         disabled={emailingReceipt}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-medium text-sm"
+                        className="btn-secondary btn-sm gap-2"
                       >
-                        <Mail className="w-4 h-4 mr-2" />
+                        <Mail className="w-4 h-4" aria-hidden="true" />
                         {emailingReceipt ? 'Sending...' : `Email receipt to ${detailsDonation.email}`}
                       </button>
                     </div>
@@ -958,7 +878,7 @@ const AdminDonations = () => {
               {detailsDonation.proof_filename && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2 text-purple-600" />
+                    <FileText className="w-4 h-4 mr-2 text-primary-600" aria-hidden="true" />
                     Transaction proof
                   </h4>
                   {!proofBlobUrl ? (
@@ -968,9 +888,9 @@ const AdminDonations = () => {
                       href={proofBlobUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
+                      className="btn-secondary btn-sm gap-2"
                     >
-                      <FileText className="w-4 h-4 mr-2" />
+                      <FileText className="w-4 h-4" aria-hidden="true" />
                       Open PDF in new tab
                     </a>
                   ) : (
@@ -983,24 +903,26 @@ const AdminDonations = () => {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Edit Donation Modal */}
       {editDonation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <form onSubmit={submitEdit} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Pencil className="w-5 h-5 mr-2 text-indigo-600" />
-                  Edit Donation
-                </h3>
-                <button type="button" onClick={() => setEditDonation(null)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <Modal
+          title="Edit Donation"
+          onClose={() => setEditDonation(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setEditDonation(null)} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="edit-donation-form" disabled={savingEdit} className="btn-primary">
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </>
+          }
+        >
+            <form id="edit-donation-form" onSubmit={submitEdit}>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1074,43 +996,33 @@ const AdminDonations = () => {
                   />
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setEditDonation(null)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {savingEdit ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Delete Donation</h3>
-                <p className="text-sm text-gray-500 mt-1">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+        <Modal
+          title="Delete Donation"
+          onClose={() => setDeleteTarget(null)}
+          size="sm"
+          footer={
+            <>
+              <button onClick={() => setDeleteTarget(null)} className="btn-secondary">
+                Cancel
+              </button>
+              <button onClick={confirmDelete} disabled={deleting} className="btn-danger gap-2">
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                {deleting ? 'Deleting...' : 'Delete Donation'}
+              </button>
+            </>
+          }
+        >
+            <p className="flex items-center gap-2 text-sm text-red-700 mb-4">
+              <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              This action cannot be undone.
+            </p>
+            <div className="bg-gray-50 rounded-lg p-4 text-sm">
               <p className="text-gray-700">
                 You are about to permanently delete the donation from{' '}
                 <strong>{deleteTarget.name}</strong> ({deleteTarget.email}) of{' '}
@@ -1122,25 +1034,7 @@ const AdminDonations = () => {
                 </p>
               )}
             </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-medium inline-flex items-center"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                {deleting ? 'Deleting...' : 'Delete Donation'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

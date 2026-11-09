@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Star, Trash2, Check, X, Image as ImageIcon, Video, User, Plus, Edit } from 'lucide-react'
+import { Star, Trash2, Check, Image as ImageIcon, Video, User, Plus, Edit } from 'lucide-react'
 import { testimonialsAPI, getStaticFileUrl } from '../../utils/api'
 import { useConfirmation } from '../../hooks/useConfirmation'
 import { getImageUrl, getVideoUrl } from '../../utils/mediaHelpers'
 import type { Testimonial } from '../../types'
 import MediaInput from '../../components/MediaInput'
+import {
+  PageHeader, Modal, LoadingBlock, ErrorState, EmptyState, StatusBadge, LongText, type StatusTone,
+} from '../../components/admin'
 
 interface TestimonialFormData {
   name: string
@@ -40,7 +43,7 @@ const AdminTestimonials = () => {
   
   const queryClient = useQueryClient()
   
-  const { data: testimonials, isLoading } = useQuery('admin-testimonials', () => 
+  const { data: testimonials, isLoading, isError, refetch } = useQuery('admin-testimonials', () => 
     testimonialsAPI.getAll(false) // Get all testimonials, not just approved
   )
   
@@ -182,12 +185,12 @@ const AdminTestimonials = () => {
     return true
   }) || []
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryTone = (category: string): StatusTone => {
     switch (category?.toLowerCase()) {
-      case 'donor': return 'bg-green-100 text-green-800'
-      case 'recipient': return 'bg-blue-100 text-blue-800'
-      case 'volunteer': return 'bg-purple-100 text-purple-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'donor': return 'success'
+      case 'recipient': return 'info'
+      case 'volunteer': return 'accent'
+      default: return 'neutral'
     }
   }
 
@@ -200,36 +203,26 @@ const AdminTestimonials = () => {
     ))
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    )
-  }
+  const saving = createMutation.isLoading || updateMutation.isLoading
 
   return (
-    <div>
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Manage Testimonials</h1>
-            <p className="text-gray-600 mt-2">Review and approve testimonials from your community</p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="btn-primary flex items-center"
-          >
-            <Plus className="w-4 h-4 mr-2" />
+    <div className="space-y-6">
+      <PageHeader
+        title="Testimonials"
+        icon={Star}
+        description="Approve community testimonials before they appear on the site."
+        actions={
+          <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
+            <Plus className="w-4 h-4" aria-hidden="true" />
             Add New Testimonial
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filter Tabs */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+      <div>
+        <div className="border-b border-gray-200 overflow-x-auto">
+          <div role="tablist" aria-label="Filter testimonials" className="-mb-px flex gap-6 sm:gap-8">
             {[
               { key: 'all', label: 'All Testimonials', count: testimonials?.length || 0 },
               { key: 'pending', label: 'Pending Approval', count: testimonials?.filter((t: Testimonial) => !t.is_approved).length || 0 },
@@ -237,8 +230,11 @@ const AdminTestimonials = () => {
             ].map((tab) => (
               <button
                 key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={filter === tab.key}
                 onClick={() => setFilter(tab.key as 'all' | 'pending' | 'approved')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                   filter === tab.key
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -247,19 +243,35 @@ const AdminTestimonials = () => {
                 {tab.label} ({tab.count})
               </button>
             ))}
-          </nav>
+          </div>
         </div>
       </div>
 
       {/* Testimonial Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {editingTestimonial ? 'Edit Testimonial' : 'Add New Testimonial'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+          title={editingTestimonial ? 'Edit Testimonial' : 'Add New Testimonial'}
+          onClose={resetForm}
+          size="lg"
+          footer={
+            <>
+              <button type="button" onClick={resetForm} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="testimonial-form" disabled={saving} className="btn-primary gap-2">
+                {saving ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" aria-hidden="true" />
+                    {editingTestimonial ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  editingTestimonial ? 'Update Testimonial' : 'Create Testimonial'
+                )}
+              </button>
+            </>
+          }
+        >
+            <form id="testimonial-form" onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -393,6 +405,7 @@ const AdminTestimonials = () => {
                       }}
                       className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
                       title="Delete video"
+                      aria-label="Delete video"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -417,40 +430,17 @@ const AdminTestimonials = () => {
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="btn-outline"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
-                  className="btn-primary flex items-center"
-                >
-                  {(createMutation.isLoading || updateMutation.isLoading) ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {editingTestimonial ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                    <>
-                      {editingTestimonial ? 'Update Testimonial' : 'Create Testimonial'}
-                    </>
-                  )}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Testimonials Table */}
-      <div className="card">
-        {filteredTestimonials.length > 0 ? (
-          <div className="overflow-x-auto">
+      {isLoading ? (
+        <LoadingBlock />
+      ) : isError ? (
+        <ErrorState message="Could not load testimonials." onRetry={() => refetch()} />
+      ) : filteredTestimonials.length > 0 ? (
+          <div className="card overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -488,20 +478,15 @@ const AdminTestimonials = () => {
                           </div>
                         )}
                         <div>
-                          <h3 className="font-semibold text-gray-900">{testimonial.name}</h3>
+                          <p className="font-semibold text-gray-900">{testimonial.name}</p>
                           {testimonial.country && (
                             <p className="text-sm text-gray-600">{testimonial.country}</p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-4">
-                      <p className="text-sm text-gray-900">
-                        {testimonial.text.length > 150 
-                          ? `${testimonial.text.substring(0, 150)}...`
-                          : testimonial.text
-                        }
-                      </p>
+                    <td className="py-4 px-4 min-w-[16rem]">
+                      <LongText text={testimonial.text} lines={2} />
                       <p className="text-xs text-gray-500 mt-1">
                         {new Date(testimonial.created_at).toLocaleDateString()}
                       </p>
@@ -514,36 +499,32 @@ const AdminTestimonials = () => {
                           </div>
                         )}
                         {testimonial.category && (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(testimonial.category)}`}>
+                          <StatusBadge tone={getCategoryTone(testimonial.category)}>
                             {testimonial.category.charAt(0).toUpperCase() + testimonial.category.slice(1)}
-                          </span>
+                          </StatusBadge>
                         )}
                       </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-2">
-                        {testimonial.image_filename && (
-                          <div className="flex items-center text-green-600">
-                            <ImageIcon className="w-4 h-4" />
+                        {testimonial.image && (
+                          <div className="flex items-center text-green-700">
+                            <ImageIcon className="w-4 h-4" aria-hidden="true" />
                             <span className="ml-1 text-xs">Photo</span>
                           </div>
                         )}
                         {testimonial.video_filename && (
-                          <div className="flex items-center text-purple-600">
-                            <Video className="w-4 h-4" />
+                          <div className="flex items-center text-primary-700">
+                            <Video className="w-4 h-4" aria-hidden="true" />
                             <span className="ml-1 text-xs">Video</span>
                           </div>
                         )}
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        testimonial.is_approved 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <StatusBadge tone={testimonial.is_approved ? 'success' : 'warning'}>
                         {testimonial.is_approved ? 'Approved' : 'Pending'}
-                      </span>
+                      </StatusBadge>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex justify-end space-x-2">
@@ -551,6 +532,7 @@ const AdminTestimonials = () => {
                           onClick={() => handleEdit(testimonial)}
                           className="text-primary-600 hover:text-primary-700 p-2 rounded-lg hover:bg-primary-50"
                           title="Edit testimonial"
+                          aria-label="Edit testimonial"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
@@ -560,6 +542,7 @@ const AdminTestimonials = () => {
                             disabled={approveMutation.isLoading}
                             className="text-green-600 hover:text-green-700 p-2 rounded-lg hover:bg-green-50"
                             title="Approve testimonial"
+                            aria-label="Approve testimonial"
                           >
                             <Check className="w-4 h-4" />
                           </button>
@@ -569,6 +552,7 @@ const AdminTestimonials = () => {
                           disabled={deleteMutation.isLoading}
                           className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
                           title="Delete testimonial"
+                          aria-label="Delete testimonial"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -579,61 +563,13 @@ const AdminTestimonials = () => {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="text-center py-12">
-            <Star className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {filter === 'pending' && 'No pending testimonials'}
-              {filter === 'approved' && 'No approved testimonials'}
-              {filter === 'all' && 'No testimonials yet'}
-            </h3>
-            <p className="text-gray-600">
-              {filter === 'pending' && 'All testimonials have been reviewed.'}
-              {filter === 'approved' && 'No testimonials have been approved yet.'}
-              {filter === 'all' && 'Testimonials from your community will appear here.'}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Summary Stats */}
-      {testimonials && testimonials.length > 0 && (
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="card">
-            <div className="flex items-center">
-              <Star className="w-8 h-8 text-yellow-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Testimonials</p>
-                <p className="text-2xl font-bold text-gray-900">{testimonials.length}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card">
-            <div className="flex items-center">
-              <Check className="w-8 h-8 text-green-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Approved</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {testimonials.filter((t: Testimonial) => t.is_approved).length}
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card">
-            <div className="flex items-center">
-              <X className="w-8 h-8 text-yellow-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Pending Review</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {testimonials.filter((t: Testimonial) => !t.is_approved).length}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-        )}
+      ) : (
+        <EmptyState
+          icon={Star}
+          title={filter === 'pending' ? 'No pending testimonials' : filter === 'approved' ? 'No approved testimonials' : 'No testimonials yet'}
+          body={filter === 'pending' ? 'All testimonials have been reviewed.' : filter === 'approved' ? 'No testimonials have been approved yet.' : 'Testimonials from your community will appear here.'}
+        />
+      )}
 
       <ConfirmationDialog />
     </div>

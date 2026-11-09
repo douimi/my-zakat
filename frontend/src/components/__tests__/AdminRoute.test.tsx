@@ -16,6 +16,7 @@ describe('AdminRoute', () => {
       token: 'valid-token',
       isAuthenticated: true,
       isAdmin: true,
+      isStaff: true,
       user: { 
         id: 1, 
         email: 'admin@example.com',
@@ -38,12 +39,30 @@ describe('AdminRoute', () => {
     expect(screen.getByText('Protected Content')).toBeInTheDocument()
   })
 
+  it('does not render children for a signed-in donor without a staff role', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      token: 'donor-token',
+      isAuthenticated: true,
+      isAdmin: false,
+      isStaff: false,
+    })
+
+    render(
+      <AdminRoute>
+        <div>Protected Content</div>
+      </AdminRoute>
+    )
+
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
+  })
+
   it('redirects to login when user is not authenticated', () => {
     // Mock unauthenticated state
     vi.mocked(useAuthStore).mockReturnValue({
       token: null,
       isAuthenticated: false,
       isAdmin: false,
+      isStaff: false,
       user: null,
       login: vi.fn(),
       logout: vi.fn(),
@@ -70,6 +89,7 @@ describe('AdminRoute', () => {
       token: 'test-token',
       isAuthenticated: true,
       isAdmin: true,
+      isStaff: true,
       user: { 
         id: 1, 
         email: 'testadmin@example.com',

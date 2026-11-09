@@ -253,7 +253,7 @@ const MediaDetailDrawer = ({
                     }),
                     'Details saved'
                   )}
-                  className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                  className="w-full bg-primary-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
                 >
                   Save details
                 </button>
@@ -280,7 +280,7 @@ const MediaDetailDrawer = ({
               {canReview && asset.status !== 'public' && (
                 <button type="button" disabled={busy}
                   onClick={() => run(() => mediaLibraryApi.review(asset.id, 'approve'), 'Published')}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-lg py-2 text-sm hover:bg-emerald-700 disabled:opacity-50">
+                  className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white rounded-lg py-2 text-sm hover:bg-primary-700 disabled:opacity-50">
                   <Globe className="w-4 h-4" /> Publish
                 </button>
               )}

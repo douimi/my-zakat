@@ -25,14 +25,16 @@ function summary(folder: ProjectFolder): string {
 const ProjectFolderList = ({
   folders, selected, onSelect, allLabel = 'Every project',
 }: ProjectFolderListProps) => (
-  <div className="space-y-1">
+  // Below md: one horizontally scrolling row of chips, so the grid keeps the
+  // full width of a phone. From md up: the usual vertical folder list.
+  <div className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
     <button type="button" onClick={() => onSelect(null)}
-      className={clsx('w-full text-left px-3 py-2 rounded-lg text-sm',
-        selected === null ? 'bg-emerald-50 text-emerald-800 font-medium' : 'hover:bg-gray-50')}>
+      className={clsx('shrink-0 md:w-full text-left px-3 py-2 rounded-lg text-sm border md:border-0 whitespace-nowrap md:whitespace-normal',
+        selected === null ? 'bg-primary-50 text-primary-800 font-medium border-primary-200' : 'border-gray-200 hover:bg-gray-50')}>
       {allLabel}
     </button>
     {folders.length === 0 && (
-      <p className="px-3 py-2 text-xs text-gray-500">No approved projects yet.</p>
+      <p className="shrink-0 px-3 py-2 text-xs text-gray-500">No approved projects yet.</p>
     )}
     {folders.map((folder) => {
       const value: FolderSelection = folder.project_id ?? 'unassigned'
@@ -40,8 +42,8 @@ const ProjectFolderList = ({
       const Icon = folder.project_id === null ? Inbox : active ? FolderOpen : Folder
       return (
         <button key={String(value)} type="button" onClick={() => onSelect(value)}
-          className={clsx('w-full text-left px-3 py-2 rounded-lg text-sm flex gap-2',
-            active ? 'bg-emerald-50 text-emerald-800 font-medium' : 'hover:bg-gray-50')}>
+          className={clsx('shrink-0 max-w-[14rem] md:max-w-none md:w-full text-left px-3 py-2 rounded-lg text-sm flex gap-2 border md:border-0',
+            active ? 'bg-primary-50 text-primary-800 font-medium border-primary-200' : 'border-gray-200 hover:bg-gray-50')}>
           <Icon className="w-4 h-4 mt-0.5 shrink-0 text-gray-400" aria-hidden />
           <span className="min-w-0">
             <span className="block truncate">{folder.name}</span>

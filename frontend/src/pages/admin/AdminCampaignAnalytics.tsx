@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, BarChart3, Mail, Eye, MousePointerClick, AlertTriangle, ShieldOff, RefreshCw, ExternalLink } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
+import { PageHeader, LoadingBlock, ErrorState, StatusBadge, type StatusTone } from '../../components/admin'
 
 interface Analytics {
   campaign_id: number
@@ -29,13 +30,13 @@ interface Analytics {
   top_urls: { url: string; clicks: number }[]
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  draft: 'bg-gray-200 text-gray-700',
-  scheduled: 'bg-blue-100 text-blue-800',
-  sending: 'bg-amber-100 text-amber-800',
-  sent: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  canceled: 'bg-gray-100 text-gray-500',
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'neutral',
+  scheduled: 'info',
+  sending: 'warning',
+  sent: 'success',
+  failed: 'danger',
+  canceled: 'neutral',
 }
 
 const KpiCard = ({ label, value, secondary, accent }: { label: string; value: string | number; secondary?: string; accent?: string }) => (
@@ -72,42 +73,51 @@ const AdminCampaignAnalytics = () => {
 
   useEffect(() => { fetchAnalytics() }, [campaignId])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading || !data) {
+  const backLink = (
+    <Link to="/admin/marketing-campaigns" className="btn-ghost btn-sm gap-1.5 -ml-2">
+      <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+      Email campaigns
+    </Link>
+  )
+
+  if (loading && !data) return <LoadingBlock label="Loading analytics…" />
+
+  if (!data) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600" />
+      <div className="space-y-4">
+        {backLink}
+        <ErrorState message="Could not load this campaign's analytics." onRetry={fetchAnalytics} />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 px-4 sm:px-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to="/admin/marketing-campaigns" className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-3 truncate">
-              <BarChart3 className="w-6 h-6 text-pink-600 flex-shrink-0" />
-              <span className="truncate">{data.name}</span>
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Campaign #{data.campaign_id}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_BADGE[data.status] || 'bg-gray-100'}`}>
-            {data.status}
-          </span>
-          <button
-            onClick={fetchAnalytics}
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-            title="Refresh"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        {backLink}
+        <PageHeader
+          title={data.name}
+          icon={BarChart3}
+          badge={<StatusBadge tone={STATUS_TONE[data.status] || 'neutral'}>{data.status}</StatusBadge>}
+          description={`Campaign #${data.campaign_id}`}
+          help={
+            <p>
+              Apple Mail Privacy Protection pre-fetches images, which inflates raw open numbers. The "Engaged opens"
+              figure excludes detected MPP fetches; the click-to-open ratio is the most reliable engagement signal.
+            </p>
+          }
+          helpTitle="About open rates"
+          actions={
+            <button
+              onClick={fetchAnalytics}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+              title="Refresh"
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            </button>
+          }
+        />
       </div>
 
       {/* Top-line KPIs */}
@@ -117,19 +127,19 @@ const AdminCampaignAnalytics = () => {
           label="Open rate"
           value={`${data.open_rate}%`}
           secondary={`${data.opened.toLocaleString()} engaged opens`}
-          accent="text-blue-700"
+          accent="text-primary-700"
         />
         <KpiCard
           label="Click rate"
           value={`${data.click_rate}%`}
           secondary={`${data.clicked.toLocaleString()} unique clicks`}
-          accent="text-emerald-700"
+          accent="text-primary-700"
         />
         <KpiCard
           label="Click-to-open"
           value={`${data.ctor}%`}
           secondary="of openers who clicked"
-          accent="text-purple-700"
+          accent="text-primary-700"
         />
       </div>
 
@@ -140,31 +150,31 @@ const AdminCampaignAnalytics = () => {
             label="Revenue raised"
             value={`$${(data.revenue ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
             secondary={`from ${data.conversions} donation${(data.conversions ?? 0) === 1 ? '' : 's'}`}
-            accent="text-pink-700"
+            accent="text-primary-700"
           />
           <KpiCard
             label="Donations"
             value={(data.conversions ?? 0).toLocaleString()}
             secondary="attributed to this campaign"
-            accent="text-pink-700"
+            accent="text-primary-700"
           />
           <KpiCard
             label="Avg gift"
             value={`$${(data.avg_donation ?? 0).toFixed(0)}`}
             secondary="mean donation amount"
-            accent="text-pink-700"
+            accent="text-primary-700"
           />
           <KpiCard
             label="Conversion rate"
             value={`${data.conversion_rate ?? 0}%`}
             secondary="recipients who donated"
-            accent="text-pink-700"
+            accent="text-primary-700"
           />
         </div>
       )}
 
       {/* Engagement breakdown */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Mail className="w-5 h-5 text-gray-500" />
           Engagement breakdown
@@ -182,7 +192,7 @@ const AdminCampaignAnalytics = () => {
       </div>
 
       {/* Top URLs */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <ExternalLink className="w-5 h-5 text-gray-500" />
           Top-clicked URLs
@@ -193,7 +203,7 @@ const AdminCampaignAnalytics = () => {
           <ul className="space-y-2">
             {data.top_urls.map((u, i) => (
               <li key={i} className="flex items-center justify-between gap-4 text-sm">
-                <a href={u.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 truncate flex-1 min-w-0" title={u.url}>
+                <a href={u.url} target="_blank" rel="noopener noreferrer" className="text-primary-700 hover:text-primary-800 hover:underline truncate flex-1 min-w-0" title={u.url}>
                   {u.url}
                 </a>
                 <span className="text-xs font-semibold text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap">{u.clicks} clicks</span>
@@ -202,11 +212,6 @@ const AdminCampaignAnalytics = () => {
           </ul>
         )}
       </div>
-
-      <p className="text-xs text-gray-500 italic">
-        Apple Mail Privacy Protection pre-fetches images, which inflates raw open numbers. The "Engaged opens"
-        figure excludes detected MPP fetches; the click-to-open ratio is the most reliable engagement signal.
-      </p>
     </div>
   )
 }

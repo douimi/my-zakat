@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
 import MediaPicker from '../../components/MediaPicker'
+import { PageHeader } from '../../components/admin'
 
 type StepIndex = 1 | 2 | 3 | 4
 
@@ -365,17 +366,14 @@ const AdminMarketingWizard = () => {
 
   // ─── Render ─────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/admin/marketing-campaigns" className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"><ArrowLeft className="w-4 h-4" /> Back to campaigns</Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center"><Rocket className="w-7 h-7 mr-2 text-primary-600" /> New marketing campaign</h1>
-          <p className="text-sm text-gray-600 mt-1">Four quick steps and you're done.</p>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="space-y-2">
+        <Link to="/admin/marketing-campaigns" className="btn-ghost btn-sm gap-1.5 -ml-2"><ArrowLeft className="w-4 h-4" aria-hidden="true" /> Email campaigns</Link>
+        <PageHeader title="New email campaign" icon={Rocket} />
       </div>
 
       {/* Progress indicator */}
-      <ol className="grid grid-cols-4 gap-2 text-xs sm:text-sm">
+      <ol className="grid grid-cols-4 gap-2 text-xs sm:text-sm" aria-label="Steps">
         {[
           { n: 1, label: 'Basics',   icon: PenTool },
           { n: 2, label: 'Audience', icon: Users },
@@ -385,17 +383,17 @@ const AdminMarketingWizard = () => {
           const active = step === n
           const done = step > n
           return (
-            <li key={n} className={`flex items-center gap-2 rounded-lg p-3 border ${
+            <li key={n} aria-current={active ? 'step' : undefined} className={`flex items-center gap-2 rounded-lg p-2 sm:p-3 border ${
               active ? 'border-primary-500 bg-primary-50 text-primary-800'
               : done ? 'border-green-300 bg-green-50 text-green-800'
               : 'border-gray-200 bg-white text-gray-500'
             }`}>
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center font-semibold ${
+              <span className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center font-semibold ${
                 active ? 'bg-primary-600 text-white' : done ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
               }`}>{done ? <Check className="w-4 h-4" /> : n}</span>
               <span className="flex flex-col leading-tight">
-                <span className="font-semibold flex items-center gap-1"><Icon className="w-3.5 h-3.5" /> Step {n}</span>
-                <span className="hidden sm:inline">{label}</span>
+                <span className="font-semibold hidden sm:flex items-center gap-1"><Icon className="w-3.5 h-3.5" aria-hidden="true" /> Step {n}</span>
+                <span className={active ? 'inline' : 'hidden sm:inline'}>{label}</span>
               </span>
             </li>
           )
@@ -407,7 +405,7 @@ const AdminMarketingWizard = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6">
           <div>
             <h2 className="text-lg font-bold text-gray-900">What are you calling this campaign?</h2>
-            <p className="text-sm text-gray-500 mt-1">This is just for you — recipients won't see it. Pick something descriptive so you can find it later.</p>
+            <p className="text-sm text-gray-500 mt-1">Only you see this name.</p>
           </div>
           <input
             autoFocus
@@ -427,14 +425,14 @@ const AdminMarketingWizard = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Who should get this email?</h2>
-            <p className="text-sm text-gray-500 mt-1">Start with a preset — that's usually enough. Advanced options if you need them.</p>
+            <p className="text-sm text-gray-500 mt-1">A preset is usually enough.</p>
           </div>
 
           {/* Mode selector */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               { id: 'preset',   label: 'Quick preset',        icon: Sparkles, desc: 'Pick one of five common audiences' },
-              { id: 'existing', label: 'Saved audience',      icon: Users,    desc: 'Reuse a segment you built before' },
+              { id: 'existing', label: 'Saved audience',      icon: Users,    desc: 'Reuse an audience you built before' },
               { id: 'custom',   label: 'Build custom rules',  icon: PenTool,  desc: 'Advanced: mix your own criteria' },
             ].map((m) => {
               const Icon = m.icon
@@ -689,7 +687,7 @@ const AdminMarketingWizard = () => {
           <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Review and send</h2>
-              <p className="text-sm text-gray-500 mt-1">Double-check the details, send a test to yourself, then hit the big button.</p>
+              <p className="text-sm text-gray-500 mt-1">Send yourself a test first.</p>
             </div>
 
             <dl className="space-y-3 text-sm">
@@ -732,7 +730,7 @@ const AdminMarketingWizard = () => {
               <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-red-900">
                 <p className="font-semibold">This will send immediately to {audienceCount?.toLocaleString() || 'the'} recipient{audienceCount === 1 ? '' : 's'}.</p>
-                <p className="mt-1 text-red-800">You cannot recall or edit the email after sending. Preview it, send a test, and only then click Send campaign.</p>
+                <p className="mt-1 text-red-800">You cannot recall or edit the email after sending.</p>
               </div>
             </div>
 

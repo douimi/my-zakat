@@ -7,6 +7,8 @@ import MediaGrid from '../../components/media/MediaGrid'
 import MediaDetailDrawer from '../../components/media/MediaDetailDrawer'
 import { formatBytes } from '../../components/media/MediaCard'
 import ProjectFolderList, { type FolderSelection } from '../../components/media/ProjectFolderList'
+import { PageHeader } from '../../components/admin'
+import { Layers } from 'lucide-react'
 import {
   mediaLibraryApi,
   type ListQuery,
@@ -103,21 +105,22 @@ const AdminMediaLibrary = () => {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">All Media</h1>
-        <p className="text-sm text-gray-600 mt-1">Every project folder, and the queue waiting on review.</p>
-      </header>
+      <PageHeader
+        title="All Media"
+        icon={Layers}
+        description="Every project folder, and the queue waiting on review."
+      />
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {(['all', 'review'] as const).map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => { setTab(value); setQuery((c) => ({ ...c, page: 1 })) }}
             className={clsx(
-              'px-4 py-2 text-sm font-medium border-b-2 -mb-px',
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap',
               tab === value
-                ? 'border-emerald-600 text-emerald-700'
+                ? 'border-primary-600 text-primary-700'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
             )}
           >
@@ -126,15 +129,16 @@ const AdminMediaLibrary = () => {
         ))}
       </div>
 
-      <div className="flex gap-6 items-start">
+      {/* Phones: the folder / people picker becomes a scrolling row above the grid. */}
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:items-start">
         {tab === 'all' && (
-          <nav className="w-56 shrink-0 space-y-3">
+          <nav className="w-full md:w-56 md:shrink-0 space-y-3" aria-label="Browse media">
             <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm" role="group" aria-label="Browse by">
               {(['project', 'person'] as const).map((value) => (
                 <button key={value} type="button" aria-pressed={browseBy === value}
                   onClick={() => switchBrowse(value)}
-                  className={clsx('flex-1 rounded-md py-1',
-                    browseBy === value ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:text-gray-900')}>
+                  className={clsx('flex-1 rounded-md py-1.5',
+                    browseBy === value ? 'bg-primary-600 text-white' : 'text-gray-600 hover:text-gray-900')}>
                   {value === 'project' ? 'Projects' : 'People'}
                 </button>
               ))}
@@ -143,18 +147,18 @@ const AdminMediaLibrary = () => {
             {browseBy === 'project' ? (
               <ProjectFolderList folders={folders} selected={folder} onSelect={openFolder} />
             ) : (
-            <div className="space-y-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
             <button type="button" onClick={() => setOwnerId(null)}
-              className={clsx('w-full text-left px-3 py-2 rounded-lg text-sm',
-                ownerId === null ? 'bg-emerald-50 text-emerald-800 font-medium' : 'hover:bg-gray-50')}>
+              className={clsx('shrink-0 md:w-full text-left px-3 py-2 rounded-lg text-sm border md:border-0 whitespace-nowrap md:whitespace-normal',
+                ownerId === null ? 'bg-primary-50 text-primary-800 font-medium border-primary-200' : 'border-gray-200 hover:bg-gray-50')}>
               Every workspace
             </button>
             {workspaces.map((workspace) => {
               const value = workspace.owner_id ?? 'unassigned'
               return (
                 <button key={String(value)} type="button" onClick={() => setOwnerId(value)}
-                  className={clsx('w-full text-left px-3 py-2 rounded-lg text-sm',
-                    ownerId === value ? 'bg-emerald-50 text-emerald-800 font-medium' : 'hover:bg-gray-50')}>
+                  className={clsx('shrink-0 max-w-[14rem] md:max-w-none md:w-full text-left px-3 py-2 rounded-lg text-sm border md:border-0',
+                    ownerId === value ? 'bg-primary-50 text-primary-800 font-medium border-primary-200' : 'border-gray-200 hover:bg-gray-50')}>
                   <span className="block truncate">{workspace.owner_name}</span>
                   <span className="block text-xs text-gray-500">
                     {workspace.asset_count} item{workspace.asset_count === 1 ? '' : 's'} · {formatBytes(workspace.total_bytes)}
@@ -183,13 +187,13 @@ const AdminMediaLibrary = () => {
             <div className="flex items-center justify-center gap-3">
               <button type="button" disabled={(query.page || 1) <= 1}
                 onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) - 1 }))}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                className="btn-secondary btn-sm">
                 Previous
               </button>
               <span className="text-sm text-gray-600">Page {query.page || 1} of {pageCount}</span>
               <button type="button" disabled={(query.page || 1) >= pageCount}
                 onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) + 1 }))}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                className="btn-secondary btn-sm">
                 Next
               </button>
             </div>

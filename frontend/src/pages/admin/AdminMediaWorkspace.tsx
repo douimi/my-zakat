@@ -5,6 +5,8 @@ import MediaGrid from '../../components/media/MediaGrid'
 import MediaUploader from '../../components/media/MediaUploader'
 import MediaDetailDrawer from '../../components/media/MediaDetailDrawer'
 import ProjectFolderList, { type FolderSelection } from '../../components/media/ProjectFolderList'
+import { PageHeader } from '../../components/admin'
+import { FolderOpen } from 'lucide-react'
 import {
   mediaLibraryApi, type ListQuery, type MediaAsset, type ProjectFolder,
 } from '../../utils/mediaLibraryApi'
@@ -65,15 +67,15 @@ const AdminMediaWorkspace = () => {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">My Workspace</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Your photos and videos. Everything here is private until an admin publishes it.
-        </p>
-      </header>
+      <PageHeader
+        title="My Workspace"
+        icon={FolderOpen}
+        description="Your photos and videos. Everything here is private until an admin publishes it."
+      />
 
-      <div className="flex gap-6 items-start">
-        <nav className="w-56 shrink-0" aria-label="Projects">
+      {/* Phones: the folders become one scrolling row above the grid. */}
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 md:items-start">
+        <nav className="w-full md:w-56 md:shrink-0" aria-label="Projects">
           <ProjectFolderList folders={folders} selected={folder} onSelect={openFolder} allLabel="All my media" />
         </nav>
 
@@ -101,13 +103,13 @@ const AdminMediaWorkspace = () => {
             <div className="flex items-center justify-center gap-3">
               <button type="button" disabled={(query.page || 1) <= 1}
                 onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) - 1 }))}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                className="btn-secondary btn-sm">
                 Previous
               </button>
               <span className="text-sm text-gray-600">Page {query.page || 1} of {pageCount}</span>
               <button type="button" disabled={(query.page || 1) >= pageCount}
                 onClick={() => setQuery((c) => ({ ...c, page: (c.page || 1) + 1 }))}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40">
+                className="btn-secondary btn-sm">
                 Next
               </button>
             </div>

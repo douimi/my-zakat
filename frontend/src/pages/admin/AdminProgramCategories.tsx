@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Upload, Video, Image as ImageIcon, Save, Link as LinkIcon, Loader2, Trash2, Plus, Edit2, FileCode, Eye } from 'lucide-react'
+import { Upload, Video, Image as ImageIcon, Save, Link as LinkIcon, Loader2, Trash2, Plus, Edit2, Eye, Layers } from 'lucide-react'
+import { clsx } from 'clsx'
+import { PageHeader, LoadingBlock, EmptyState, StatusBadge, LongText, Modal, Collapsible } from '../../components/admin'
 import { programCategoriesAPI, getStaticFileUrl } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import { isValidImageUrl, isValidVideoUrl } from '../../utils/mediaHelpers'
-import LazyVideo from '../../components/LazyVideo'
 import VideoThumbnail from '../../components/VideoThumbnail'
 import { Link } from 'react-router-dom'
 import type { ProgramCategory } from '../../types'
@@ -81,7 +82,7 @@ const AdminProgramCategories = () => {
   )
 
   const createMutation = useMutation(
-    (data: typeof newCategory) => programCategoriesAPI.create(data),
+    (data: Parameters<typeof programCategoriesAPI.create>[0]) => programCategoriesAPI.create(data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('program-categories')
@@ -94,6 +95,9 @@ const AdminProgramCategories = () => {
           short_description: '',
           image_url: '',
           impact_text: '',
+          html_content: '',
+          css_content: '',
+          js_content: '',
           display_order: 0,
           is_active: true
         })
@@ -232,33 +236,55 @@ const AdminProgramCategories = () => {
     return url
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    )
+  const resetCategoryData = (cat: ProgramCategory) => {
+    setCategoryData({
+      ...categoryData,
+      [cat.id]: {
+        title: cat.title,
+        description: cat.description || '',
+        short_description: cat.short_description || '',
+        impact_text: cat.impact_text || '',
+        image_url: cat.image_url || '',
+        html_content: cat.html_content || '',
+        css_content: cat.css_content || '',
+        js_content: cat.js_content || '',
+        display_order: cat.display_order,
+        is_active: cat.is_active
+      }
+    })
   }
 
-  return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Program Categories Management</h1>
-          <p className="text-gray-600 mt-2">Manage the program categories displayed in the "Our Work" section</p>
-        </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Category
-        </button>
-      </div>
+  if (isLoading) {
+    return <LoadingBlock label="Loading categories…" />
+  }
 
-      {/* Categories Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {categories?.map((category: ProgramCategory) => {
+  const codeTabClass = (active: boolean) => clsx(
+    'px-4 py-2 text-sm font-medium',
+    active ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+  )
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Program categories"
+        icon={Layers}
+        count={categories?.length}
+        description={'The categories in the "Our Work" section.'}
+        actions={
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary gap-2"
+          >
+            <Plus className="w-5 h-5" aria-hidden="true" />
+            Add Category
+          </button>
+        }
+      />
+
+      {/* Categories Grid: compact cards; the full form opens only on Edit. */}
+      {categories && categories.length > 0 ? (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {categories.map((category: ProgramCategory) => {
           const currentData = categoryData[category.id] || {
             title: category.title,
             description: category.description || '',
@@ -273,352 +299,322 @@ const AdminProgramCategories = () => {
           const showImageInput = showUrlInput?.categoryId === category.id && showUrlInput?.field === 'image'
           const showVideoInput = showUrlInput?.categoryId === category.id && showUrlInput?.field === 'video'
           const isEditing = editingCategory === category.id
+          const activeTab = activeTabs[category.id] || 'html'
+          const field = (id: string) => `category-${category.id}-${id}`
+          const hasCode = !!(category.html_content || category.css_content || category.js_content)
 
           return (
-            <div key={category.id} className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">{category.name}</h3>
-                    <Link
-                      to={`/categories/${category.slug}`}
-                      target="_blank"
-                      className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
-                    >
-                      <Eye className="w-3 h-3" />
-                      View Page
-                    </Link>
+            <div
+              key={category.id}
+              className={clsx('bg-white rounded-xl border border-gray-200 shadow-sm p-4', isEditing && 'sm:col-span-2 xl:col-span-3')}
+            >
+              <div className="flex gap-4">
+                {/* Thumbnail */}
+                <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                  {videoUrl ? (
+                    <VideoThumbnail videoSrc={videoUrl} className="w-full h-full" alt={`${category.title} video`} />
+                  ) : imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-gray-300" aria-hidden="true" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate" title={category.name}>{category.name}</p>
+                      <p className="text-xs text-gray-500 truncate" title={category.title}>{category.title}</p>
+                    </div>
+                    <StatusBadge tone={category.is_active ? 'success' : 'neutral'}>
+                      {category.is_active ? 'Active' : 'Inactive'}
+                    </StatusBadge>
                   </div>
-                  <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDeleteCategory(category.id)}
-                    disabled={deleteMutation.isLoading}
-                    className="btn-outline text-sm text-red-600 border-red-300 hover:bg-red-50 flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (isEditing) {
-                        handleSaveCategory(category.id)
-                      } else {
-                        setEditingCategory(category.id)
-                      }
-                    }}
-                    disabled={updateMutation.isLoading}
-                    className="btn-primary flex items-center gap-2 text-sm"
-                  >
-                    {updateMutation.isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : isEditing ? (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Save
-                      </>
-                    ) : (
-                      <>
-                        <Edit2 className="w-4 h-4" />
-                        Edit
-                      </>
-                    )}
-                  </button>
+                  {!isEditing && (category.short_description || category.description) && (
+                    <div className="mt-2">
+                      <LongText text={category.short_description || category.description} lines={2} />
+                    </div>
+                  )}
+                  {!isEditing && (category.impact_text || hasCode) && (
+                    <p className="mt-2 flex flex-wrap gap-1.5">
+                      {category.impact_text && <span className="badge-primary">{category.impact_text}</span>}
+                      {hasCode && <span className="badge-neutral">Custom page code</span>}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Media Section */}
-              {videoUrl && !showVideoInput && !showImageInput && (
-                <div className="mb-4">
-                  <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-200">
-                    <VideoThumbnail
-                      videoSrc={videoUrl}
-                      className="w-full h-full"
-                      alt={`${category.title} video`}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Video (takes priority over image)</p>
-                </div>
-              )}
-              {!videoUrl && imageUrl && !showImageInput && !showVideoInput && (
-                <div className="mb-4">
-                  <img
-                    src={imageUrl}
-                    alt={category.title}
-                    className="w-full h-48 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Image</p>
-                </div>
-              )}
-
-              {/* Video Upload/URL */}
-              {isEditing && (
-                <>
-                  {showVideoInput ? (
-                    <div className="mb-4 space-y-3">
-                      <MediaInput
-                        value={urlValue}
-                        onChange={(url) => setUrlValue(url)}
-                        type="videos"
-                        label="Video URL"
-                        placeholder="Enter video URL or select from library"
-                        showPreview={false}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleUrlSubmit(category.id, 'video')}
-                          disabled={!urlValue.trim() || !isValidVideoUrl(urlValue) || updateMutation.isLoading}
-                          className="btn-primary flex-1 text-sm"
-                        >
-                          <Save className="w-4 h-4 mr-1" />
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setShowUrlInput(null)}
-                          className="btn-outline text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : showImageInput ? (
-                    <div className="mb-4 space-y-3">
-                      <MediaInput
-                        value={urlValue}
-                        onChange={(url) => setUrlValue(url)}
-                        type="images"
-                        label="Image URL"
-                        placeholder="Enter image URL or select from library"
-                        showPreview={false}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleUrlSubmit(category.id, 'image')}
-                          disabled={!urlValue.trim() || !isValidImageUrl(urlValue) || updateMutation.isLoading}
-                          className="btn-primary flex-1 text-sm"
-                        >
-                          <Save className="w-4 h-4 mr-1" />
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setShowUrlInput(null)}
-                          className="btn-outline text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mb-4 space-y-3">
-                      {/* Video Section */}
-                      <div className="border-2 border-dashed rounded-lg p-3 text-center">
-                        <Video className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                        <p className="text-xs text-gray-600 mb-2">Video (optional, takes priority)</p>
-                        <div className="flex gap-2 justify-center">
-                          <label className="btn-outline text-xs cursor-pointer">
-                            <Upload className="w-3 h-3 mr-1" />
-                            Upload Video
-                            <input
-                              type="file"
-                              accept="video/*"
-                              onChange={(e) => handleFileUpload(category.id, e.target.files?.[0] || null)}
-                              className="hidden"
-                              disabled={uploadingItem === category.id}
-                            />
-                          </label>
-                          <button
-                            onClick={() => {
-                              setUrlValue(category.video_filename || '')
-                              setShowUrlInput({ categoryId: category.id, field: 'video' })
-                            }}
-                            className="btn-outline text-xs"
-                          >
-                            <LinkIcon className="w-3 h-3 mr-1" />
-                            Video URL
-                          </button>
-                        </div>
-                        {uploadingItem === category.id && (
-                          <div className="mt-2 flex items-center justify-center">
-                            <Loader2 className="w-3 h-3 text-primary-600 animate-spin mr-1" />
-                            <span className="text-xs text-gray-600">Uploading...</span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Image Section - URL Only */}
-                      <div className="border-2 border-dashed rounded-lg p-3 text-center">
-                        <ImageIcon className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                        <p className="text-xs text-gray-600 mb-2">Image URL (fallback if no video)</p>
-                        <button
-                          onClick={() => {
-                            setUrlValue(category.image_url || '')
-                            setShowUrlInput({ categoryId: category.id, field: 'image' })
-                          }}
-                          className="btn-outline text-xs w-full"
-                        >
-                          <LinkIcon className="w-3 h-3 mr-1" />
-                          Set Image URL
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Category Details */}
-              <div className="space-y-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={currentData.title || ''}
-                      onChange={(e) => setCategoryData({
-                        ...categoryData,
-                        [category.id]: { ...currentData, title: e.target.value }
-                      })}
-                      className="input-field"
-                      placeholder="Category title"
-                    />
-                  ) : (
-                    <p className="text-gray-900">{category.title}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
-                  {isEditing ? (
-                    <textarea
-                      value={currentData.short_description || ''}
-                      onChange={(e) => setCategoryData({
-                        ...categoryData,
-                        [category.id]: { ...currentData, short_description: e.target.value }
-                      })}
-                      className="input-field"
-                      rows={2}
-                      placeholder="Short description (shown on homepage)"
-                    />
-                  ) : (
-                    <p className="text-gray-600 text-sm">{category.short_description || 'No description'}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  {isEditing ? (
-                    <textarea
-                      value={currentData.description || ''}
-                      onChange={(e) => setCategoryData({
-                        ...categoryData,
-                        [category.id]: { ...currentData, description: e.target.value }
-                      })}
-                      className="input-field"
-                      rows={3}
-                      placeholder="Full description"
-                    />
-                  ) : (
-                    <p className="text-gray-600 text-sm">{category.description || 'No description'}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Impact Text</label>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={currentData.impact_text || ''}
-                      onChange={(e) => setCategoryData({
-                        ...categoryData,
-                        [category.id]: { ...currentData, impact_text: e.target.value }
-                      })}
-                      className="input-field"
-                      placeholder="Impact text (e.g., 'Helped 1,200+ families')"
-                    />
-                  ) : (
-                    <p className="text-gray-600 text-sm">{category.impact_text || 'No impact text'}</p>
-                  )}
-                </div>
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <Link
+                  to={`/categories/${category.slug}`}
+                  target="_blank"
+                  className="btn-ghost btn-sm gap-1.5"
+                >
+                  <Eye className="w-4 h-4" aria-hidden="true" />
+                  View Page
+                </Link>
+                <button
+                  onClick={() => handleDeleteCategory(category.id)}
+                  disabled={deleteMutation.isLoading}
+                  className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                  title="Delete category"
+                  aria-label={`Delete ${category.name}`}
+                >
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
                 {isEditing && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
-                    <input
-                      type="number"
-                      value={currentData.display_order || 0}
-                      onChange={(e) => setCategoryData({
-                        ...categoryData,
-                        [category.id]: { ...currentData, display_order: parseInt(e.target.value) || 0 }
-                      })}
-                      className="input-field"
-                      placeholder="Display order"
-                    />
-                  </div>
+                  <button
+                    onClick={() => { setEditingCategory(null); setShowUrlInput(null); resetCategoryData(category) }}
+                    className="btn-secondary btn-sm"
+                  >
+                    Cancel
+                  </button>
                 )}
-                {isEditing && (
-                  <>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={currentData.is_active ?? true}
-                        onChange={(e) => setCategoryData({
-                          ...categoryData,
-                          [category.id]: { ...currentData, is_active: e.target.checked }
-                        })}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <label className="ml-2 text-sm text-gray-700">Active</label>
-                    </div>
-                    
-                    {/* Page Content Editor */}
-                    <div className="mt-6 border-t pt-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <FileCode className="w-5 h-5 text-primary-600" />
-                        <h4 className="text-lg font-semibold text-gray-900">Page Content Editor</h4>
+                <button
+                  onClick={() => {
+                    if (isEditing) {
+                      handleSaveCategory(category.id)
+                    } else {
+                      setEditingCategory(category.id)
+                    }
+                  }}
+                  disabled={updateMutation.isLoading}
+                  className={clsx(isEditing ? 'btn-primary' : 'btn-secondary', 'btn-sm gap-2')}
+                >
+                  {updateMutation.isLoading && isEditing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      Saving...
+                    </>
+                  ) : isEditing ? (
+                    <>
+                      <Save className="w-4 h-4" aria-hidden="true" />
+                      Save
+                    </>
+                  ) : (
+                    <>
+                      <Edit2 className="w-4 h-4" aria-hidden="true" />
+                      Edit
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {isEditing && (
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-6">
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                    {/* Category Details */}
+                    <div className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label htmlFor={field('title')} className="label">Title</label>
+                          <input
+                            id={field('title')}
+                            type="text"
+                            value={currentData.title || ''}
+                            onChange={(e) => setCategoryData({
+                              ...categoryData,
+                              [category.id]: { ...currentData, title: e.target.value }
+                            })}
+                            className="input-field"
+                            placeholder="Category title"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={field('impact')} className="label">Impact Text</label>
+                          <input
+                            id={field('impact')}
+                            type="text"
+                            value={currentData.impact_text || ''}
+                            onChange={(e) => setCategoryData({
+                              ...categoryData,
+                              [category.id]: { ...currentData, impact_text: e.target.value }
+                            })}
+                            className="input-field"
+                            placeholder="Impact text (e.g., 'Helped 1,200+ families')"
+                          />
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Customize the category page content with HTML, CSS, and JavaScript
-                      </p>
-                      
-                      {/* Tabs */}
-                      <div className="border border-gray-300 rounded-lg overflow-hidden mb-4">
-                        <div className="flex border-b border-gray-300">
-                          <button
-                            type="button"
-                            onClick={() => setActiveTabs({ ...activeTabs, [category.id]: 'html' })}
-                            className={`px-4 py-2 text-sm font-medium ${
-                              (activeTabs[category.id] || 'html') === 'html'
-                                ? 'bg-primary-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            HTML
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTabs({ ...activeTabs, [category.id]: 'css' })}
-                            className={`px-4 py-2 text-sm font-medium ${
-                              (activeTabs[category.id] || 'html') === 'css'
-                                ? 'bg-primary-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            CSS
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTabs({ ...activeTabs, [category.id]: 'js' })}
-                            className={`px-4 py-2 text-sm font-medium ${
-                              (activeTabs[category.id] || 'html') === 'js'
-                                ? 'bg-primary-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            JavaScript
-                          </button>
+                      <div>
+                        <label htmlFor={field('short')} className="label">Short Description</label>
+                        <textarea
+                          id={field('short')}
+                          value={currentData.short_description || ''}
+                          onChange={(e) => setCategoryData({
+                            ...categoryData,
+                            [category.id]: { ...currentData, short_description: e.target.value }
+                          })}
+                          className="input-field"
+                          rows={2}
+                          placeholder="Short description (shown on homepage)"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={field('description')} className="label">Description</label>
+                        <textarea
+                          id={field('description')}
+                          value={currentData.description || ''}
+                          onChange={(e) => setCategoryData({
+                            ...categoryData,
+                            [category.id]: { ...currentData, description: e.target.value }
+                          })}
+                          className="input-field"
+                          rows={3}
+                          placeholder="Full description"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-end gap-6">
+                        <div>
+                          <label htmlFor={field('order')} className="label">Display Order</label>
+                          <input
+                            id={field('order')}
+                            type="number"
+                            value={currentData.display_order || 0}
+                            onChange={(e) => setCategoryData({
+                              ...categoryData,
+                              [category.id]: { ...currentData, display_order: parseInt(e.target.value) || 0 }
+                            })}
+                            className="input-field w-28"
+                            placeholder="Display order"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-700 pb-3">
+                          <input
+                            type="checkbox"
+                            checked={currentData.is_active ?? true}
+                            onChange={(e) => setCategoryData({
+                              ...categoryData,
+                              [category.id]: { ...currentData, is_active: e.target.checked }
+                            })}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          Active
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Video Upload/URL */}
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-gray-700">Media</p>
+                      {showVideoInput || showImageInput ? (
+                        <div className="space-y-3">
+                          <MediaInput
+                            value={urlValue}
+                            onChange={(url) => setUrlValue(url)}
+                            type={showVideoInput ? 'videos' : 'images'}
+                            label={showVideoInput ? 'Video URL' : 'Image URL'}
+                            placeholder={showVideoInput ? 'Enter video URL or select from library' : 'Enter image URL or select from library'}
+                            showPreview={false}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleUrlSubmit(category.id, showVideoInput ? 'video' : 'image')}
+                              disabled={
+                                !urlValue.trim() ||
+                                !(showVideoInput ? isValidVideoUrl(urlValue) : isValidImageUrl(urlValue)) ||
+                                updateMutation.isLoading
+                              }
+                              className="btn-primary btn-sm flex-1 gap-1.5"
+                            >
+                              <Save className="w-4 h-4" aria-hidden="true" />
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setShowUrlInput(null)}
+                              className="btn-secondary btn-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Video Section */}
+                          <div className="border-2 border-dashed rounded-lg p-3 text-center">
+                            <Video className="w-6 h-6 text-gray-400 mx-auto mb-2" aria-hidden="true" />
+                            <p className="text-xs text-gray-600 mb-2">Video (optional, takes priority)</p>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              <label className="btn-secondary btn-sm gap-1 cursor-pointer">
+                                <Upload className="w-3 h-3" aria-hidden="true" />
+                                Upload Video
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  onChange={(e) => handleFileUpload(category.id, e.target.files?.[0] || null)}
+                                  className="hidden"
+                                  disabled={uploadingItem === category.id}
+                                />
+                              </label>
+                              <button
+                                onClick={() => {
+                                  setUrlValue(category.video_filename || '')
+                                  setShowUrlInput({ categoryId: category.id, field: 'video' })
+                                }}
+                                className="btn-secondary btn-sm gap-1"
+                              >
+                                <LinkIcon className="w-3 h-3" aria-hidden="true" />
+                                Video URL
+                              </button>
+                            </div>
+                            {uploadingItem === category.id && (
+                              <div className="mt-2 flex items-center justify-center">
+                                <Loader2 className="w-3 h-3 text-primary-600 animate-spin mr-1" aria-hidden="true" />
+                                <span className="text-xs text-gray-600">Uploading...</span>
+                              </div>
+                            )}
+                          </div>
+                          {/* Image Section - URL Only */}
+                          <div className="border-2 border-dashed rounded-lg p-3 text-center">
+                            <ImageIcon className="w-6 h-6 text-gray-400 mx-auto mb-2" aria-hidden="true" />
+                            <p className="text-xs text-gray-600 mb-2">Image URL (fallback if no video)</p>
+                            <button
+                              onClick={() => {
+                                setUrlValue(category.image_url || '')
+                                setShowUrlInput({ categoryId: category.id, field: 'image' })
+                              }}
+                              className="btn-secondary btn-sm gap-1 w-full"
+                            >
+                              <LinkIcon className="w-3 h-3" aria-hidden="true" />
+                              Set Image URL
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Page Content Editor: advanced, folded until asked for. */}
+                  <div className="rounded-lg border border-gray-200 overflow-hidden">
+                    <Collapsible
+                      title="Advanced: custom page code"
+                      preview={hasCode ? 'HTML · CSS · JS (this page has custom code)' : 'HTML · CSS · JS'}
+                    >
+                      <div className="border border-gray-300 rounded-lg overflow-hidden">
+                        <div className="flex border-b border-gray-300" role="tablist" aria-label="Code language">
+                          {([['html', 'HTML'], ['css', 'CSS'], ['js', 'JavaScript']] as const).map(([key, label]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              role="tab"
+                              aria-selected={activeTab === key}
+                              onClick={() => setActiveTabs({ ...activeTabs, [category.id]: key })}
+                              className={codeTabClass(activeTab === key)}
+                            >
+                              {label}
+                            </button>
+                          ))}
                         </div>
 
                         {/* Editor */}
                         <div className="bg-gray-50">
-                          {(activeTabs[category.id] || 'html') === 'html' && (
+                          {activeTab === 'html' && (
                             <textarea
+                              aria-label="HTML content"
                               value={currentData.html_content || ''}
                               onChange={(e) => setCategoryData({
                                 ...categoryData,
@@ -629,8 +625,9 @@ const AdminProgramCategories = () => {
                               placeholder="Enter HTML content for category page..."
                             />
                           )}
-                          {(activeTabs[category.id] || 'html') === 'css' && (
+                          {activeTab === 'css' && (
                             <textarea
+                              aria-label="CSS content"
                               value={currentData.css_content || ''}
                               onChange={(e) => setCategoryData({
                                 ...categoryData,
@@ -641,8 +638,9 @@ const AdminProgramCategories = () => {
                               placeholder="Enter CSS content for category page..."
                             />
                           )}
-                          {(activeTabs[category.id] || 'html') === 'js' && (
+                          {activeTab === 'js' && (
                             <textarea
+                              aria-label="JavaScript content"
                               value={currentData.js_content || ''}
                               onChange={(e) => setCategoryData({
                                 ...categoryData,
@@ -655,171 +653,202 @@ const AdminProgramCategories = () => {
                           )}
                         </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                    </Collapsible>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+      ) : (
+        <EmptyState
+          icon={Layers}
+          title="No categories yet."
+          action={
+            <button onClick={() => setShowCreateModal(true)} className="btn-primary gap-2">
+              <Plus className="w-5 h-5" aria-hidden="true" />
+              Add Category
+            </button>
+          }
+        />
+      )}
 
       {/* Create Category Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New Category</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                  <input
-                    type="text"
-                    value={newCategory.name}
-                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                    className="input-field"
-                    placeholder="e.g., Emergency Relief"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug *</label>
-                  <input
-                    type="text"
-                    value={newCategory.slug}
-                    onChange={(e) => setNewCategory({ ...newCategory, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
-                    className="input-field"
-                    placeholder="e.g., emergency-relief"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                  <input
-                    type="text"
-                    value={newCategory.title}
-                    onChange={(e) => setNewCategory({ ...newCategory, title: e.target.value })}
-                    className="input-field"
-                    placeholder="Category title"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
-                  <textarea
-                    value={newCategory.short_description}
-                    onChange={(e) => setNewCategory({ ...newCategory, short_description: e.target.value })}
-                    className="input-field"
-                    rows={2}
-                    placeholder="Short description (shown on homepage)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    value={newCategory.description}
-                    onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-                    className="input-field"
-                    rows={3}
-                    placeholder="Full description"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                  <input
-                    type="url"
-                    value={newCategory.image_url}
-                    onChange={(e) => setNewCategory({ ...newCategory, image_url: e.target.value })}
-                    className="input-field"
-                    placeholder="Image URL"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Impact Text</label>
-                  <input
-                    type="text"
-                    value={newCategory.impact_text}
-                    onChange={(e) => setNewCategory({ ...newCategory, impact_text: e.target.value })}
-                    className="input-field"
-                    placeholder="e.g., 'Helped 1,200+ families'"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HTML Content</label>
-                  <textarea
-                    value={newCategory.html_content}
-                    onChange={(e) => setNewCategory({ ...newCategory, html_content: e.target.value })}
-                    className="input-field font-mono text-sm"
-                    rows={6}
-                    placeholder="HTML content for category page..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CSS Content</label>
-                  <textarea
-                    value={newCategory.css_content}
-                    onChange={(e) => setNewCategory({ ...newCategory, css_content: e.target.value })}
-                    className="input-field font-mono text-sm"
-                    rows={6}
-                    placeholder="CSS content for category page..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">JavaScript Content</label>
-                  <textarea
-                    value={newCategory.js_content}
-                    onChange={(e) => setNewCategory({ ...newCategory, js_content: e.target.value })}
-                    className="input-field font-mono text-sm"
-                    rows={6}
-                    placeholder="JavaScript content for category page..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
-                  <input
-                    type="number"
-                    value={newCategory.display_order}
-                    onChange={(e) => setNewCategory({ ...newCategory, display_order: parseInt(e.target.value) || 0 })}
-                    className="input-field"
-                  />
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={newCategory.is_active}
-                    onChange={(e) => setNewCategory({ ...newCategory, is_active: e.target.checked })}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <label className="ml-2 text-sm text-gray-700">Active</label>
-                </div>
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  onClick={handleCreateCategory}
-                  disabled={createMutation.isLoading || !newCategory.name || !newCategory.slug || !newCategory.title}
-                  className="btn-primary flex-1"
-                >
-                  {createMutation.isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Category
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="btn-outline"
-                  disabled={createMutation.isLoading}
-                >
-                  Cancel
-                </button>
-              </div>
+      <Modal
+        open={showCreateModal}
+        title="Create New Category"
+        size="lg"
+        onClose={() => { if (!createMutation.isLoading) setShowCreateModal(false) }}
+        footer={
+          <>
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="btn-secondary"
+              disabled={createMutation.isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateCategory}
+              disabled={createMutation.isLoading || !newCategory.name || !newCategory.slug || !newCategory.title}
+              className="btn-primary gap-2"
+            >
+              {createMutation.isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  Create Category
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="new-category-name" className="label">Name *</label>
+              <input
+                id="new-category-name"
+                type="text"
+                value={newCategory.name}
+                onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                className="input-field"
+                placeholder="e.g., Emergency Relief"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-category-slug" className="label">Slug *</label>
+              <input
+                id="new-category-slug"
+                type="text"
+                value={newCategory.slug}
+                onChange={(e) => setNewCategory({ ...newCategory, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                className="input-field"
+                placeholder="e.g., emergency-relief"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-category-title" className="label">Title *</label>
+              <input
+                id="new-category-title"
+                type="text"
+                value={newCategory.title}
+                onChange={(e) => setNewCategory({ ...newCategory, title: e.target.value })}
+                className="input-field"
+                placeholder="Category title"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-category-impact" className="label">Impact Text</label>
+              <input
+                id="new-category-impact"
+                type="text"
+                value={newCategory.impact_text}
+                onChange={(e) => setNewCategory({ ...newCategory, impact_text: e.target.value })}
+                className="input-field"
+                placeholder="e.g., 'Helped 1,200+ families'"
+              />
             </div>
           </div>
+          <div>
+            <label htmlFor="new-category-short" className="label">Short Description</label>
+            <textarea
+              id="new-category-short"
+              value={newCategory.short_description}
+              onChange={(e) => setNewCategory({ ...newCategory, short_description: e.target.value })}
+              className="input-field"
+              rows={2}
+              placeholder="Short description (shown on homepage)"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-category-description" className="label">Description</label>
+            <textarea
+              id="new-category-description"
+              value={newCategory.description}
+              onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+              className="input-field"
+              rows={3}
+              placeholder="Full description"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-category-image" className="label">Image URL</label>
+            <input
+              id="new-category-image"
+              type="url"
+              value={newCategory.image_url}
+              onChange={(e) => setNewCategory({ ...newCategory, image_url: e.target.value })}
+              className="input-field"
+              placeholder="Image URL"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <label htmlFor="new-category-order" className="label">Display Order</label>
+              <input
+                id="new-category-order"
+                type="number"
+                value={newCategory.display_order}
+                onChange={(e) => setNewCategory({ ...newCategory, display_order: parseInt(e.target.value) || 0 })}
+                className="input-field w-28"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 pb-3">
+              <input
+                type="checkbox"
+                checked={newCategory.is_active}
+                onChange={(e) => setNewCategory({ ...newCategory, is_active: e.target.checked })}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Active
+            </label>
+          </div>
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <Collapsible title="Advanced: custom page code" preview="HTML · CSS · JS">
+              <div>
+                <label htmlFor="new-category-html" className="label">HTML Content</label>
+                <textarea
+                  id="new-category-html"
+                  value={newCategory.html_content}
+                  onChange={(e) => setNewCategory({ ...newCategory, html_content: e.target.value })}
+                  className="input-field font-mono text-sm"
+                  rows={6}
+                  placeholder="HTML content for category page..."
+                />
+              </div>
+              <div>
+                <label htmlFor="new-category-css" className="label">CSS Content</label>
+                <textarea
+                  id="new-category-css"
+                  value={newCategory.css_content}
+                  onChange={(e) => setNewCategory({ ...newCategory, css_content: e.target.value })}
+                  className="input-field font-mono text-sm"
+                  rows={6}
+                  placeholder="CSS content for category page..."
+                />
+              </div>
+              <div>
+                <label htmlFor="new-category-js" className="label">JavaScript Content</label>
+                <textarea
+                  id="new-category-js"
+                  value={newCategory.js_content}
+                  onChange={(e) => setNewCategory({ ...newCategory, js_content: e.target.value })}
+                  className="input-field font-mono text-sm"
+                  rows={6}
+                  placeholder="JavaScript content for category page..."
+                />
+              </div>
+            </Collapsible>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal

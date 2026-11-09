@@ -10,6 +10,7 @@ import MediaInput from '../../components/MediaInput'
 import MediaPicker from '../../components/MediaPicker'
 import MediaPickerDialog from '../../components/media/MediaPickerDialog'
 import LazyVideo from '../../components/LazyVideo'
+import { PageHeader, LoadingBlock, ErrorState, EmptyState } from '../../components/admin'
 
 interface GalleryItemType extends GalleryItem {
   // Extended type
@@ -29,7 +30,7 @@ const AdminGallery = () => {
   const { showSuccess, showError } = useToast()
   const { confirm, ConfirmationDialog } = useConfirmation()
 
-  const { data: galleryItems, isLoading } = useQuery('admin-gallery', () => galleryAPI.getAll(false))
+  const { data: galleryItems, isLoading, isError, refetch } = useQuery('admin-gallery', () => galleryAPI.getAll(false))
 
   const uploadMutation = useMutation(galleryAPI.upload, {
     onSuccess: () => {
@@ -253,81 +254,79 @@ const AdminGallery = () => {
     setDraggedIndex(null)
   }
 
-  if (isLoading) {
-    return (
-      <div className="section-container">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        </div>
-      </div>
-    )
-  }
+  if (isLoading) return <LoadingBlock />
 
   const sortedItems = galleryItems ? [...galleryItems].sort((a, b) => (a.display_order || 0) - (b.display_order || 0)) : []
 
   return (
-    <div className="section-container">
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Operations Gallery</h1>
-            <p className="text-gray-600 mt-2">Manage photos and videos for the "Our Work in Action" section</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              onChange={handleFileSelect}
-              className="hidden"
-              disabled={uploading}
-            />
+    <div className="space-y-6">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        onChange={handleFileSelect}
+        className="hidden"
+        disabled={uploading}
+      />
+      <PageHeader
+        title="Gallery"
+        icon={ImageIcon}
+        count={sortedItems.length}
+        description='Photos and videos for the homepage "Our Work in Action" section. Drag cards to reorder.'
+        actions={
+          <>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="btn-primary flex items-center"
+              className="btn-primary gap-2"
             >
               {uploading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                   Uploading...
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload File
+                  <Upload className="w-4 h-4" aria-hidden="true" />
+                  Upload file
                 </>
               )}
             </button>
             <button
               onClick={() => setShowUrlInput(!showUrlInput)}
-              className="btn-outline flex items-center"
+              aria-expanded={showUrlInput}
+              className="btn-secondary"
             >
               Add URL
             </button>
             <button
               onClick={() => setShowMediaLibraryPicker(true)}
-              className="btn-outline flex items-center"
+              className="btn-secondary gap-2"
             >
-              <LibraryBig className="w-4 h-4 mr-2" />
-              Choose from media library
+              <LibraryBig className="w-4 h-4" aria-hidden="true" />
+              From media library
             </button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
+      {isError && <ErrorState message="Could not load the gallery." onRetry={() => refetch()} />}
+
+      <>
         {/* URL Input */}
         {showUrlInput && (
-          <div className="mb-6 card bg-blue-50 border-blue-200">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-blue-900">Add Gallery Item from URL</h3>
+              <h2 className="font-semibold text-gray-900">Add gallery item from URL</h2>
               <button
                 onClick={() => {
                   setShowUrlInput(false)
                   setUrlValue('')
                 }}
-                className="text-blue-600 hover:text-blue-700"
+                className="p-1 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Cancel adding from URL"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
             <div className="space-y-3">
@@ -347,7 +346,7 @@ const AdminGallery = () => {
                 >
                   {createFromUrlMutation.isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
                       Adding...
                     </>
                   ) : (
@@ -359,7 +358,7 @@ const AdminGallery = () => {
                     setShowUrlInput(false)
                     setUrlValue('')
                   }}
-                  className="btn-outline"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
@@ -367,16 +366,21 @@ const AdminGallery = () => {
             </div>
           </div>
         )}
-      </div>
+      </>
 
       {sortedItems.length === 0 ? (
-        <div className="card text-center py-12">
-          <ImageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500 mb-4">No gallery items yet</p>
-          <button onClick={() => fileInputRef.current?.click()} className="btn-primary">
-            Add Your First Item
-          </button>
-        </div>
+        !isError && (
+          <EmptyState
+            icon={ImageIcon}
+            title="No gallery items yet"
+            action={
+              <button onClick={() => fileInputRef.current?.click()} className="btn-primary gap-2">
+                <Upload className="w-4 h-4" aria-hidden="true" />
+                Add your first item
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedItems.map((item: GalleryItemType, index: number) => {
@@ -409,13 +413,21 @@ const AdminGallery = () => {
                           onClick={() => setPlayingVideoId(null)}
                           className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded hover:bg-opacity-70"
                           title="Close video"
+                          aria-label="Stop video"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     ) : (
                       // Show thumbnail with play button
-                      <div className="w-full h-full relative cursor-pointer" onClick={() => setPlayingVideoId(item.id)}>
+                      <div
+                        className="w-full h-full relative cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Play video ${item.media_filename}`}
+                        onClick={() => setPlayingVideoId(item.id)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPlayingVideoId(item.id) } }}
+                      >
                         {item.thumbnail_url ? (
                           <img
                             src={item.thumbnail_url}
@@ -462,8 +474,10 @@ const AdminGallery = () => {
                           : 'bg-gray-500 text-white'
                       }`}
                       title={item.is_active ? 'Active' : 'Inactive'}
+                      aria-label={item.is_active ? 'Shown on site (click to hide)' : 'Hidden from site (click to show)'}
+                      aria-pressed={item.is_active}
                     >
-                      {item.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      {item.is_active ? <Eye className="w-4 h-4" aria-hidden="true" /> : <EyeOff className="w-4 h-4" aria-hidden="true" />}
                     </button>
                   </div>
                   <div className="absolute top-2 left-2">
@@ -490,10 +504,11 @@ const AdminGallery = () => {
                     {isVideo && (
                       <button
                         onClick={() => setThumbnailPickerItemId(item.id)}
-                        className="text-indigo-600 hover:text-indigo-700 p-2 rounded-lg hover:bg-indigo-50"
+                        className="text-primary-600 hover:text-primary-700 p-2 rounded-lg hover:bg-primary-50"
                         title={item.thumbnail_url ? 'Change custom thumbnail' : 'Set custom thumbnail from S3'}
+                        aria-label={item.thumbnail_url ? 'Change custom thumbnail' : 'Set custom thumbnail from S3'}
                       >
-                        <ImagePlus className="w-4 h-4" />
+                        <ImagePlus className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
                     {isVideo && item.thumbnail_url && (
@@ -501,16 +516,18 @@ const AdminGallery = () => {
                         onClick={() => handleClearThumbnail(item.id)}
                         className="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-50"
                         title="Reset to auto-generated thumbnail"
+                        aria-label="Reset to auto-generated thumbnail"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
                     <button
                       onClick={() => handleDelete(item.id)}
                       className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
                       title="Delete"
+                      aria-label={`Delete ${item.media_filename}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

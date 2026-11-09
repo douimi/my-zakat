@@ -7,6 +7,9 @@ import { isValidImageUrl, getImageUrl } from '../../utils/mediaHelpers'
 import type { Event } from '../../types'
 import MediaInput from '../../components/MediaInput'
 import MediaPickerDialog from '../../components/media/MediaPickerDialog'
+import {
+  PageHeader, Modal, LoadingBlock, ErrorState, EmptyState, StatusBadge, LongText,
+} from '../../components/admin'
 
 interface EventFormData {
   title: string
@@ -31,7 +34,7 @@ const AdminEvents = () => {
   
   const queryClient = useQueryClient()
   
-  const { data: events, isLoading, error } = useQuery(
+  const { data: events, isLoading, error, refetch } = useQuery(
     'admin-events', 
     () => eventsAPI.getAll(false),
     {
@@ -120,62 +123,57 @@ const AdminEvents = () => {
     }
   }
 
-  // Debug: Log the events data
-  console.log('AdminEvents - events data:', events)
-  console.log('AdminEvents - isLoading:', isLoading)
-  console.log('AdminEvents - error:', error)
+  const saving = createMutation.isLoading || updateMutation.isLoading
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    )
-  }
+  // Upcoming events first (soonest on top), then past events (most recent first).
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const isPast = (event: Event) => new Date(event.date) < startOfToday
+  const sortedEvents: Event[] = [...((events as Event[] | undefined) || [])].sort((a, b) => {
+    const pa = isPast(a)
+    const pb = isPast(b)
+    if (pa !== pb) return pa ? 1 : -1
+    const diff = new Date(a.date).getTime() - new Date(b.date).getTime()
+    return pa ? -diff : diff
+  })
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-red-600">Error loading events: {error.toString()}</div>
-      </div>
-    )
-  }
+  const addButton = (
+    <button onClick={() => setShowForm(true)} className="btn-primary gap-2">
+      <Plus className="w-4 h-4" aria-hidden="true" />
+      Add New Event
+    </button>
+  )
 
   return (
-    <div>
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Manage Events</h1>
-            <p className="text-gray-600 mt-2">Create, edit, and manage upcoming events</p>
-          </div>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => queryClient.refetchQueries('admin-events')}
-              className="btn-outline flex items-center"
-            >
-              Refresh Events
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="btn-primary flex items-center"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Event
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Events" icon={Calendar} count={events?.length} actions={addButton} />
 
       {/* Event Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {editingEvent ? 'Edit Event' : 'Add New Event'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+          title={editingEvent ? 'Edit Event' : 'Add New Event'}
+          // The library picker opens on top of this form; Escape there must not discard the form.
+          onClose={() => { if (!showMediaLibraryPicker) resetForm() }}
+          size="lg"
+          footer={
+            <>
+              <button type="button" onClick={resetForm} className="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" form="event-form" disabled={saving} className="btn-primary gap-2">
+                {saving ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" aria-hidden="true" />
+                    {editingEvent ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  editingEvent ? 'Update Event' : 'Create Event'
+                )}
+              </button>
+            </>
+          }
+        >
+            <form id="event-form" onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Event Title *
@@ -241,47 +239,24 @@ const AdminEvents = () => {
                 <button
                   type="button"
                   onClick={() => setShowMediaLibraryPicker(true)}
-                  className="mt-2 btn-outline flex items-center text-sm"
+                  className="mt-2 btn-secondary btn-sm gap-2"
                 >
-                  <LibraryBig className="w-4 h-4 mr-2" />
+                  <LibraryBig className="w-4 h-4" aria-hidden="true" />
                   Choose from media library
                 </button>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="btn-outline"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
-                  className="btn-primary flex items-center"
-                >
-                  {(createMutation.isLoading || updateMutation.isLoading) ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {editingEvent ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                    <>
-                      {editingEvent ? 'Update Event' : 'Create Event'}
-                    </>
-                  )}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Events Table */}
-      <div className="card">
-        {events && events.length > 0 ? (
-          <div className="overflow-x-auto">
+      {isLoading ? (
+        <LoadingBlock />
+      ) : error ? (
+        <ErrorState message="Could not load events." onRetry={() => refetch()} />
+      ) : sortedEvents.length > 0 ? (
+          <div className="card overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -292,24 +267,20 @@ const AdminEvents = () => {
                 </tr>
               </thead>
               <tbody>
-                {events.map((event: Event) => (
+                {sortedEvents.map((event: Event) => (
                   <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-4 px-4">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{event.title}</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {event.description.length > 100 
-                            ? `${event.description.substring(0, 100)}...`
-                            : event.description
-                          }
-                        </p>
+                    <td className="py-4 px-4 min-w-[16rem]">
+                      <p className="font-semibold text-gray-900">{event.title}</p>
+                      <div className="mt-1">
+                        <LongText text={event.description} lines={2} />
                       </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="space-y-1">
                         <div className="flex items-center text-sm text-gray-600">
-                          <Calendar className="w-4 h-4 mr-1" />
+                          <Calendar className="w-4 h-4 mr-1" aria-hidden="true" />
                           {new Date(event.date).toLocaleDateString()}
+                          {isPast(event) && <StatusBadge className="ml-2">Past</StatusBadge>}
                         </div>
                         <div className="flex items-center text-sm text-gray-600">
                           <MapPin className="w-4 h-4 mr-1" />
@@ -345,6 +316,7 @@ const AdminEvents = () => {
                           onClick={() => handleEdit(event)}
                           className="text-primary-600 hover:text-primary-700 p-2 rounded-lg hover:bg-primary-50"
                           title="Edit event"
+                          aria-label="Edit event"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
@@ -353,6 +325,7 @@ const AdminEvents = () => {
                           disabled={deleteMutation.isLoading}
                           className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
                           title="Delete event"
+                          aria-label="Delete event"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -363,21 +336,9 @@ const AdminEvents = () => {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="text-center py-12">
-            <Calendar className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No events yet</h3>
-            <p className="text-gray-600 mb-4">Create your first event to get started</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="btn-primary flex items-center mx-auto"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Event
-            </button>
-          </div>
-        )}
-      </div>
+      ) : (
+        <EmptyState icon={Calendar} title="No events yet" body="Create your first event to get started." action={addButton} />
+      )}
 
       <MediaPickerDialog
         open={showMediaLibraryPicker}

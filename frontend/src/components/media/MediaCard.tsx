@@ -31,7 +31,7 @@ const MediaCard = ({ asset, onSelect }: MediaCardProps) => {
       type="button"
       onClick={() => onSelect(asset)}
       aria-label={label}
-      className="group text-left bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-emerald-400 hover:shadow-md transition focus:outline-none focus:ring-2 focus:ring-emerald-500"
+      className="group text-left bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-primary-400 hover:shadow-md transition focus:outline-none focus:ring-2 focus:ring-primary-500"
     >
       <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
         {asset.thumbnail_url ? (
