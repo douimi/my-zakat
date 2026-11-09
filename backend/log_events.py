@@ -109,6 +109,36 @@ AGREEMENT_SAVED = "agreement.saved"            # draft created or edited
 AGREEMENT_ISSUED = "agreement.issued"          # PDF rendered and downloaded
 
 # ---------------------------------------------------------------------------
+# Sponsorship — families and orphans (migration 39). The case workflow, and
+# the money path of a sponsorship, which mirrors the donation one: intent
+# (checkout_created), commitment (started), each charge (payment_recorded),
+# failure (payment_failed) and the end (ended).
+# ---------------------------------------------------------------------------
+SPONSORSHIP_CASE_SUBMITTED = "sponsorship.case_submitted"      # a new request was filed
+SPONSORSHIP_CASE_RESUBMITTED = "sponsorship.case_resubmitted"  # applicant answered an info request
+SPONSORSHIP_CASE_TRANSITIONED = "sponsorship.case_transitioned"  # any staff status change
+SPONSORSHIP_CASE_EDITED = "sponsorship.case_edited"            # staff edited the dossier or profile
+SPONSORSHIP_DOCUMENT_UPLOADED = "sponsorship.document_uploaded"
+SPONSORSHIP_DOCUMENT_REVIEWED = "sponsorship.document_reviewed"
+SPONSORSHIP_CHECKOUT_CREATED = "sponsorship.checkout_created"  # intent, not money
+SPONSORSHIP_STARTED = "sponsorship.started"                    # first payment confirmed
+SPONSORSHIP_PAYMENT_RECORDED = "sponsorship.payment_recorded"  # one monthly charge
+SPONSORSHIP_PAYMENT_FAILED = "sponsorship.payment_failed"
+SPONSORSHIP_ENDED = "sponsorship.ended"                        # by sponsor, staff, Stripe or case closure
+SPONSORSHIP_DISBURSEMENT_RECORDED = "sponsorship.disbursement_recorded"
+SPONSORSHIP_PORTAL_SIGNED_IN = "sponsorship.portal_signed_in"
+
+SPONSORSHIP_EVENTS = (
+    SPONSORSHIP_CASE_SUBMITTED, SPONSORSHIP_CASE_RESUBMITTED,
+    SPONSORSHIP_CASE_TRANSITIONED, SPONSORSHIP_CASE_EDITED,
+    SPONSORSHIP_DOCUMENT_UPLOADED, SPONSORSHIP_DOCUMENT_REVIEWED,
+    SPONSORSHIP_CHECKOUT_CREATED, SPONSORSHIP_STARTED,
+    SPONSORSHIP_PAYMENT_RECORDED, SPONSORSHIP_PAYMENT_FAILED,
+    SPONSORSHIP_ENDED, SPONSORSHIP_DISBURSEMENT_RECORDED,
+    SPONSORSHIP_PORTAL_SIGNED_IN,
+)
+
+# ---------------------------------------------------------------------------
 # Everything else worth finding again.
 # ---------------------------------------------------------------------------
 AUTH_LOGIN = "auth.login"
@@ -162,6 +192,6 @@ PROPOSAL_EVENTS = (
     AGREEMENT_SAVED, AGREEMENT_ISSUED,
 )
 
-ALL_EVENTS = PAYMENT_EVENTS + PROPOSAL_EVENTS + (
+ALL_EVENTS = PAYMENT_EVENTS + PROPOSAL_EVENTS + SPONSORSHIP_EVENTS + (
     AUTH_LOGIN, AUTH_REGISTER, REQUEST_FAILED, CONTENT_CHANGED,
 )

@@ -1503,12 +1503,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         reason=ev.REASON_DB_ERROR, stripe_event=event_id,
                     )
                     db.rollback()
+                _sponsorship_hook("checkout_completed", db, session, event_id)
 
         # ── customer.subscription.created — activate subscription, NO donation ──
         elif event_type == "customer.subscription.created":
             subscription = event["data"]["object"]
             subscription_id = subscription.get("id")
             customer_id = subscription.get("customer")
+            _sponsorship_hook("subscription_created", db, subscription, event_id)
 
             try:
                 customer = stripe.Customer.retrieve(customer_id)
@@ -1611,8 +1613,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             )
                             db.rollback()
 
+            # After the generic path: it may have just written the Donation,
+            # which the hook then tags; when it skipped the invoice, the hook
+            # writes it. Either way the invoice is recorded exactly once.
+            _sponsorship_hook("invoice_paid", db, invoice, event_id)
+
         # ── invoice.payment_failed ──
         elif event_type == "invoice.payment_failed":
+            _sponsorship_hook("invoice_failed", db, event["data"]["object"], event_id)
             subscription_id = event["data"]["object"].get("subscription")
             if subscription_id:
                 db_sub = db.query(DonationSubscription).filter(
@@ -1625,6 +1633,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         # ── customer.subscription.deleted ──
         elif event_type == "customer.subscription.deleted":
+            _sponsorship_hook("subscription_deleted", db, event["data"]["object"], event_id)
             subscription_id = event["data"]["object"].get("id")
             if subscription_id:
                 db_sub = db.query(DonationSubscription).filter(
@@ -1639,6 +1648,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         elif event_type == "checkout.session.expired":
             session = event["data"]["object"]
             session_id = session.get("id")
+            _sponsorship_hook("checkout_expired", db, session, event_id)
             amount = session.get("amount_total", 0) / 100.0
             customer_email = session.get("customer_email", "")
             details = session.get("customer_details") or {}
@@ -1752,6 +1762,83 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             reason=ev.REASON_UNEXPECTED,
         )
         return JSONResponse(status_code=500, content={"status": "webhook error"})
+
+
+def _sponsorship_hook(kind: str, db: Session, obj: dict, event_id: str) -> None:
+    """Carry a Stripe event over to the sponsorship it belongs to, if any.
+
+    Called alongside the generic donation handling, never instead of it, and
+    fenced: a fault in the sponsorship bookkeeping is logged loudly but must
+    not make Stripe retry an event whose donation was already recorded.
+    """
+    import sponsorship_service as sp_svc
+    import sponsorship_emails as sp_emails
+    try:
+        if kind == "checkout_completed":
+            metadata = obj.get("metadata") or {}
+            if metadata.get("type") != "sponsorship":
+                return
+            sp = sp_svc.find_sponsorship(db, session_id=obj.get("id"),
+                                         sponsorship_id=metadata.get("sponsorship_id"))
+            if sp is None:
+                return
+            sub = obj.get("subscription")
+            cust = obj.get("customer")
+            started = sp_svc.activate(
+                db, sp, subscription_id=sub.get("id") if isinstance(sub, dict) else sub,
+                customer_id=cust.get("id") if isinstance(cust, dict) else cust, event_id=event_id)
+            if started:
+                _sponsorship_started_emails(db, sp)
+        elif kind == "subscription_created":
+            sid = (obj.get("metadata") or {}).get("sponsorship_id")
+            sp = sp_svc.find_sponsorship(db, sponsorship_id=sid) if sid else None
+            if sp is not None and not sp.stripe_subscription_id:
+                sp.stripe_subscription_id = obj.get("id")
+                sp.stripe_customer_id = sp.stripe_customer_id or obj.get("customer")
+                db.commit()
+        elif kind == "invoice_paid":
+            sp, donation, created, started = sp_svc.record_payment(db, obj, event_id)
+            if sp is None:
+                return
+            if created:
+                _send_certificate_safe(donation)
+            if started:
+                _sponsorship_started_emails(db, sp)
+        elif kind == "invoice_failed":
+            sub_id = sp_svc.invoice_subscription_id(obj)
+            if sub_id:
+                sp_svc.mark_past_due(db, sub_id, event_id)
+        elif kind == "subscription_deleted":
+            if obj.get("id"):
+                sp_svc.end_from_stripe(db, obj["id"])
+        elif kind == "checkout_expired":
+            if obj.get("id"):
+                sp_svc.expire_checkout(db, obj["id"])
+    except Exception as exc:
+        db.rollback()
+        logger.event(
+            ev.WEBHOOK_FAILED, "a Stripe event could not be applied to its sponsorship",
+            level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE, reason=ev.REASON_DB_ERROR,
+            stripe_event=event_id, hook=kind,
+        )
+
+
+def _sponsorship_started_emails(db: Session, sp) -> None:
+    import sponsorship_emails as sp_emails
+    from models import SponsorshipCase
+    case = db.query(SponsorshipCase).get(sp.case_id)
+    if case is None:
+        return
+    for send in (lambda: sp_emails.sponsor_started(sp, case),
+                 lambda: sp_emails.applicant_sponsor_found(case, sp.monthly_amount_cents, sp.id)):
+        try:
+            send()
+        except Exception as exc:
+            logger.event(
+                ev.SPONSORSHIP_STARTED, "could not queue a sponsorship email",
+                level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
+                reason=ev.REASON_EMAIL_SEND_FAILED, sponsorship_id=sp.id,
+            )
 
 
 def _send_certificate_safe(donation: Donation):

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, UniqueConstraint, JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
@@ -55,6 +55,14 @@ class Donation(Base):
     utm_medium = Column(String(100), nullable=True)
     utm_campaign = Column(String(100), nullable=True, index=True)
     utm_content = Column(String(100), nullable=True)
+    # Set when the charge is a monthly sponsorship payment (migration 39). The
+    # donation stays an ordinary donation — receipt, totals, admin list — and
+    # this is what lets a case add up what it has received.
+    sponsorship_id = Column(
+        Integer, ForeignKey("sponsorships.id", ondelete="SET NULL", use_alter=True,
+                            name="fk_donations_sponsorship_id"),
+        nullable=True, index=True,
+    )
 
 
 class User(Base):
@@ -986,3 +994,247 @@ class MediaAsset(Base):
     review_note = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Sponsorship — sponsor a family or an orphan (migration 39)
+#
+# Design: docs/superpowers/specs/2026-11-09-sponsorship-and-arabic-design.md
+#
+# Class-table inheritance: SponsorshipCase carries the workflow, the public
+# profile and the money for both kinds; the kind-specific facts live in a 1:1
+# details table. Workflow rules live in sponsorship_service, never here.
+# ─────────────────────────────────────────────────────────────────────
+
+class SponsorshipCase(Base):
+    """One dossier: a family in need, or an orphan."""
+    __tablename__ = "sponsorship_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Random, not sequential, so the public listing leaks neither volume nor
+    # order. F-XXXXXX for a family, O-XXXXXX for an orphan.
+    reference = Column(String(12), nullable=False, unique=True, index=True)
+    kind = Column(String(10), nullable=False)
+    status = Column(String(20), nullable=False, default="submitted", index=True)
+
+    # ── Who filed it (the email is the portal identity) ────
+    submitter_type = Column(String(20), nullable=False)   # self | organization | staff
+    submitter_email = Column(String(200), nullable=False, index=True)
+    submitter_name = Column(String(200), nullable=False)
+    submitter_phone = Column(String(50), nullable=True)
+    organization_name = Column(String(200), nullable=True)
+    organization_registration = Column(String(100), nullable=True)
+    organization_contact_role = Column(String(100), nullable=True)
+    preferred_language = Column(String(5), nullable=False, default="en")
+
+    # ── Where (address is never public) ────────────────────
+    country = Column(String(100), nullable=False)
+    region = Column(String(150), nullable=True)
+    city = Column(String(150), nullable=False)
+    address = Column(Text, nullable=True)
+
+    # ── The situation, private ─────────────────────────────
+    situation_category = Column(String(40), nullable=True)
+    situation_description = Column(Text, nullable=False)
+    monthly_income_cents = Column(Integer, nullable=False, default=0)
+    income_sources = Column(Text, nullable=True)
+    other_aid = Column(Text, nullable=True)
+    urgent_needs = Column(Text, nullable=True)
+
+    # [{category, monthly_cents, note}]
+    needs = Column(JSONType, nullable=False, default=list)
+    requested_monthly_cents = Column(Integer, nullable=False, default=0)
+    approved_monthly_cents = Column(Integer, nullable=True)
+
+    # ── The curated public profile ─────────────────────────
+    public_name = Column(String(100), nullable=True)
+    public_title = Column(String(200), nullable=True)
+    public_title_ar = Column(String(200), nullable=True)
+    public_story = Column(Text, nullable=True)
+    public_story_ar = Column(Text, nullable=True)
+    public_photo_key = Column(String(500), nullable=True)
+
+    # ── Consent ────────────────────────────────────────────
+    consent_verification = Column(Boolean, nullable=False, default=False)
+    consent_publication = Column(Boolean, nullable=False, default=False)
+    consent_text = Column(Text, nullable=True)
+    consent_at = Column(DateTime, nullable=True)
+
+    duplicate_flags = Column(JSONType, nullable=False, default=list)
+    duplicates_reviewed_at = Column(DateTime, nullable=True)
+
+    assigned_to = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    close_reason = Column(String(40), nullable=True)
+
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    submitted_ip = Column(String(45), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    last_applicant_activity_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    admin_seen_at = Column(DateTime, nullable=True)
+    applicant_seen_at = Column(DateTime, nullable=True)
+
+
+class SponsorshipFamilyDetails(Base):
+    __tablename__ = "sponsorship_family_details"
+
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), primary_key=True)
+    head_full_name = Column(String(200), nullable=False)
+    head_national_id = Column(String(50), nullable=True)
+    head_birth_year = Column(Integer, nullable=True)
+    head_gender = Column(String(10), nullable=True)
+    head_marital_status = Column(String(20), nullable=True)
+    head_occupation = Column(String(150), nullable=True)
+    household_size = Column(Integer, nullable=False)
+    housing_status = Column(String(30), nullable=True)
+    monthly_rent_cents = Column(Integer, nullable=False, default=0)
+    health_notes = Column(Text, nullable=True)
+
+
+class SponsorshipHouseholdMember(Base):
+    __tablename__ = "sponsorship_household_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=False, default=0)
+    first_name = Column(String(100), nullable=False)
+    relationship = Column(String(30), nullable=False)
+    gender = Column(String(10), nullable=True)
+    birth_year = Column(Integer, nullable=True)
+    occupation_or_school = Column(String(200), nullable=True)
+    health_note = Column(Text, nullable=True)
+    is_orphan = Column(Boolean, nullable=False, default=False)
+
+
+class SponsorshipOrphanDetails(Base):
+    __tablename__ = "sponsorship_orphan_details"
+
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), primary_key=True)
+    full_name = Column(String(200), nullable=False)
+    gender = Column(String(10), nullable=False)
+    birth_date = Column(Date, nullable=False)
+    orphan_type = Column(String(10), nullable=False)   # father | mother | both
+    father_name = Column(String(200), nullable=True)
+    father_death_date = Column(Date, nullable=True)
+    father_death_cause = Column(Text, nullable=True)
+    mother_name = Column(String(200), nullable=True)
+    mother_alive = Column(Boolean, nullable=True)
+    mother_death_date = Column(Date, nullable=True)
+    guardian_name = Column(String(200), nullable=False)
+    guardian_relationship = Column(String(50), nullable=False)
+    guardian_national_id = Column(String(50), nullable=True)
+    guardian_phone = Column(String(50), nullable=True)
+    lives_with = Column(String(30), nullable=True)
+    school_level = Column(String(100), nullable=True)
+    school_name = Column(String(200), nullable=True)
+    health_status = Column(Text, nullable=True)
+    interests = Column(Text, nullable=True)
+    siblings_count = Column(Integer, nullable=False, default=0)
+    # Referenced, never copied: no duplicate, no shared sponsorship.
+    family_case_id = Column(
+        Integer, ForeignKey("sponsorship_cases.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+
+
+class SponsorshipCaseDocument(Base):
+    """A supporting document. Bytes in S3; never served through a public URL."""
+    __tablename__ = "sponsorship_case_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    doc_type = Column(String(40), nullable=False)
+    filename = Column(String(255), nullable=False)
+    object_key = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=False)
+    kind = Column(String(20), nullable=False)          # image | document
+    size_bytes = Column(Integer, nullable=False)
+    uploaded_by = Column(String(20), nullable=False)   # applicant | staff
+    uploaded_by_email = Column(String(255), nullable=True)
+    uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    review_status = Column(String(20), nullable=False, default="pending")
+    review_note = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class SponsorshipCaseEvent(Base):
+    """Append-only history. Written by sponsorship_service in the same
+    transaction as the change it describes; never updated or deleted."""
+    __tablename__ = "sponsorship_case_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    type = Column(String(40), nullable=False)
+    actor_type = Column(String(20), nullable=False)     # staff | applicant | sponsor | system
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_label = Column(String(255), nullable=True)
+    from_status = Column(String(20), nullable=True)
+    to_status = Column(String(20), nullable=True)
+    visibility = Column(String(12), nullable=False, default="internal")
+    message = Column(Text, nullable=True)
+    note = Column(Text, nullable=True)
+    changes = Column(JSONType, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class Sponsorship(Base):
+    """One sponsor's monthly commitment to one case."""
+    __tablename__ = "sponsorships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id"), nullable=False, index=True)
+    sponsor_email = Column(String(200), nullable=False, index=True)
+    sponsor_name = Column(String(200), nullable=False)
+    preferred_language = Column(String(5), nullable=False, default="en")
+    monthly_amount_cents = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default="usd")
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    stripe_checkout_session_id = Column(String(255), nullable=True, unique=True)
+    stripe_subscription_id = Column(String(255), nullable=True, unique=True)
+    stripe_customer_id = Column(String(255), nullable=True)
+    checkout_expires_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    last_payment_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    end_reason = Column(String(40), nullable=True)
+    end_note = Column(Text, nullable=True)
+    ended_by = Column(String(20), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SponsorshipDisbursement(Base):
+    """What the money was spent on. Shown to sponsors and to the applicant."""
+    __tablename__ = "sponsorship_disbursements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id"), nullable=False, index=True)
+    amount_cents = Column(Integer, nullable=False)
+    category = Column(String(30), nullable=False)
+    period = Column(String(7), nullable=True)
+    description = Column(Text, nullable=False)
+    description_ar = Column(Text, nullable=True)
+    internal_note = Column(Text, nullable=True)
+    disbursed_at = Column(Date, nullable=False)
+    receipt_document_id = Column(
+        Integer, ForeignKey("sponsorship_case_documents.id", ondelete="SET NULL"), nullable=True,
+    )
+    recorded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SponsorshipCaseUpdate(Base):
+    """News posted by staff to a case's sponsors."""
+    __tablename__ = "sponsorship_case_updates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    title_ar = Column(String(200), nullable=True)
+    body = Column(Text, nullable=False)
+    body_ar = Column(Text, nullable=True)
+    photo_key = Column(String(500), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

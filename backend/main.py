@@ -17,6 +17,7 @@ from auth_utils import get_password_hash
 from s3_service import ensure_bucket_exists
 from audit_middleware import AuditMiddleware
 from routers import auth, admin, donations, events, stories, contact, testimonials, subscriptions, volunteers, settings, user, slideshow, urgent_needs, media, static_files, gallery, program_categories, programs, cleanup, s3_media, campaigns, marketing, marketing_templates, marketing_segments, marketing_campaigns, fundraising_projects, tracking, project_proposals, proposal_portal, media_library, media_library_files, nisab
+from routers import sponsorship_public, sponsorship_portal, sponsorship_admin
 
 # Check if running in test mode
 TESTING_MODE = os.getenv("TESTING", "false").lower() == "true"
@@ -244,6 +245,11 @@ app.include_router(project_proposals.router, prefix="/api/project-proposals", ta
 app.include_router(fundraising_projects.router, prefix="/api/fundraising-projects", tags=["fundraising-projects"])
 app.include_router(tracking.router, prefix="/api/tracking", tags=["tracking"])
 app.include_router(nisab.router, prefix="/api/nisab", tags=["nisab"])
+# Sponsorship. The public router's prefix is the parent of the other two, so
+# it is mounted last and can never shadow a portal or admin path.
+app.include_router(sponsorship_portal.router, prefix="/api/sponsorship/portal", tags=["sponsorship-portal"])
+app.include_router(sponsorship_admin.router, prefix="/api/sponsorship/admin", tags=["sponsorship-admin"])
+app.include_router(sponsorship_public.router, prefix="/api/sponsorship", tags=["sponsorship"])
 
 @app.get("/")
 async def root():

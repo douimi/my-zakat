@@ -1,0 +1,20 @@
+{{ heading }}
+
+{% for paragraph in paragraphs %}
+{{ paragraph }}
+
+{% endfor %}
+{% if quote %}
+"{{ quote }}"
+
+{% endif %}
+{% if code %}
+    {{ code }}
+
+{% endif %}
+{% if cta_url %}
+{{ cta_label }}: {{ cta_url }}
+
+{% endif %}
+{{ signoff }}
+{{ team }}

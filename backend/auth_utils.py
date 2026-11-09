@@ -180,6 +180,54 @@ def get_portal_actor(
     return actor if isinstance(actor, str) and actor else None
 
 
+# ── Sponsorship portal ─────────────────────────────────────────────────
+# Same model as the proposal portal (an emailed code proves the address, and
+# the address is the identity) but a separate token type: a code requested to
+# follow a sponsorship request must not open someone's funding proposals, and
+# the reverse. verify_token() refuses both, since neither typ is "user".
+SPONSORSHIP_PORTAL_TOKEN_TYPE = "sponsorship_portal"
+
+
+def create_sponsorship_portal_token(email: str, *, acting_staff: Optional[str] = None,
+                                    expires_delta: Optional[timedelta] = None) -> str:
+    claims = {"sub": email, "typ": SPONSORSHIP_PORTAL_TOKEN_TYPE}
+    if acting_staff:
+        claims["act"] = acting_staff
+    return create_access_token(
+        claims, expires_delta=expires_delta or timedelta(minutes=PORTAL_TOKEN_MINUTES))
+
+
+def _sponsorship_portal_claims(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("typ") != SPONSORSHIP_PORTAL_TOKEN_TYPE or not payload.get("sub"):
+        return None
+    return payload
+
+
+def get_sponsorship_portal_email(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
+    claims = _sponsorship_portal_claims(credentials.credentials)
+    if not claims:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in again to continue.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return claims["sub"]
+
+
+def get_sponsorship_portal_actor(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Optional[str]:
+    claims = _sponsorship_portal_claims(credentials.credentials) or {}
+    actor = claims.get("act")
+    return actor if isinstance(actor, str) and actor else None
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
