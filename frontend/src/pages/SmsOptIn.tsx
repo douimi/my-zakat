@@ -86,18 +86,18 @@ const SmsOptIn = () => {
   // instructions because there's nothing to opt out of).
   if (status === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50 py-16">
+      <div className="min-h-[70vh] bg-gray-50 py-12 sm:py-16">
         <SEOHead
           title={submittedWithConsent ? 'SMS Subscription Confirmed' : 'SMS Subscription'}
           description="MyZakat SMS Subscription."
           canonicalPath="/sms-opt-in"
         />
         <div className="section-container">
-          <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-lg p-8 sm:p-10 text-center">
-            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-6 ${submittedWithConsent ? 'bg-green-100' : 'bg-primary-100'}`}>
+          <div className="card sm:p-10 max-w-xl mx-auto text-center">
+            <div className="mb-5">
               {submittedWithConsent
-                ? <CheckCircle2 className="w-9 h-9 text-green-600" />
-                : <MessageCircle className="w-9 h-9 text-primary-600" />}
+                ? <CheckCircle2 className="w-10 h-10 mx-auto text-accent-600" aria-hidden="true" />
+                : <MessageCircle className="w-10 h-10 mx-auto text-primary-600" aria-hidden="true" />}
             </div>
             <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-3">
               {submittedWithConsent ? "You're subscribed!" : 'Thanks for stopping by'}
@@ -108,14 +108,11 @@ const SmsOptIn = () => {
             {submittedWithConsent && (
               <p className="text-sm text-gray-500 mb-8">
                 You can opt out at any time by replying <strong>STOP</strong> to any of our
-                messages, emailing <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>,
+                messages, emailing <a href="mailto:info@myzakat.org" className="link">info@myzakat.org</a>,
                 or calling 1-833-MYZAKAT.
               </p>
             )}
-            <Link
-              to="/"
-              className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
-            >
+            <Link to="/" className="btn-primary">
               Back to Home
             </Link>
           </div>
@@ -136,10 +133,7 @@ const SmsOptIn = () => {
         <div className="max-w-2xl mx-auto">
 
           {/* Header */}
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-5 shadow-md">
-              <MessageCircle className="w-8 h-8 text-white" />
-            </div>
+          <div className="text-center mb-8">
             <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900 mb-3">
               SMS Subscription
             </h1>
@@ -150,9 +144,9 @@ const SmsOptIn = () => {
           </div>
 
           {/* What you'll get */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="card mb-6">
             <h2 className="text-base font-semibold text-gray-900 mb-3 flex items-center">
-              <ShieldCheck className="w-5 h-5 text-primary-600 mr-2" />
+              <ShieldCheck className="w-5 h-5 text-primary-600 mr-2" aria-hidden="true" />
               What you can expect
             </h2>
             <ul className="text-sm text-gray-700 space-y-2 leading-relaxed">
@@ -167,7 +161,7 @@ const SmsOptIn = () => {
           {/* Form */}
           <form
             onSubmit={handleSubmit}
-            className="bg-white rounded-xl shadow-md border border-gray-100 p-6 sm:p-8 space-y-5"
+            className="card sm:p-8 space-y-5"
             aria-label="SMS opt-in form"
           >
             <div>
@@ -182,7 +176,7 @@ const SmsOptIn = () => {
                 maxLength={100}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input-field"
                 placeholder="Your full name"
                 autoComplete="name"
               />
@@ -193,14 +187,14 @@ const SmsOptIn = () => {
                 Mobile phone number <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Phone className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                 <input
                   id="optin-phone"
                   type="tel"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input-field pl-9"
                   placeholder="(555) 123-4567"
                   autoComplete="tel-national"
                   inputMode="tel"
@@ -213,14 +207,14 @@ const SmsOptIn = () => {
 
             <div>
               <label htmlFor="optin-email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email <span className="text-gray-400 text-xs">(optional)</span>
+                Email <span className="text-gray-500 text-xs">(optional)</span>
               </label>
               <input
                 id="optin-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input-field"
                 placeholder="you@example.com"
                 autoComplete="email"
               />
@@ -256,8 +250,8 @@ const SmsOptIn = () => {
             </div>
 
             {status === 'error' && errorMessage && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div className="alert-error" role="alert">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
                 <span>{errorMessage}</span>
               </div>
             )}
@@ -265,7 +259,7 @@ const SmsOptIn = () => {
             <button
               type="submit"
               disabled={status === 'submitting'}
-              className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="btn-primary w-full gap-2"
             >
               {status === 'submitting' ? (
                 <>

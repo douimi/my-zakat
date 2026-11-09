@@ -16,6 +16,8 @@ import { Calculator, DollarSign, TrendingUp, Info, ArrowRight, CheckCircle, Aler
 import { donationsAPI } from '../utils/api'
 import type { ZakatCalculation, ZakatResult } from '../types'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
 import {
   fetchNisab,
   hasUsableFigure,
@@ -44,7 +46,6 @@ const PRICE_HINT = "Enter today's price per gram"
  */
 const toCents = (price: number) => Math.round(price * 100) / 100
 
-const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
 const HEADING = 'text-2xl font-heading font-bold text-gray-900 mb-4'
 const PROSE = 'text-gray-700 leading-relaxed'
 
@@ -102,6 +103,16 @@ const ZakatCalculator = () => {
       cancelled = true
     }
   }, [setValue])
+
+  // The result dialog closes on Escape, like every other dialog on the site.
+  useEffect(() => {
+    if (!showResultModal) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowResultModal(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [showResultModal])
 
   // The single gate on printing money anywhere on this page.
   const showFigure = nisabLoaded && hasUsableFigure(nisab)
@@ -180,14 +191,9 @@ const ZakatCalculator = () => {
   // Field definition: `unit` distinguishes USD ($) from grams (g)
   type FieldDef = { name: keyof ZakatCalculation; label: string; placeholder: string; unit: 'usd' | 'grams' }
 
+  // Assets first, then what you owe: the order people think in. (Liabilities
+  // used to come first.) Field names are unchanged.
   const formSections: { title: string; icon: typeof TrendingUp; note?: string | null; fields: FieldDef[] }[] = [
-    {
-      title: 'Liabilities & Debts',
-      icon: TrendingUp,
-      fields: [
-        { name: 'liabilities', label: 'Total Debts & Liabilities', placeholder: '0.00', unit: 'usd' },
-      ],
-    },
     {
       title: 'Cash & Liquid Assets',
       icon: DollarSign,
@@ -228,6 +234,13 @@ const ZakatCalculator = () => {
       fields: [
         { name: 'other_valuables', label: 'Other Valuable Assets', placeholder: '0.00', unit: 'usd' },
         { name: 'other_assets', label: 'Miscellaneous Assets', placeholder: '0.00', unit: 'usd' },
+      ],
+    },
+    {
+      title: 'Liabilities & Debts',
+      icon: TrendingUp,
+      fields: [
+        { name: 'liabilities', label: 'Total Debts & Liabilities', placeholder: '0.00', unit: 'usd' },
       ],
     },
   ]
@@ -318,51 +331,43 @@ const ZakatCalculator = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gray-50">
       <SEOHead
         title={`Zakat Calculator ${year} — How Much Zakat Do I Owe?`}
         description="Work out what zakat you owe. Enter your cash, savings, gold, silver, investments and business assets, and see them compared against the current nisab threshold."
         canonicalPath="/zakat-calculator"
         jsonLd={jsonLd}
       />
-      <div className="section-container">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-6">
-            <Calculator className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-4">
-            Zakat Calculator {year} — How Much Zakat Do I Owe?
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Total your cash, gold, investments and business assets, see them measured against the
-            current nisab, and find the 2.5% that is due.
-          </p>
-        </div>
 
+      <PageHeader
+        title={`Zakat Calculator ${year} — How Much Zakat Do I Owe?`}
+        description="Total your cash, gold, investments and business assets, see them measured against the current nisab, and find the 2.5% that is due."
+      />
+
+      <div className="section-container py-8 sm:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Calculator Form */}
           <div className="lg:col-span-2">
             <div className="card">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-                {formSections.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="border-b border-gray-200 pb-8 last:border-b-0">
+                {formSections.map((section) => (
+                  <div key={section.title} className="border-b border-gray-200 pb-8 last:border-b-0">
                     <div className="flex items-center mb-6">
-                      <section.icon className="w-6 h-6 text-primary-600 mr-3" />
-                      <h3 className="text-xl font-semibold text-gray-900">{section.title}</h3>
+                      <section.icon className="w-5 h-5 text-primary-600 mr-3" aria-hidden="true" />
+                      <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
                     </div>
 
                     {section.note && (
-                      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                      <div className="alert-warning mb-6">
                         <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-                        <p className="text-sm text-amber-900">{section.note}</p>
+                        <p>{section.note}</p>
                       </div>
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {section.fields.map((field) => (
                         <div key={field.name}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label htmlFor={`zakat-${field.name}`} className="label">
                             {field.label}
                           </label>
                           <div className="relative">
@@ -372,6 +377,7 @@ const ZakatCalculator = () => {
                               </span>
                             </div>
                             <input
+                              id={`zakat-${field.name}`}
                               type="number"
                               step="0.01"
                               min="0"
@@ -387,9 +393,9 @@ const ZakatCalculator = () => {
                 ))}
 
                 {submitError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 flex items-start">
-                    <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm">{submitError}</span>
+                  <div className="alert-error" role="alert">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>{submitError}</span>
                   </div>
                 )}
 
@@ -397,16 +403,16 @@ const ZakatCalculator = () => {
                   <button
                     type="submit"
                     disabled={isCalculating}
-                    className="btn-primary flex-1 flex items-center justify-center"
+                    className="btn-primary flex-1 gap-2"
                   >
                     {isCalculating ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                         Calculating...
                       </>
                     ) : (
                       <>
-                        <Calculator className="w-5 h-5 mr-2" />
+                        <Calculator className="w-5 h-5" aria-hidden="true" />
                         Calculate Zakat
                       </>
                     )}
@@ -421,7 +427,7 @@ const ZakatCalculator = () => {
                       setSubmitError(null)
                       setShowResultModal(false)
                     }}
-                    className="btn-outline flex-1"
+                    className="btn-secondary flex-1"
                   >
                     Reset Calculator
                   </button>
@@ -434,10 +440,10 @@ const ZakatCalculator = () => {
           <div className="space-y-6">
             {/* What the total is being measured against — shown above the
                 result, so the threshold is never implicit. */}
-            <div className="card bg-primary-50 border-primary-200">
+            <div className="card">
               <div className="flex items-center mb-4">
-                <Scale className="w-6 h-6 text-primary-600 mr-3" aria-hidden="true" />
-                <h3 className="text-lg font-semibold text-gray-900">What your total is compared against</h3>
+                <Scale className="w-5 h-5 text-primary-600 mr-3" aria-hidden="true" />
+                <h2 className="text-lg font-semibold text-gray-900">What your total is compared against</h2>
               </div>
 
               {!nisabLoaded && (
@@ -481,12 +487,9 @@ const ZakatCalculator = () => {
                     </p>
                   )}
 
-                  <Link
-                    to="/nisab"
-                    className="text-primary-700 hover:text-primary-800 font-medium inline-flex items-center"
-                  >
+                  <Link to="/nisab" className="link inline-flex items-center">
                     How the nisab is worked out
-                    <ArrowRight className="ml-2 w-4 h-4" />
+                    <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
                   </Link>
                 </div>
               )}
@@ -494,256 +497,227 @@ const ZakatCalculator = () => {
 
             {/* Results */}
             {result && (
-              <div className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-200">
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Your Zakat Calculation</h3>
+              <div className="card-tinted" aria-live="polite">
+                <div className="mb-6">
+                  <h2 className="text-xl font-heading font-bold text-gray-900 mb-1">Your Zakat Calculation</h2>
                   <p className="text-gray-600 text-sm">Based on your provided information</p>
                 </div>
 
                 {/* Nisab status banner */}
                 {resultThreshold === null ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-start">
-                      <AlertCircle className="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm">
-                        <p className="font-semibold text-amber-900 mb-1">No threshold to compare against</p>
-                        <p className="text-amber-900">
-                          Your net zakatable wealth is {formatUSD(result.net_zakatable)}. We are not
-                          showing a threshold because no gold price was entered and we hold none we
-                          can vouch for — we will not invent one. The nisab is {goldGramsText} of
-                          gold, or {silverGramsText} of silver, at the market price on the day you
-                          work it out.
-                        </p>
-                      </div>
+                  <div className="alert-warning mb-4">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="font-semibold mb-1">No threshold to compare against</p>
+                      <p>
+                        Your net zakatable wealth is {formatUSD(result.net_zakatable)}. We are not
+                        showing a threshold because no gold price was entered and we hold none we
+                        can vouch for — we will not invent one. The nisab is {goldGramsText} of
+                        gold, or {silverGramsText} of silver, at the market price on the day you
+                        work it out.
+                      </p>
                     </div>
                   </div>
                 ) : !result.meets_nisab ? (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-start">
-                      <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm">
-                        <p className="font-semibold text-yellow-900 mb-1">Below Nisab — no Zakat is due</p>
-                        <p className="text-yellow-800">
-                          Your net zakatable wealth ({formatUSD(result.net_zakatable)}) is below the
-                          current Nisab threshold of {formatUSD(resultThreshold)}.
-                        </p>
-                      </div>
+                  <div className="alert-warning mb-4">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="font-semibold mb-1">Below Nisab — no Zakat is due</p>
+                      <p>
+                        Your net zakatable wealth ({formatUSD(result.net_zakatable)}) is below the
+                        current Nisab threshold of {formatUSD(resultThreshold)}.
+                      </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-start">
-                      <CheckCircle className="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm">
-                        <p className="font-semibold text-green-900 mb-1">Above Nisab — Zakat is due</p>
-                        <p className="text-green-800">
-                          Net zakatable: {formatUSD(result.net_zakatable)} • Nisab: {formatUSD(resultThreshold)}
-                        </p>
-                      </div>
+                  <div className="alert-success mb-4">
+                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="font-semibold mb-1">Above Nisab — Zakat is due</p>
+                      <p>
+                        Net zakatable: {formatUSD(result.net_zakatable)} • Nisab: {formatUSD(resultThreshold)}
+                      </p>
                     </div>
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center py-2 border-b border-primary-200">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center py-2 border-b border-primary-100">
                     <span className="text-gray-700">Wealth Zakat:</span>
                     <span className="font-semibold text-gray-900">{formatUSD(result.wealth)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-primary-200">
+                  <div className="flex justify-between items-center py-2 border-b border-primary-100">
                     <span className="text-gray-700">Gold Zakat:</span>
                     <span className="font-semibold text-gray-900">{formatUSD(result.gold)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-primary-200">
+                  <div className="flex justify-between items-center py-2 border-b border-primary-100">
                     <span className="text-gray-700">Silver Zakat:</span>
                     <span className="font-semibold text-gray-900">{formatUSD(result.silver)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-primary-200">
+                  <div className="flex justify-between items-center py-2 border-b border-primary-100">
                     <span className="text-gray-700">Business Zakat:</span>
                     <span className="font-semibold text-gray-900">{formatUSD(result.business_goods)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-primary-200">
-                    <span className="text-gray-700">Agriculture Zakat (5%):</span>
+                  {/* No rate in the label: the rate on produce is 5% or 10%
+                      depending on irrigation (see the FAQ). */}
+                  <div className="flex justify-between items-center py-2 border-b border-primary-100">
+                    <span className="text-gray-700">Agriculture Zakat:</span>
                     <span className="font-semibold text-gray-900">{formatUSD(result.agriculture)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-4 bg-primary-100 rounded-lg px-4 mt-4">
-                    <span className="text-lg font-bold text-gray-900">Total Zakat Due:</span>
-                    <span className="text-2xl font-bold text-primary-600">{formatUSD(result.total)}</span>
+                  <div className="flex justify-between items-center py-4 bg-white rounded-lg px-4 mt-4">
+                    <span className="text-base font-bold text-gray-900">Total Zakat Due:</span>
+                    <span className="text-2xl font-bold text-primary-700">{formatUSD(result.total)}</span>
                   </div>
                 </div>
 
-                {showDonateButton && (
+                {/* While the result dialog is open it carries the same link;
+                    one at a time, so there is never a hidden duplicate. */}
+                {showDonateButton && !showResultModal && (
                   <div className="mt-6">
                     <Link
                       to={`/donate?zakat_amount=${result.total.toFixed(2)}`}
-                      className="btn-primary w-full text-center flex items-center justify-center"
+                      className="btn-primary w-full gap-2"
                     >
                       Pay Zakat Now
-                      <ArrowRight className="ml-2 w-5 h-5" />
+                      <ArrowRight className="w-5 h-5" aria-hidden="true" />
                     </Link>
                   </div>
                 )}
               </div>
             )}
-
-            {/* Information */}
-            <div className="card">
-              <div className="flex items-center mb-4">
-                <Info className="w-6 h-6 text-primary-600 mr-3" />
-                <h3 className="text-lg font-semibold text-gray-900">About Zakat</h3>
-              </div>
-              <div className="space-y-4 text-sm text-gray-600">
-                <p>
-                  Zakat is one of the Five Pillars of Islam and represents 2.5% of your qualifying
-                  wealth that has been in your possession for a full lunar year.
-                </p>
-                <p>
-                  <strong>Nisab threshold:</strong> Zakat is due only once your net zakatable wealth
-                  reaches the nisab. This calculator measures against the gold threshold; the silver
-                  one is lower.
-                </p>
-              </div>
-
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <Link
-                  to="/zakat-education"
-                  className="text-primary-600 hover:text-primary-700 font-medium flex items-center"
-                >
-                  Learn More About Zakat
-                  <ArrowRight className="ml-2 w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Quick Tips */}
-            <div className="card bg-yellow-50 border-yellow-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">💡 Quick Tips</h3>
-              <ul className="space-y-2 text-sm text-gray-700">
-                <li>• Include all cash, savings, and investments</li>
-                <li>• Liabilities are deducted from your total</li>
-                <li>• Check the metal prices against a source you trust</li>
-                <li>• Business inventory counts as zakatable wealth</li>
-                <li>• Personal residence is typically not included</li>
-              </ul>
-            </div>
           </div>
         </div>
 
         {/* ------------------------------------------------------------------
             The content. Written to the editorial rules: it states what is
-            agreed, names what is not, and rules on nothing.
+            agreed, names what is not, and rules on nothing. Folded under the
+            tool; the text stays in the DOM (and in the FAQ schema).
            ------------------------------------------------------------------ */}
-        <div className="max-w-4xl mx-auto mt-12 sm:mt-16 space-y-6 sm:space-y-8">
-          <section className={CARD}>
-            <h2 className={HEADING}>What this calculator covers — and what it does not</h2>
-            <p className={PROSE}>
-              This works out zakat al-mal: the annual charge on wealth you have held for a full lunar
-              year. It takes cash, money owed to you, shares and funds, retirement savings, gold and
-              silver by weight, business stock, property bought to resell, agricultural produce and
-              livestock value, subtracts your liabilities, and applies the rate to what is left.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              It does not cover zakat al-fitr, the per-person amount due before the Eid prayer at the
-              end of Ramadan, and it does not apply the detailed livestock tables, which count animals
-              by head and species rather than by value. It also cannot know which school you follow, so
-              treat the number it gives as a starting point rather than a verdict.
-            </p>
-          </section>
+        <div className="max-w-4xl mt-12 sm:mt-16 space-y-8">
+          <section aria-labelledby="zakat-how-it-works" className="space-y-3">
+            <h2 id="zakat-how-it-works" className={HEADING}>How it works</h2>
 
-          <section className={CARD}>
-            <h2 className={HEADING}>The rule in plain language</h2>
-            <p className={PROSE}>
-              Zakat is due at 2.5% of qualifying wealth once two conditions are met. The first is time:
-              the wealth must have been yours for a full lunar year — a hawl, about 354 days, not 365.
-              The second is amount: it must sit at or above the nisab, the threshold defined by the
-              value of a set weight of gold or of silver.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              At or above the threshold, the 2.5% applies to the whole of that wealth, not only to the
-              part above the line. Below it, no zakat is due this year.
-            </p>
-          </section>
-
-          <section className={CARD}>
-            <h2 className={HEADING}>What counts, and what does not</h2>
-            <p className={PROSE}>
-              Zakatable wealth is broadly wealth that grows or is held as a store of value: cash,
-              savings, receivables, gold and silver in any form, shares, accessible retirement
-              balances, goods held for sale, and property bought to resell. What you hold for your own
-              use is not counted — your home, your car, your furniture, your clothes and the tools of
-              your trade.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              <strong>Debts are the point on which scholars differ.</strong> Many hold that debts
-              immediately due — this month&apos;s rent, an overdue bill — come off your
-              zakatable wealth before the rate is applied. Others hold that a long-term debt such as a
-              mortgage is not deducted in full, since setting a twenty-year liability against a single
-              year&apos;s wealth would remove almost everyone from zakat, and deduct only the
-              instalments falling due within the year. Both positions are held by serious scholars.
-              This page does not choose between them: the calculator subtracts whatever you enter in
-              the liabilities field, so that entry is yours to make.
-            </p>
-          </section>
-
-          <section className={CARD}>
-            <h2 className={HEADING}>The nisab this calculator uses</h2>
-            <p className={PROSE}>
-              The threshold your total is measured against is shown beside the result above, with the
-              date the price behind it was taken. We print a dollar figure only while that price is
-              recent enough for us to stand behind; when it is not, the price fields stay empty and
-              the method is shown instead.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              This calculator uses the gold threshold, at {goldGramsText}. The silver threshold,{' '}
-              {silverGramsText}, works out much lower, so it brings more people into zakat, and many
-              scholars prefer it for that reason. The{' '}
-              <Link to="/nisab" className="text-primary-700 underline hover:text-primary-800">
-                nisab page
-              </Link>{' '}
-              sets out both, along with the competing weight conventions, and carries the current
-              figures.
-            </p>
-          </section>
-
-          {/* A worked example, withheld whenever the page is withholding real
-              money. We do not show invented arithmetic on the same screen where
-              we have just declined to show a figure we could not vouch for. */}
-          {showFigure && (
-            <section className={CARD}>
-              <h2 className={HEADING}>A worked example</h2>
-              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
-                <p className="text-sm text-gray-600">
-                  Illustrative only. The round numbers below are invented to show the arithmetic, not
-                  market data. Use the dated threshold beside the result above.
-                </p>
-              </div>
+            <Disclosure
+              title="What this calculator covers — and what it does not"
+              summary="Zakat on wealth only, not zakat al-Fitr or livestock tables"
+            >
               <p className={PROSE}>
-                Suppose you hold $10,000 in savings that has been with you for a full lunar year and
-                owe $2,000 due immediately. On the view that immediately due debts are deducted, your
-                net zakatable wealth is $8,000. If the silver nisab works out at around $640 that day,
-                $8,000 is well above it, so zakat is due: 2.5% of $8,000 is $200.
+                This works out zakat al-mal: the annual charge on wealth you have held for a full lunar
+                year. It takes cash, money owed to you, shares and funds, retirement savings, gold and
+                silver by weight, business stock, property bought to resell, agricultural produce and
+                livestock value, subtracts your liabilities, and applies the rate to what is left.
               </p>
-              <p className={`${PROSE} mt-4`}>
-                On the other view of that $2,000 — that a long-term liability is not set against
-                a single year&apos;s wealth — the base would be $10,000 and the amount due $250. That
-                $50 gap is why it is worth asking someone qualified which treatment applies to you.
+              <p className={PROSE}>
+                It does not cover zakat al-fitr, the per-person amount due before the Eid prayer at the
+                end of Ramadan, and it does not apply the detailed livestock tables, which count animals
+                by head and species rather than by value. It also cannot know which school you follow, so
+                treat the number it gives as a starting point rather than a verdict.
               </p>
-            </section>
-          )}
+            </Disclosure>
 
-          <section className={CARD}>
-            <h2 className={HEADING}>Common questions</h2>
-            <div className="divide-y divide-gray-200">
-              {faqs.map((faq) => (
-                <div key={faq.question} className="py-5 first:pt-0 last:pb-0">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
-                  <p className={PROSE}>{faq.answer}</p>
+            <Disclosure title="The rule in plain language" summary="2.5%, after a lunar year above the nisab">
+              <p className={PROSE}>
+                Zakat is due at 2.5% of qualifying wealth once two conditions are met. The first is time:
+                the wealth must have been yours for a full lunar year — a hawl, about 354 days, not 365.
+                The second is amount: it must sit at or above the nisab, the threshold defined by the
+                value of a set weight of gold or of silver.
+              </p>
+              <p className={PROSE}>
+                At or above the threshold, the 2.5% applies to the whole of that wealth, not only to the
+                part above the line. Below it, no zakat is due this year.
+              </p>
+            </Disclosure>
+
+            <Disclosure
+              title="What counts, and what does not"
+              summary="Cash, gold, shares, business stock; not your home or car"
+            >
+              <p className={PROSE}>
+                Zakatable wealth is broadly wealth that grows or is held as a store of value: cash,
+                savings, receivables, gold and silver in any form, shares, accessible retirement
+                balances, goods held for sale, and property bought to resell. What you hold for your own
+                use is not counted — your home, your car, your furniture, your clothes and the tools of
+                your trade.
+              </p>
+              <p className={PROSE}>
+                <strong>Debts are the point on which scholars differ.</strong> Many hold that debts
+                immediately due — this month&apos;s rent, an overdue bill — come off your
+                zakatable wealth before the rate is applied. Others hold that a long-term debt such as a
+                mortgage is not deducted in full, since setting a twenty-year liability against a single
+                year&apos;s wealth would remove almost everyone from zakat, and deduct only the
+                instalments falling due within the year. Both positions are held by serious scholars.
+                This page does not choose between them: the calculator subtracts whatever you enter in
+                the liabilities field, so that entry is yours to make.
+              </p>
+            </Disclosure>
+
+            <Disclosure title="The nisab this calculator uses" summary="The gold threshold; the silver one is lower">
+              <p className={PROSE}>
+                The threshold your total is measured against is shown beside the result above, with the
+                date the price behind it was taken. We print a dollar figure only while that price is
+                recent enough for us to stand behind; when it is not, the price fields stay empty and
+                the method is shown instead.
+              </p>
+              <p className={PROSE}>
+                This calculator uses the gold threshold, at {goldGramsText}. The silver threshold,{' '}
+                {silverGramsText}, works out much lower, so it brings more people into zakat, and many
+                scholars prefer it for that reason. The{' '}
+                <Link to="/nisab" className="text-primary-700 underline hover:text-primary-800">
+                  nisab page
+                </Link>{' '}
+                sets out both, along with the competing weight conventions, and carries the current
+                figures.
+              </p>
+            </Disclosure>
+
+            {/* A worked example, withheld whenever the page is withholding real
+                money. We do not show invented arithmetic on the same screen where
+                we have just declined to show a figure we could not vouch for. It
+                is measured against the gold nisab, like the calculator. */}
+            {showFigure && (
+              <Disclosure title="A worked example" summary="$10,000 in savings, with $2,000 owed">
+                <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
+                  <p className="text-sm text-gray-600">
+                    Illustrative only. The round numbers below are invented to show the arithmetic, not
+                    market data. Use the dated threshold beside the result above.
+                  </p>
                 </div>
+                <p className={PROSE}>
+                  Suppose you hold $10,000 in savings that has been with you for a full lunar year and
+                  owe $2,000 due immediately. On the view that immediately due debts are deducted, your
+                  net zakatable wealth is $8,000. If that is above the nisab that day, zakat is due: 2.5%
+                  of $8,000 is $200.
+                </p>
+                <p className={PROSE}>
+                  On the other view of that $2,000 — that a long-term liability is not set against
+                  a single year&apos;s wealth — the base would be $10,000 and the amount due $250. That
+                  $50 gap is why it is worth asking someone qualified which treatment applies to you.
+                </p>
+              </Disclosure>
+            )}
+
+            <Link to="/zakat-education" className="link inline-flex items-center pt-1">
+              Zakat explained, from the beginning
+              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+            </Link>
+          </section>
+
+          {/* FAQ — the same text that goes into the FAQPage schema, one closed
+              item per question. */}
+          <section aria-labelledby="zakat-faq">
+            <h2 id="zakat-faq" className={HEADING}>Common questions</h2>
+            <div className="card py-1 sm:py-1 divide-y divide-gray-200">
+              {faqs.map((faq) => (
+                <Disclosure key={faq.question} variant="plain" title={faq.question}>
+                  <p className={PROSE}>{faq.answer}</p>
+                </Disclosure>
               ))}
             </div>
           </section>
 
-          <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 sm:p-8">
+          {/* The disclaimer — stays open */}
+          <section className="alert-warning block p-6 sm:p-8 text-base">
             <p className="text-amber-900 leading-relaxed">
               This page is general guidance, not a religious ruling. Zakat depends on your
               circumstances — for anything specific to your situation, please ask a qualified
@@ -756,18 +730,22 @@ const ZakatCalculator = () => {
       {/* Zakat Result Modal */}
       {showResultModal && result && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
           onClick={() => setShowResultModal(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="zakat-result-title"
+            className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
             <div className="flex justify-end p-4 pb-0">
               <button
+                type="button"
                 onClick={() => setShowResultModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-1 -m-1 rounded text-gray-500 hover:text-gray-700"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -780,10 +758,10 @@ const ZakatCalculator = () => {
               {resultThreshold === null ? (
                 <>
                   <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-100 rounded-full mb-4">
-                      <Scale className="w-8 h-8 text-amber-600" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-full mb-4">
+                      <Scale className="w-6 h-6 text-amber-700" aria-hidden="true" />
                     </div>
-                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                    <h2 id="zakat-result-title" className="text-2xl font-heading font-bold text-gray-900 mb-2">
                       We cannot tell you yet
                     </h2>
                     <p className="text-sm text-gray-600">
@@ -791,12 +769,12 @@ const ZakatCalculator = () => {
                     </p>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm">
+                  <div className="alert-warning block mb-6">
                     <div className="flex justify-between mb-2">
-                      <span className="text-amber-900 font-medium">Your net zakatable:</span>
-                      <span className="text-amber-900 font-semibold">{formatUSD(result.net_zakatable)}</span>
+                      <span className="font-medium">Your net zakatable:</span>
+                      <span className="font-semibold">{formatUSD(result.net_zakatable)}</span>
                     </div>
-                    <p className="text-amber-900 mt-3">
+                    <p className="mt-3">
                       No gold price was entered, and we hold none recent enough to vouch for. Rather
                       than substitute a price of our own and hand you a confident figure built on it,
                       we are showing you none. Enter today’s gold price per gram above and the
@@ -811,39 +789,41 @@ const ZakatCalculator = () => {
 
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
+                      type="button"
                       onClick={() => setShowResultModal(false)}
-                      className="btn-primary flex-1 flex items-center justify-center py-3"
+                      className="btn-primary flex-1 gap-2"
                     >
-                      <RotateCcw className="w-5 h-5 mr-2" />
+                      <RotateCcw className="w-5 h-5" aria-hidden="true" />
                       Add a price and recalculate
                     </button>
                     <Link
                       to="/nisab"
                       onClick={() => setShowResultModal(false)}
-                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                      className="btn-secondary flex-1 gap-2"
                     >
                       How the nisab is worked out
-                      <ArrowRight className="w-5 h-5 ml-2" />
+                      <ArrowRight className="w-5 h-5" aria-hidden="true" />
                     </Link>
                   </div>
                 </>
               ) : result.meets_nisab && result.total >= 1 ? (
                 <>
-                  {/* Header — celebrates the calculation */}
                   <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 to-blue-600 rounded-full mb-4 shadow-lg">
-                      <CheckCircle className="w-8 h-8 text-white" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 bg-primary-50 rounded-full mb-4">
+                      <CheckCircle className="w-6 h-6 text-primary-700" aria-hidden="true" />
                     </div>
-                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                    <h2 id="zakat-result-title" className="text-2xl font-heading font-bold text-gray-900 mb-2">
                       Your Zakat Calculation is Ready
                     </h2>
                     <p className="text-sm text-gray-600">Here is the Zakat amount you owe</p>
                   </div>
 
-                  {/* Big amount */}
-                  <div className="bg-gradient-to-br from-primary-50 via-blue-50 to-primary-50 border-2 border-primary-200 rounded-xl p-6 mb-6 text-center">
+                  {/* Big amount. The label is deliberately not "Total Zakat
+                      Due": that phrase belongs to the result card behind the
+                      dialog, and the two must not both match one query. */}
+                  <div className="card-tinted mb-6 text-center">
                     <p className="text-sm font-medium text-primary-700 mb-1 uppercase tracking-wide">
-                      Total Zakat Due
+                      Zakat due
                     </p>
                     <p className="text-5xl font-bold text-primary-700 mb-1">
                       {formatUSD(result.total)}
@@ -882,7 +862,7 @@ const ZakatCalculator = () => {
                       )}
                       {result.agriculture > 0 && (
                         <>
-                          <span>Agriculture Zakat (5%)</span>
+                          <span>Agriculture Zakat</span>
                           <span className="text-right font-medium">{formatUSD(result.agriculture)}</span>
                         </>
                       )}
@@ -891,37 +871,36 @@ const ZakatCalculator = () => {
 
                   {/* Action buttons */}
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      onClick={() => {
-                        setShowResultModal(false)
-                        navigate(`/donate?zakat_amount=${result.total.toFixed(2)}`)
-                      }}
-                      className="btn-primary flex-1 flex items-center justify-center py-3"
-                    >
-                      <ArrowRight className="w-5 h-5 mr-2" />
-                      Proceed with Donation
-                    </button>
-                    <button
+                    <Link
+                      to={`/donate?zakat_amount=${result.total.toFixed(2)}`}
                       onClick={() => setShowResultModal(false)}
-                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                      className="btn-primary flex-1 gap-2"
                     >
-                      <RotateCcw className="w-5 h-5 mr-2" />
+                      Pay Zakat Now
+                      <ArrowRight className="w-5 h-5" aria-hidden="true" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowResultModal(false)}
+                      className="btn-secondary flex-1 gap-2"
+                    >
+                      <RotateCcw className="w-5 h-5" aria-hidden="true" />
                       Recalculate
                     </button>
                   </div>
 
                   <p className="text-center text-xs text-gray-500 mt-4">
-                    "Proceed with Donation" will pre-fill the donation page with your Zakat amount.
+                    The donation form opens with this amount filled in.
                   </p>
                 </>
               ) : (
                 <>
                   {/* Below-Nisab state */}
                   <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-4">
-                      <AlertCircle className="w-8 h-8 text-yellow-600" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-full mb-4">
+                      <AlertCircle className="w-6 h-6 text-amber-700" aria-hidden="true" />
                     </div>
-                    <h2 className="text-2xl font-heading font-bold text-gray-900 mb-2">
+                    <h2 id="zakat-result-title" className="text-2xl font-heading font-bold text-gray-900 mb-2">
                       No Zakat Due
                     </h2>
                     <p className="text-sm text-gray-600">
@@ -929,14 +908,14 @@ const ZakatCalculator = () => {
                     </p>
                   </div>
 
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-sm">
+                  <div className="alert-warning block mb-6">
                     <div className="flex justify-between mb-2">
-                      <span className="text-yellow-900 font-medium">Your net zakatable:</span>
-                      <span className="text-yellow-900 font-semibold">{formatUSD(result.net_zakatable)}</span>
+                      <span className="font-medium">Your net zakatable:</span>
+                      <span className="font-semibold">{formatUSD(result.net_zakatable)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-yellow-900 font-medium">Nisab threshold:</span>
-                      <span className="text-yellow-900 font-semibold">{formatUSD(resultThreshold)}</span>
+                      <span className="font-medium">Nisab threshold:</span>
+                      <span className="font-semibold">{formatUSD(resultThreshold)}</span>
                     </div>
                   </div>
 
@@ -947,20 +926,22 @@ const ZakatCalculator = () => {
 
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
+                      type="button"
                       onClick={() => {
                         setShowResultModal(false)
                         navigate('/donate')
                       }}
-                      className="btn-primary flex-1 flex items-center justify-center py-3"
+                      className="btn-primary flex-1 gap-2"
                     >
-                      <ArrowRight className="w-5 h-5 mr-2" />
+                      <ArrowRight className="w-5 h-5" aria-hidden="true" />
                       Make a Sadaqa Donation
                     </button>
                     <button
+                      type="button"
                       onClick={() => setShowResultModal(false)}
-                      className="btn-outline flex-1 flex items-center justify-center py-3"
+                      className="btn-secondary flex-1 gap-2"
                     >
-                      <RotateCcw className="w-5 h-5 mr-2" />
+                      <RotateCcw className="w-5 h-5" aria-hidden="true" />
                       Recalculate
                     </button>
                   </div>

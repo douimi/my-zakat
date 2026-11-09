@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useSearchParams } from 'react-router-dom'
 import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js'
-import { Heart, Shield, CheckCircle, CreditCard, AlertCircle } from 'lucide-react'
+import { ShieldCheck, CheckCircle, AlertCircle } from 'lucide-react'
 import { donationsAPI } from '../utils/api'
 import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
 
 interface DonationForm {
   name: string
@@ -221,35 +222,26 @@ const Donate = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gray-50">
       <SEOHead
         title="Donate Zakat & Sadaqa Online"
         description="Make a secure Zakat or Sadaqa donation online. Support families in need with one-time or recurring donations through our trusted, PCI-compliant payment platform."
         canonicalPath="/donate"
       />
-      <div className="section-container">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-6">
-            <Heart className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-4">
-            Make a Donation
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Your generosity creates real change. Every donation, no matter the size,
-            makes a meaningful difference in someone's life.
-          </p>
-        </div>
+      <PageHeader
+        title="Make a Donation"
+        description="Choose an amount and a cause. Payment is handled securely by Stripe."
+      />
 
+      <div className="section-container py-8 sm:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Donation Form */}
           <div className="lg:col-span-2">
-            <div className="card">
+            <div className="card sm:p-8">
               <form onSubmit={handleSubmit(onSubmit, onFormError)} className="space-y-6">
                 {/* Amount Selection */}
                 <div>
-                  <label className="block text-lg font-semibold text-gray-900 mb-4">
+                  <label htmlFor="donate-amount" className="block text-lg font-semibold text-gray-900 mb-3">
                     Donation Amount
                   </label>
 
@@ -260,14 +252,15 @@ const Donate = () => {
                         key={amount}
                         type="button"
                         data-testid={`donate-amount-${amount}`}
+                        aria-pressed={selectedAmount === amount}
                         onClick={() => {
                           setSelectedAmount(amount)
                           setValue('amount', amount, { shouldValidate: true })
                         }}
-                        className={`py-3 px-4 rounded-lg border-2 font-semibold transition-all ${
+                        className={`min-h-[44px] py-2.5 px-3 rounded-lg border font-semibold transition-colors ${
                           selectedAmount === amount
-                            ? 'border-primary-600 bg-primary-50 text-primary-600'
-                            : 'border-gray-300 hover:border-primary-300 text-gray-700'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-primary-300'
                         }`}
                       >
                         ${amount}
@@ -281,6 +274,7 @@ const Donate = () => {
                       <span className="text-gray-500 text-lg">$</span>
                     </div>
                     <input
+                      id="donate-amount"
                       type="number"
                       step="0.01"
                       min="1"
@@ -295,8 +289,8 @@ const Donate = () => {
                     />
                   </div>
                   {errors.amount && (
-                    <p className="mt-2 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-1" />
+                    <p className="field-error">
+                      <AlertCircle className="w-4 h-4" aria-hidden="true" />
                       {errors.amount.message || 'Please enter a valid amount'}
                     </p>
                   )}
@@ -304,10 +298,15 @@ const Donate = () => {
 
                 {/* Purpose */}
                 <div>
-                  <label className="block text-lg font-semibold text-gray-900 mb-2">
+                  <label htmlFor="donate-purpose" className="block text-lg font-semibold text-gray-900 mb-2">
                     Purpose
                   </label>
-                  <select data-testid="donate-purpose" {...register('purpose')} className="input-field">
+                  <select
+                    id="donate-purpose"
+                    data-testid="donate-purpose"
+                    {...register('purpose')}
+                    className="input-field"
+                  >
                     {purposes.map((purpose) => (
                       <option key={purpose} value={purpose}>
                         {purpose}
@@ -317,13 +316,16 @@ const Donate = () => {
                 </div>
 
                 {/* Frequency */}
-                <div>
-                  <label className="block text-lg font-semibold text-gray-900 mb-2">
+                <fieldset>
+                  <legend className="block text-lg font-semibold text-gray-900 mb-2">
                     Frequency
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  </legend>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {['One-Time', 'Monthly', 'Annually'].map((freq) => (
-                      <label key={freq} className="flex items-center">
+                      <label
+                        key={freq}
+                        className="flex items-center min-h-[44px] px-4 rounded-lg border border-gray-300 bg-white cursor-pointer hover:border-primary-300 has-[:checked]:border-primary-600 has-[:checked]:bg-primary-50"
+                      >
                         <input
                           type="radio"
                           value={freq}
@@ -335,13 +337,13 @@ const Donate = () => {
                       </label>
                     ))}
                   </div>
-                </div>
+                </fieldset>
 
                 {/* Payment Schedule - Show only for recurring payments */}
                 {(watch('frequency') === 'Monthly' || watch('frequency') === 'Annually') && (
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h4 className="text-lg font-semibold text-blue-900 mb-3">Recurring Payment</h4>
-                    <p className="text-sm text-blue-800">
+                  <div className="alert-info block">
+                    <h4 className="font-semibold mb-1">Recurring Payment</h4>
+                    <p>
                       <strong>Payment Schedule:</strong> Your first payment will be processed immediately.
                       Future payments will occur {watch('frequency') === 'Monthly' ? 'monthly' : 'annually'} from today's date.
                     </p>
@@ -351,30 +353,34 @@ const Donate = () => {
                 {/* Personal Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="donate-name" className="label">
                       Full Name *
                     </label>
                     <input
+                      id="donate-name"
                       type="text"
                       data-testid="donate-name"
+                      autoComplete="name"
                       {...register('name', { required: 'Please enter your full name' })}
                       className={`input-field ${errors.name ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       placeholder="Enter your full name"
                     />
                     {errors.name && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-1" />
+                      <p className="field-error">
+                        <AlertCircle className="w-4 h-4" aria-hidden="true" />
                         {errors.name.message}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="donate-email" className="label">
                       Email Address *
                     </label>
                     <input
+                      id="donate-email"
                       type="email"
                       data-testid="donate-email"
+                      autoComplete="email"
                       {...register('email', {
                         required: 'Please enter your email address',
                         pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Please enter a valid email address' }
@@ -383,8 +389,8 @@ const Donate = () => {
                       placeholder="Enter your email"
                     />
                     {errors.email && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-1" />
+                      <p className="field-error">
+                        <AlertCircle className="w-4 h-4" aria-hidden="true" />
                         {errors.email.message}
                       </p>
                     )}
@@ -396,21 +402,17 @@ const Donate = () => {
                   type="submit"
                   data-testid="donate-submit"
                   disabled={isProcessing}
-                  className="btn-primary w-full text-lg py-4 flex items-center justify-center"
+                  className="btn-primary btn-lg w-full gap-2"
                 >
                   {isProcessing ? (
                     <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       Processing...
                     </>
                   ) : (
-                    <>
-                      <CreditCard className="w-5 h-5 mr-2" />
-                      {watch('frequency') === 'Monthly' || watch('frequency') === 'Annually'
-                        ? 'Set up Recurring Donation'
-                        : 'Proceed to Payment'
-                      }
-                    </>
+                    watch('frequency') === 'Monthly' || watch('frequency') === 'Annually'
+                      ? 'Set up Recurring Donation'
+                      : 'Proceed to Payment'
                   )}
                 </button>
               </form>
@@ -421,70 +423,65 @@ const Donate = () => {
           <div className="space-y-6">
             {/* Impact Preview */}
             {watchedAmount > 0 && (
-              <div className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-200">
+              <div className="card-tinted">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Impact</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-700">Meals provided:</span>
-                    <span className="font-semibold">{Math.floor(watchedAmount / 5)}</span>
+                    <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 5)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-700">Families helped:</span>
-                    <span className="font-semibold">{Math.floor(watchedAmount / 100)}</span>
+                    <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 100)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-700">Children supported:</span>
-                    <span className="font-semibold">{Math.floor(watchedAmount / 50)}</span>
+                    <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 50)}</span>
                   </div>
                 </div>
+                <p className="mt-4 text-xs text-gray-600">
+                  Rough estimates: $5 a meal, $50 a child, $100 a family.
+                </p>
               </div>
             )}
 
-            {/* Security & Trust */}
+            {/* Security & Trust. Only claims we can stand behind: no
+                "100% transparent usage", and the receipt is an email receipt. */}
             <div className="card">
-              <div className="flex items-center mb-4">
-                <Shield className="w-6 h-6 text-green-600 mr-3" />
-                <h3 className="text-lg font-semibold text-gray-900">Secure & Trusted</h3>
+              <div className="flex items-center mb-3">
+                <ShieldCheck className="w-5 h-5 text-accent-700 mr-2" aria-hidden="true" />
+                <h3 className="text-base font-semibold text-gray-900">Secure & Trusted</h3>
               </div>
-              <div className="space-y-3 text-sm text-gray-600">
-                <div className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                  <span>256-bit SSL encryption</span>
-                </div>
-                <div className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                  <span>PCI DSS compliant</span>
-                </div>
-                <div className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                  <span>100% transparent usage</span>
-                </div>
-                <div className="flex items-center">
-                  <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                  <span>Instant tax receipt</span>
-                </div>
-              </div>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li className="flex items-center">
+                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  256-bit SSL encryption
+                </li>
+                <li className="flex items-center">
+                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  PCI DSS compliant
+                </li>
+                <li className="flex items-center">
+                  <CheckCircle className="w-4 h-4 text-accent-600 mr-2 shrink-0" aria-hidden="true" />
+                  Receipt by email
+                </li>
+              </ul>
             </div>
 
             {/* Recent Donations */}
             {recentDonations.length > 0 && (
               <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Donations</h3>
-                <div className="space-y-3 text-sm">
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Donations</h3>
+                <ul className="space-y-2 text-sm">
                   {recentDonations.map((donation, index) => (
-                    <div key={index} className="flex justify-between items-center">
+                    <li key={index} className="flex justify-between items-center">
                       <span className="text-gray-600">{donation.name}</span>
-                      <span className="font-semibold text-green-600">
-                        ${donation.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      <span className="font-semibold text-gray-900">
+                        ${donation.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </span>
-                    </div>
+                    </li>
                   ))}
-                  <div className="text-center pt-3 border-t border-gray-200">
-                    <span className="text-primary-600 font-medium">
-                      Be part of something bigger — every gift changes a life 💚
-                    </span>
-                  </div>
-                </div>
+                </ul>
               </div>
             )}
           </div>

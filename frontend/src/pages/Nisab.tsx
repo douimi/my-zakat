@@ -10,8 +10,10 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Scale, Calculator, Coins, Wallet, Wheat, Info } from 'lucide-react'
+import { Calculator, Coins, Wallet, Wheat, Info } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
 import {
   fetchNisab,
   hasUsableFigure,
@@ -21,7 +23,7 @@ import {
 } from '../utils/nisabApi'
 import { currentYear, getBreadcrumbJsonLd, getFaqJsonLd } from '../utils/seo'
 
-const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
+const CARD = 'card sm:p-8'
 const HEADING = 'text-2xl font-heading font-bold text-gray-900 mb-4'
 const PROSE = 'text-gray-700 leading-relaxed'
 
@@ -132,7 +134,7 @@ const Nisab = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 sm:py-12">
+    <div className="min-h-screen bg-gray-50">
       <SEOHead
         title={`Nisab ${year} — Current Gold & Silver Threshold for Zakat`}
         description="The nisab is the minimum wealth at which zakat becomes due. See the current gold and silver thresholds in USD, the date they were taken, and how they are worked out."
@@ -140,27 +142,16 @@ const Nisab = () => {
         jsonLd={jsonLd}
       />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        {/* Header */}
-        <div className="text-center mb-8 sm:mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-6">
-            <Scale className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-4">
-            Nisab: the threshold at which zakat becomes due
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
-            The nisab is defined as the value of a fixed weight of gold or of silver, so it has no
-            fixed dollar value — it moves with the metal markets.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Zakat guide"
+        title="Nisab: the threshold at which zakat becomes due"
+        description="The nisab is defined as the value of a fixed weight of gold or of silver, so it has no fixed dollar value — it moves with the metal markets."
+      />
 
-        <div className="space-y-6 sm:space-y-8">
+      <div className="section-container py-8 sm:py-10">
+        <div className="max-w-4xl space-y-6 sm:space-y-8">
           {/* 1. The figure, first */}
-          <section
-            className="bg-primary-50 rounded-xl shadow-sm border border-primary-200 p-6 sm:p-8"
-            aria-labelledby="current-threshold"
-          >
+          <section className="card-tinted sm:p-8" aria-labelledby="current-threshold">
             <h2 id="current-threshold" className="text-xl font-heading font-bold text-gray-900 mb-6">
               The current threshold
             </h2>
@@ -227,7 +218,8 @@ const Nisab = () => {
             )}
           </section>
 
-          {/* 2. What the nisab is */}
+          {/* 2. What the nisab is. Its second paragraph repeated the header
+              word for word, so it went. */}
           <section className={CARD}>
             <h2 className={HEADING}>What the nisab is</h2>
             <p className={PROSE}>
@@ -235,82 +227,76 @@ const Nisab = () => {
               zakat becomes due on it. Below the nisab, no zakat is owed. At or above it, zakat is
               due at 2.5% of the qualifying wealth.
             </p>
-            <p className={`${PROSE} mt-4`}>
-              The threshold is not a fixed sum of money. It is defined as the value of a fixed weight
-              of gold or of silver, so it moves with the metal markets.
-            </p>
           </section>
 
-          {/* 3. How it is worked out */}
-          <section className={CARD}>
-            <h2 className={HEADING}>How it is worked out</h2>
-            <p className={PROSE}>
-              We use {goldGramsWord} of gold and {silverGramsWord} of silver — the same threshold
-              our zakat calculator measures against. Multiply the weight by today’s price per gram
-              and you have the threshold in your own currency.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              These weights are not the only ones in circulation. They are the Hanafi conversion of
-              20 mithqal of gold and 200 dirhams of silver; another convention in common use rounds
-              the same measures to 85 grams and 595 grams respectively. The difference is small in
-              practice, but it is real, and a site that showed one figure without mentioning the
-              other would be hiding a genuine disagreement.
-            </p>
-          </section>
-
-          {/* 4. Gold or silver? */}
-          <section className={CARD}>
-            <h2 className={HEADING}>Gold or silver?</h2>
-            <p className={PROSE}>
-              Scholars differ on which threshold to use. The silver nisab is far lower, so it brings
-              more people into zakat and more wealth to those entitled to it; many scholars prefer it
-              for that reason. Others hold that gold is the sounder benchmark today, on the grounds
-              that silver’s value relative to everyday goods has fallen a long way since the two
-              thresholds were set as equivalents.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              Some prefer the silver threshold for that reason: it is the lower of the two, so it
-              errs towards paying zakat rather than withholding it. If you follow a particular school
-              or teacher, follow their position.
-            </p>
-          </section>
-
-          {/* 5. A worked example — withheld whenever the page is withholding
-              dollar figures, so the page never mixes made-up money with a
-              missing real one. */}
-          {showFigure && (
-            <section className={CARD}>
-              <h2 className={HEADING}>A worked example</h2>
-              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
-                <p className="text-sm text-gray-600">
-                  Illustrative only. The round numbers below are invented to show the arithmetic —
-                  they are not market data. Use the dated figures at the top of this page.
-                </p>
-              </div>
+          {/* 3-5. The method, the gold-or-silver question and the worked
+              example, folded until asked for. The text stays in the DOM.
+              Summaries must not repeat the pinned sentences ("scholars
+              differ", "85 g of gold", "grams of gold"): tests expect one match. */}
+          <div className="space-y-3">
+            <Disclosure
+              title="How it is worked out"
+              summary="The weights behind the figure, and the other convention in use"
+            >
               <p className={PROSE}>
-                Suppose the silver nisab works out at $640 and you hold $4,000 in savings that you
-                have had for a full lunar year. $4,000 is above $640, so zakat is due: 2.5% of $4,000
-                is $100.
+                We use {goldGramsWord} of gold and {silverGramsWord} of silver — the same threshold
+                our zakat calculator measures against. Multiply the weight by today’s price per gram
+                and you have the threshold in your own currency.
               </p>
-            </section>
-          )}
+              <p className={PROSE}>
+                These weights are the Hanafi conversion of 20 mithqal of gold and 200 dirhams of
+                silver. Another common convention rounds the same measures to 85 grams and 595 grams.
+                The difference is small, but it is real.
+              </p>
+            </Disclosure>
 
-          {/* 6. FAQ — the same text that goes into the FAQPage schema */}
-          <section className={CARD}>
-            <h2 className={HEADING}>Common questions</h2>
-            <div className="divide-y divide-gray-200">
-              {faqs.map((faq) => (
-                <div key={faq.question} className="py-5 first:pt-0 last:pb-0">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
-                  <p className={PROSE}>{faq.answer}</p>
+            <Disclosure title="Gold or silver?" summary="The silver threshold is the lower one; follow your school">
+              <p className={PROSE}>
+                Scholars differ on which threshold to use. The silver nisab is far lower, so it brings
+                more people into zakat and more wealth to those entitled to it; many scholars prefer it
+                for that reason. Others hold that gold is the sounder benchmark today, on the grounds
+                that silver’s value relative to everyday goods has fallen a long way since the two
+                thresholds were set as equivalents.
+              </p>
+              <p className={PROSE}>If you follow a particular school or teacher, follow their position.</p>
+            </Disclosure>
+
+            {/* A worked example — withheld whenever the page is withholding
+                dollar figures, so the page never mixes made-up money with a
+                missing real one. */}
+            {showFigure && (
+              <Disclosure title="A worked example" summary="$4,000 in savings, held for a lunar year">
+                <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
+                  <p className="text-sm text-gray-600">
+                    Illustrative only. The round numbers below are invented to show the arithmetic —
+                    they are not market data. Use the dated figures at the top of this page.
+                  </p>
                 </div>
+                <p className={PROSE}>
+                  Suppose the silver nisab works out at $640 and you hold $4,000 in savings that you
+                  have had for a full lunar year. $4,000 is above $640, so zakat is due: 2.5% of $4,000
+                  is $100.
+                </p>
+              </Disclosure>
+            )}
+          </div>
+
+          {/* 6. FAQ — the same text that goes into the FAQPage schema, one
+              closed item per question. */}
+          <section aria-labelledby="nisab-faq">
+            <h2 id="nisab-faq" className={HEADING}>Common questions</h2>
+            <div className="card py-1 sm:py-1 divide-y divide-gray-200">
+              {faqs.map((faq) => (
+                <Disclosure key={faq.question} variant="plain" title={faq.question}>
+                  <p className={PROSE}>{faq.answer}</p>
+                </Disclosure>
               ))}
             </div>
           </section>
 
-          {/* 7. The disclaimer */}
-          <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 sm:p-8">
+          {/* 7. The disclaimer — stays open */}
+          <section className="alert-warning block p-6 sm:p-8 text-base">
             <p className="text-amber-900 leading-relaxed">
               This page is general guidance, not a religious ruling. Zakat depends on your
               circumstances — for anything specific to your situation, please ask a qualified

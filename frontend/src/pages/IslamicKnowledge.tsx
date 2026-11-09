@@ -1,61 +1,73 @@
-import { BookOpen, Heart } from 'lucide-react'
+/**
+ * /islamic-knowledge — kept as a route, but no longer a "knowledge base".
+ *
+ * It used to show four unlinked cards promising content that does not exist.
+ * It now points to the guides we actually publish. The route stays because it
+ * is linked from outside; dropping it from the sitemap needs the owner's call.
+ */
+import { Link } from 'react-router-dom'
+import { ArrowRight } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+
+const GUIDES = [
+  {
+    path: '/zakat-education',
+    name: 'Zakat basics',
+    blurb: 'What zakat is, who owes it, on what, and who receives it.',
+  },
+  {
+    path: '/nisab',
+    name: 'Nisab today',
+    blurb: 'The current threshold at which zakat becomes due, and how it is worked out.',
+  },
+  {
+    path: '/zakat-on-gold',
+    name: 'Zakat on gold',
+    blurb: 'Work out what is due on jewellery and bullion from its weight and purity.',
+  },
+  {
+    path: '/zakat-al-fitr-calculator',
+    name: 'Zakat al-Fitr',
+    blurb: 'The per-person charity due before the Eid prayer at the end of Ramadan.',
+  },
+  {
+    path: '/kaffarah-calculator',
+    name: 'Kaffarah',
+    blurb: 'Expiation for a deliberately broken fast or oath, costed by the number of days.',
+  },
+]
 
 const IslamicKnowledge = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-white">
       <SEOHead
         title="Islamic Knowledge"
         description="Explore Islamic educational resources from MyZakat. Learn about Islamic principles, charitable giving, and spiritual growth through our curated content."
         canonicalPath="/islamic-knowledge"
       />
-      <div className="section-container">
-        <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
-          <div className="flex items-center mb-8">
-            <BookOpen className="w-10 h-10 text-primary-600 mr-4" />
-            <h1 className="text-4xl font-heading font-bold text-gray-900">Islamic Knowledge Base</h1>
-          </div>
-          
-          <div className="prose prose-lg max-w-none">
-            <p className="text-xl text-gray-600 mb-6">
-              Explore comprehensive Islamic knowledge and guidance to deepen your understanding of faith and practice.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-              <div className="card">
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">Foundations of Faith</h3>
-                <p className="text-gray-600">
-                  Learn about the fundamental principles of Islam, including the Five Pillars, articles of faith, and core beliefs.
-                </p>
-              </div>
-              
-              <div className="card">
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">Worship & Rituals</h3>
-                <p className="text-gray-600">
-                  Understand the proper methods of prayer, fasting, Hajj, Umrah, and other acts of worship in Islam.
-                </p>
-              </div>
-              
-              <div className="card">
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">Islamic Ethics</h3>
-                <p className="text-gray-600">
-                  Discover the moral and ethical teachings of Islam, including kindness, justice, and compassion.
-                </p>
-              </div>
-              
-              <div className="card">
-                <h3 className="text-2xl font-semibold text-gray-900 mb-4">Quran & Hadith</h3>
-                <p className="text-gray-600">
-                  Access resources for studying the Quran and authentic Hadith collections with proper context and interpretation.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <PageHeader title="Guides to giving" description="Short, sourced guides to the giving we handle." />
+
+      <div className="section-container py-10 sm:py-12">
+        <ul className="max-w-3xl divide-y divide-gray-200 rounded-xl border border-gray-200">
+          {GUIDES.map((guide) => (
+            <li key={guide.path}>
+              <Link
+                to={guide.path}
+                className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
+              >
+                <span>
+                  <span className="block font-semibold text-gray-900">{guide.name}</span>
+                  <span className="block text-sm text-gray-600 mt-1">{guide.blurb}</span>
+                </span>
+                <ArrowRight className="w-5 h-5 text-primary-600 shrink-0 mt-0.5" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   )
 }
 
 export default IslamicKnowledge
-

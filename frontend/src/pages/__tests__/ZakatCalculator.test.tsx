@@ -123,6 +123,29 @@ describe('Zakat calculator page', () => {
     expect(screen.queryByText(/No Zakat Due/i)).not.toBeInTheDocument()
   })
 
+  it('offers exactly one way to pay when zakat is due', async () => {
+    // e2e (donation-flow.spec.ts) looks up getByText(/total zakat/i) and
+    // getByRole('link', /pay.*zakat/) in strict mode. The result card and the
+    // result dialog must not both answer either query, and the one link must
+    // carry the amount through to /donate.
+    const user = userEvent.setup()
+    vi.mocked(fetchNisab).mockResolvedValue(freshNisab())
+    vi.mocked(donationsAPI.calculateZakat).mockResolvedValue({
+      wealth: 250, gold: 0, silver: 0, business_goods: 0, agriculture: 0, total: 250,
+      total_assets: 10000, net_zakatable: 10000,
+      nisab_threshold: 8321.1, meets_nisab: true,
+    })
+    renderPage()
+    await screen.findByDisplayValue('95.12')
+
+    await user.click(screen.getByRole('button', { name: /calculate/i }))
+
+    expect(await screen.findAllByText(/total zakat/i)).toHaveLength(1)
+    const payLinks = screen.getAllByRole('link', { name: /pay.*zakat|donate.*zakat/i })
+    expect(payLinks).toHaveLength(1)
+    expect(payLinks[0]).toHaveAttribute('href', '/donate?zakat_amount=250.00')
+  })
+
   it('titles itself with the current year', async () => {
     vi.mocked(fetchNisab).mockResolvedValue(freshNisab())
     renderPage()

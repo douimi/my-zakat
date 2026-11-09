@@ -41,43 +41,39 @@ const Unsubscribe = () => {
   }, [searchParams])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white py-16">
+    <div className="min-h-[70vh] bg-gray-50 py-12 sm:py-16">
       <SEOHead title="Unsubscribe" description="Unsubscribe from MyZakat emails." canonicalPath="/unsubscribe" />
       <div className="section-container">
-        <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
+        <div className="card sm:p-8 max-w-md mx-auto text-center" aria-live="polite">
           {status === 'pending' && (
             <>
-              <Loader2 className="w-12 h-12 mx-auto text-primary-600 animate-spin mb-4" />
+              <Loader2 className="w-10 h-10 mx-auto text-primary-600 animate-spin mb-4" aria-hidden="true" />
               <h1 className="text-xl font-heading font-bold text-gray-900">Processing your request…</h1>
             </>
           )}
           {status === 'success' && (
             <>
-              <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-9 h-9 text-green-600" />
-              </div>
+              <CheckCircle2 className="w-10 h-10 mx-auto text-accent-600 mb-4" aria-hidden="true" />
               <h1 className="text-2xl font-heading font-bold text-gray-900 mb-3">You're unsubscribed</h1>
               {email && <p className="text-sm text-gray-500 mb-2">{email}</p>}
               <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
-              <p className="text-xs text-gray-500 mb-6">
+              <p className="text-sm text-gray-500 mb-6">
                 Changed your mind? You can re-subscribe anytime from our website.
               </p>
-              <Link to="/" className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-lg">
+              <Link to="/" className="btn-primary">
                 Back to Home
               </Link>
             </>
           )}
           {status === 'error' && (
             <>
-              <div className="w-16 h-16 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <AlertCircle className="w-9 h-9 text-red-600" />
-              </div>
+              <AlertCircle className="w-10 h-10 mx-auto text-red-600 mb-4" aria-hidden="true" />
               <h1 className="text-2xl font-heading font-bold text-gray-900 mb-3">Something went wrong</h1>
               <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
-              <p className="text-xs text-gray-500 mb-6">
-                If you continue to receive emails, email <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a> directly and we'll remove you manually.
+              <p className="text-sm text-gray-500 mb-6">
+                If you continue to receive emails, email <a href="mailto:info@myzakat.org" className="link">info@myzakat.org</a> directly and we'll remove you manually.
               </p>
-              <Link to="/" className="inline-block bg-gray-700 hover:bg-gray-800 text-white font-semibold px-6 py-3 rounded-lg">
+              <Link to="/" className="btn-secondary">
                 Back to Home
               </Link>
             </>

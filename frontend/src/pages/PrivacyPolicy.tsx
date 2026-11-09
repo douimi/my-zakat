@@ -1,35 +1,43 @@
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+
+// The date of the last change to the text below (from git). It used to be
+// `new Date()`, which printed the visitor's today on every visit. Update it
+// whenever the policy text changes.
+const LAST_UPDATED = 'June 15, 2026'
 
 const PrivacyPolicy = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-white">
       <SEOHead
         title="Privacy Policy"
         description="MyZakat Privacy Policy. Learn how we collect, use, and protect your personal information when you use our Zakat donation platform."
         canonicalPath="/privacy-policy"
       />
-      <div className="section-container">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-heading font-bold text-gray-900 mb-4">Privacy Policy</h1>
-            <p className="text-xl text-gray-600">
-              MyZakat – Zakat Distribution Foundation
-            </p>
-            <p className="text-sm text-gray-500 mt-2">Last updated: {new Date().toLocaleDateString()}</p>
-          </div>
-
-          <div className="card space-y-8">
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
+      <PageHeader title="Privacy Policy" description="MyZakat – Zakat Distribution Foundation">
+        <p className="text-sm text-gray-500 mt-3">Last updated: {LAST_UPDATED}</p>
+      </PageHeader>
+      <div className="section-container py-10 sm:py-12">
+        <div className="max-w-3xl">
+          <div className="space-y-3">
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">1. Introduction</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 MyZakat – Zakat Distribution Foundation ("we," "our," or "us") is committed to protecting your privacy. 
                 This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit 
                 our website and use our services.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">2. Information We Collect</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">2. Information We Collect</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Personal Information</h3>
@@ -52,10 +60,14 @@ const PrivacyPolicy = () => {
                   </ul>
                 </div>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">3. How We Use Your Information</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">3. How We Use Your Information</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 We use the information we collect to:
               </p>
@@ -68,10 +80,14 @@ const PrivacyPolicy = () => {
                 <li>Comply with legal obligations</li>
                 <li>Prevent fraud and ensure security</li>
               </ul>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">4. Information Sharing and Disclosure</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">4. Information Sharing and Disclosure</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following circumstances:
               </p>
@@ -93,10 +109,14 @@ const PrivacyPolicy = () => {
                   above.
                 </p>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">5. SMS / Text Messaging Communications</h2>
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">5. SMS / Text Messaging Communications</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 If you opt in to receive text (SMS) messages from MyZakat, the following terms apply:
               </p>
@@ -144,10 +164,14 @@ const PrivacyPolicy = () => {
                 For questions about our SMS program, email <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a> or
                 call 1-833-MYZAKAT.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Opt-In and Opt-Out</h2>
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">6. Opt-In and Opt-Out</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 You are in full control of the communications you receive from MyZakat.
                 This section describes exactly how to opt in and how to opt out of each
@@ -232,19 +256,27 @@ const PrivacyPolicy = () => {
                   </p>
                 </div>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Data Security</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">7. Data Security</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 We implement appropriate technical and organizational security measures to protect your personal information 
                 against unauthorized access, alteration, disclosure, or destruction. However, no method of transmission over 
                 the Internet or electronic storage is 100% secure, and we cannot guarantee absolute security.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Your Rights</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">8. Your Rights</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 Depending on your location, you may have certain rights regarding your personal information, including:
               </p>
@@ -259,35 +291,51 @@ const PrivacyPolicy = () => {
               <p className="text-gray-600 leading-relaxed mt-4">
                 To exercise these rights, please contact us using the information provided in the "Contact Us" section below.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. Cookies and Tracking Technologies</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">9. Cookies and Tracking Technologies</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 We use cookies and similar tracking technologies to enhance your experience on our website. You can control 
                 cookie preferences through your browser settings. However, disabling cookies may limit some functionality of our website.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Children's Privacy</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">10. Children's Privacy</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 Our services are not directed to individuals under the age of 18. We do not knowingly collect personal 
                 information from children. If you believe we have collected information from a child, please contact us immediately.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Changes to This Privacy Policy</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">11. Changes to This Privacy Policy</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new 
                 Privacy Policy on this page and updating the "Last updated" date. You are advised to review this Privacy 
                 Policy periodically for any changes.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">12. Contact Us</h2>
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">12. Contact Us</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed mb-4">
                 If you have any questions about this Privacy Policy or our data practices, please contact us:
               </p>
@@ -297,7 +345,8 @@ const PrivacyPolicy = () => {
                 <p className="text-gray-600">Phone: 1-833-MYZAKAT</p>
                 <p className="text-gray-600">Address: P.O. BOX 2250, Winchester, VA 22604</p>
               </div>
-            </section>
+              </div>
+            </details>
           </div>
         </div>
       </div>

@@ -12,8 +12,10 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Coins, Calculator, Info, Scale, ArrowRight } from 'lucide-react'
+import { Calculator, Info, ArrowRight } from 'lucide-react'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
 import { fetchNisab, hasUsableFigure, type Nisab as NisabData } from '../utils/nisabApi'
 import {
   currentYear,
@@ -22,7 +24,7 @@ import {
   getHowToJsonLd,
 } from '../utils/seo'
 
-const CARD = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8'
+const CARD = 'card sm:p-8'
 const HEADING = 'text-2xl font-heading font-bold text-gray-900 mb-4'
 const PROSE = 'text-gray-700 leading-relaxed'
 
@@ -134,7 +136,7 @@ const ZakatOnGold = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 sm:py-12">
+    <div className="min-h-screen bg-gray-50">
       <SEOHead
         title={`Zakat on Gold ${year} — How Much Do You Pay?`}
         description="Zakat on gold is 2.5% of its value once it has been held for a lunar year. See how to weigh and value bullion, coins and jewellery, and where scholars differ on worn jewellery."
@@ -142,22 +144,14 @@ const ZakatOnGold = () => {
         jsonLd={jsonLd}
       />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        {/* Header */}
-        <div className="text-center mb-8 sm:mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-6">
-            <Coins className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-4">
-            Zakat on Gold {year} — How Much Do You Pay?
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
-            Gold is zakatable at 2.5% of its value once it has been yours for a full lunar year. The
-            work is in weighing it, valuing it by karat, and knowing which pieces to count.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Zakat guide"
+        title={`Zakat on Gold ${year} — How Much Do You Pay?`}
+        description="Gold is zakatable at 2.5% of its value once it has been yours for a full lunar year. The work is in weighing it, valuing it by karat, and knowing which pieces to count."
+      />
 
-        <div className="space-y-6 sm:space-y-8">
+      <div className="section-container py-8 sm:py-10">
+        <div className="max-w-4xl space-y-6 sm:space-y-8">
           {/* 1. The short answer */}
           <section className={CARD}>
             <h2 className={HEADING}>The short answer</h2>
@@ -174,30 +168,15 @@ const ZakatOnGold = () => {
             </p>
           </section>
 
-          {/* 2. Which gold counts — the contested point, named and left open. */}
+          {/* 2. Which gold counts — the contested point, named and left open.
+              The long version of both views is FAQ #1. */}
           <section className={CARD}>
             <h2 className={HEADING}>Which gold counts</h2>
             <p className={PROSE}>
-              Gold held as bullion, as bars, as coins or as an investment is zakatable, and there is
-              no serious disagreement about it. The same goes for gold you are holding to sell, for
-              scrap you have not got round to trading in, and for pieces kept in a safe deposit box
-              rather than worn.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              <strong>Jewellery in regular personal use is the contested case.</strong> Many scholars
-              hold that it is exempt: it is a personal effect, used rather than accumulated, and
-              belongs in the same category as clothing and household goods, which zakat does not
-              reach. Some who take that view set a customary limit, so that jewellery beyond what is
-              normal for a woman in her circumstances becomes zakatable on the excess. Other scholars
-              hold that gold is zakatable by its nature whatever it is used for, and that carving out
-              an exemption for adornment would leave a great deal of real wealth untouched while a
-              saver holding the same value in cash pays in full.
-            </p>
-            <p className={`${PROSE} mt-4`}>
-              Both positions are long-standing and both are held by serious scholars. This page does
-              not choose between them. If you follow a particular school or teacher, follow their
-              position; if you do not, this is exactly the sort of question worth putting to someone
-              qualified before you do the arithmetic.
+              Bullion, bars, coins, investment gold and gold kept unworn are zakatable; there is no
+              serious disagreement on that. <strong>Jewellery worn regularly is the contested
+              case:</strong> many scholars exempt it as a personal effect, others hold that gold is
+              zakatable whatever its use. Both views are long-standing; follow your school or teacher.
             </p>
           </section>
 
@@ -231,22 +210,14 @@ const ZakatOnGold = () => {
               </table>
             </div>
             <p className={`${PROSE} mt-6`}>
-              You can either value each group at the market price for its own karat, or convert each
-              group to its pure gold content — the weight multiplied by the purity above — and value
-              the whole lot at the fine gold price. The two routes give the same answer. What they
-              both guard against is treating a 14k chain as though it were bullion, which would
-              roughly double the figure you end up with.
+              Value each karat group at its own price, or convert to pure gold and use the fine-gold
+              price. The answer is the same.
             </p>
           </section>
 
           {/* 4. The threshold */}
           <section className={CARD}>
-            <div className="flex items-center mb-4">
-              <Scale className="w-6 h-6 text-primary-600 mr-3" aria-hidden="true" />
-              <h2 className="text-2xl font-heading font-bold text-gray-900">
-                Measuring it against the threshold
-              </h2>
-            </div>
+            <h2 className={HEADING}>Measuring it against the threshold</h2>
             <p className={PROSE}>
               If gold is the only zakatable wealth you hold, it is measured against the gold nisab:{' '}
               {thresholdSentence}. Hold less than that and no zakat is due on it this year; hold that
@@ -258,27 +229,18 @@ const ZakatOnGold = () => {
               threshold, which is why a few grams of gold can matter even when the gold on its own
               would fall well short.
             </p>
-            <p className={`${PROSE} mt-4`}>
-              Which threshold applies — the gold one, or the considerably lower silver one — is a
-              point on which scholars differ, and the choice can change the answer for anyone near
-              the line.
-            </p>
-            <Link
-              to="/nisab"
-              className="mt-4 text-primary-700 hover:text-primary-800 font-medium inline-flex items-center"
-            >
+            <Link to="/nisab" className="link mt-4 inline-flex items-center">
               How the nisab is worked out, with the current figures
-              <ArrowRight className="ml-2 w-4 h-4" />
+              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
             </Link>
           </section>
 
           {/* 5. A worked example — withheld whenever the page is withholding
               dollar figures, so it never shows invented arithmetic on the same
-              screen where it has just declined to print a real figure. */}
+              screen where it has just declined to print a real figure. Folded. */}
           {showFigure && goldGrams !== null && (
-            <section className={CARD}>
-              <h2 className={HEADING}>A worked example: 100 g of 22-karat gold</h2>
-              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+            <Disclosure title="A worked example" summary="100 g of 22-karat jewellery">
+              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <Info className="w-5 h-5 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
                 <p className="text-sm text-gray-600">
                   Illustrative only. The gold price below is a round invented number chosen to show
@@ -289,7 +251,7 @@ const ZakatOnGold = () => {
                 Suppose you hold 100 grams of 22-karat jewellery, on the view that it is zakatable,
                 and suppose fine gold is trading at an illustrative $100 a gram.
               </p>
-              <ul className="mt-4 space-y-2 text-gray-700">
+              <ul className="space-y-2 text-gray-700">
                 <li>
                   <strong>Pure gold content:</strong> 100 g at 22 karat is 22 ÷ 24, or about 91.7%
                   gold — roughly 91.7 grams of fine gold.
@@ -306,29 +268,24 @@ const ZakatOnGold = () => {
                   about $229.
                 </li>
               </ul>
-              <p className={`${PROSE} mt-4`}>
-                Notice how close those two numbers are. At an invented $100 a gram, 100 grams of 22k
-                sits only a little above the threshold — which is why the real price on the day, and
-                the karat of each piece, both move the answer more than you might expect.
-              </p>
-            </section>
+            </Disclosure>
           )}
 
-          {/* 6. FAQ — the same text that goes into the FAQPage schema */}
-          <section className={CARD}>
-            <h2 className={HEADING}>Common questions</h2>
-            <div className="divide-y divide-gray-200">
+          {/* 6. FAQ — the same text that goes into the FAQPage schema, one
+              closed item per question. */}
+          <section aria-labelledby="gold-faq">
+            <h2 id="gold-faq" className={HEADING}>Common questions</h2>
+            <div className="card py-1 sm:py-1 divide-y divide-gray-200">
               {faqs.map((faq) => (
-                <div key={faq.question} className="py-5 first:pt-0 last:pb-0">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
+                <Disclosure key={faq.question} variant="plain" title={faq.question}>
                   <p className={PROSE}>{faq.answer}</p>
-                </div>
+                </Disclosure>
               ))}
             </div>
           </section>
 
-          {/* 7. The disclaimer */}
-          <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 sm:p-8">
+          {/* 7. The disclaimer — stays open */}
+          <section className="alert-warning block p-6 sm:p-8 text-base">
             <p className="text-amber-900 leading-relaxed">
               This page is general guidance, not a religious ruling. Zakat depends on your
               circumstances — for anything specific to your situation, please ask a qualified
@@ -338,8 +295,8 @@ const ZakatOnGold = () => {
 
           {/* 8. Through to the calculator */}
           <div className="text-center">
-            <Link to="/zakat-calculator" className="btn-primary inline-flex items-center">
-              <Calculator className="w-5 h-5 mr-2" />
+            <Link to="/zakat-calculator" className="btn-primary gap-2">
+              <Calculator className="w-5 h-5" aria-hidden="true" />
               Work it out in the zakat calculator
             </Link>
           </div>

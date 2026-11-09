@@ -1,52 +1,70 @@
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+
+// The date of the last change to the text below (from git). It used to be
+// `new Date()`, which printed the visitor's today on every visit. Update it
+// whenever the policy text changes.
+const LAST_UPDATED = 'August 24, 2026'
 
 const TermsOfService = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-white">
       <SEOHead
         title="Terms of Service"
         description="MyZakat Terms of Service. Read the terms governing your use of the MyZakat platform — donations, account use, content, and your rights as a user."
         canonicalPath="/terms-of-service"
       />
-      <div className="section-container">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-heading font-bold text-gray-900 mb-4">Terms of Service</h1>
-            <p className="text-xl text-gray-600">MyZakat – Zakat Distribution Foundation</p>
-            <p className="text-sm text-gray-500 mt-2">Last updated: {new Date().toLocaleDateString()}</p>
-          </div>
-
-          <div className="card space-y-8">
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Acceptance of Terms</h2>
+      <PageHeader title="Terms of Service" description="MyZakat – Zakat Distribution Foundation">
+        <p className="text-sm text-gray-500 mt-3">Last updated: {LAST_UPDATED}</p>
+      </PageHeader>
+      <div className="section-container py-10 sm:py-12">
+        <div className="max-w-3xl">
+          <div className="space-y-3">
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">1. Acceptance of Terms</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 By accessing or using the MyZakat website, mobile experience, or any of our services
                 (collectively, the "Services"), you agree to be bound by these Terms of Service ("Terms").
                 If you do not agree to these Terms, please do not use the Services.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">2. About MyZakat</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">2. About MyZakat</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 MyZakat – Zakat Distribution Foundation is a nonprofit organization that facilitates
                 Zakat, Sadaqa, and other charitable donations, distributing them to eligible recipients
                 in accordance with Islamic principles. We provide tools to help donors calculate their
                 Zakat, manage their giving, and stay informed about the impact of their contributions.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">3. Eligibility</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">3. Eligibility</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 You must be at least 18 years old (or the age of majority in your jurisdiction) to make
                 a donation or create an account. By using the Services, you represent that you meet these
                 requirements and that all information you provide is accurate and current.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">4. Donations</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">4. Donations</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">4.1 Voluntary Contributions</h3>
@@ -83,30 +101,42 @@ const TermsOfService = () => {
                   </p>
                 </div>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">5. Tax Receipts</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">5. Tax Receipts</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 MyZakat is a registered 501(c)(3) nonprofit organization in the United States. Donations
                 may be tax-deductible to the extent permitted by law. We will provide a donation receipt
                 via email after each successful contribution. Please consult your tax advisor regarding
                 the deductibility of your donation in your jurisdiction.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. User Accounts</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">6. User Accounts</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 You may create an account to track your donations and manage recurring contributions.
                 You are responsible for safeguarding your password and for any activity under your
                 account. Notify us immediately at <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>
                 {' '}if you suspect unauthorized access.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Acceptable Use</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">7. Acceptable Use</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed">
                 <p>You agree not to:</p>
                 <ul className="list-disc list-inside mt-2 space-y-1 ml-4">
@@ -119,20 +149,28 @@ const TermsOfService = () => {
                   <li>Use automated tools (scrapers, bots) to access the Services without our written permission</li>
                 </ul>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Intellectual Property</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">8. Intellectual Property</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 All content on the Services — including text, graphics, logos, images, videos, and
                 software — is the property of MyZakat or its licensors and is protected by copyright,
                 trademark, and other applicable laws. You may not reproduce, distribute, modify, or
                 create derivative works from any of our content without our prior written consent.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. User-Submitted Content</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">9. User-Submitted Content</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 If you submit testimonials, comments, or other content to MyZakat, you grant us a
                 worldwide, royalty-free, non-exclusive license to use, reproduce, display, and distribute
@@ -140,20 +178,28 @@ const TermsOfService = () => {
                 have the necessary rights to submit such content and that it does not infringe any
                 third-party rights.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Third-Party Services</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">10. Third-Party Services</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 Payment processing is handled by Stripe, Inc. By making a donation, you also agree to
                 Stripe's terms and privacy policy. MyZakat does not store your full payment card details
                 on our servers. Other third-party services (e.g., email, analytics) may be used to
                 operate the Services and have their own terms.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Disclaimers</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">11. Disclaimers</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 The Services are provided "as is" and "as available" without warranties of any kind,
                 either express or implied. While we strive to keep the Services available and accurate,
@@ -161,10 +207,14 @@ const TermsOfService = () => {
                 MyZakat is not responsible for any third-party content or services accessible through
                 the Services.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">12. Limitation of Liability</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">12. Limitation of Liability</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 To the maximum extent permitted by law, MyZakat and its officers, directors, employees,
                 and volunteers will not be liable for any indirect, incidental, special, consequential,
@@ -172,48 +222,68 @@ const TermsOfService = () => {
                 claim related to the Services shall not exceed the amount you donated in the 12 months
                 preceding the event giving rise to the claim.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">13. Indemnification</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">13. Indemnification</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 You agree to indemnify and hold harmless MyZakat, its affiliates, and personnel from any
                 claims, damages, or expenses arising from your violation of these Terms, your misuse of
                 the Services, or your violation of any third-party rights.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">14. Termination</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">14. Termination</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 We may suspend or terminate your access to the Services at any time, without notice,
                 if we believe you have violated these Terms or engaged in conduct that harms MyZakat or
                 other users. You may stop using the Services at any time and request account deletion
                 by emailing <a href="mailto:info@myzakat.org" className="text-primary-600 hover:underline">info@myzakat.org</a>.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">15. Changes to These Terms</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">15. Changes to These Terms</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 We may update these Terms from time to time. When we do, we will revise the "Last updated"
                 date at the top of this page. Material changes will be communicated via the Services or
                 by email when reasonably possible. Your continued use of the Services after the updated
                 Terms take effect constitutes your acceptance of the revised Terms.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">16. Governing Law</h2>
+            <details className="disclosure">
+              <summary>
+                <h2 className="disclosure-title text-lg">16. Governing Law</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <p className="text-gray-600 leading-relaxed">
                 These Terms are governed by the laws of the Commonwealth of Virginia, United States,
                 without regard to its conflict-of-laws principles. Any disputes will be resolved in the
                 state or federal courts located in Virginia.
               </p>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">17. SMS / Text Messaging Terms</h2>
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">17. SMS / Text Messaging Terms</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed space-y-4">
                 <p>
                   These SMS terms apply if you opt in to receive text messages from MyZakat, whether
@@ -311,10 +381,14 @@ const TermsOfService = () => {
                   </ul>
                 </div>
               </div>
-            </section>
+              </div>
+            </details>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">18. Contact Us</h2>
+            <details className="disclosure" open>
+              <summary>
+                <h2 className="disclosure-title text-lg">18. Contact Us</h2>
+              </summary>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
               <div className="text-gray-600 leading-relaxed space-y-2">
                 <p>If you have any questions about these Terms, please contact us:</p>
                 <p>
@@ -325,7 +399,8 @@ const TermsOfService = () => {
                   Phone: <a href="tel:+18336992528" className="text-primary-600 hover:underline">1-833-MYZAKAT</a>
                 </p>
               </div>
-            </section>
+              </div>
+            </details>
           </div>
         </div>
       </div>
