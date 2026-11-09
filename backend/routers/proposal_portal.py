@@ -296,7 +296,10 @@ async def _store_staged(db: Session, dossier: ProjectProposal, report, staged) -
     """
     stored = 0
     for checked, upload in staged:
-        object_key = s3_service.generate_object_key(
+        # private_object_key, not generate_object_key: the latter drops this
+        # prefix and keeps the uploader's filename, so same-named invoices from
+        # two teams overwrote each other under the publicly served images/.
+        object_key = s3_service.private_object_key(
             "proposal-reports/%d" % dossier.id, checked.filename)
         try:
             # One file in memory at a time, released before the next is read.

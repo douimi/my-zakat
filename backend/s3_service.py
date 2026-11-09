@@ -425,6 +425,26 @@ def generate_object_key(media_type: str, filename: str) -> str:
     return f"{media_type}/{safe_filename}"
 
 
+def private_object_key(prefix: str, filename: str) -> str:
+    """A unique key under `prefix` for a file that must never be public.
+
+    generate_object_key() keeps only 'images' or 'videos' as a prefix and the
+    uploader's own filename as the rest, which is right for site media and
+    wrong for anything private: two uploads named `invoice.pdf` land on the
+    same key and the second overwrites the first, and the result sits under
+    images/, which /api/uploads/media/images/{filename} serves to anyone who
+    guesses the name. Here the name is random and only its extension is kept,
+    so neither can happen.
+    """
+    import os as _os
+    import uuid as _uuid
+    ext = _os.path.splitext(filename or "")[1].lower()
+    if not ext or len(ext) > 10 or not ext[1:].isalnum():
+        ext = ""
+    clean_prefix = "/".join(part for part in prefix.split("/") if part and part not in (".", ".."))
+    return f"{clean_prefix}/{_uuid.uuid4().hex}{ext}"
+
+
 def extract_object_key_from_url(url: str) -> Optional[str]:
     """
     Extract S3 object key from a URL
