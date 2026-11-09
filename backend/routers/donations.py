@@ -548,7 +548,16 @@ async def get_donation_stats(db: Session = Depends(get_db)):
     return {
         "total_donations": total_donations,
         "total_donors": total_donors,
-        "recent_donations": recent_donations,
+        # Public endpoint: never return emails, Stripe session ids, notes or
+        # file names. Only a masked name, the amount and the date.
+        "recent_donations": [
+            {
+                "name": _mask_donor_name(d.name),
+                "amount": d.amount,
+                "donated_at": d.donated_at,
+            }
+            for d in recent_donations
+        ],
         "total_raised": float(settings_dict.get('total_raised', '0')),
         "impact": {
             "meals": int(settings_dict.get('meals_provided', '0')),
