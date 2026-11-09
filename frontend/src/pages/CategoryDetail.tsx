@@ -3,15 +3,25 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { programCategoriesAPI, programsAPI, getStaticFileUrl } from '../utils/api'
 import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
-import { ArrowLeft, Heart, Share2, Calendar, ChevronLeft, ChevronRight, ArrowRight, Users, Target } from 'lucide-react'
-import LazyVideo from '../components/LazyVideo'
-import VideoThumbnail from '../components/VideoThumbnail'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
+import type { Program } from '../types'
+import VideoThumbnail, { PlayableVideo } from '../components/VideoThumbnail'
+import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
+
+/** Descriptions longer than this (in plain-text characters) start collapsed. */
+const LONG_TEXT_CHARS = 320
+
+const toPlainText = (html: string) =>
+  html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
 const CategoryDetail = () => {
   const { slug } = useParams<{ slug: string }>()
   const jsRef = useRef<HTMLScriptElement | null>(null)
   const cssRef = useRef<HTMLStyleElement | null>(null)
-  const [slideshowIndex, setSlideshowIndex] = useState(0)
+  // Once the hero video plays, drop the title overlay so it does not cover the player controls.
+  const [heroPlaying, setHeroPlaying] = useState(false)
 
   const { data: category, isLoading, error } = useQuery(
     ['category', slug],
@@ -22,7 +32,7 @@ const CategoryDetail = () => {
     }
   )
 
-  const { data: categoryPrograms } = useQuery(
+  const { data: categoryPrograms } = useQuery<Program[]>(
     ['category-programs', category?.id],
     () => programsAPI.getAll(category?.id, true),
     {
@@ -31,23 +41,13 @@ const CategoryDetail = () => {
     }
   )
 
-  // Auto-advance slideshow
-  useEffect(() => {
-    if (categoryPrograms && categoryPrograms.length > 1) {
-      const interval = setInterval(() => {
-        setSlideshowIndex((prev) => (prev + 1) % categoryPrograms.length)
-      }, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [categoryPrograms])
-
   useEffect(() => {
     // Clean up ALL existing category CSS/JS (not just from this category)
     const existingStyles = document.querySelectorAll('style[id^="category-css-"]')
     existingStyles.forEach((style) => {
       style.remove()
     })
-    
+
     const existingScripts = document.querySelectorAll('script[data-category]')
     existingScripts.forEach((script) => {
       script.remove()
@@ -84,13 +84,13 @@ const CategoryDetail = () => {
       stylesToRemove.forEach((style) => {
         style.remove()
       })
-      
+
       // Remove scripts
       const scriptsToRemove = document.querySelectorAll('script[data-category]')
       scriptsToRemove.forEach((script) => {
         script.remove()
       })
-      
+
       cssRef.current = null
       jsRef.current = null
     }
@@ -104,43 +104,11 @@ const CategoryDetail = () => {
     return getStaticFileUrl(`/api/uploads/program_categories/${filename}`)
   }
 
-  const getProgramImageUrl = (program: any, width: number = 0) => {
-    if (program.video_filename) {
-      return getStaticFileUrl(`/api/uploads/programs/${program.video_filename}`)
-    }
-    const url = program.image_url || null
-    if (url && width > 0 && !url.startsWith('http://') && !url.startsWith('https://')) {
-      return `${url}${url.includes('?') ? '&' : '?'}w=${width}`
-    }
-    return url
-  }
-
-  const slideshowImages = categoryPrograms
-    ?.filter((p: any) => p.image_url || p.video_filename)
-    .map((p: any) => ({
-      url: getProgramImageUrl(p, IMAGE_WIDTHS.LARGE),
-      title: p.title,
-      program: p
-    })) || []
-
-  const goToSlide = (index: number) => {
-    if (index >= 0 && index < slideshowImages.length) {
-      setSlideshowIndex(index)
-    }
-  }
-
-  const goToPrevious = () => {
-    setSlideshowIndex((prev) => (prev - 1 + slideshowImages.length) % slideshowImages.length)
-  }
-
-  const goToNext = () => {
-    setSlideshowIndex((prev) => (prev + 1) % slideshowImages.length)
-  }
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
+        <span className="sr-only">Loading</span>
       </div>
     )
   }
@@ -150,7 +118,7 @@ const CategoryDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Category Not Found</h1>
-          <Link to="/programs" className="text-primary-600 hover:text-primary-700">
+          <Link to="/programs" className="link">
             Return to Programs
           </Link>
         </div>
@@ -163,196 +131,84 @@ const CategoryDetail = () => {
   const imageUrl = rawImageUrl && !rawImageUrl.startsWith('http://') && !rawImageUrl.startsWith('https://')
     ? `${rawImageUrl}${rawImageUrl.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}`
     : rawImageUrl
+  const donateHref = `/donate?purpose=${encodeURIComponent(category.title)}`
+  const descriptionText = category.description ? toPlainText(category.description) : ''
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
-      {(imageUrl || videoUrl) && (
-        <div className="relative h-96 overflow-hidden">
+    <div className="min-h-screen bg-white">
+      <SEOHead
+        title={category.title}
+        description={category.short_description || undefined}
+        canonicalPath={`/categories/${slug}`}
+      />
+
+      {/* Hero: media with the title over it, or a plain header when there is no media */}
+      {imageUrl || videoUrl ? (
+        <div className="relative h-80 sm:h-96 overflow-hidden bg-gray-900">
           {videoUrl ? (
-            <div className="relative w-full h-full group cursor-pointer" onClick={(e) => {
-              // Replace thumbnail with actual video on click
-              const container = e.currentTarget
-              if (container.querySelector('video')) return // Already playing
-              
-              const video = document.createElement('video')
-              video.src = videoUrl
-              video.className = "w-full h-full object-cover"
-              video.controls = true
-              video.playsInline = true
-              video.preload = "auto" // Preload entire video for faster playback
-              video.muted = false
-              
-              // Show loading indicator
-              const loadingDiv = document.createElement('div')
-              loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-              loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-              container.innerHTML = ''
-              container.appendChild(loadingDiv)
-              container.appendChild(video)
-              
-              // Remove loading indicator when video can play
-              video.addEventListener('canplay', () => {
-                loadingDiv.remove()
-                video.play().catch(() => {}) // Auto-play if possible
-              }, { once: true })
-              
-              video.addEventListener('error', () => {
-                loadingDiv.remove()
-                container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white">Video failed to load</div>'
-              }, { once: true })
-            }}
-            onMouseEnter={(e) => {
-              // Preload video on hover for faster playback
-              const container = e.currentTarget
-              if (!container.querySelector('video') && videoUrl) {
-                const preloadVideo = document.createElement('video')
-                preloadVideo.src = videoUrl
-                preloadVideo.preload = "auto"
-                preloadVideo.style.display = "none"
-                document.body.appendChild(preloadVideo)
-                
-                // Clean up after a delay
-                setTimeout(() => {
-                  if (preloadVideo.parentNode) {
-                    preloadVideo.parentNode.removeChild(preloadVideo)
-                  }
-                }, 30000) // Keep preloaded for 30 seconds
-              }
-            }}>
-              <VideoThumbnail
-                videoSrc={videoUrl}
-                className="w-full h-full"
-                alt={`${category.title} video`}
-              />
-            </div>
+            <PlayableVideo videoSrc={videoUrl} title={category.title} className="w-full h-full" onPlay={() => setHeroPlaying(true)} />
           ) : (
             <img
-              src={imageUrl}
-              alt={category.title}
+              src={imageUrl || undefined}
+              alt=""
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-8 text-white pointer-events-none">
-            <h1 className="text-4xl lg:text-5xl font-bold mb-2">{category.title}</h1>
-            {category.short_description && (
-              <p className="text-xl text-white/90">{category.short_description}</p>
-            )}
+          <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none ${heroPlaying ? 'hidden' : ''}`}></div>
+          <div className={`absolute bottom-0 left-0 right-0 pointer-events-none ${heroPlaying ? 'sr-only' : ''}`}>
+            <div className="section-container pb-8 text-white">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold mb-2">{category.title}</h1>
+              {category.short_description && (
+                <p className="text-lg sm:text-xl text-white/90 max-w-3xl line-clamp-3">{category.short_description}</p>
+              )}
+            </div>
           </div>
         </div>
+      ) : (
+        <PageHeader title={category.title} description={category.short_description} />
       )}
 
-      {/* Content Section */}
-      <div className="section-container py-12">
-        {/* Description */}
+      <div className="section-container py-10 sm:py-12">
+        <Link to="/programs" className="link inline-flex items-center gap-1.5 text-sm mb-8">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All programs
+        </Link>
+
+        {/* Description: long text starts collapsed (owner rule) */}
         {category.description && (
-          <div className="mb-8">
-            <div className="prose max-w-none text-lg text-gray-700" dangerouslySetInnerHTML={{ __html: category.description }} />
-          </div>
+          descriptionText.length > LONG_TEXT_CHARS ? (
+            <Disclosure
+              className="mb-8 max-w-4xl"
+              title={`About ${category.title}`}
+              summary={descriptionText}
+            >
+              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: category.description }} />
+            </Disclosure>
+          ) : (
+            <div className="prose max-w-none text-lg mb-8" dangerouslySetInnerHTML={{ __html: category.description }} />
+          )
         )}
 
-        {/* Custom HTML Content */}
+        {/* Custom HTML Content (admin-authored, may carry its own CSS/JS: rendered as is) */}
         {category.html_content && (
           <div className="mb-8">
             <div dangerouslySetInnerHTML={{ __html: category.html_content }} />
           </div>
         )}
 
-        {/* Media Slideshow */}
-        {slideshowImages.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Our Work in Action</h2>
-            <div className="relative w-full h-96 md:h-[500px] rounded-xl overflow-hidden shadow-2xl">
-              {/* Slideshow Images */}
-              {slideshowImages.map((slide, index) => (
-                <div
-                  key={index}
-                  className={`absolute inset-0 transition-opacity duration-1000 ${
-                    index === slideshowIndex ? 'opacity-100' : 'opacity-0'
-                  }`}
-                >
-                  <img
-                    src={slide.url || ''}
-                    alt={slide.title}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
-                  <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
-                    <h3 className="text-2xl md:text-3xl font-bold mb-2">{slide.title}</h3>
-                    {slide.program.short_description && (
-                      <p className="text-lg text-white/90">{slide.program.short_description}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Navigation Arrows */}
-              {slideshowImages.length > 1 && (
-                <>
-                  <button
-                    onClick={goToPrevious}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 rounded-full p-3 shadow-lg transition-all z-10"
-                    aria-label="Previous slide"
-                  >
-                    <ChevronLeft className="w-6 h-6" />
-                  </button>
-                  <button
-                    onClick={goToNext}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 rounded-full p-3 shadow-lg transition-all z-10"
-                    aria-label="Next slide"
-                  >
-                    <ChevronRight className="w-6 h-6" />
-                  </button>
-                </>
-              )}
-
-              {/* Dots Indicator */}
-              {slideshowImages.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-                  {slideshowImages.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => goToSlide(index)}
-                      className={`w-3 h-3 rounded-full transition-all ${
-                        index === slideshowIndex
-                          ? 'bg-white w-8'
-                          : 'bg-white/50 hover:bg-white/75'
-                      }`}
-                      aria-label={`Go to slide ${index + 1}`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Impact Text */}
         {category.impact_text && (
-          <div className="mt-8 p-8 bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200">
-            <div className="flex items-center mb-3">
-              <Target className="w-8 h-8 text-primary-600 mr-3" />
-              <h3 className="text-2xl font-bold text-gray-900">Our Impact</h3>
-            </div>
-            <p className="text-xl text-gray-700 font-semibold">{category.impact_text}</p>
+          <div className="card-tinted mb-8 max-w-4xl">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">Our impact</h2>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{category.impact_text}</p>
           </div>
         )}
 
         {/* Programs in this Category */}
         {categoryPrograms && categoryPrograms.length > 0 && (
-          <div className="mt-16">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900">Programs in {category.title}</h2>
-                <p className="text-gray-600 mt-2">Explore our initiatives making a difference</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {categoryPrograms.map((program: any) => {
+          <section className="mt-12" aria-labelledby="category-programs-title">
+            <h2 id="category-programs-title" className="section-title mb-6">Programs in {category.title}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categoryPrograms.map((program) => {
                 const programVideoUrl = program.video_filename
                   ? getStaticFileUrl(`/api/uploads/programs/${program.video_filename}`)
                   : null
@@ -365,161 +221,58 @@ const CategoryDetail = () => {
                   <Link
                     key={program.id}
                     to={`/programs/${program.slug}`}
-                    className="group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden transform hover:-translate-y-2"
+                    className="card-media group"
                   >
                     {(programImageUrl || programVideoUrl) && (
-                      <div className="relative h-56 overflow-hidden group cursor-pointer" onClick={(e) => {
-                        if (programVideoUrl) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          const container = e.currentTarget
-                          if (container.querySelector('video')) return
-                          
-                          const video = document.createElement('video')
-                          video.src = programVideoUrl
-                          video.className = "w-full h-full object-cover"
-                          video.controls = true
-                          video.playsInline = true
-                          video.preload = "auto"
-                          video.muted = false
-                          
-                          const loadingDiv = document.createElement('div')
-                          loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-                          loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-                          container.innerHTML = ''
-                          container.appendChild(loadingDiv)
-                          container.appendChild(video)
-                          
-                          video.addEventListener('canplay', () => {
-                            loadingDiv.remove()
-                            video.play().catch(() => {})
-                          }, { once: true })
-                          
-                          video.addEventListener('error', () => {
-                            loadingDiv.remove()
-                            container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white text-sm">Video failed to load</div>'
-                          }, { once: true })
-                        }
-                      }}
-                      onMouseEnter={(e) => {
-                        if (programVideoUrl) {
-                          const container = e.currentTarget
-                          if (!container.querySelector('video')) {
-                            const preloadVideo = document.createElement('video')
-                            preloadVideo.src = programVideoUrl
-                            preloadVideo.preload = "auto"
-                            preloadVideo.style.display = "none"
-                            document.body.appendChild(preloadVideo)
-                            setTimeout(() => {
-                              if (preloadVideo.parentNode) {
-                                preloadVideo.parentNode.removeChild(preloadVideo)
-                              }
-                            }, 30000)
-                          }
-                        }
-                      }}>
+                      <div className="relative h-48 overflow-hidden bg-gray-100">
                         {programVideoUrl ? (
+                          // Thumbnail only: the video plays on the program page (no player inside a link).
                           <VideoThumbnail
                             videoSrc={programVideoUrl}
                             className="w-full h-full"
-                            alt={`${program.title} video`}
+                            alt=""
                           />
                         ) : (
                           <img
-                            src={programImageUrl}
-                            alt={program.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            src={programImageUrl || undefined}
+                            alt=""
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            loading="lazy"
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                       </div>
                     )}
-                    <div className="p-6">
-                      <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                        {program.title}
-                      </h3>
-                      {program.short_description && (
-                        <p className="text-gray-600 line-clamp-3 mb-4">{program.short_description}</p>
-                      )}
+                    <div className="card-body">
+                      <h3 className="card-title group-hover:text-primary-700">{program.title}</h3>
                       {program.impact_text && (
-                        <div className="mb-4">
-                          <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
-                            {program.impact_text}
-                          </span>
-                        </div>
+                        <p className="mt-2"><span className="badge-primary">{program.impact_text}</span></p>
                       )}
-                      <div className="flex items-center text-primary-600 font-semibold group-hover:gap-2 transition-all">
-                        <span>Learn More</span>
-                        <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                      </div>
+                      {program.short_description && (
+                        <p className="mt-2 text-gray-600 line-clamp-3">{program.short_description}</p>
+                      )}
+                      <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1">
+                        Learn More <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                      </span>
                     </div>
                   </Link>
                 )
               })}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Multiple CTAs */}
-        <div className="mt-16 space-y-6">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">Get Involved</h2>
-          
-          {/* Primary CTA */}
-          <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl p-8 text-white text-center shadow-xl">
-            <Heart className="w-12 h-12 mx-auto mb-4" />
-            <h3 className="text-3xl font-bold mb-3">Support {category.title}</h3>
-            <p className="text-xl mb-6 text-white/90">Your donation helps us continue our vital work and reach more people in need</p>
-            <Link
-              to="/donate"
-              className="inline-flex items-center bg-white text-primary-600 font-bold px-8 py-4 rounded-xl hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              <Heart className="w-5 h-5 mr-2" />
-              Donate Now
+        {/* One call to action */}
+        <section className="mt-12 rounded-xl hero-gradient text-white p-8 sm:p-10" aria-labelledby="category-cta-title">
+          <h2 id="category-cta-title" className="text-2xl sm:text-3xl font-heading font-bold">Support {category.title}</h2>
+          <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-4">
+            <Link to={donateHref} className="btn-inverse btn-lg">
+              Donate to {category.title}
+            </Link>
+            <Link to="/volunteer" className="font-medium text-white underline underline-offset-2 hover:text-white/90">
+              Volunteer
             </Link>
           </div>
-
-          {/* Secondary CTAs */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Link
-              to="/volunteer"
-              className="group bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 text-center"
-            >
-              <Users className="w-10 h-10 text-primary-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-              <h4 className="text-xl font-bold text-gray-900 mb-2">Volunteer</h4>
-              <p className="text-gray-600 mb-4">Join our team and make a hands-on difference</p>
-              <span className="text-primary-600 font-semibold group-hover:gap-2 inline-flex items-center">
-                Learn More
-                <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </Link>
-
-            <Link
-              to="/contact"
-              className="group bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 text-center"
-            >
-              <Share2 className="w-10 h-10 text-primary-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-              <h4 className="text-xl font-bold text-gray-900 mb-2">Partner With Us</h4>
-              <p className="text-gray-600 mb-4">Collaborate and amplify our impact together</p>
-              <span className="text-primary-600 font-semibold group-hover:gap-2 inline-flex items-center">
-                Contact Us
-                <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </Link>
-
-            <Link
-              to="/stories"
-              className="group bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 text-center"
-            >
-              <Calendar className="w-10 h-10 text-primary-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-              <h4 className="text-xl font-bold text-gray-900 mb-2">Read Stories</h4>
-              <p className="text-gray-600 mb-4">See the real impact of your support</p>
-              <span className="text-primary-600 font-semibold group-hover:gap-2 inline-flex items-center">
-                View Stories
-                <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </Link>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   )

@@ -1,16 +1,26 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from 'react-query'
 import { programsAPI, getStaticFileUrl } from '../utils/api'
 import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
-import { Heart, Calendar } from 'lucide-react'
-import LazyVideo from '../components/LazyVideo'
-import VideoThumbnail from '../components/VideoThumbnail'
+import { ArrowLeft } from 'lucide-react'
+import { PlayableVideo } from '../components/VideoThumbnail'
+import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+import Disclosure from '../components/ui/Disclosure'
+
+/** Descriptions longer than this (in plain-text characters) start collapsed. */
+const LONG_TEXT_CHARS = 320
+
+const toPlainText = (html: string) =>
+  html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
 const ProgramDetail = () => {
   const { slug } = useParams<{ slug: string }>()
   const jsRef = useRef<HTMLScriptElement | null>(null)
   const cssRef = useRef<HTMLStyleElement | null>(null)
+  // Once the hero video plays, drop the title overlay so it does not cover the player controls.
+  const [heroPlaying, setHeroPlaying] = useState(false)
 
   const { data: program, isLoading, error } = useQuery(
     ['program', slug],
@@ -27,7 +37,7 @@ const ProgramDetail = () => {
     existingStyles.forEach((style) => {
       style.remove()
     })
-    
+
     const existingScripts = document.querySelectorAll('script[data-program]')
     existingScripts.forEach((script) => {
       script.remove()
@@ -58,7 +68,7 @@ const ProgramDetail = () => {
         cssRef.current.parentNode.removeChild(cssRef.current)
         cssRef.current = null
       }
-      
+
       if (jsRef.current && jsRef.current.parentNode) {
         jsRef.current.parentNode.removeChild(jsRef.current)
         jsRef.current = null
@@ -76,8 +86,9 @@ const ProgramDetail = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
+        <span className="sr-only">Loading</span>
       </div>
     )
   }
@@ -87,7 +98,7 @@ const ProgramDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Program Not Found</h1>
-          <Link to="/programs" className="text-primary-600 hover:text-primary-700">
+          <Link to="/programs" className="link">
             Return to Programs
           </Link>
         </div>
@@ -100,96 +111,74 @@ const ProgramDetail = () => {
   const imageUrl = rawImageUrl && !rawImageUrl.startsWith('http://') && !rawImageUrl.startsWith('https://')
     ? `${rawImageUrl}${rawImageUrl.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}`
     : rawImageUrl
+  const donateHref = `/donate?purpose=${encodeURIComponent(program.title)}`
+  const descriptionText = program.description ? toPlainText(program.description) : ''
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
-      {(imageUrl || videoUrl) && (
-        <div className="relative h-96 overflow-hidden">
+    <div className="min-h-screen bg-white">
+      <SEOHead
+        title={program.title}
+        description={program.short_description || undefined}
+        canonicalPath={`/programs/${slug}`}
+      />
+
+      {/* Hero: media with the title over it, or a plain header when there is no media */}
+      {imageUrl || videoUrl ? (
+        <div className="relative h-80 sm:h-96 overflow-hidden bg-gray-900">
           {videoUrl ? (
-            <div className="relative w-full h-full group cursor-pointer" onClick={(e) => {
-              // Replace thumbnail with actual video on click
-              const container = e.currentTarget
-              if (container.querySelector('video')) return // Already playing
-              
-              const video = document.createElement('video')
-              video.src = videoUrl
-              video.className = "w-full h-full object-cover"
-              video.controls = true
-              video.playsInline = true
-              video.preload = "auto" // Preload entire video for faster playback
-              video.muted = false
-              
-              // Show loading indicator
-              const loadingDiv = document.createElement('div')
-              loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-              loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-              container.innerHTML = ''
-              container.appendChild(loadingDiv)
-              container.appendChild(video)
-              
-              // Remove loading indicator when video can play
-              video.addEventListener('canplay', () => {
-                loadingDiv.remove()
-                video.play().catch(() => {}) // Auto-play if possible
-              }, { once: true })
-              
-              video.addEventListener('error', () => {
-                loadingDiv.remove()
-                container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white">Video failed to load</div>'
-              }, { once: true })
-            }}
-            onMouseEnter={(e) => {
-              // Preload video on hover for faster playback
-              const container = e.currentTarget
-              if (!container.querySelector('video') && videoUrl) {
-                const preloadVideo = document.createElement('video')
-                preloadVideo.src = videoUrl
-                preloadVideo.preload = "auto"
-                preloadVideo.style.display = "none"
-                document.body.appendChild(preloadVideo)
-                
-                // Clean up after a delay
-                setTimeout(() => {
-                  if (preloadVideo.parentNode) {
-                    preloadVideo.parentNode.removeChild(preloadVideo)
-                  }
-                }, 30000) // Keep preloaded for 30 seconds
-              }
-            }}>
-              <VideoThumbnail
-                videoSrc={videoUrl}
-                className="w-full h-full"
-                alt={`${program.title} video`}
-              />
-            </div>
+            <PlayableVideo videoSrc={videoUrl} title={program.title} className="w-full h-full" onPlay={() => setHeroPlaying(true)} />
           ) : (
             <img
-              src={imageUrl}
-              alt={program.title}
+              src={imageUrl || undefined}
+              alt=""
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-8 text-white pointer-events-none">
-            <h1 className="text-4xl lg:text-5xl font-bold mb-2">{program.title}</h1>
-            {program.short_description && (
-              <p className="text-xl text-white/90">{program.short_description}</p>
-            )}
+          <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none ${heroPlaying ? 'hidden' : ''}`}></div>
+          <div className={`absolute bottom-0 left-0 right-0 pointer-events-none ${heroPlaying ? 'sr-only' : ''}`}>
+            <div className="section-container pb-8 text-white">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold mb-2">{program.title}</h1>
+              {program.short_description && (
+                <p className="text-lg sm:text-xl text-white/90 max-w-3xl line-clamp-3">{program.short_description}</p>
+              )}
+            </div>
           </div>
         </div>
+      ) : (
+        <PageHeader title={program.title} description={program.short_description} />
       )}
 
-      {/* Content Section */}
-      <div className="section-container py-12">
-        {/* Description */}
+      <div className="section-container py-10 sm:py-12">
+        <Link to="/programs" className="link inline-flex items-center gap-1.5 text-sm mb-8">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All programs
+        </Link>
+
+        {/* Primary action, visible without expanding anything */}
+        <div className="mb-10 flex flex-col sm:flex-row sm:items-center gap-4">
+          <Link to={donateHref} className="btn-primary btn-lg">
+            Donate to This Program
+          </Link>
+          <Link to="/volunteer" className="link">
+            Volunteer
+          </Link>
+        </div>
+
+        {/* Description: long text starts collapsed (owner rule) */}
         {program.description && (
-          <div className="mb-8">
-            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: program.description }} />
-          </div>
+          descriptionText.length > LONG_TEXT_CHARS ? (
+            <Disclosure
+              className="mb-8 max-w-4xl"
+              title={`About ${program.title}`}
+              summary={descriptionText}
+            >
+              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: program.description }} />
+            </Disclosure>
+          ) : (
+            <div className="prose max-w-none text-lg mb-8" dangerouslySetInnerHTML={{ __html: program.description }} />
+          )
         )}
 
-        {/* Custom HTML Content */}
+        {/* Custom HTML Content (admin-authored, may carry its own CSS/JS: rendered as is) */}
         {program.html_content && (
           <div className="mb-8">
             <div dangerouslySetInnerHTML={{ __html: program.html_content }} />
@@ -198,36 +187,14 @@ const ProgramDetail = () => {
 
         {/* Impact Text */}
         {program.impact_text && (
-          <div className="mt-8 p-6 bg-primary-50 rounded-xl">
-            <div className="flex items-center mb-2">
-              <Heart className="w-6 h-6 text-primary-600 mr-2" />
-              <h3 className="text-xl font-bold text-gray-900">Impact</h3>
-            </div>
-            <p className="text-lg text-gray-700">{program.impact_text}</p>
+          <div className="card-tinted max-w-4xl">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">Impact</h2>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{program.impact_text}</p>
           </div>
         )}
-
-        {/* CTAs */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Link
-            to="/donate"
-            className="group bg-primary-600 hover:bg-primary-700 text-white font-semibold px-8 py-6 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center"
-          >
-            <Heart className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" />
-            <span>Donate to This Program</span>
-          </Link>
-          <Link
-            to="/volunteer"
-            className="group bg-white hover:bg-gray-50 text-primary-600 border-2 border-primary-600 font-semibold px-8 py-6 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center"
-          >
-            <Calendar className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" />
-            <span>Volunteer</span>
-          </Link>
-        </div>
       </div>
     </div>
   )
 }
 
 export default ProgramDetail
-

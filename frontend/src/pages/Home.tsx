@@ -1,34 +1,90 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
-import { 
-  Heart, 
-  Users, 
-  Globe, 
-  TrendingUp, 
-  ArrowRight, 
+import {
+  ArrowRight,
   Play,
-  CheckCircle,
   Star,
-  Image as ImageIcon,
   X,
   ChevronLeft,
   ChevronRight,
   Calendar,
   MapPin,
-  Sparkles,
-  HeartHandshake
 } from 'lucide-react'
 import { donationsAPI, storiesAPI, eventsAPI, testimonialsAPI, settingsAPI, getStaticFileUrl, galleryAPI, programCategoriesAPI } from '../utils/api'
 import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import SEOHead from '../components/SEOHead'
 import { getFaqJsonLd } from '../utils/seo'
-import type { Event, ProgramCategory } from '../types'
+import type { DonationStats, Event, ProgramCategory, Story, Testimonial } from '../types'
 import Slideshow from '../components/Slideshow'
 import LazyVideo from '../components/LazyVideo'
-import VideoThumbnail from '../components/VideoThumbnail'
+import VideoThumbnail, { PlayableVideo } from '../components/VideoThumbnail'
 import CampaignPopup from '../components/CampaignPopup'
 import FundraisingProjectsSection from '../components/FundraisingProjectsSection'
+
+interface Setting {
+  key: string
+  value?: string
+}
+
+interface GalleryItem {
+  id: number
+  media_filename: string
+  thumbnail_url?: string | null
+}
+
+/** Number of gallery tiles shown before "Show all". */
+const GALLERY_PREVIEW_COUNT = 9
+
+// Helper to append width param to a URL for optimization
+const withWidth = (url: string | null, width: number): string | null => {
+  if (!url || url.startsWith('http://') || url.startsWith('https://')) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}w=${width}`
+}
+
+// Helper to get category media - checks video first, then image
+const getCategoryMedia = (category: ProgramCategory) => {
+  if (category.video_filename) {
+    const videoUrl = getStaticFileUrl(`/api/uploads/program_categories/${category.video_filename}`)
+    return { url: videoUrl, type: 'video' as const }
+  }
+  if (category.image_url) {
+    return { url: category.image_url, type: 'image' as const }
+  }
+  return { url: null, type: 'image' as const }
+}
+
+// Story videos are served from /api/uploads/stories/ (or are already full S3 URLs)
+const getStoryVideoUrl = (videoFilename?: string) => {
+  if (!videoFilename) return null
+  if (videoFilename.startsWith('http://') || videoFilename.startsWith('https://')) return videoFilename
+  return getStaticFileUrl(`/api/uploads/stories/${videoFilename}`)
+}
+
+const getTestimonialVideoUrl = (videoFilename?: string) => {
+  if (!videoFilename) return null
+  return getStaticFileUrl(`/api/uploads/testimonials/${videoFilename}`)
+}
+
+/** Section heading row: one-line h2, optional one-sentence lead, optional "View all" link on the right. */
+const SectionHead = ({ id, title, lead, viewAll }: { id: string; title: string; lead?: string; viewAll?: { to: string; label: string } }) => (
+  <div className="section-head">
+    <div>
+      <h2 id={id} className="section-title">{title}</h2>
+      {lead && <p className="section-lead">{lead}</p>}
+    </div>
+    {viewAll && (
+      <Link to={viewAll.to} className="link inline-flex items-center gap-1 shrink-0">
+        {viewAll.label} <ArrowRight className="w-4 h-4" aria-hidden="true" />
+      </Link>
+    )}
+  </div>
+)
+
+// Card title link whose ::after covers the whole card, so the card is clickable
+// with a single link (no nested links/buttons). Media buttons sit above it with z-10.
+const STRETCHED_LINK = 'after:absolute after:inset-0 after:content-[""] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-primary-600 focus-visible:after:rounded-xl'
 
 const Home = () => {
 
@@ -38,35 +94,35 @@ const Home = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes
     onError: (error) => console.error('Stats error:', error)
   })
-  const { data: settings, error: settingsError } = useQuery('home-media-settings', settingsAPI.getAll, {
+  const { data: settings, error: settingsError } = useQuery<Setting[]>('home-media-settings', settingsAPI.getAll, {
     retry: 1,
     staleTime: 10 * 60 * 1000, // 10 minutes - settings change rarely
     onError: (error) => console.error('Settings error:', error)
   })
-  
-  // Load secondary content after a delay to prioritize critical content
-  const { data: featuredStories, error: storiesError } = useQuery('featured-stories', () => 
+
+  // Load secondary content after the critical data, to prioritize the first screen
+  const { data: featuredStories } = useQuery<Story[]>('featured-stories', () =>
     storiesAPI.getAll(true, false), { // Get all active stories, not just featured
     retry: 1,
     staleTime: 5 * 60 * 1000,
     enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Stories error:', error)
   })
-  const { data: upcomingEvents, error: eventsError } = useQuery('upcoming-events', () => 
+  const { data: upcomingEvents } = useQuery<Event[]>('upcoming-events', () =>
     eventsAPI.getAll(true), {
     retry: 1,
     staleTime: 5 * 60 * 1000,
     enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Events error:', error)
   })
-  const { data: testimonials, error: testimonialsError } = useQuery('testimonials', () => 
+  const { data: testimonials } = useQuery<Testimonial[]>('testimonials', () =>
     testimonialsAPI.getAll(true), {
     retry: 1,
     staleTime: 5 * 60 * 1000,
     enabled: !!donationStats, // Only load after critical data
     onError: (error) => console.error('Testimonials error:', error)
   })
-  const { data: categories, error: categoriesError } = useQuery('program-categories', () => 
+  const { data: categories } = useQuery<ProgramCategory[]>('program-categories', () =>
     programCategoriesAPI.getAll(true), {
     retry: 1,
     staleTime: 5 * 60 * 1000,
@@ -77,98 +133,26 @@ const Home = () => {
   // Show error state if any critical API calls fail
   if (statsError || settingsError) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <h1 className="text-4xl font-heading font-bold text-center mb-8">MyZakat</h1>
-          <div className="text-center">
-            <p className="text-red-600 mb-4">Unable to load homepage data. Please check your connection.</p>
-            <p className="text-gray-600">Other pages should still work normally.</p>
-          </div>
+      <div className="section-alt">
+        <div className="section-container text-center">
+          <h1 className="page-title mb-6">MyZakat</h1>
+          <p className="text-red-700 mb-2">Unable to load homepage data. Please check your connection.</p>
+          <p className="text-gray-600 mb-6">Other pages should still work normally.</p>
+          <Link to="/donate" className="btn-primary">Donate</Link>
         </div>
       </div>
     )
   }
 
+  // The stats endpoint also returns total_raised, which the DonationStats type does not declare.
+  const stats = donationStats as (DonationStats & { total_raised?: number }) | undefined
   const impactStats = [
-    {
-      icon: Heart,
-      value: donationStats?.impact?.meals || 0,
-      label: 'Meals Provided',
-      color: 'text-red-600'
-    },
-    {
-      icon: Users,
-      value: donationStats?.impact?.families || 0,
-      label: 'Families Supported',
-      color: 'text-blue-600'
-    },
-    {
-      icon: Globe,
-      value: donationStats?.impact?.orphans || 0,
-      label: 'Orphans Cared For',
-      color: 'text-green-600'
-    },
-    {
-      icon: TrendingUp,
-      value: `$${(donationStats?.total_raised || 0).toLocaleString()}`,
-      label: 'Total Raised',
-      color: 'text-purple-600'
-    }
+    { value: (stats?.impact?.meals || 0).toLocaleString('en-US'), label: 'Meals provided' },
+    { value: (stats?.impact?.families || 0).toLocaleString('en-US'), label: 'Families supported' },
+    { value: (stats?.impact?.orphans || 0).toLocaleString('en-US'), label: 'Orphans cared for' },
+    { value: `$${(stats?.total_raised || 0).toLocaleString('en-US')}`, label: 'Total raised' },
   ]
-
-  // Get media URLs from settings
-  const getMediaUrl = (key: string, fallback: string) => {
-    const setting = settings?.find(s => s.key === key)
-    if (!setting?.value) return fallback
-    
-    // If it's a URL, return as-is
-    if (setting.value.startsWith('http://') || setting.value.startsWith('https://')) {
-      return setting.value
-    }
-    
-    // If it's a filename, construct the API path
-    return getStaticFileUrl(`/api/uploads/media/images/${setting.value}`)
-  }
-
-  // Helper function to get video URL - check if it's a filename or URL
-  const getVideoUrl = (value?: string) => {
-    if (!value) return null
-    // Check if it's a full URL (starts with http:// or https://)
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value
-    }
-    // Otherwise, treat it as a filename and load from uploads
-    return getStaticFileUrl(`/api/uploads/media/videos/${value}`)
-  }
-
-  const getSettingValue = (key: string): string => {
-    const setting = settings?.find(s => s.key === key)
-    return setting?.value || ''
-  }
-
-  // Helper to get category media - checks video first, then image
-  const getCategoryMedia = (category: ProgramCategory) => {
-    if (category.video_filename) {
-      // Video takes priority
-      const videoUrl = getStaticFileUrl(`/api/uploads/program_categories/${category.video_filename}`)
-      return { url: videoUrl, type: 'video' as const }
-    } else if (category.image_url) {
-      // Fallback to image - check if it's a URL or needs to be constructed
-      if (category.image_url.startsWith('http://') || category.image_url.startsWith('https://')) {
-        return { url: category.image_url, type: 'image' as const }
-      }
-      return { url: category.image_url, type: 'image' as const }
-    }
-
-    return { url: null, type: 'image' as const }
-  }
-
-  // Helper to append width param to a URL for optimization
-  const withWidth = (url: string | null, width: number): string | null => {
-    if (!url || url.startsWith('http://') || url.startsWith('https://')) return url
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}w=${width}`
-  }
+  const homeImpactEnabled = settings?.find((s) => s.key === 'home_impact_enabled')?.value !== 'false'
 
   return (
     <div className="min-h-screen">
@@ -183,270 +167,85 @@ const Home = () => {
           { question: 'What is the difference between Zakat and Sadaqa?', answer: 'Zakat is obligatory with specific rules about amounts and recipients. Sadaqa is voluntary charity with no minimum amount or restrictions.' },
         ])}
       />
-      {/* Slideshow Section */}
-      <Slideshow />
 
-      {/* Fundraising projects — public progress cards with animated bars */}
+      {/* Hero slideshow (renders the page h1) */}
+      <Slideshow
+        heading="MyZakat: give your zakat and sadaqa"
+        emptyDescription="Pick a project or give to where the need is greatest. You get a receipt by email."
+        emptyActions={
+          <>
+            <Link to="/donate" className="btn-primary btn-lg">Donate Now</Link>
+            <Link to="/zakat-calculator" className="btn-secondary btn-lg">Calculate My Zakat</Link>
+          </>
+        }
+      />
+
+      {/* Projects you can fund */}
       <FundraisingProjectsSection />
 
-      {/* Our Work teaser — scrolls to the gallery section */}
-      <button
-        type="button"
-        onClick={() => {
-          document.getElementById('our-work-in-action')?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-          })
-        }}
-        aria-label="Scroll to Our Work in Action"
-        className="group w-full bg-gradient-to-r from-primary-600 via-blue-600 to-primary-700 text-white py-5 px-4 hover:from-primary-700 hover:via-blue-700 hover:to-primary-800 transition-all duration-300 cursor-pointer relative overflow-hidden"
-      >
-        {/* Animated shimmer overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-
-        <div className="section-container relative z-10 flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
-          {/* Pulsing play icon */}
-          <span className="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center flex-shrink-0">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-30 animate-ping"></span>
-            <span className="relative inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-              <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white" />
-            </span>
-          </span>
-
-          {/* Text */}
-          <div className="text-center sm:text-left">
-            <p className="font-bold text-base sm:text-lg leading-tight">
-              See Our Work in Action
-            </p>
-            <p className="text-xs sm:text-sm text-blue-100">
-              Discover our latest projects through photos and videos
-            </p>
-          </div>
-
-          {/* Animated down arrow */}
-          <div className="hidden sm:flex items-center ml-2">
-            <div className="flex flex-col items-center animate-bounce">
-              <ChevronRight className="w-5 h-5 rotate-90" />
-            </div>
-          </div>
-        </div>
-      </button>
-
-      {/* Impact Stats */}
-      {(() => {
-        const homeImpactEnabled = settings?.find(s => s.key === 'home_impact_enabled')?.value !== 'false'
-        return homeImpactEnabled ? (
-          <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-5">
-              <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
-            </div>
-            <div className="section-container relative z-10">
-              <div className="text-center mb-16">
-                <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-                  Our Impact
-                </div>
-                <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                  Transforming Lives Through
-                  <span className="block text-primary-600 mt-2">Generous Giving</span>
-                </h2>
-                <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                  Every contribution creates a ripple effect of positive change, touching lives and building hope in communities worldwide
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {impactStats.map((stat, index) => (
-                  <div 
-                    key={index}
-                    className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fade-in overflow-hidden"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-100 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative p-8">
-                      <div className={`w-16 h-16 ${stat.color.replace('text-', 'bg-').replace('-600', '-100')} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500`}>
-                        <stat.icon className={`w-8 h-8 ${stat.color}`} />
-                      </div>
-                      <div className="text-4xl lg:text-5xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors duration-300">
-                        {stat.value}
-                      </div>
-                      <div className="text-gray-600 font-semibold text-lg">{stat.label}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        ) : null
-      })()}
-
-      {/* How It Works */}
-      <section className="py-20 bg-white relative">
-        <div className="section-container">
-          <div className="text-center mb-16">
-            <div className="inline-block px-4 py-2 bg-blue-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-              Simple Process
-            </div>
-            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-              Your Donation Journey
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              From your click to their smile - discover the seamless path your contribution takes to create lasting change
-            </p>
-          </div>
-
-          <div className="relative">
-            {/* Connection Line - Hidden on mobile */}
-            <div className="hidden lg:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-200 via-primary-400 to-primary-200"></div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
-              {[
-                {
-                  step: '1',
-                  title: 'You Donate',
-                  description: 'Choose your cause and make a secure donation online with complete transparency and peace of mind.',
-                  icon: Heart,
-                  gradient: 'from-red-500 to-pink-500'
-                },
-                {
-                  step: '2',
-                  title: 'We Deliver',
-                  description: 'Our dedicated team ensures your donation reaches those most in need, quickly and efficiently.',
-                  icon: Globe,
-                  gradient: 'from-blue-500 to-cyan-500'
-                },
-                {
-                  step: '3',
-                  title: 'Lives Change',
-                  description: 'Your generosity provides food, water, education, and hope to families and children in need.',
-                  icon: Users,
-                  gradient: 'from-green-500 to-emerald-500'
-                }
-              ].map((item, index) => (
-                <div 
-                  key={index} 
-                  className="relative group animate-fade-in" 
-                  style={{ animationDelay: `${index * 0.15}s` }}
-                >
-                  {/* Step Number Badge */}
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${item.gradient} rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                      <span className="text-white font-bold text-xl">{item.step}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 p-8 pt-12 border border-gray-100 group-hover:border-primary-200">
-                    <div className={`w-20 h-20 bg-gradient-to-br ${item.gradient} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:rotate-6 transition-transform duration-500 shadow-lg`}>
-                      <item.icon className="w-10 h-10 text-white" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center group-hover:text-primary-600 transition-colors">
-                      {item.title}
-                    </h3>
-                    <p className="text-gray-600 leading-relaxed text-center">
-                      {item.description}
-                    </p>
-                  </div>
+      {/* Impact numbers (admin toggle: home_impact_enabled) */}
+      {homeImpactEnabled && (
+        <section className="section-alt" aria-labelledby="home-impact-title">
+          <div className="section-container">
+            <h2 id="home-impact-title" className="eyebrow mb-6">Since we started</h2>
+            <dl className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {impactStats.map((stat) => (
+                <div key={stat.label}>
+                  <dt className="text-sm text-gray-600">{stat.label}</dt>
+                  <dd className="mt-1 text-3xl font-bold text-gray-900">{stat.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* Our Work - Program Categories */}
+      {/* Programs */}
       {categories && categories.length > 0 && (
-        <section className="py-20 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-          </div>
-          <div className="section-container relative z-10">
-            <div className="text-center mb-16">
-              <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-                Our Work
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                Programs That Make
-                <span className="block text-primary-600 mt-2">A Real Difference</span>
-              </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                Focused initiatives that address the most critical needs in underserved communities around the world
-              </p>
-            </div>
+        <section className="section" aria-labelledby="home-programs-title">
+          <div className="section-container">
+            <SectionHead id="home-programs-title" title="Our programs" viewAll={{ to: '/programs', label: 'All programs' }} />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {categories.map((category, index) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categories.map((category) => {
                 const media = getCategoryMedia(category)
                 return (
-                  <div 
-                    key={category.id}
-                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    {/* Media Section */}
-                    <div className="relative overflow-hidden h-64 group cursor-pointer" onClick={(e) => {
-                      if (media.type === 'video' && media.url) {
-                        const container = e.currentTarget
-                        const video = document.createElement('video')
-                        video.src = media.url
-                        video.className = "w-full h-full object-cover"
-                        video.controls = true
-                        video.playsInline = true
-                        video.preload = "metadata"
-                        container.innerHTML = ''
-                        container.appendChild(video)
-                      }
-                    }}>
+                  <article key={category.id} className="card-media group relative">
+                    <div className="relative h-48 overflow-hidden bg-gray-100">
                       {media.type === 'video' && media.url ? (
-                        <VideoThumbnail
-                          videoSrc={media.url}
-                          className="w-full h-full"
-                          alt={`${category.title} video`}
-                        />
-                      ) : media.url ? (
-                        <>
-                          <img
-                            src={withWidth(media.url, IMAGE_WIDTHS.CARD) || media.url}
-                            alt={category.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                            crossOrigin={media.url.startsWith('http://') || media.url.startsWith('https://') ? 'anonymous' : undefined}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
-                          {/* Overlay only for images, not videos */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                        </>
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-400">No media</span>
+                        <div className="relative z-10 h-full">
+                          <PlayableVideo videoSrc={media.url} title={category.title} className="w-full h-full" />
                         </div>
-                      )}
+                      ) : media.url ? (
+                        <img
+                          src={withWidth(media.url, IMAGE_WIDTHS.CARD) || media.url}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      ) : null}
                     </div>
-                    
-                    {/* Content Section */}
-                    <div className="p-6">
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                        {category.title}
+
+                    <div className="card-body">
+                      <h3 className="card-title">
+                        <Link to={`/categories/${category.slug}`} className={`hover:text-primary-700 ${STRETCHED_LINK}`}>
+                          {category.title}
+                        </Link>
                       </h3>
                       {category.impact_text && (
-                        <div className="mb-3">
-                          <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
-                            {category.impact_text}
-                          </span>
-                        </div>
+                        <p className="mt-2"><span className="badge-primary">{category.impact_text}</span></p>
                       )}
-                      <p className="text-gray-600 mb-6 leading-relaxed">
+                      <p className="mt-2 text-gray-600 line-clamp-2">
                         {category.short_description || category.description || ''}
                       </p>
-                      <Link 
-                        to="/donate" 
-                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
-                      >
-                        Support This Program
-                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </Link>
+                      <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
+                        See this program <ArrowRight className="w-4 h-4" />
+                      </span>
                     </div>
-                  </div>
+                  </article>
                 )
               })}
             </div>
@@ -454,418 +253,173 @@ const Home = () => {
         </section>
       )}
 
-      {/* Stories Section */}
+      {/* Stories */}
       {featuredStories && featuredStories.length > 0 && (
-        <section className="py-20 bg-gradient-to-br from-purple-50 via-white to-blue-50 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-1/4 right-0 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-1/4 left-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
-          </div>
-          <div className="section-container relative z-10">
-            <div className="text-center mb-16">
-              <div className="inline-block px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-4">
-                Stories of Impact
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                Real Stories,
-                <span className="block text-primary-600 mt-2">Real Impact</span>
-              </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                Discover how your generosity transforms lives and creates lasting change in communities around the world
-              </p>
-            </div>
+        <section className="section-alt" aria-labelledby="home-stories-title">
+          <div className="section-container">
+            <SectionHead id="home-stories-title" title="Stories from the field" viewAll={{ to: '/stories', label: 'View All Stories' }} />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {featuredStories.slice(0, 3).map((story: any, index: number) => {
-                // Helper function to get image URL
-                const getImageUrl = (imageValue?: string) => {
-                  return getOptimizedImageUrl(imageValue, IMAGE_WIDTHS.THUMB, 'stories')
-                }
-
-                // Helper function to get video URL
-                const getVideoUrl = (videoFilename?: string) => {
-                  if (!videoFilename) return null
-                  // If it's already a full URL (from S3), return as-is
-                  if (videoFilename.startsWith('http://') || videoFilename.startsWith('https://')) {
-                    return videoFilename
-                  }
-                  // Story videos are served from /api/uploads/stories/ endpoint
-                  return getStaticFileUrl(`/api/uploads/stories/${videoFilename}`)
-                }
-
-                const imageUrl = getImageUrl(story.image_filename)
-                const videoUrl = getVideoUrl(story.video_filename)
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredStories.slice(0, 3).map((story) => {
+                const imageUrl = getOptimizedImageUrl(story.image_filename, IMAGE_WIDTHS.THUMB, 'stories')
+                const videoUrl = getStoryVideoUrl(story.video_filename)
 
                 return (
-                  <div 
-                    key={story.id}
-                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    {/* Story Media */}
+                  <article key={story.id} className="card-media group relative">
                     {(imageUrl || videoUrl) && (
-                      <div className="relative overflow-hidden h-48 group cursor-pointer" onClick={(e) => {
-                        if (videoUrl) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          const container = e.currentTarget
-                          if (container.querySelector('video')) return // Already playing
-                          
-                          const video = document.createElement('video')
-                          video.src = videoUrl
-                          video.className = "w-full h-full object-cover"
-                          video.controls = true
-                          video.playsInline = true
-                          video.preload = "auto"
-                          video.muted = false
-                          
-                          const loadingDiv = document.createElement('div')
-                          loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-                          loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-                          container.innerHTML = ''
-                          container.appendChild(loadingDiv)
-                          container.appendChild(video)
-                          
-                          video.addEventListener('canplay', () => {
-                            loadingDiv.remove()
-                            video.play().catch(() => {})
-                          }, { once: true })
-                          
-                          video.addEventListener('error', () => {
-                            loadingDiv.remove()
-                            container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white text-sm">Video failed to load</div>'
-                          }, { once: true })
-                        }
-                      }}
-                      onMouseEnter={(e) => {
-                        if (videoUrl) {
-                          const container = e.currentTarget
-                          if (!container.querySelector('video')) {
-                            const preloadVideo = document.createElement('video')
-                            preloadVideo.src = videoUrl
-                            preloadVideo.preload = "auto"
-                            preloadVideo.style.display = "none"
-                            document.body.appendChild(preloadVideo)
-                            setTimeout(() => {
-                              if (preloadVideo.parentNode) {
-                                preloadVideo.parentNode.removeChild(preloadVideo)
-                              }
-                            }, 30000)
-                          }
-                        }
-                      }}>
+                      <div className="relative h-48 overflow-hidden bg-gray-100">
                         {videoUrl ? (
-                          <VideoThumbnail
-                            videoSrc={videoUrl}
-                            poster={imageUrl || undefined}
-                            className="w-full h-full"
-                            alt={`${story.title} video`}
-                          />
+                          <div className="relative z-10 h-full">
+                            <PlayableVideo videoSrc={videoUrl} poster={imageUrl || undefined} title={story.title} className="w-full h-full" />
+                          </div>
                         ) : (
-                          <img 
-                            src={imageUrl || ''} 
-                            alt={story.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                          <img
+                            src={imageUrl || ''}
+                            alt=""
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            loading="lazy"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none'
                             }}
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                       </div>
                     )}
 
-                    <div className="p-6">
-                      {/* Story Title */}
-                      <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
-                        {story.title}
+                    <div className="card-body">
+                      <h3 className="card-title line-clamp-2">
+                        <Link to={`/stories/${story.id}`} className={`hover:text-primary-700 ${STRETCHED_LINK}`}>
+                          {story.title}
+                        </Link>
                       </h3>
-
-                      {/* Story Summary */}
-                      <p className="text-gray-600 mb-6 line-clamp-3 leading-relaxed">
-                        {story.summary || story.content?.substring(0, 150) + '...'}
+                      <p className="mt-2 text-gray-600 line-clamp-3">
+                        {story.summary || (story.content ? `${story.content.substring(0, 150)}...` : '')}
                       </p>
-
-                      {/* Action Button */}
-                      <Link 
-                        to={`/stories/${story.id}`}
-                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
-                      >
-                        Read Story
-                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </Link>
+                      <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
+                        Read story <ArrowRight className="w-4 h-4" />
+                      </span>
                     </div>
-                  </div>
+                  </article>
                 )
               })}
-            </div>
-
-            {/* View All Stories Link */}
-            <div className="text-center mt-12">
-              <Link 
-                to="/stories"
-                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
-              >
-                View All Stories
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Link>
             </div>
           </div>
         </section>
       )}
 
-      {/* Events Section */}
+      {/* Upcoming events (only when there are some) */}
       {upcomingEvents && upcomingEvents.length > 0 && (
-        <section className="py-20 bg-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-          </div>
-          <div className="section-container relative z-10">
-            <div className="text-center mb-16">
-              <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-                Upcoming Events
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                Join Us at Our
-                <span className="block text-primary-600 mt-2">Upcoming Events</span>
-              </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                Be part of our community events, fundraisers, and gatherings where we come together to make a difference
-              </p>
-            </div>
+        <section className="section" aria-labelledby="home-events-title">
+          <div className="section-container">
+            <SectionHead id="home-events-title" title="Upcoming events" viewAll={{ to: '/events', label: 'View All Events' }} />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {upcomingEvents.slice(0, 3).map((event: Event, index: number) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {upcomingEvents.slice(0, 3).map((event) => {
                 const eventDate = new Date(event.date)
                 const isToday = eventDate.toDateString() === new Date().toDateString()
-                
                 const imageUrl = getOptimizedImageUrl(event.image, IMAGE_WIDTHS.THUMB, 'events')
 
                 return (
-                  <div 
-                    key={event.id}
-                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    {/* Event Image */}
+                  <article key={event.id} className="card-media group relative">
                     {imageUrl && (
-                      <div className="relative overflow-hidden h-48">
-                        <img 
-                          src={imageUrl} 
-                          alt={event.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      <div className="relative h-48 overflow-hidden bg-gray-100">
+                        <img
+                          src={imageUrl}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none'
                           }}
                         />
-                        <div className="absolute top-4 right-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            isToday 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {isToday ? 'Today' : 'Upcoming'}
-                          </span>
-                        </div>
+                        {isToday && (
+                          <span className="badge-danger absolute top-3 left-3 shadow-sm">Today</span>
+                        )}
                       </div>
                     )}
 
-                    <div className="p-6">
-                      {/* Event Title */}
-                      <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors">
-                        {event.title}
+                    <div className="card-body">
+                      <h3 className="card-title">
+                        <Link to={`/events/${event.id}`} className={`hover:text-primary-700 ${STRETCHED_LINK}`}>
+                          {event.title}
+                        </Link>
                       </h3>
-
-                      {/* Event Description */}
-                      <p className="text-gray-600 mb-4 line-clamp-2">{event.description}</p>
-
-                      {/* Event Details */}
-                      <div className="space-y-2 mb-6">
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Calendar className="w-4 h-4 mr-2 text-primary-500 flex-shrink-0" />
-                          <span>
-                            {eventDate.toLocaleDateString('en-US', {
-                              weekday: 'short',
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center text-sm text-gray-600">
-                          <MapPin className="w-4 h-4 mr-2 text-primary-500 flex-shrink-0" />
-                          <span className="truncate">{event.location}</span>
-                        </div>
+                      <p className="mt-2 text-gray-600 line-clamp-2">{event.description}</p>
+                      <div className="mt-4 space-y-1.5 text-sm text-gray-600">
+                        <p className="flex items-center">
+                          <Calendar className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
+                          {eventDate.toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </p>
+                        {event.location && (
+                          <p className="flex items-center">
+                            <MapPin className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
+                            <span className="truncate">{event.location}</span>
+                          </p>
+                        )}
                       </div>
-
-                      {/* Action Button */}
-                      <Link 
-                        to={`/events/${event.id}`}
-                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
-                      >
-                        Learn More
-                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </Link>
                     </div>
-                  </div>
+                  </article>
                 )
               })}
-            </div>
-
-            {/* View All Events Link */}
-            <div className="text-center mt-12">
-              <Link 
-                to="/events"
-                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
-              >
-                View All Events
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Link>
             </div>
           </div>
         </section>
       )}
 
-      {/* Testimonials */}
+      {/* Testimonials (only when there are some) */}
       {testimonials && testimonials.length > 0 && (
-        <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
-          </div>
-          <div className="section-container relative z-10">
-            <div className="text-center mb-16">
-              <div className="inline-block px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-4">
-                Testimonials
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                Voices of
-                <span className="block text-primary-600 mt-2">Gratitude & Hope</span>
-              </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                Hear from those whose lives have been transformed by your generous contributions
-              </p>
-            </div>
+        <section className="section-alt" aria-labelledby="home-testimonials-title">
+          <div className="section-container">
+            <SectionHead id="home-testimonials-title" title="What donors say" />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {testimonials.slice(0, 3).map((testimonial, index) => {
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {testimonials.slice(0, 3).map((testimonial) => {
                 const imageUrl = getOptimizedImageUrl(testimonial.image, IMAGE_WIDTHS.THUMB, 'testimonials')
+                const videoUrl = getTestimonialVideoUrl(testimonial.video_filename)
+                const rating = testimonial.rating ? Math.max(0, Math.min(5, Math.round(testimonial.rating))) : 0
 
-                // Helper function to get video URL
-                const getVideoUrl = (videoFilename?: string) => {
-                  if (!videoFilename) return null
-                  return getStaticFileUrl(`/api/uploads/testimonials/${videoFilename}`)
-                }
-                const videoUrl = getVideoUrl(testimonial.video_filename)
-                
                 return (
-                <div 
-                  key={testimonial.id}
-                  className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fade-in p-8 border border-gray-100 relative overflow-hidden"
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-50 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative">
-                    {/* Video Display */}
+                  <figure key={testimonial.id} className="card flex flex-col">
                     {videoUrl && (
-                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900 group cursor-pointer" onClick={(e) => {
-                        const container = e.currentTarget
-                        if (container.querySelector('video')) return
-                        
-                        const video = document.createElement('video')
-                        video.src = videoUrl
-                        video.className = "w-full aspect-video object-cover"
-                        video.controls = true
-                        video.playsInline = true
-                        video.preload = "auto"
-                        video.muted = false
-                        
-                        const loadingDiv = document.createElement('div')
-                        loadingDiv.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10"
-                        loadingDiv.innerHTML = '<div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>'
-                        container.innerHTML = ''
-                        container.appendChild(loadingDiv)
-                        container.appendChild(video)
-                        
-                        video.addEventListener('canplay', () => {
-                          loadingDiv.remove()
-                          video.play().catch(() => {})
-                        }, { once: true })
-                        
-                        video.addEventListener('error', () => {
-                          loadingDiv.remove()
-                          container.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gray-900 text-white">Video failed to load</div>'
-                        }, { once: true })
-                      }}
-                      onMouseEnter={(e) => {
-                        const container = e.currentTarget
-                        if (!container.querySelector('video') && videoUrl) {
-                          const preloadVideo = document.createElement('video')
-                          preloadVideo.src = videoUrl
-                          preloadVideo.preload = "auto"
-                          preloadVideo.style.display = "none"
-                          document.body.appendChild(preloadVideo)
-                          setTimeout(() => {
-                            if (preloadVideo.parentNode) {
-                              preloadVideo.parentNode.removeChild(preloadVideo)
-                            }
-                          }, 30000)
-                        }
-                      }}>
-                        <VideoThumbnail
-                          videoSrc={videoUrl}
-                          className="w-full aspect-video object-cover"
-                          alt={`${testimonial.name} testimonial video`}
-                        />
+                      <div className="mb-5 rounded-lg overflow-hidden bg-gray-900 aspect-video">
+                        <PlayableVideo videoSrc={videoUrl} title={`${testimonial.name} testimonial`} className="w-full h-full" />
                       </div>
                     )}
-                    {!videoUrl && imageUrl && (
-                      <div className="mb-6 rounded-lg overflow-hidden bg-gray-900">
+                    {rating > 0 && (
+                      <div className="flex mb-4" role="img" aria-label={`Rated ${rating} out of 5`}>
+                        {Array.from({ length: rating }).map((_, i) => (
+                          <Star key={i} className="w-4 h-4 text-amber-500 fill-current" aria-hidden="true" />
+                        ))}
+                      </div>
+                    )}
+                    <blockquote className="text-gray-700 leading-relaxed flex-1">
+                      <p>“{testimonial.text}”</p>
+                    </blockquote>
+                    <figcaption className="mt-5 pt-4 border-t border-gray-100 flex items-center gap-3">
+                      {!videoUrl && imageUrl && (
                         <img
                           src={imageUrl}
-                          alt={testimonial.name}
-                          className="w-full aspect-video object-cover"
+                          alt=""
+                          className="w-12 h-12 rounded-full object-cover"
                           loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
                         />
-                      </div>
-                    )}
-                    
-                    {/* Image Display (only if no video) */}
-                    {!videoUrl && imageUrl && (
-                      <div className="mb-6 flex justify-center">
-                        <div className="relative">
-                          <img 
-                            src={imageUrl} 
-                            alt={testimonial.name}
-                            className="w-20 h-20 rounded-full object-cover ring-4 ring-primary-100 group-hover:ring-primary-200 transition-all duration-300"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
-                          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white"></div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex justify-center mb-6">
-                      {[...Array(testimonial.rating || 5)].map((_, i) => (
-                        <Star key={i} className="w-5 h-5 text-yellow-400 fill-current mx-0.5" />
-                      ))}
-                    </div>
-                    <div className="relative mb-6">
-                      <div className="absolute top-0 left-0 text-6xl text-primary-200 font-serif leading-none opacity-50">"</div>
-                      <p className="text-gray-700 italic leading-relaxed relative z-10 pl-6 text-lg">
-                        {testimonial.text}
-                      </p>
-                    </div>
-                    <div className="border-t border-gray-100 pt-4">
-                      <div className="font-bold text-gray-900 text-lg">{testimonial.name}</div>
-                      {testimonial.country && (
-                        <div className="text-sm text-gray-500 mt-1">{testimonial.country}</div>
                       )}
-                    </div>
-                  </div>
-                </div>
+                      <span>
+                        <span className="block font-semibold text-gray-900">{testimonial.name}</span>
+                        {testimonial.country && (
+                          <span className="block text-sm text-gray-500">{testimonial.country}</span>
+                        )}
+                      </span>
+                    </figcaption>
+                  </figure>
                 )
               })}
             </div>
@@ -873,108 +427,25 @@ const Home = () => {
         </section>
       )}
 
-      {/* Gallery Section */}
-      <section id="our-work-in-action" className="py-20 bg-white relative overflow-hidden scroll-mt-20">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-        </div>
-        <div className="section-container relative z-10">
-          <div className="text-center mb-16">
-            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-              Visual Impact
-            </div>
-            <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-              Our Work in Action
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Witness the real-world impact of your donations through photos and videos showcasing our ongoing aid activities
-            </p>
-          </div>
+      {/* Gallery (hidden when there is nothing to show) */}
+      <GallerySection />
 
-          <GallerySection />
-        </div>
-      </section>
-
-      {/* Our Foundation */}
-      <section className="py-20 bg-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl"></div>
-        </div>
-        <div className="section-container relative z-10">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-6">
-                <Sparkles className="w-4 h-4" />
-                <span>Our Foundation</span>
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-heading font-bold text-gray-900 mb-6">
-                Built on Personal Commitment
-              </h2>
-            </div>
-
-            <div className="max-w-2xl mx-auto mb-12">
-              <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100 hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center mb-6">
-                  <div className="w-14 h-14 bg-primary-600 rounded-xl flex items-center justify-center mr-4 shadow-lg">
-                    <HeartHandshake className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900">Personal Beginnings</h3>
-                </div>
-                <p className="text-gray-700 leading-relaxed text-lg">
-                  MyZakat Zakat Distribution Foundation emerged from a personal commitment to serving humanity. 
-                  What began as individual efforts to address immediate needs has grown into a dedicated platform for amplifying charitable impact.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl shadow-2xl p-8 md:p-10 border-2 border-primary-300">
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="flex-shrink-0">
-                  <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg">
-                    <Heart className="w-10 h-10 text-primary-600" />
-                  </div>
-                </div>
-                <div className="flex-1 text-center md:text-left">
-                  <p className="text-2xl font-bold text-white mb-2">
-                    Look at what was accomplished using only personal resources.
-                  </p>
-                  <p className="text-xl text-primary-100">
-                    Now imagine what we can achieve together with your support.
-                  </p>
-                </div>
-                <div className="flex-shrink-0">
-                  <Link to="/donate" className="bg-white text-primary-600 hover:bg-primary-50 text-lg px-8 py-4 rounded-lg font-semibold flex items-center gap-2 group transition-all duration-300 shadow-lg">
-                    Join Us
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 hero-gradient text-white">
+      {/* Closing call to action (the only one on the page) */}
+      <section className="section hero-gradient text-white" aria-labelledby="home-cta-title">
         <div className="section-container text-center">
-          <h2 className="text-3xl lg:text-5xl font-heading font-bold mb-6">
-            Ready to Make a Difference?
+          <h2 id="home-cta-title" className="section-title text-white">
+            Give your zakat or sadaqa
           </h2>
-          <p className="text-xl lg:text-2xl mb-8 text-blue-100 max-w-3xl mx-auto">
-            Your Zakat and Sadaqa can transform lives today. Join our community of compassionate donors.
+          <p className="mt-3 text-lg text-white/90 max-w-2xl mx-auto">
+            Pick a project or give to where the need is greatest. You get a receipt by email.
           </p>
-          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link to="/donate" className="btn-primary bg-white text-primary-600 hover:bg-blue-50 text-xl px-10 py-4">
+          <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Link to="/donate" className="btn-inverse btn-lg">
               Donate Now
-              <Heart className="ml-2 w-6 h-6" />
             </Link>
-            <Link to="/zakat-calculator" className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-primary-600 font-medium px-10 py-4 rounded-lg transition-colors duration-200 text-xl">
+            <Link to="/zakat-calculator" className="btn btn-lg border border-white/60 text-white hover:bg-white/10">
               Calculate My Zakat
             </Link>
-          </div>
-          <div className="mt-8 text-blue-100">
-            <p className="text-lg">💳 Secure payments • 🔒 100% transparent • 📊 Real-time impact tracking</p>
           </div>
         </div>
       </section>
@@ -985,8 +456,11 @@ const Home = () => {
 
 const GallerySection = () => {
   const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null)
-  
-  const { data: galleryItems = [], isLoading } = useQuery('public-gallery', () => galleryAPI.getAll(true))
+  const [showAll, setShowAll] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
+
+  const { data: galleryItems = [], isLoading } = useQuery<GalleryItem[]>('public-gallery', () => galleryAPI.getAll(true))
 
   // Helper function to get media URL - check if it's a filename or URL
   const getMediaUrl = (filename: string): { url: string; isVideo: boolean } => {
@@ -995,25 +469,25 @@ const GallerySection = () => {
       // Extract filename from URL if it's a backend proxy URL
       const urlParts = filename.split('/')
       const actualFilename = urlParts[urlParts.length - 1]
-      
+
       // Determine if it's a video based on extension or URL path
-      const isVideo = filename.includes('/videos/') || 
-                     filename.includes('youtube.com') || 
-                     filename.includes('youtu.be') || 
-                     filename.includes('vimeo.com') || 
+      const isVideo = filename.includes('/videos/') ||
+                     filename.includes('youtube.com') ||
+                     filename.includes('youtu.be') ||
+                     filename.includes('vimeo.com') ||
                      actualFilename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
-      
+
       // If it's a backend proxy URL, use it directly
       // Otherwise, it might be an external URL (YouTube, etc.)
       return { url: filename, isVideo: !!isVideo }
     }
-    
+
     // Otherwise, treat it as a filename and determine if it's video or image
     const isVideo = filename.match(/\.(mp4|webm|ogg|avi|mov)$/i)
-    const url = isVideo 
+    const url = isVideo
       ? getStaticFileUrl(`/api/uploads/media/videos/${filename}`)
       : getStaticFileUrl(`/api/uploads/media/images/${filename}`)
-    
+
     return { url, isVideo: !!isVideo }
   }
 
@@ -1032,6 +506,7 @@ const GallerySection = () => {
   })
 
   const selectedMedia = selectedMediaIndex !== null ? processedItems[selectedMediaIndex] : null
+  const isOpen = selectedMedia !== null
 
   const goToPrevious = () => {
     if (selectedMediaIndex === null) return
@@ -1045,167 +520,194 @@ const GallerySection = () => {
     setSelectedMediaIndex(newIndex)
   }
 
+  const close = () => setSelectedMediaIndex(null)
+
+  // Move focus into the viewer when it opens, and back to the tile that opened it when it closes.
+  useEffect(() => {
+    if (isOpen) {
+      dialogRef.current?.focus()
+    } else if (openerRef.current) {
+      openerRef.current.focus()
+      openerRef.current = null
+    }
+  }, [isOpen])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (selectedMediaIndex === null) return
     if (e.key === 'ArrowLeft') goToPrevious()
     if (e.key === 'ArrowRight') goToNext()
-    if (e.key === 'Escape') setSelectedMediaIndex(null)
+    if (e.key === 'Escape') close()
   }
 
-  if (isLoading) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-      </div>
-    )
-  }
+  if (!isLoading && processedItems.length === 0) return null
 
-  if (processedItems.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="w-24 h-24 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-          <ImageIcon className="w-12 h-12 text-gray-400" />
-        </div>
-        <p className="text-gray-500">Gallery coming soon...</p>
-      </div>
-    )
-  }
+  const visibleItems = showAll ? processedItems : processedItems.slice(0, GALLERY_PREVIEW_COUNT)
+  const hiddenCount = processedItems.length - visibleItems.length
 
   return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {processedItems.map((item, index) => (
-          <div 
-            key={item.id}
-            className="group aspect-square bg-gray-200 rounded-2xl overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-500 relative animate-fade-in transform hover:-translate-y-2"
-            style={{ animationDelay: `${index * 0.1}s` }}
-            onClick={() => setSelectedMediaIndex(index)}
-          >
-            {item.type === 'video' ? (
-              item.thumbnail ? (
-                // Use backend-generated thumbnail if available
-                <img 
-                  src={item.thumbnail}
-                  alt={`Gallery video ${item.id}`}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  loading="lazy"
-                  crossOrigin={item.thumbnail?.startsWith('http://') || item.thumbnail?.startsWith('https://') ? 'anonymous' : undefined}
-                  onError={(e) => {
-                    // Fallback to VideoThumbnail if thumbnail fails to load
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              ) : (
-                // Fallback to client-side generation if no thumbnail
-                <VideoThumbnail
-                  videoSrc={item.url}
-                  className="w-full h-full"
-                  alt={`Gallery video ${item.id}`}
-                />
-              )
-            ) : (
-              <img 
-                src={item.thumbnail || item.url}
-                alt={`Gallery ${item.type} ${item.id}`}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                loading="lazy"
-                crossOrigin={(item.thumbnail || item.url)?.startsWith('http://') || (item.thumbnail || item.url)?.startsWith('https://') ? 'anonymous' : undefined}
-                onError={(e) => {
-                  // Hide image if it fails to load instead of trying placeholder
-                  e.currentTarget.style.display = 'none'
-                }}
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            {item.type === 'video' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-500">
-                <div className="bg-white rounded-full p-4 group-hover:scale-110 transition-all duration-300 shadow-xl">
-                  <Play className="w-10 h-10 text-primary-600 ml-1" />
-                </div>
-              </div>
-            )}
+    <section id="our-work-in-action" className="section scroll-mt-20" aria-labelledby="home-gallery-title">
+      <div className="section-container">
+        <SectionHead id="home-gallery-title" title="Photos and videos from our work" />
+        {isLoading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4" role="status">
+            <span className="sr-only">Loading gallery</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="aspect-square rounded-xl bg-gray-100" />
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* Media Modal with Navigation */}
-      {selectedMedia && selectedMediaIndex !== null && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedMediaIndex(null)}
-          onKeyDown={handleKeyDown}
-          tabIndex={0}
-        >
-          <div className="relative max-w-6xl max-h-full w-full flex items-center">
-            {/* Previous Button */}
-            {processedItems.length > 1 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  goToPrevious()
-                }}
-                className="absolute left-4 text-white bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-75 transition-all duration-200 z-10"
-                aria-label="Previous"
-              >
-                <ChevronLeft className="w-8 h-8" />
-              </button>
-            )}
-
-            {/* Media Content */}
-            <div className="flex-1 flex items-center justify-center">
-              {selectedMedia.type === 'video' ? (
-                <div className="aspect-video bg-black rounded-lg overflow-hidden w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-                  <LazyVideo
-                    src={selectedMedia.url}
-                    className="w-full h-full"
-                    controls={true}
-                    autoPlay={true}
-                    playsInline={true}
-                  />
-                </div>
-              ) : (
-                <img 
-                  src={selectedMedia.url}
-                  alt={`Gallery image ${selectedMediaIndex + 1}`}
-                  className="max-w-full max-h-[90vh] object-contain rounded-lg"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              )}
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {visibleItems.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="group relative aspect-square bg-gray-100 rounded-xl overflow-hidden"
+                  onClick={(e) => {
+                    openerRef.current = e.currentTarget
+                    setSelectedMediaIndex(index)
+                  }}
+                  aria-label={item.type === 'video' ? `Play video ${index + 1}` : `Open photo ${index + 1}`}
+                >
+                  {item.type === 'video' ? (
+                    item.thumbnail ? (
+                      // Use backend-generated thumbnail if available
+                      <img
+                        src={item.thumbnail}
+                        alt=""
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      // Fallback to client-side generation if no thumbnail
+                      <VideoThumbnail
+                        videoSrc={item.url}
+                        className="w-full h-full"
+                        alt=""
+                      />
+                    )
+                  ) : (
+                    <img
+                      src={item.thumbnail || item.url}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => {
+                        // Hide image if it fails to load instead of trying placeholder
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  )}
+                  {item.type === 'video' && item.thumbnail && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/20" aria-hidden="true">
+                      <span className="bg-white/90 rounded-full p-3 shadow-md">
+                        <Play className="w-7 h-7 text-primary-700 ml-0.5" />
+                      </span>
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            {/* Next Button */}
-            {processedItems.length > 1 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  goToNext()
-                }}
-                className="absolute right-4 text-white bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-75 transition-all duration-200 z-10"
-                aria-label="Next"
-              >
-                <ChevronRight className="w-8 h-8" />
-              </button>
-            )}
-
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedMediaIndex(null)}
-              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all duration-200 z-10"
-              aria-label="Close"
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            {/* Counter */}
-            {processedItems.length > 1 && (
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 rounded-full px-4 py-2 text-sm">
-                {selectedMediaIndex + 1} / {processedItems.length}
+            {hiddenCount > 0 && (
+              <div className="mt-6 text-center">
+                <button type="button" className="btn-secondary" onClick={() => setShowAll(true)}>
+                  Show all ({processedItems.length})
+                </button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-    </>
+
+            {/* Media viewer with navigation */}
+            {selectedMedia && selectedMediaIndex !== null && (
+              <div
+                ref={dialogRef}
+                className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 outline-none"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Gallery, item ${selectedMediaIndex + 1} of ${processedItems.length}`}
+                onClick={close}
+                onKeyDown={handleKeyDown}
+                tabIndex={-1}
+              >
+                <div className="relative max-w-6xl max-h-full w-full flex items-center">
+                  {/* Previous Button */}
+                  {processedItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        goToPrevious()
+                      }}
+                      className="absolute left-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
+                      aria-label="Previous"
+                    >
+                      <ChevronLeft className="w-8 h-8" aria-hidden="true" />
+                    </button>
+                  )}
+
+                  {/* Media Content */}
+                  <div className="flex-1 flex items-center justify-center">
+                    {selectedMedia.type === 'video' ? (
+                      <div className="aspect-video bg-black rounded-lg overflow-hidden w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+                        <LazyVideo
+                          src={selectedMedia.url}
+                          className="w-full h-full"
+                          controls={true}
+                          autoPlay={true}
+                          playsInline={true}
+                        />
+                      </div>
+                    ) : (
+                      <img
+                        src={selectedMedia.url}
+                        alt={`Gallery image ${selectedMediaIndex + 1}`}
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                  </div>
+
+                  {/* Next Button */}
+                  {processedItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        goToNext()
+                      }}
+                      className="absolute right-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
+                      aria-label="Next"
+                    >
+                      <ChevronRight className="w-8 h-8" aria-hidden="true" />
+                    </button>
+                  )}
+
+                  {/* Close Button */}
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/75 transition-colors z-10"
+                    aria-label="Close"
+                  >
+                    <X className="w-6 h-6" aria-hidden="true" />
+                  </button>
+
+                  {/* Counter */}
+                  {processedItems.length > 1 && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black/50 rounded-full px-4 py-2 text-sm">
+                      {selectedMediaIndex + 1} / {processedItems.length}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 

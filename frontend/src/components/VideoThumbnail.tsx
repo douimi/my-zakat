@@ -477,6 +477,9 @@ const VideoThumbnail = ({
       video.muted = true
       video.playsInline = true
       video.crossOrigin = (videoSrc.startsWith('http://') || videoSrc.startsWith('https://')) ? 'anonymous' : null
+      // The hidden <video> is rendered without a src so that nothing is fetched until
+      // the thumbnail is actually needed (in view, no poster, no cached frame).
+      video.src = videoSrc
       
       // Set timeout
       const timeout = setTimeout(() => {
@@ -502,25 +505,29 @@ const VideoThumbnail = ({
         observer.disconnect()
       }
     }
-  }, [videoSrc, poster, thumbnailUrl, isGenerating, onThumbnailGenerated])
+    // Only re-run for a new source. Depending on thumbnailUrl/isGenerating (as before) re-ran the
+    // effect the moment generation started, which flipped `mounted` to false and made every
+    // in-flight capture bail out, so client-side thumbnails never appeared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoSrc, poster])
 
   return (
     <div ref={containerRef} className={`${className} relative bg-gray-200`}>
       {/* Hidden video for thumbnail generation - use absolute positioning instead of hidden class to allow frame rendering */}
+      {/* Hidden video used only to grab a frame. No src here: generateThumbnail() sets it when the
+          card scrolls into view, so posters and cached thumbnails never download the video. */}
       <video
         ref={videoRef}
-        src={videoSrc}
         className="absolute opacity-0 pointer-events-none"
         style={{ width: '1px', height: '1px', top: '-9999px', left: '-9999px' }}
-        preload="metadata"
+        preload="none"
         muted
         playsInline
+        aria-hidden="true"
+        tabIndex={-1}
         crossOrigin={videoSrc.startsWith('http://') || videoSrc.startsWith('https://') ? 'anonymous' : undefined}
-        onLoadedMetadata={() => {
-        }}
-        onLoadedData={() => {
-        }}
         onError={(e) => {
+          if (!e.currentTarget.getAttribute('src')) return
           console.error('VideoThumbnail: Video load error', { videoSrc, error: e, target: e.target })
         }}
       />
@@ -538,20 +545,64 @@ const VideoThumbnail = ({
           }}
         />
       ) : (
-        <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-          <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center shadow-lg">
-            <Play className="w-8 h-8 text-primary-600 ml-1" />
-          </div>
-        </div>
+        <div className="w-full h-full bg-gray-200" role={alt ? 'img' : undefined} aria-label={alt || undefined} />
       )}
-      
-      {/* Play button overlay - always visible */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity duration-200 pointer-events-none">
-        <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity shadow-xl">
-          <Play className="w-8 h-8 text-primary-600 ml-1" />
+
+      {/* Play icon overlay - always visible */}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors duration-200 pointer-events-none" aria-hidden="true">
+        <div className="w-14 h-14 bg-white/90 rounded-full flex items-center justify-center shadow-md">
+          <Play className="w-7 h-7 text-primary-700 ml-1" />
         </div>
       </div>
     </div>
+  )
+}
+
+interface PlayableVideoProps {
+  videoSrc: string
+  /** What the video shows; used for the button's accessible name ("Play video: …"). */
+  title: string
+  poster?: string
+  /** Sizing classes for both the thumbnail button and the player (e.g. "w-full h-full"). */
+  className?: string
+  /** Called when the visitor starts the video (e.g. to hide a title overlay that would cover the controls). */
+  onPlay?: () => void
+}
+
+/**
+ * Thumbnail that turns into a real <video> player when clicked. Replaces the old
+ * "clickable div + innerHTML" pattern: it is a keyboard-reachable <button>, and the
+ * video file is only requested once the visitor asks for it (no hover preloading).
+ */
+export const PlayableVideo = ({ videoSrc, title, poster, className = '', onPlay }: PlayableVideoProps) => {
+  const [playing, setPlaying] = useState(false)
+
+  if (playing) {
+    return (
+      <video
+        src={videoSrc}
+        poster={poster}
+        className={`${className} bg-black object-cover`}
+        controls
+        autoPlay
+        playsInline
+        preload="auto"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setPlaying(true)
+        onPlay?.()
+      }}
+      className={`group relative block ${className}`}
+      aria-label={`Play video: ${title}`}
+    >
+      <VideoThumbnail videoSrc={videoSrc} poster={poster} className="w-full h-full" alt="" />
+    </button>
   )
 }
 

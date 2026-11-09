@@ -1,24 +1,21 @@
 /**
- * Public "Fund a Project" section rendered on the homepage.
+ * Public "Projects you can fund" section rendered on the homepage.
  *
- * For each active fundraising project the admin has defined, shows a card with:
- *   - Hero image (or gradient placeholder)
- *   - Category chip + urgency badge (urgent when < 25% remaining OR deadline soon)
+ * For each fundraising project the admin has defined, shows a card with:
+ *   - Image (or a plain placeholder)
+ *   - At most two badges: category + one status (urgent / fully funded / past / featured)
  *   - Title + short description
- *   - Animated progress bar with milestone marks (25/50/75%)
- *   - Three stat pills: Goal · Raised · Remaining
+ *   - "{n}% funded" + progress bar with milestone marks (25/50/75%)
+ *   - One stats row: Goal · Raised · Still needed
  *   - Optional deadline countdown
- *   - Donate CTA that pre-fills the Donate form with amount + purpose
+ *   - Donate CTA that pre-fills the Donate form with amount + purpose (open projects only)
  *
- * The progress bar animates on scroll-into-view (IntersectionObserver) so it
- * feels responsive rather than static.
+ * Open projects are listed first. When nothing is open, the section says so and
+ * shows recently funded projects instead of pretending they still need money.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Target, Wallet, ArrowUpRight, Clock, Sparkles, HeartHandshake, TrendingUp, CheckCircle2,
-  ShieldCheck, Archive,
-} from 'lucide-react'
+import { ArrowRight, Clock, HeartHandshake, CheckCircle2 } from 'lucide-react'
 
 export interface Project {
   id: number
@@ -60,23 +57,34 @@ const daysUntil = (iso: string | null): number | null => {
   return Math.ceil((d - now) / (1000 * 60 * 60 * 24))
 }
 
+/** Still taking donations: active, not marked completed, and under 100%. */
+export const isProjectOpen = (p: Project) =>
+  p.is_active !== false && p.status !== 'completed' && p.progress_percent < 100
+
 // ── Progress bar with milestone ticks ────────────────────────────────
-const ProgressBar = ({ percent, animate }: { percent: number; animate: boolean }) => {
+const ProgressBar = ({ percent, animate, label }: { percent: number; animate: boolean; label: string }) => {
   const clamped = Math.max(0, Math.min(100, percent))
   return (
-    <div className="relative">
-      <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+    <div
+      className="relative"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(clamped)}
+      aria-label={label}
+    >
+      <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
         <div
-          className={`h-full rounded-full bg-gradient-to-r from-primary-500 via-primary-600 to-blue-600 transition-all ease-out ${animate ? 'duration-[1400ms]' : 'duration-0'}`}
+          className={`h-full rounded-full bg-accent-500 transition-all ease-out ${animate ? 'duration-[1400ms]' : 'duration-0'}`}
           style={{ width: `${animate ? clamped : 0}%` }}
         />
       </div>
       {/* Milestone ticks — 25 / 50 / 75 % */}
-      <div className="absolute inset-y-0 left-0 w-full pointer-events-none">
+      <div className="absolute inset-y-0 left-0 w-full pointer-events-none" aria-hidden="true">
         {[25, 50, 75].map((tick) => (
           <div
             key={tick}
-            className={`absolute top-0 h-3 w-px transition-colors ${clamped >= tick ? 'bg-white/70' : 'bg-gray-300'}`}
+            className={`absolute top-0 h-2.5 w-px ${clamped >= tick ? 'bg-white/70' : 'bg-gray-300'}`}
             style={{ left: `${tick}%` }}
           />
         ))}
@@ -111,6 +119,17 @@ export const ProjectCard = ({ project }: { project: Project }) => {
     || (days !== null && days >= 0 && days <= 14)
   )
 
+  // One status badge at most (with the category, two badges in total).
+  const status = isArchived
+    ? { label: 'Past project', className: 'badge-neutral' }
+    : isCompleted
+      ? { label: 'Fully funded', className: 'badge-success' }
+      : isUrgent
+        ? { label: 'Urgent', className: 'badge-danger' }
+        : project.is_featured
+          ? { label: 'Featured', className: 'badge-primary' }
+          : null
+
   // Build the Donate link — pre-fill amount + purpose so the form is one click away.
   const donationAmount = project.suggested_donation
     || Math.min(project.remaining_amount, 50) // sensible default: whatever's smaller
@@ -118,118 +137,76 @@ export const ProjectCard = ({ project }: { project: Project }) => {
   const donateHref = `/donate?amount=${Math.max(1, Math.round(donationAmount))}&purpose=${encodeURIComponent(project.title)}`
 
   return (
-    <div ref={ref} className="group relative flex flex-col rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-      {/* Image / gradient hero */}
-      <div className="relative h-44 sm:h-48 overflow-hidden">
+    <div ref={ref} className="card-media group">
+      {/* Image */}
+      <div className="relative h-44 sm:h-48 overflow-hidden bg-gray-100">
         {project.image_url ? (
           <img
             src={project.image_url}
             alt={project.title}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary-500 via-primary-600 to-blue-700 flex items-center justify-center">
-            <HeartHandshake className="w-14 h-14 text-white/40" />
+          <div className="w-full h-full flex items-center justify-center" aria-hidden="true">
+            <HeartHandshake className="w-12 h-12 text-gray-300" />
           </div>
         )}
 
-        {/* Overlays: category chip + urgency badge + featured star */}
-        <div className="absolute top-3 left-3 flex flex-wrap gap-2">
-          {project.category && (
-            <span className="bg-white/95 backdrop-blur-sm text-gray-800 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
-              {project.category}
-            </span>
-          )}
-          {project.is_featured && (
-            <span className="bg-amber-400/95 text-amber-900 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm inline-flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Featured
-            </span>
-          )}
-        </div>
-        {(isUrgent || isCompleted || isArchived) && (
-          <div className="absolute top-3 right-3">
-            {isArchived ? (
-              <span className="bg-gray-700 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md inline-flex items-center gap-1">
-                <Archive className="w-3 h-3" /> Archived
-              </span>
-            ) : isCompleted ? (
-              <span className="bg-green-500 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md inline-flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Fully funded
-              </span>
-            ) : (
-              <span className="bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md inline-flex items-center gap-1 animate-pulse">
-                <Clock className="w-3 h-3" /> Urgent
-              </span>
+        {(project.category || status) && (
+          <div className="absolute top-3 left-3 right-3 flex flex-wrap gap-2">
+            {project.category && (
+              <span className="badge bg-white/95 text-gray-800 shadow-sm">{project.category}</span>
             )}
+            {status && <span className={`${status.className} shadow-sm`}>{status.label}</span>}
           </div>
         )}
-
-        {/* Percentage badge, bottom-right corner */}
-        <div className="absolute bottom-3 right-3 bg-white rounded-lg shadow-md px-3 py-1.5">
-          <p className="text-[10px] font-semibold uppercase text-gray-500 leading-tight">Progress</p>
-          <p className="text-lg font-bold text-primary-700 leading-none">{project.progress_percent}%</p>
-        </div>
       </div>
 
       {/* Body */}
-      <div className="p-5 sm:p-6 flex flex-col flex-1">
-        <h3 className="text-lg font-heading font-bold text-gray-900 mb-1.5 line-clamp-2">{project.title}</h3>
+      <div className="card-body">
+        <h3 className="card-title mb-1.5 line-clamp-2">{project.title}</h3>
         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.short_description}</p>
 
-        {/* Progress bar */}
-        <ProgressBar percent={project.progress_percent} animate={animate} />
+        <p className="text-sm font-semibold text-gray-900 mb-2">{project.progress_percent}% funded</p>
+        <ProgressBar
+          percent={project.progress_percent}
+          animate={animate}
+          label={`${project.title}: ${project.progress_percent}% funded`}
+        />
 
-        {/* Stat pills */}
-        <div className="grid grid-cols-3 gap-2 mt-4 mb-5">
-          <div className="text-center bg-blue-50 border border-blue-100 rounded-lg py-2.5 px-2">
-            <div className="flex items-center justify-center gap-1 text-blue-800 mb-0.5">
-              <Target className="w-3.5 h-3.5" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider">Goal</p>
-            </div>
-            <p className="text-sm font-bold text-blue-900 leading-tight">{formatMoney(project.goal_amount, project.currency)}</p>
+        <dl className="grid grid-cols-3 gap-2 text-center mt-4 mb-5">
+          <div>
+            <dt className="text-xs text-gray-500">Goal</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.goal_amount, project.currency)}</dd>
           </div>
-          <div className="text-center bg-emerald-50 border border-emerald-100 rounded-lg py-2.5 px-2">
-            <div className="flex items-center justify-center gap-1 text-emerald-800 mb-0.5">
-              <Wallet className="w-3.5 h-3.5" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider">Raised</p>
-            </div>
-            <p className="text-sm font-bold text-emerald-900 leading-tight">{formatMoney(project.spent_amount, project.currency)}</p>
+          <div>
+            <dt className="text-xs text-gray-500">Raised</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.spent_amount, project.currency)}</dd>
           </div>
-          <div className={`text-center border rounded-lg py-2.5 px-2 ${isCompleted ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
-            <div className={`flex items-center justify-center gap-1 mb-0.5 ${isCompleted ? 'text-gray-500' : 'text-amber-800'}`}>
-              <TrendingUp className="w-3.5 h-3.5" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider">Needed</p>
-            </div>
-            <p className={`text-sm font-bold leading-tight ${isCompleted ? 'text-gray-500' : 'text-amber-900'}`}>{formatMoney(project.remaining_amount, project.currency)}</p>
+          <div>
+            <dt className="text-xs text-gray-500">Still needed</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.remaining_amount, project.currency)}</dd>
           </div>
-        </div>
+        </dl>
 
-        {/* Deadline mini-line */}
-        {days !== null && days >= 0 && !isCompleted && (
-          <p className="text-xs text-gray-500 mb-3 inline-flex items-center gap-1.5">
-            <Clock className={`w-3.5 h-3.5 ${days <= 7 ? 'text-red-500' : 'text-gray-400'}`} />
+        {days !== null && days >= 0 && !isCompleted && !isArchived && (
+          <p className="text-xs text-gray-600 mb-3 inline-flex items-center gap-1.5">
+            <Clock className={`w-3.5 h-3.5 ${days <= 7 ? 'text-red-600' : 'text-gray-500'}`} aria-hidden="true" />
             {days === 0 ? 'Ends today' : days === 1 ? '1 day left' : `${days} days left`}
           </p>
         )}
 
-        {/* CTA — grows to bottom */}
         <div className="mt-auto">
           {isArchived ? (
-            <div className="w-full text-center bg-gray-50 border border-gray-200 text-gray-600 rounded-lg py-3 px-4 font-semibold text-sm inline-flex items-center justify-center gap-2">
-              <Archive className="w-4 h-4" /> Past project
-            </div>
+            <p className="text-sm text-gray-600">No longer taking donations.</p>
           ) : isCompleted ? (
-            <div className="w-full text-center bg-green-50 border border-green-200 text-green-800 rounded-lg py-3 px-4 font-semibold text-sm inline-flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4" /> Fully funded. Thank you!
-            </div>
+            <p className="text-sm font-medium text-green-800 inline-flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Fully funded. Thank you!
+            </p>
           ) : (
-            <Link
-              to={donateHref}
-              className="group/cta w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-600 to-blue-600 hover:from-primary-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
-            >
-              Donate to help complete this
-              <ArrowUpRight className="w-4 h-4 transition-transform group-hover/cta:translate-x-0.5 group-hover/cta:-translate-y-0.5" />
+            <Link to={donateHref} className="btn-primary w-full">
+              Donate to this project
             </Link>
           )}
         </div>
@@ -237,31 +214,6 @@ export const ProjectCard = ({ project }: { project: Project }) => {
     </div>
   )
 }
-
-// ── 100% donation-integrity callout ─────────────────────────────────
-//
-// Used both on the homepage section and on the full /projects page.
-// Full-width, left-aligned, quiet emerald tint — sits inside the section
-// rhythm as a proper trust statement rather than a decorative pill.
-export const DonationIntegrityCallout = () => (
-  <div className="mb-10 sm:mb-12 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-5 sm:px-8 py-5 sm:py-6">
-    <div className="flex items-start gap-4 sm:gap-5">
-      <div className="flex-shrink-0 mt-0.5 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white border border-emerald-200 flex items-center justify-center shadow-sm">
-        <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
-      </div>
-      <div className="max-w-3xl">
-        <h3 className="text-base sm:text-lg font-heading font-bold text-gray-900 mb-1.5">
-          100% of your donation reaches those in need.
-        </h3>
-        <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
-          Every dollar you give goes directly to the project you choose. We fund our
-          administrative and operating costs from separate sources, so nothing you
-          contribute is spent on overhead.
-        </p>
-      </div>
-    </div>
-  </div>
-)
 
 // ── Section wrapper ─────────────────────────────────────────────────
 const FundraisingProjectsSection = () => {
@@ -282,56 +234,58 @@ const FundraisingProjectsSection = () => {
     return () => { cancelled = true }
   }, [])
 
-  // Homepage shows only the projects the admin has explicitly marked as
-  // featured. If none are featured (fresh install, or admin cleared the
-  // flags), fall back to the first six active projects so the section
-  // never renders empty.
-  const featured = projects.filter((p) => p.is_featured)
-  const homepageProjects = (featured.length > 0 ? featured : projects).slice(0, 6)
+  // Open projects come first (featured ones at the top), then the featured projects
+  // that are already funded. If nothing is open, show the featured funded projects
+  // (or, if none are featured, the first funded ones) under an honest heading.
+  const open = projects
+    .filter(isProjectOpen)
+    .sort((a, b) => Number(b.is_featured) - Number(a.is_featured))
+  const funded = projects.filter((p) => !isProjectOpen(p))
+  const fundedFeatured = funded.filter((p) => p.is_featured)
+  const hasOpen = open.length > 0
+  const homepageProjects = (hasOpen
+    ? [...open, ...fundedFeatured]
+    : (fundedFeatured.length > 0 ? fundedFeatured : funded)
+  ).slice(0, 6)
 
   // Nothing to render if no active projects — the admin hasn't set any up yet.
   if (!loading && projects.length === 0) return null
 
   return (
-    <section id="fund-projects" className="py-16 sm:py-20 bg-gradient-to-b from-white to-gray-50">
+    <section id="fund-projects" className="section" aria-labelledby="fund-projects-title">
       <div className="section-container">
-        <div className="text-center mb-10 sm:mb-12 max-w-2xl mx-auto">
-          <span className="inline-flex items-center gap-1.5 bg-primary-100 text-primary-700 text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full mb-4">
-            <HeartHandshake className="w-3.5 h-3.5" /> Fund a project
-          </span>
-          <h2 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900 mb-3">
-            See exactly where your donation goes
-          </h2>
-          <p className="text-base sm:text-lg text-gray-600">
-            These are the projects we're raising for right now. Each card shows the goal, how
-            much we've raised so far, and what's still needed to complete it.
-          </p>
+        <div className="section-head">
+          <div>
+            <h2 id="fund-projects-title" className="section-title">
+              {loading || hasOpen ? 'Projects you can fund' : 'Recently funded'}
+            </h2>
+            <p className="section-lead">
+              {loading || hasOpen
+                ? "Each card shows the goal, what's been raised, and what's left."
+                : (
+                  <>
+                    No project is open for donations right now. You can still{' '}
+                    <Link to="/donate" className="link">give where the need is greatest</Link>.
+                  </>
+                )}
+            </p>
+          </div>
+          <Link to="/projects" className="link inline-flex items-center gap-1 shrink-0">
+            All projects <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </Link>
         </div>
 
-        <DonationIntegrityCallout />
-
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="status">
+            <span className="sr-only">Loading projects</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`h-96 rounded-xl bg-gray-100 ${i > 0 ? 'hidden md:block' : ''} ${i > 1 ? 'md:hidden lg:block' : ''}`} />
+            ))}
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
-            </div>
-
-            {/* See-all CTA — always shown so donors can reach the full catalog
-                (current, past, and archived) from the homepage in one click. */}
-            <div className="mt-10 sm:mt-12 text-center">
-              <Link
-                to="/projects"
-                className="inline-flex items-center gap-2 bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 hover:border-primary-300 font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md transition-all"
-              >
-                See our recent projects
-                <ArrowUpRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
+          </div>
         )}
       </div>
     </section>

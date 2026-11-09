@@ -27,28 +27,22 @@ const LazyVideo = ({
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Wait for page to be interactive before setting up observer
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', setupObserver)
-      return () => {
-        document.removeEventListener('DOMContentLoaded', setupObserver)
-      }
-    } else {
-      setupObserver()
-    }
+    let observer: IntersectionObserver | null = null
+    let loadTimer: ReturnType<typeof setTimeout> | undefined
 
-    function setupObserver() {
-      const observer = new IntersectionObserver(
+    const setupObserver = () => {
+      if (!containerRef.current) return
+      observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
             if (entry.isIntersecting) {
               setIsInView(true)
               // Delay loading to prioritize page render and ensure page is interactive
               const delay = document.readyState === 'complete' ? 200 : 500
-              setTimeout(() => {
+              loadTimer = setTimeout(() => {
                 setShouldLoad(true)
               }, delay)
-              observer.disconnect()
+              observer?.disconnect()
             }
           })
         },
@@ -57,14 +51,22 @@ const LazyVideo = ({
           threshold: 0.01
         }
       )
+      observer.observe(containerRef.current)
+    }
 
-      if (containerRef.current) {
-        observer.observe(containerRef.current)
-      }
+    // Wait for page to be interactive before setting up observer
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupObserver)
+    } else {
+      setupObserver()
+    }
 
-      return () => {
-        observer.disconnect()
-      }
+    // Disconnect on unmount (the previous version returned this cleanup from the inner
+    // function, where React never saw it, so observers outlived their component).
+    return () => {
+      document.removeEventListener('DOMContentLoaded', setupObserver)
+      observer?.disconnect()
+      if (loadTimer) clearTimeout(loadTimer)
     }
   }, [])
 
@@ -79,7 +81,7 @@ const LazyVideo = ({
     return (
       <div className={className}>
         <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-          <span className="text-gray-400 text-sm">Video unavailable</span>
+          <span className="text-gray-500 text-sm">Video unavailable</span>
         </div>
       </div>
     )
@@ -102,8 +104,8 @@ const LazyVideo = ({
               }}
             />
           ) : (
-            <div className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
-              <Play className="w-8 h-8 text-primary-600 ml-1" />
+            <div className="w-14 h-14 bg-white/90 rounded-full flex items-center justify-center" aria-hidden="true">
+              <Play className="w-7 h-7 text-primary-700 ml-1" />
             </div>
           )}
         </div>

@@ -5,11 +5,15 @@ import { programCategoriesAPI, getStaticFileUrl } from '../utils/api'
 import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import type { ProgramCategory } from '../types'
 import LazyVideo from '../components/LazyVideo'
-import VideoThumbnail from '../components/VideoThumbnail'
 import SEOHead from '../components/SEOHead'
+import PageHeader from '../components/ui/PageHeader'
+
+// Card title link whose ::after covers the whole card (one link per card). The video
+// player sits above it (z-10) so its native controls stay usable.
+const STRETCHED_LINK = 'after:absolute after:inset-0 after:content-[""] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-primary-600 focus-visible:after:rounded-xl'
 
 const Programs = () => {
-  const { data: categories, isLoading, error } = useQuery('program-categories', () => 
+  const { data: categories, isLoading, error } = useQuery<ProgramCategory[]>('program-categories', () =>
     programCategoriesAPI.getAll(true)
   )
 
@@ -19,23 +23,30 @@ const Programs = () => {
       // Video takes priority
       const videoUrl = getStaticFileUrl(`/api/uploads/program_categories/${category.video_filename}`)
       return { url: videoUrl, type: 'video' as const }
-    } else if (category.image_url) {
-      // Fallback to image - check if it's a URL or needs to be constructed
-      if (category.image_url.startsWith('http://') || category.image_url.startsWith('https://')) {
-        return { url: category.image_url, type: 'image' as const }
-      }
+    }
+    if (category.image_url) {
       return { url: category.image_url, type: 'image' as const }
     }
-    
     return { url: null, type: 'image' as const }
   }
 
+  const header = (
+    <PageHeader
+      title="Our programs"
+      description="The areas we fund. Open one to see its programs and how to give."
+    />
+  )
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-white">
+        {header}
+        <div className="section">
+          <div className="section-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="status">
+            <span className="sr-only">Loading programs</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-80 rounded-xl bg-gray-100" />
+            ))}
           </div>
         </div>
       </div>
@@ -44,11 +55,11 @@ const Programs = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="section-container">
-          <div className="text-center py-20">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Error Loading Programs</h1>
-            <p className="text-gray-600">Unable to load program categories. Please try again later.</p>
+      <div className="min-h-screen bg-white">
+        {header}
+        <div className="section">
+          <div className="section-container">
+            <p className="alert-error" role="alert">Unable to load programs. Please try again later.</p>
           </div>
         </div>
       </div>
@@ -56,140 +67,78 @@ const Programs = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <SEOHead
         title="Charitable Programs"
         description="Explore MyZakat charitable programs. From emergency relief to community development, find programs that make a lasting impact and support those in need."
         canonicalPath="/programs"
       />
-      {/* Hero Section */}
-      <section className="py-20 bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl"></div>
-        </div>
-        <div className="section-container relative z-10">
-          <div className="text-center mb-16">
-            <div className="inline-block px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-semibold mb-4">
-              Our Work
-            </div>
-            <h1 className="text-4xl lg:text-6xl font-heading font-bold text-gray-900 mb-6">
-              Programs That Make
-              <span className="block text-primary-600 mt-2">A Real Difference</span>
-            </h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Focused initiatives that address the most critical needs in underserved communities around the world. 
-              Each program is designed to create lasting impact and transform lives.
-            </p>
-          </div>
-        </div>
-      </section>
+      {header}
 
-      {/* Programs Grid */}
-      {categories && categories.length > 0 ? (
-        <section className="py-20 bg-white relative">
-          <div className="section-container">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {categories.map((category: ProgramCategory, index: number) => {
+      <section className="section">
+        <div className="section-container">
+          {categories && categories.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categories.map((category) => {
                 const media = getCategoryMedia(category)
                 return (
-                  <div 
-                    key={category.id}
-                    className="group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 animate-fade-in overflow-hidden border border-gray-100"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    {/* Media Section */}
-                    <div className="relative overflow-hidden h-64">
+                  <article key={category.id} className="card-media group relative">
+                    <div className="relative h-56 overflow-hidden bg-gray-100">
                       {media.type === 'video' && media.url ? (
-                        <LazyVideo
-                          src={media.url}
-                          className="w-full h-full object-cover"
-                          controls={true}
-                          playsInline={true}
-                        />
-                      ) : media.url ? (
-                        <>
-                          <img
-                            src={media.url && !media.url.startsWith('http://') && !media.url.startsWith('https://') ? `${media.url}${media.url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.THUMB}` : media.url}
-                            alt={category.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                            crossOrigin={media.url?.startsWith('http://') || media.url?.startsWith('https://') ? 'anonymous' : undefined}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                            }}
+                        <div className="relative z-10 h-full">
+                          <LazyVideo
+                            src={media.url}
+                            className="w-full h-full object-cover"
+                            controls={true}
+                            playsInline={true}
                           />
-                          {/* Overlay only for images, not videos */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                        </>
+                        </div>
+                      ) : media.url ? (
+                        <img
+                          src={!media.url.startsWith('http://') && !media.url.startsWith('https://') ? `${media.url}${media.url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.THUMB}` : media.url}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
                       ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <Heart className="w-16 h-16 text-gray-400" />
+                        <div className="w-full h-full flex items-center justify-center" aria-hidden="true">
+                          <Heart className="w-12 h-12 text-gray-300" />
                         </div>
                       )}
                     </div>
-                    
-                    {/* Content Section */}
-                    <div className="p-6">
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                        {category.title}
-                      </h3>
+
+                    <div className="card-body">
+                      <h2 className="card-title text-xl">
+                        <Link to={`/categories/${category.slug}`} className={`hover:text-primary-700 ${STRETCHED_LINK}`}>
+                          {category.title}
+                        </Link>
+                      </h2>
                       {category.impact_text && (
-                        <div className="mb-3">
-                          <span className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm font-semibold">
-                            {category.impact_text}
-                          </span>
-                        </div>
+                        <p className="mt-2"><span className="badge-primary">{category.impact_text}</span></p>
                       )}
-                      <p className="text-gray-600 mb-4 leading-relaxed line-clamp-3">
+                      <p className="mt-2 text-gray-600 leading-relaxed line-clamp-3">
                         {category.short_description || category.description || ''}
                       </p>
-                      {category.description && category.description.length > 100 && (
-                        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
-                          {category.description}
-                        </p>
-                      )}
-                      <Link 
-                        to={`/categories/${category.slug}`}
-                        className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform group-hover:scale-105 shadow-lg hover:shadow-xl"
-                      >
-                        Learn More
-                        <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </Link>
+                      <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
+                        Learn More <ArrowRight className="w-4 h-4" />
+                      </span>
                     </div>
-                  </div>
+                  </article>
                 )
               })}
             </div>
-          </div>
-        </section>
-      ) : (
-        <section className="py-20 bg-white">
-          <div className="section-container">
-            <div className="text-center py-20">
-              <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">No Programs Available</h2>
-              <p className="text-gray-600">Program categories will be displayed here once they are added.</p>
+          ) : (
+            <div className="text-center py-16">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">No programs yet</h2>
+              <p className="text-gray-600">
+                Programs will appear here once they are added. You can still{' '}
+                <Link to="/donate" className="link">give where the need is greatest</Link>.
+              </p>
             </div>
-          </div>
-        </section>
-      )}
-
-      {/* CTA Section */}
-      <section className="py-20 hero-gradient text-white">
-        <div className="section-container text-center">
-          <h2 className="text-3xl lg:text-5xl font-heading font-bold mb-6">
-            Ready to Make a Difference?
-          </h2>
-          <p className="text-xl lg:text-2xl mb-8 text-blue-100 max-w-3xl mx-auto">
-            Your Zakat and Sadaqa can transform lives today. Choose a program that resonates with you and make a lasting impact.
-          </p>
-          <Link 
-            to="/donate" 
-            className="inline-flex items-center btn-primary bg-white text-primary-600 hover:bg-blue-50 text-xl px-10 py-4"
-          >
-            Donate Now
-            <Heart className="ml-2 w-6 h-6" />
-          </Link>
+          )}
         </div>
       </section>
     </div>

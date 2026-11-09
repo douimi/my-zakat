@@ -5,6 +5,7 @@ import { urgentNeedsAPI } from '../utils/api'
 import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import SEOHead from '../components/SEOHead'
 
 const UrgentNeedDetail = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -111,8 +112,9 @@ const UrgentNeedDetail = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
+        <span className="sr-only">Loading</span>
       </div>
     )
   }
@@ -122,7 +124,7 @@ const UrgentNeedDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Urgent Need Not Found</h1>
-          <Link to="/" className="text-primary-600 hover:text-primary-700">
+          <Link to="/" className="link">
             Return to Homepage
           </Link>
         </div>
@@ -130,16 +132,21 @@ const UrgentNeedDetail = () => {
     )
   }
 
+  const donateHref = `/donate?purpose=${encodeURIComponent(need.title)}`
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEOHead
+        title={need.title}
+        description={need.short_description || undefined}
+        canonicalPath={`/urgent-needs/${slug}`}
+      />
+
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+      <div className="bg-white border-b border-gray-200">
         <div className="section-container py-4">
-          <Link
-            to="/"
-            className="inline-flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+          <Link to="/" className="link inline-flex items-center gap-1.5 text-sm">
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             Back to Home
           </Link>
         </div>
@@ -151,29 +158,36 @@ const UrgentNeedDetail = () => {
           <div className="mb-8">
             <img
               src={need.image_url && !need.image_url.startsWith('http://') && !need.image_url.startsWith('https://') ? `${need.image_url}${need.image_url.includes('?') ? '&' : '?'}w=${IMAGE_WIDTHS.LARGE}` : need.image_url}
-              alt={need.title}
-              className="w-full h-64 md:h-96 object-cover rounded-lg shadow-lg"
+              alt=""
+              className="w-full h-64 md:h-96 object-cover rounded-xl"
             />
           </div>
         )}
 
-        <div ref={contentRef} className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-heading font-bold text-gray-900 mb-4">{need.title}</h1>
+        <div className="card sm:p-8">
+          <h1 className="page-title">{need.title}</h1>
 
-          {need.short_description && (
-            <p className="text-xl text-gray-600 mb-8">{need.short_description}</p>
+          {/* The admin HTML usually repeats the title and subtitle, so the short description is only shown without it. */}
+          {!need.html_content && need.short_description && (
+            <p className="page-lead">{need.short_description}</p>
           )}
 
-          {need.html_content ? (
-            <div
-              className="urgent-need-content prose prose-lg max-w-none"
-              dangerouslySetInnerHTML={{ __html: need.html_content }}
-            />
-          ) : (
-            <div className="text-gray-600">
-              <p>Content coming soon...</p>
-            </div>
-          )}
+          <div className="mt-6">
+            <Link to={donateHref} className="btn-primary btn-lg">
+              Donate to this appeal
+            </Link>
+          </div>
+
+          <div ref={contentRef} className="mt-8">
+            {need.html_content ? (
+              <div
+                className="urgent-need-content prose prose-lg max-w-none"
+                dangerouslySetInnerHTML={{ __html: need.html_content }}
+              />
+            ) : (
+              <p className="text-gray-600">More details coming soon.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

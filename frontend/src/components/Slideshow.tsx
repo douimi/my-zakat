@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { slideshowAPI, getStaticFileUrl } from '../utils/api'
+import PageHeader from './ui/PageHeader'
 
 interface SlideshowSlide {
   id: number
@@ -16,6 +17,22 @@ interface SlideshowSlide {
   updated_at?: string
 }
 
+interface SlideshowProps {
+  /**
+   * The page's h1. While slides exist it is visually hidden (slide titles rotate, so they
+   * cannot be the h1); when the admin has no active slides it is shown in a plain header.
+   */
+  heading: string
+  /** Shown under the heading only when there are no slides. */
+  emptyDescription?: ReactNode
+  /** Actions shown under the heading only when there are no slides. */
+  emptyActions?: ReactNode
+}
+
+const AUTO_ADVANCE_MS = 8000
+/** Above this many slides, the dot row would overflow; a "3 / 12" counter is shown instead. */
+const MAX_DOTS = 10
+
 // Append a cache-busting version param to a URL so a freshly-updated slide
 // image isn't served from a stale browser/CDN cache. Uses the slide's
 // updated_at when available so the URL only changes when the slide actually
@@ -26,23 +43,34 @@ function bustCache(url: string, version: string | number | undefined): string {
   return `${url}${sep}v=${encodeURIComponent(String(version))}`
 }
 
-const Slideshow = () => {
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) => {
   const [slides, setSlides] = useState<SlideshowSlide[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  // Autoplay is on unless the visitor asked for reduced motion; the pause button toggles it.
+  const [isPlaying, setIsPlaying] = useState(() => !prefersReducedMotion())
+  // Hovering or focusing inside the carousel pauses it too (WCAG 2.2.2), without changing the button state.
+  const [isInteracting, setIsInteracting] = useState(false)
+  const regionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     fetchSlides()
   }, [])
 
+  const isRunning = slides.length > 1 && isPlaying && !isInteracting
+
   useEffect(() => {
-    if (slides.length > 1) {
-      const interval = setInterval(() => {
-        setCurrentIndex((prev) => (prev + 1) % slides.length)
-      }, 8000) // Auto-advance every 8 seconds
-      return () => clearInterval(interval)
-    }
-  }, [slides.length])
+    if (!isRunning) return
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % slides.length)
+    }, AUTO_ADVANCE_MS)
+    return () => clearInterval(interval)
+  }, [isRunning, slides.length])
 
   const fetchSlides = async () => {
     try {
@@ -71,17 +99,18 @@ const Slideshow = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full h-96 bg-gray-200 animate-pulse flex items-center justify-center">
-        <div className="text-gray-500">Loading slideshow...</div>
+      <div className="w-full h-96 md:h-[500px] lg:h-[600px] bg-gray-100" role="status">
+        <h1 className="sr-only">{heading}</h1>
+        <span className="sr-only">Loading</span>
       </div>
     )
   }
 
   if (slides.length === 0) {
-    return null // Don't show slideshow if no slides
+    return <PageHeader title={heading} description={emptyDescription} actions={emptyActions} />
   }
 
-  const currentSlide = slides[currentIndex]
+  const currentSlide = slides[Math.min(currentIndex, slides.length - 1)]
   // Use image_url if available, otherwise fall back to image_filename, then default
   // Append ?w=1200 for hero-sized images to avoid loading full 1920px originals
   const getSlideImageUrl = () => {
@@ -102,46 +131,61 @@ const Slideshow = () => {
   // image to the same S3 key still shows the new version on next load.
   const versionKey = currentSlide.updated_at ? new Date(currentSlide.updated_at).getTime() : currentSlide.id
   const imageUrl = bustCache(encodeURI(getSlideImageUrl()), versionKey)
-  
+
   // Reset animation when slide changes by using a key
   const slideKey = `slide-${currentSlide.id}-${currentIndex}`
+  const hasControls = slides.length > 1
+  const showDots = slides.length <= MAX_DOTS
 
   return (
-    <div className="relative w-full h-96 md:h-[500px] lg:h-[600px] overflow-hidden">
+    <section
+      ref={regionRef}
+      className="relative w-full h-96 md:h-[500px] lg:h-[600px] overflow-hidden bg-gray-900"
+      aria-roledescription="carousel"
+      aria-label="Highlights"
+      onMouseEnter={() => setIsInteracting(true)}
+      onMouseLeave={() => setIsInteracting(false)}
+      onFocus={() => setIsInteracting(true)}
+      onBlur={(e) => {
+        if (!regionRef.current?.contains(e.relatedTarget as Node | null)) setIsInteracting(false)
+      }}
+    >
+      <h1 className="sr-only">{heading}</h1>
+
       {/* Slide Image */}
       <div
-        className="absolute inset-0 bg-cover bg-center transition-opacity duration-2000"
+        className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage: `url("${imageUrl}")`,
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/10"></div>
       </div>
 
       {/* Content Overlay */}
       <div className="relative z-10 h-full flex items-center">
         <div className="section-container w-full">
-          <div key={slideKey} className="max-w-2xl text-white">
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold mb-4 animate-fade-in">
+          <div
+            key={slideKey}
+            className="max-w-2xl text-white px-10 sm:px-12 lg:px-14"
+            aria-roledescription="slide"
+            aria-label={`${currentIndex + 1} of ${slides.length}`}
+            aria-live={isRunning ? 'off' : 'polite'}
+          >
+            <h2 className="text-3xl md:text-5xl lg:text-6xl font-heading font-bold mb-4 animate-fade-in">
               {currentSlide.title}
             </h2>
             {currentSlide.description && (
-              <p 
-                className="text-lg md:text-xl mb-8 text-gray-100 animate-fade-in" 
+              <p
+                className="text-lg md:text-xl mb-8 text-gray-100 line-clamp-3 animate-fade-in"
                 style={{ animationDelay: '0.2s' }}
               >
                 {currentSlide.description}
               </p>
             )}
             {currentSlide.cta_text && currentSlide.cta_url ? (
-              <div 
-                className="animate-fade-in"
-                style={{ animationDelay: '0.4s' }}
-              >
-                <Link
-                  to={currentSlide.cta_url}
-                  className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-medium px-8 py-4 rounded-lg transition-all duration-200 text-lg shadow-lg hover:shadow-xl transform hover:scale-105"
-                >
+              <div className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
+                <Link to={currentSlide.cta_url} className="btn-primary btn-lg">
                   {currentSlide.cta_text}
                 </Link>
               </div>
@@ -150,44 +194,62 @@ const Slideshow = () => {
         </div>
       </div>
 
-      {/* Navigation Arrows */}
-      {slides.length > 1 && (
+      {hasControls && (
         <>
+          {/* Navigation Arrows */}
           <button
+            type="button"
             onClick={goToPrevious}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-all duration-200"
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
             aria-label="Previous slide"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="w-6 h-6" aria-hidden="true" />
           </button>
           <button
+            type="button"
             onClick={goToNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-all duration-200"
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
             aria-label="Next slide"
           >
-            <ChevronRight className="w-6 h-6" />
+            <ChevronRight className="w-6 h-6" aria-hidden="true" />
           </button>
+
+          {/* Pause / play + slide indicators */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 rounded-full bg-black/40 px-2 pr-3 sm:pr-2">
+            <button
+              type="button"
+              onClick={() => setIsPlaying((p) => !p)}
+              className="p-2 text-white"
+              aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
+            >
+              {isPlaying ? <Pause className="w-4 h-4" aria-hidden="true" /> : <Play className="w-4 h-4" aria-hidden="true" />}
+            </button>
+            {/* Dots fit up to MAX_DOTS slides on tablet and up; otherwise (and on phones) a counter
+                stands in, so the control row never overflows the screen. Arrows still reach every slide. */}
+            <span className={`px-1 text-sm font-medium text-white tabular-nums ${showDots ? 'sm:hidden' : ''}`} aria-hidden="true">
+              {currentIndex + 1} / {slides.length}
+            </span>
+            {showDots && slides.map((_, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => goToSlide(index)}
+                className="group p-2 hidden sm:block"
+                aria-label={`Go to slide ${index + 1}`}
+                aria-current={index === currentIndex ? 'true' : undefined}
+              >
+                <span
+                  className={`block h-2.5 rounded-full transition-all duration-300 ${
+                    index === currentIndex ? 'w-8 bg-white' : 'w-2.5 bg-white/60 group-hover:bg-white/90'
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
         </>
       )}
-
-      {/* Slide Indicators */}
-      {slides.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex space-x-2">
-          {slides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                index === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/75'
-              }`}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    </section>
   )
 }
 
 export default Slideshow
-
