@@ -7,6 +7,8 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Brand primary. Text on white: use 600+ (600 = 5.2:1, 700 = 6.7:1). 500 is for fills/icons only.
+        // (Retuning to the logo indigo is an owner decision still pending: do not change these hexes here.)
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -20,41 +22,36 @@ export default {
           900: '#1e3a8a',
           950: '#172554',
         },
-        secondary: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617',
-        }
+        // Logo green (#25C44C) for progress fills, "funded" and success accents.
+        // Use as TEXT only at 700+ (700 on white = 5.4:1); 500/600 are for fills and icons.
+        accent: {
+          50: '#effcf2',
+          100: '#d8f7e0',
+          200: '#b0eec2',
+          500: '#25c44c',
+          600: '#1a9e3c',
+          700: '#157a30',
+          800: '#14612a',
+        },
+        // `secondary` (a slate copy) was removed: it had 0 uses. Use gray-* for neutrals.
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         heading: ['Poppins', 'system-ui', 'sans-serif'],
       },
       animation: {
-        'fade-in': 'fadeIn 0.6s ease-in-out',
+        // `both` keeps the first frame during an animation-delay (no flash before a staggered fade).
+        'fade-in': 'fadeIn 0.6s ease-out both',
         'slide-up': 'slideUp 0.6s ease-out',
-        'bounce-subtle': 'bounceSubtle 2s infinite',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideUp: {
           '0%': { transform: 'translateY(100%)' },
           '100%': { transform: 'translateY(0)' },
-        },
-        bounceSubtle: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-5px)' },
         },
       },
     },

@@ -9,10 +9,13 @@ import { useEffect, useState } from 'react'
 import {
   FolderKanban, Download, Trash2, Eye, RefreshCw, Filter, X, AlertTriangle,
   CheckCircle2, XCircle, Search, FileText, Bell,
-  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink, ChevronRight,
+  Banknote, Paperclip, ClipboardCheck, Hourglass, Ban, ArrowRight, Mail, ExternalLink,
 } from 'lucide-react'
 import { PORTAL_HANDOFF_PREFIX } from '../../utils/proposalPortalApi'
 import FilePreview, { previewOf, type PreviewFile } from '../../components/FilePreview'
+import Collapsible from '../../components/admin/Collapsible'
+import LongText from '../../components/admin/LongText'
+import LoadingBlock from '../../components/admin/LoadingBlock'
 import { clsx } from 'clsx'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../contexts/ToastContext'
@@ -851,7 +854,7 @@ const AdminProjectProposals = () => {
     n == null ? '—' : `$${n.toLocaleString(undefined, { maximumFractionDigits })}`
 
   return (
-    <div className="space-y-6 px-4 sm:px-0">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
           <FolderKanban className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-primary-600" />
@@ -871,7 +874,7 @@ const AdminProjectProposals = () => {
         </h1>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-500" />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+          <select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
             <option value="">All statuses</option>
             <option value="submitted">Submitted</option>
             <option value="under_review">Under review</option>
@@ -883,18 +886,17 @@ const AdminProjectProposals = () => {
             <option value="report_changes_requested">Report sent back</option>
             <option value="completed">Completed</option>
           </select>
-          <button onClick={fetchRows} className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg" title="Refresh">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={fetchRows} className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg" title="Refresh" aria-label="Refresh">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </button>
         </div>
       </div>
-
-      <p className="text-sm text-gray-600">Click a proposal to open it.</p>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
         <div className="relative max-w-sm">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search proposals"
             placeholder="Search by name, project, or email…"
             className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
         </div>
@@ -956,15 +958,18 @@ const AdminProjectProposals = () => {
                   <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell whitespace-nowrap">{formatDate(r.submitted_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => openDetail(r)} className="text-primary-600 hover:text-primary-800 p-1.5 rounded hover:bg-primary-50" title="Review"><Eye className="w-4 h-4" /></button>
-                      <button onClick={() => downloadPdf(r)} className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded hover:bg-indigo-50" title="Download PDF"><Download className="w-4 h-4" /></button>
-                      <button onClick={() => setDeleting(r)} className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => openDetail(r)} className="text-primary-600 hover:text-primary-800 p-1.5 rounded hover:bg-primary-50" title="Review" aria-label="Review"><Eye className="w-4 h-4" aria-hidden="true" /></button>
+                      <button onClick={() => downloadPdf(r)} className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded hover:bg-indigo-50" title="Download PDF" aria-label="Download PDF"><Download className="w-4 h-4" aria-hidden="true" /></button>
+                      <button onClick={() => setDeleting(r)} className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50" title="Delete" aria-label="Delete"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {loading && rows.length === 0 && (
+                <tr><td colSpan={7}><LoadingBlock label="Loading proposals…" /></td></tr>
+              )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">No proposals match.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-500">No proposals match.</td></tr>
               )}
             </tbody>
           </table>
@@ -979,16 +984,16 @@ const AdminProjectProposals = () => {
                 without it the tab bar was the one flex child left to give way,
                 and on most screens it was squeezed to nothing, which is why the
                 Agreement and History tabs seemed to come and go. */}
-            <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div className="min-w-0">
+            <div className="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 py-4 border-b border-gray-200">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-bold text-gray-900 truncate">{selected.project_name || '—'}</h3>
                 <p className="text-xs text-gray-500 truncate">Ref #{selected.id} · {selected.full_name || '—'} · <a href={`mailto:${selected.email}`} className="text-primary-600 hover:underline">{selected.email}</a></p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[selected.status]}`}>{STATUS_LABEL[selected.status]}</span>
                 <button onClick={openPortalAsApplicant} title="See the portal as this applicant sees it, and act for them" className="text-xs inline-flex items-center gap-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded"><ExternalLink className="w-3.5 h-3.5" /> Open portal as applicant</button>
                 <button onClick={() => downloadPdf(selected)} className="text-xs inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded"><Download className="w-3.5 h-3.5" /> PDF</button>
-                <button onClick={closeDetail} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                <button onClick={closeDetail} aria-label="Close" className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
               </div>
             </div>
 
@@ -1636,49 +1641,6 @@ const AdminProjectProposals = () => {
             </div>
           </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-/** A section that starts folded, with one line saying what is inside. Long
- *  text stays out of the way until someone asks for it. */
-const Collapsible = ({ title, preview, defaultOpen = false, children }: {
-  title: string
-  preview?: string
-  defaultOpen?: boolean
-  children: React.ReactNode
-}) => {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border-b border-gray-100 last:border-b-0">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className="w-full flex items-start gap-2 px-6 py-3 text-left hover:bg-gray-50">
-        <ChevronRight className={clsx('w-4 h-4 mt-0.5 text-gray-400 shrink-0 transition-transform', open && 'rotate-90')} />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-gray-800">{title}</span>
-          {!open && preview && <span className="block text-xs text-gray-500 truncate">{preview}</span>}
-        </span>
-      </button>
-      {open && <div className="px-6 pb-4 pl-12 space-y-3">{children}</div>}
-    </div>
-  )
-}
-
-/** Long text clamped to a few lines, with a toggle only when it is long. */
-const LongText = ({ text, lines = 2 }: { text: string | null | undefined; lines?: 2 | 3 | 4 }) => {
-  const [open, setOpen] = useState(false)
-  const value = text || '—'
-  const long = value.length > 160 || value.split('\n').length > lines
-  const clamp = { 2: 'line-clamp-2', 3: 'line-clamp-3', 4: 'line-clamp-4' }[lines]
-  return (
-    <div>
-      <p className={clsx('text-sm text-gray-800 whitespace-pre-wrap', long && !open && clamp)}>{value}</p>
-      {long && (
-        <button type="button" onClick={() => setOpen((o) => !o)}
-          className="text-xs font-medium text-primary-700 hover:underline mt-0.5">
-          {open ? 'Show less' : 'Show more'}
-        </button>
       )}
     </div>
   )

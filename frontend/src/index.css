@@ -1,3 +1,29 @@
+/*
+ * MyZakat design system: global styles and component classes.
+ *
+ * Rules: one brand colour (primary), white / gray-50 surfaces, shadow only for elevation,
+ * motion only on state change. Text: gray-900 headings, gray-600/700 body, gray-500 captions,
+ * never gray-400 for text. Status colours: success = green, warning = amber (not yellow),
+ * error = red, info = primary.
+ *
+ * Component classes (all in @layer components, so Tailwind utilities on the element still win):
+ *   Buttons   .btn (base) .btn-primary .btn-secondary .btn-outline (= .btn-secondary, legacy alias)
+ *             .btn-ghost .btn-inverse (white button on a dark band) .btn-danger   sizes: .btn-sm .btn-lg
+ *             The base has no gap: add `gap-2` yourself, or keep the icon's `mr-2`.
+ *   Links     .link
+ *   Surfaces  .card (padded panel) .card-media (image card, no padding) .card-body .card-tinted .card-title
+ *   Layout    .section-container .section .section-alt .section-head .section-title .section-lead .eyebrow
+ *             .page-header .page-title .page-lead  (use <PageHeader> from components/ui for public pages)
+ *   Forms     .label .input (= .input-field) .input-field .field-error .help-text
+ *   Status    .badge .badge-neutral .badge-primary .badge-success .badge-warning .badge-danger .badge-accent
+ *             .alert .alert-info .alert-success .alert-warning .alert-error
+ *   Collapse  .disclosure (+ .disclosure-plain) on <details>; children .disclosure-title .disclosure-summary
+ *             (use <Disclosure> from components/ui). Content stays in the DOM while closed.
+ *   Rich text .prose (+ .prose-lg). Hand-written: the typography plugin is not installed.
+ *   A11y      .skip-link (first element in the layout, href="#main"); global :focus-visible outline;
+ *             prefers-reduced-motion disables animations and transitions.
+ *   Legacy    .hero-gradient (now a solid primary-700 band)
+ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,51 +32,386 @@
   * {
     @apply border-gray-200;
   }
-  
+
   body {
-    @apply bg-white text-gray-900 font-sans;
+    @apply bg-white text-gray-900 font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
   }
+
+  /* Placeholders default to gray-400 (2.5:1). gray-500 passes AA (4.8:1). */
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-gray-500;
+  }
+
+  /* One visible keyboard focus style everywhere. Elements that set `focus:outline-none` + a ring keep their ring. */
+  :focus-visible {
+    outline: 2px solid theme('colors.primary.600');
+    outline-offset: 2px;
+  }
+
+  /* Programmatic focus targets (e.g. <main tabIndex={-1}>) do not need a ring. */
+  [tabindex="-1"]:focus {
+    outline: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
+  /* ---------- Buttons ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-6 py-3 min-h-[44px] font-semibold
+      transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply btn bg-primary-600 text-white hover:bg-primary-700;
   }
 
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-primary-600 border border-primary-600 font-medium px-6 py-3 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply btn bg-white text-primary-700 border border-primary-300 hover:bg-primary-50;
   }
 
+  /* Legacy alias, ~46 call sites. Do not delete. */
   .btn-outline {
-    @apply bg-transparent hover:bg-primary-50 text-primary-600 border border-primary-300 font-medium px-6 py-3 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply btn-secondary;
   }
 
+  .btn-ghost {
+    @apply btn text-primary-700 hover:bg-primary-50;
+  }
+
+  /* White button on a dark (primary) band. */
+  .btn-inverse {
+    @apply btn bg-white text-primary-700 hover:bg-primary-50;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+
+  /* Sizes come after the variants so they win the cascade (same specificity). */
+  .btn-sm {
+    @apply px-4 py-2 min-h-[36px] text-sm;
+  }
+
+  .btn-lg {
+    @apply px-8 py-4 text-lg;
+  }
+
+  .link {
+    @apply font-medium text-primary-700 underline-offset-2 hover:underline;
+  }
+
+  /* ---------- Surfaces ---------- */
   .card {
-    @apply bg-white rounded-xl shadow-lg border border-gray-200 p-6;
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm p-6;
   }
 
-  .input-field {
-    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors duration-200;
+  .card-media {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col
+      transition-shadow duration-200 hover:shadow-md;
   }
 
+  .card-body {
+    @apply p-5 sm:p-6 flex flex-col flex-1;
+  }
+
+  .card-tinted {
+    @apply rounded-xl border border-primary-100 bg-primary-50 p-6;
+  }
+
+  .card-title {
+    @apply text-lg font-heading font-semibold text-gray-900;
+  }
+
+  /* ---------- Layout and type ---------- */
   .section-container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 
-  .hero-gradient {
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  .section {
+    @apply py-12 sm:py-16;
   }
 
-  .text-gradient {
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  .section-alt {
+    @apply py-12 sm:py-16 bg-gray-50;
+  }
+
+  .section-head {
+    @apply mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .section-title {
+    @apply text-2xl sm:text-3xl font-heading font-bold text-gray-900;
+  }
+
+  .section-lead {
+    @apply mt-2 text-base sm:text-lg text-gray-600 max-w-2xl;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-wider text-primary-700;
+  }
+
+  .page-header {
+    @apply bg-gray-50 border-b border-gray-200 py-10 sm:py-14;
+  }
+
+  .page-title {
+    @apply text-3xl sm:text-4xl lg:text-5xl font-heading font-bold tracking-tight text-gray-900;
+  }
+
+  .page-lead {
+    @apply mt-3 text-lg text-gray-600 max-w-2xl;
+  }
+
+  /* ---------- Forms ---------- */
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1.5;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 bg-white text-gray-900 placeholder-gray-500 border border-gray-300 rounded-lg
+      focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors duration-200;
+  }
+
+  .input {
+    @apply input-field;
+  }
+
+  .field-error {
+    @apply mt-1.5 flex items-center gap-1 text-sm text-red-700;
+  }
+
+  .help-text {
+    @apply mt-1.5 text-sm text-gray-500;
+  }
+
+  /* ---------- Badges and alerts (all pairs >= 4.5:1) ---------- */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .badge-neutral {
+    @apply badge bg-gray-100 text-gray-700;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary-50 text-primary-700;
+  }
+
+  .badge-success {
+    @apply badge bg-green-50 text-green-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-50 text-amber-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-50 text-red-700;
+  }
+
+  .badge-accent {
+    @apply badge bg-accent-50 text-accent-800;
+  }
+
+  .alert {
+    @apply flex items-start gap-3 rounded-lg border p-4 text-sm;
+  }
+
+  .alert-info {
+    @apply alert bg-primary-50 border-primary-200 text-primary-900;
+  }
+
+  .alert-success {
+    @apply alert bg-green-50 border-green-200 text-green-800;
+  }
+
+  .alert-warning {
+    @apply alert bg-amber-50 border-amber-200 text-amber-900;
+  }
+
+  .alert-error {
+    @apply alert bg-red-50 border-red-200 text-red-700;
+  }
+
+  /* ---------- Collapsed-by-default long text (native <details>) ---------- */
+  .disclosure {
+    @apply rounded-xl border border-gray-200 bg-white;
+  }
+
+  .disclosure > summary {
+    @apply flex cursor-pointer list-none items-start justify-between gap-4 rounded-xl px-5 py-4
+      text-left hover:bg-gray-50;
+  }
+
+  .disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* Chevron drawn in CSS so plain <details class="disclosure"> markup gets it too. */
+  .disclosure > summary::after {
+    content: '';
+    @apply mt-1.5 h-2 w-2 shrink-0 border-b-2 border-r-2 border-gray-500 transition-transform duration-150;
+    transform: rotate(45deg);
+  }
+
+  .disclosure[open] > summary::after {
+    transform: rotate(-135deg);
+  }
+
+  .disclosure > :not(summary) {
+    @apply px-5 pb-5 text-gray-700;
+  }
+
+  .disclosure-title {
+    @apply block font-semibold text-gray-900;
+  }
+
+  .disclosure-summary {
+    @apply mt-0.5 block text-sm text-gray-600 truncate;
+  }
+
+  .disclosure[open] .disclosure-summary {
+    @apply hidden;
+  }
+
+  /* Borderless variant for stacked lists inside a card (wrap the list in `divide-y`). */
+  .disclosure-plain {
+    @apply rounded-none border-0 bg-transparent;
+  }
+
+  .disclosure-plain > summary {
+    @apply rounded-none px-0;
+  }
+
+  .disclosure-plain > :not(summary) {
+    @apply px-0;
+  }
+
+  /* ---------- Rich text (CMS HTML). Hand-written; no typography plugin. ---------- */
+  .prose {
+    @apply text-gray-700 leading-relaxed;
+    max-width: 65ch;
+  }
+
+  .prose > * + * {
+    @apply mt-4;
+  }
+
+  .prose h2 {
+    @apply mt-8 text-2xl font-bold text-gray-900;
+  }
+
+  .prose h3 {
+    @apply mt-6 text-xl font-semibold text-gray-900;
+  }
+
+  .prose h4 {
+    @apply mt-6 text-lg font-semibold text-gray-900;
+  }
+
+  .prose > :first-child {
+    @apply mt-0;
+  }
+
+  .prose p {
+    @apply leading-relaxed;
+  }
+
+  .prose ul {
+    @apply list-disc pl-6 space-y-1;
+  }
+
+  .prose ol {
+    @apply list-decimal pl-6 space-y-1;
+  }
+
+  .prose li > ul,
+  .prose li > ol {
+    @apply mt-1;
+  }
+
+  .prose a {
+    @apply font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800;
+  }
+
+  .prose strong {
+    @apply font-semibold text-gray-900;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-primary-200 pl-4 italic text-gray-600;
+  }
+
+  .prose img {
+    @apply rounded-lg;
+  }
+
+  .prose hr {
+    @apply my-8 border-gray-200;
+  }
+
+  .prose code {
+    @apply rounded bg-gray-100 px-1 py-0.5 text-sm text-gray-900;
+  }
+
+  .prose table {
+    @apply w-full text-left text-sm;
+  }
+
+  .prose th {
+    @apply border-b border-gray-300 py-2 pr-4 font-semibold text-gray-900;
+  }
+
+  .prose td {
+    @apply border-b border-gray-200 py-2 pr-4;
+  }
+
+  .prose-lg {
+    @apply text-lg;
+  }
+
+  .prose-lg h2 {
+    @apply text-3xl;
+  }
+
+  .prose-lg h3 {
+    @apply text-2xl;
+  }
+
+  /* ---------- Accessibility ---------- */
+  /* Off-screen until focused; put it first in the layout: <a href="#main" className="skip-link">Skip to content</a> */
+  .skip-link {
+    @apply fixed left-2 top-2 z-[100] rounded-lg bg-primary-700 px-4 py-2 font-semibold text-white shadow-md
+      -translate-y-[200%] focus:translate-y-0 transition-transform;
+  }
+
+  /* ---------- Legacy ---------- */
+  /* Was a blue gradient whose start (#3b82f6) failed contrast with text-blue-100. Now a solid band (2 uses). */
+  .hero-gradient {
+    @apply bg-primary-700;
   }
 }
 
@@ -80,26 +441,4 @@ html {
 /* Ensure body starts at top on page load */
 body {
   scroll-behavior: auto;
-}
-
-/* Focus styles for accessibility */
-.focus-visible {
-  @apply outline-none ring-2 ring-primary-500 ring-offset-2;
-}
-
-/* Fade-in animation */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.6s ease-out forwards;
-  opacity: 0;
 }
