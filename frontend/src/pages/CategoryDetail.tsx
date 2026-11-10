@@ -9,6 +9,21 @@ import VideoThumbnail, { PlayableVideo } from '../components/VideoThumbnail'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
 import Disclosure from '../components/ui/Disclosure'
+import { defineMessages, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  loading: { en: 'Loading', ar: 'جارٍ التحميل' },
+  notFound: { en: 'Category Not Found', ar: 'هذا المجال غير موجود' },
+  returnToPrograms: { en: 'Return to Programs', ar: 'العودة إلى البرامج' },
+  allPrograms: { en: 'All programs', ar: 'جميع البرامج' },
+  about: { en: 'About {title}', ar: 'نبذة عن {title}' },
+  ourImpact: { en: 'Our impact', ar: 'أثرنا' },
+  programsIn: { en: 'Programs in {title}', ar: 'برامج {title}' },
+  learnMore: { en: 'Learn More', ar: 'اعرف المزيد' },
+  support: { en: 'Support {title}', ar: 'ادعم {title}' },
+  donateTo: { en: 'Donate to {title}', ar: 'تبرّع لصالح {title}' },
+})
 
 /** Descriptions longer than this (in plain-text characters) start collapsed. */
 const LONG_TEXT_CHARS = 320
@@ -22,6 +37,7 @@ const CategoryDetail = () => {
   const cssRef = useRef<HTMLStyleElement | null>(null)
   // Once the hero video plays, drop the title overlay so it does not cover the player controls.
   const [heroPlaying, setHeroPlaying] = useState(false)
+  const t = useT()
 
   const { data: category, isLoading, error } = useQuery(
     ['category', slug],
@@ -108,7 +124,7 @@ const CategoryDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
-        <span className="sr-only">Loading</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
@@ -117,9 +133,9 @@ const CategoryDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Category Not Found</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t(M.notFound)}</h1>
           <Link to="/programs" className="link">
-            Return to Programs
+            {t(M.returnToPrograms)}
           </Link>
         </div>
       </div>
@@ -170,7 +186,7 @@ const CategoryDetail = () => {
 
       <div className="section-container py-10 sm:py-12">
         <Link to="/programs" className="link inline-flex items-center gap-1.5 text-sm mb-8">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All programs
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {t(M.allPrograms)}
         </Link>
 
         {/* Description: long text starts collapsed (owner rule) */}
@@ -178,27 +194,27 @@ const CategoryDetail = () => {
           descriptionText.length > LONG_TEXT_CHARS ? (
             <Disclosure
               className="mb-8 max-w-4xl"
-              title={`About ${category.title}`}
+              title={t(M.about, { title: category.title })}
               summary={descriptionText}
             >
-              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: category.description }} />
+              <div className="prose max-w-none" dir="auto" dangerouslySetInnerHTML={{ __html: category.description }} />
             </Disclosure>
           ) : (
-            <div className="prose max-w-none text-lg mb-8" dangerouslySetInnerHTML={{ __html: category.description }} />
+            <div className="prose max-w-none text-lg mb-8" dir="auto" dangerouslySetInnerHTML={{ __html: category.description }} />
           )
         )}
 
         {/* Custom HTML Content (admin-authored, may carry its own CSS/JS: rendered as is) */}
         {category.html_content && (
           <div className="mb-8">
-            <div dangerouslySetInnerHTML={{ __html: category.html_content }} />
+            <div dir="auto" dangerouslySetInnerHTML={{ __html: category.html_content }} />
           </div>
         )}
 
         {/* Impact Text */}
         {category.impact_text && (
           <div className="card-tinted mb-8 max-w-4xl">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">Our impact</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">{t(M.ourImpact)}</h2>
             <p className="mt-1 text-lg font-semibold text-gray-900">{category.impact_text}</p>
           </div>
         )}
@@ -206,7 +222,7 @@ const CategoryDetail = () => {
         {/* Programs in this Category */}
         {categoryPrograms && categoryPrograms.length > 0 && (
           <section className="mt-12" aria-labelledby="category-programs-title">
-            <h2 id="category-programs-title" className="section-title mb-6">Programs in {category.title}</h2>
+            <h2 id="category-programs-title" className="section-title mb-6">{t(M.programsIn, { title: category.title })}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {categoryPrograms.map((program) => {
                 const programVideoUrl = program.video_filename
@@ -251,7 +267,7 @@ const CategoryDetail = () => {
                         <p className="mt-2 text-gray-600 line-clamp-3">{program.short_description}</p>
                       )}
                       <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1">
-                        Learn More <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                        {t(M.learnMore)} <ArrowRight className="w-4 h-4" aria-hidden="true" />
                       </span>
                     </div>
                   </Link>
@@ -263,13 +279,13 @@ const CategoryDetail = () => {
 
         {/* One call to action */}
         <section className="mt-12 rounded-xl hero-gradient text-white p-8 sm:p-10" aria-labelledby="category-cta-title">
-          <h2 id="category-cta-title" className="text-2xl sm:text-3xl font-heading font-bold">Support {category.title}</h2>
+          <h2 id="category-cta-title" className="text-2xl sm:text-3xl font-heading font-bold">{t(M.support, { title: category.title })}</h2>
           <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-4">
             <Link to={donateHref} className="btn-inverse btn-lg">
-              Donate to {category.title}
+              {t(M.donateTo, { title: category.title })}
             </Link>
             <Link to="/volunteer" className="font-medium text-white underline underline-offset-2 hover:text-white/90">
-              Volunteer
+              {t(C.volunteer)}
             </Link>
           </div>
         </section>

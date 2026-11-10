@@ -6,6 +6,16 @@ import { IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SEOHead from '../components/SEOHead'
+import { defineMessages, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  loading: { en: 'Loading', ar: 'جارٍ التحميل' },
+  notFound: { en: 'Urgent Need Not Found', ar: 'هذا النداء العاجل غير موجود' },
+  returnHome: { en: 'Return to Homepage', ar: 'العودة إلى الصفحة الرئيسية' },
+  donate: { en: 'Donate to this appeal', ar: 'تبرّع لهذا النداء' },
+  comingSoon: { en: 'More details coming soon.', ar: 'المزيد من التفاصيل قريبًا.' },
+})
 
 const UrgentNeedDetail = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -13,6 +23,7 @@ const UrgentNeedDetail = () => {
   const jsRef = useRef<HTMLScriptElement | null>(null)
   const cssRef = useRef<HTMLStyleElement | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const t = useT()
 
   const { data: need, isLoading, error } = useQuery(
     ['urgent-need', slug],
@@ -114,7 +125,7 @@ const UrgentNeedDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
-        <span className="sr-only">Loading</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
@@ -123,9 +134,9 @@ const UrgentNeedDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Urgent Need Not Found</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t(M.notFound)}</h1>
           <Link to="/" className="link">
-            Return to Homepage
+            {t(M.returnHome)}
           </Link>
         </div>
       </div>
@@ -147,7 +158,7 @@ const UrgentNeedDetail = () => {
         <div className="section-container py-4">
           <Link to="/" className="link inline-flex items-center gap-1.5 text-sm">
             <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            Back to Home
+            {t(C.backToHome)}
           </Link>
         </div>
       </div>
@@ -174,7 +185,7 @@ const UrgentNeedDetail = () => {
 
           <div className="mt-6">
             <Link to={donateHref} className="btn-primary btn-lg">
-              Donate to this appeal
+              {t(M.donate)}
             </Link>
           </div>
 
@@ -182,10 +193,10 @@ const UrgentNeedDetail = () => {
             {need.html_content ? (
               <div
                 className="urgent-need-content prose prose-lg max-w-none"
-                dangerouslySetInnerHTML={{ __html: need.html_content }}
+                dir="auto" dangerouslySetInnerHTML={{ __html: need.html_content }}
               />
             ) : (
-              <p className="text-gray-600">More details coming soon.</p>
+              <p className="text-gray-600">{t(M.comingSoon)}</p>
             )}
           </div>
         </div>

@@ -8,6 +8,123 @@ import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
+import { defineMessages, useFormat, useLocale, useT, type Message } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  seoTitle: { en: 'Donate Zakat & Sadaqa Online', ar: 'أدِّ زكاتك وصدقتك عبر الإنترنت' },
+  seoDescription: {
+    en: 'Make a secure Zakat or Sadaqa donation online. Support families in need with one-time or recurring donations through our trusted, PCI-compliant payment platform.',
+    ar: 'أدِّ زكاتك أو صدقتك عبر الإنترنت بأمان، وادعم الأسر المحتاجة بتبرع لمرة واحدة أو تبرع دوري عبر منصة دفع موثوقة متوافقة مع معيار PCI.',
+  },
+  title: { en: 'Make a Donation', ar: 'قدّم تبرعك' },
+  lead: {
+    en: 'Choose an amount and a cause. Payment is handled securely by Stripe.',
+    ar: 'اختر المبلغ ووجهة تبرعك. تتم معالجة الدفع بأمان عبر Stripe.',
+  },
+
+  // Toasts
+  paymentLoadingTitle: { en: 'Payment system loading', ar: 'نظام الدفع قيد التحميل' },
+  paymentLoadingBody: { en: 'Please wait a moment and try again.', ar: 'يُرجى الانتظار قليلًا ثم المحاولة مرة أخرى.' },
+  invalidAmountTitle: { en: 'Invalid amount', ar: 'مبلغ غير صالح' },
+  invalidAmountBody: {
+    en: 'Please enter a donation amount of at least $1.',
+    ar: 'يُرجى إدخال مبلغ تبرع لا يقل عن دولار واحد.',
+  },
+  redirectFailedTitle: { en: 'Payment redirect failed', ar: 'تعذّر الانتقال إلى صفحة الدفع' },
+  redirectFailedBody: {
+    en: 'Could not redirect to payment page. Please try again.',
+    ar: 'تعذّر تحويلك إلى صفحة الدفع. يُرجى المحاولة مرة أخرى.',
+  },
+  paymentFailedTitle: { en: 'Payment failed', ar: 'تعذّر إتمام الدفع' },
+  paymentFailedBody: {
+    en: 'Something went wrong. Please try again or contact us at info@myzakat.org.',
+    ar: 'حدث خطأ ما. يُرجى المحاولة مرة أخرى أو التواصل معنا على info@myzakat.org.',
+  },
+  nameRequiredTitle: { en: 'Name required', ar: 'الاسم مطلوب' },
+  nameRequiredBody: { en: 'Please enter your full name.', ar: 'يُرجى إدخال اسمك الكامل.' },
+  emailRequiredTitle: { en: 'Email required', ar: 'البريد الإلكتروني مطلوب' },
+  emailRequiredBody: { en: 'Please enter a valid email address.', ar: 'يُرجى إدخال بريد إلكتروني صحيح.' },
+  amountRequiredTitle: { en: 'Amount required', ar: 'المبلغ مطلوب' },
+  amountRequiredBody: {
+    en: 'Please select or enter a donation amount of at least $1.',
+    ar: 'يُرجى اختيار مبلغ التبرع أو إدخاله، على ألا يقل عن دولار واحد.',
+  },
+
+  // Amount
+  amount: { en: 'Donation Amount', ar: 'مبلغ التبرع' },
+  customAmount: { en: 'Enter custom amount', ar: 'أدخل مبلغًا آخر' },
+  amountMissing: { en: 'Please enter an amount', ar: 'يُرجى إدخال المبلغ' },
+  amountMin: { en: 'Minimum donation is $1', ar: 'الحد الأدنى للتبرع دولار واحد' },
+  amountInvalid: { en: 'Please enter a valid amount', ar: 'يُرجى إدخال مبلغ صحيح' },
+
+  // Purpose
+  purpose: { en: 'Purpose', ar: 'وجهة التبرع' },
+
+  // Frequency
+  recurringTitle: { en: 'Recurring Payment', ar: 'تبرع دوري' },
+  scheduleLabel: { en: 'Payment Schedule:', ar: 'موعد الدفعات:' },
+  scheduleMonthly: {
+    en: "Your first payment will be processed immediately. Future payments will occur monthly from today's date.",
+    ar: 'ستُخصم دفعتك الأولى فورًا، ثم تُخصم الدفعات التالية شهريًا ابتداءً من تاريخ اليوم.',
+  },
+  scheduleAnnually: {
+    en: "Your first payment will be processed immediately. Future payments will occur annually from today's date.",
+    ar: 'ستُخصم دفعتك الأولى فورًا، ثم تُخصم الدفعات التالية سنويًا ابتداءً من تاريخ اليوم.',
+  },
+
+  // Donor
+  fullName: { en: 'Full Name *', ar: 'الاسم الكامل *' },
+  fullNameMissing: { en: 'Please enter your full name', ar: 'يُرجى إدخال اسمك الكامل' },
+  fullNamePlaceholder: { en: 'Enter your full name', ar: 'أدخل اسمك الكامل' },
+  email: { en: 'Email Address *', ar: 'البريد الإلكتروني *' },
+  emailMissing: { en: 'Please enter your email address', ar: 'يُرجى إدخال بريدك الإلكتروني' },
+  emailInvalid: { en: 'Please enter a valid email address', ar: 'يُرجى إدخال بريد إلكتروني صحيح' },
+  emailPlaceholder: { en: 'Enter your email', ar: 'أدخل بريدك الإلكتروني' },
+
+  // Submit
+  processing: { en: 'Processing...', ar: 'جارٍ المعالجة...' },
+  setUpRecurring: { en: 'Set up Recurring Donation', ar: 'إعداد التبرع الدوري' },
+  proceed: { en: 'Proceed to Payment', ar: 'المتابعة إلى الدفع' },
+
+  // Sidebar
+  impactTitle: { en: 'Your Impact', ar: 'أثر تبرعك' },
+  meals: { en: 'Meals provided:', ar: 'الوجبات المقدَّمة:' },
+  families: { en: 'Families helped:', ar: 'الأسر المستفيدة:' },
+  children: { en: 'Children supported:', ar: 'الأطفال المدعومون:' },
+  estimates: {
+    en: 'Rough estimates: {meal} a meal, {child} a child, {family} a family.',
+    ar: 'تقديرات تقريبية: {meal} للوجبة، و{child} للطفل، و{family} للأسرة.',
+  },
+  secureTitle: { en: 'Secure & Trusted', ar: 'آمن وموثوق' },
+  ssl: { en: '256-bit SSL encryption', ar: 'تشفير SSL بقوة 256 بت' },
+  pci: { en: 'PCI DSS compliant', ar: 'متوافق مع معيار PCI DSS' },
+  receipt: { en: 'Receipt by email', ar: 'إيصال عبر البريد الإلكتروني' },
+  recentTitle: { en: 'Recent Donations', ar: 'أحدث التبرعات' },
+
+  // Purposes (the English name is the value sent to Stripe and stored)
+  generalDonation: { en: 'General Donation', ar: 'تبرع عام' },
+  zakat: { en: 'Zakat', ar: 'زكاة' },
+  emergencyRelief: { en: 'Emergency Relief', ar: 'إغاثة عاجلة' },
+  supportFamily: { en: 'Support a Family', ar: 'دعم أسرة' },
+  orphanCare: { en: 'Orphan Care', ar: 'رعاية الأيتام' },
+  foodWater: { en: 'Food & Water Aid', ar: 'الغذاء والماء' },
+  education: { en: 'Education', ar: 'التعليم' },
+  healthcare: { en: 'Healthcare', ar: 'الرعاية الصحية' },
+})
+
+/** Labels for the standard purposes; a campaign purpose from the URL is shown as given. */
+const PURPOSE_LABELS: Record<string, Message> = Object.fromEntries(
+  [M.generalDonation, M.zakat, M.emergencyRelief, M.supportFamily, M.orphanCare, M.foodWater, M.education, M.healthcare]
+    .map((m) => [m.en, m]),
+)
+
+/** The radio value stays English (it drives the Stripe interval); only the label is translated. */
+const FREQUENCY_LABELS: Record<string, Message> = {
+  'One-Time': C.oneTime,
+  Monthly: C.monthly,
+  Annually: C.annually,
+}
 
 interface DonationForm {
   name: string
@@ -22,6 +139,9 @@ const Donate = () => {
   const [isProcessing, setIsProcessing] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
   const { showError } = useToast()
+  const t = useT()
+  const locale = useLocale()
+  const { money } = useFormat()
 
   // Recent donations (real, privacy-masked, sorted by amount)
   const [recentDonations, setRecentDonations] = useState<{ name: string; amount: number }[]>([])
@@ -138,12 +258,12 @@ const Donate = () => {
 
   const onSubmit = async (data: DonationForm) => {
     if (!stripe || !elements) {
-      showError('Payment system loading', 'Please wait a moment and try again.')
+      showError(t(M.paymentLoadingTitle), t(M.paymentLoadingBody))
       return
     }
 
     if (!data.amount || data.amount < 1) {
-      showError('Invalid amount', 'Please enter a donation amount of at least $1.')
+      showError(t(M.invalidAmountTitle), t(M.invalidAmountBody))
       return
     }
 
@@ -177,7 +297,7 @@ const Donate = () => {
         })
 
         if (error) {
-          showError('Payment redirect failed', error.message || 'Could not redirect to payment page. Please try again.')
+          showError(t(M.redirectFailedTitle), error.message || t(M.redirectFailedBody))
         }
       } else {
         // Create one-time payment session
@@ -196,15 +316,15 @@ const Donate = () => {
         })
 
         if (error) {
-          showError('Payment redirect failed', error.message || 'Could not redirect to payment page. Please try again.')
+          showError(t(M.redirectFailedTitle), error.message || t(M.redirectFailedBody))
         }
       }
     } catch (error: any) {
       const message =
         error?.response?.data?.detail ||
         error?.message ||
-        'Something went wrong. Please try again or contact us at info@myzakat.org.'
-      showError('Payment failed', message)
+        t(M.paymentFailedBody)
+      showError(t(M.paymentFailedTitle), message)
     } finally {
       setIsProcessing(false)
     }
@@ -213,24 +333,24 @@ const Donate = () => {
   // Show validation errors via toast when form submit is blocked
   const onFormError = () => {
     if (errors.name) {
-      showError('Name required', 'Please enter your full name.')
+      showError(t(M.nameRequiredTitle), t(M.nameRequiredBody))
     } else if (errors.email) {
-      showError('Email required', 'Please enter a valid email address.')
+      showError(t(M.emailRequiredTitle), t(M.emailRequiredBody))
     } else if (errors.amount) {
-      showError('Amount required', 'Please select or enter a donation amount of at least $1.')
+      showError(t(M.amountRequiredTitle), t(M.amountRequiredBody))
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <SEOHead
-        title="Donate Zakat & Sadaqa Online"
-        description="Make a secure Zakat or Sadaqa donation online. Support families in need with one-time or recurring donations through our trusted, PCI-compliant payment platform."
+        title={t(M.seoTitle)}
+        description={t(M.seoDescription)}
         canonicalPath="/donate"
       />
       <PageHeader
-        title="Make a Donation"
-        description="Choose an amount and a cause. Payment is handled securely by Stripe."
+        title={t(M.title)}
+        description={t(M.lead)}
       />
 
       <div className="section-container py-8 sm:py-10">
@@ -242,7 +362,7 @@ const Donate = () => {
                 {/* Amount Selection */}
                 <div>
                   <label htmlFor="donate-amount" className="block text-lg font-semibold text-gray-900 mb-3">
-                    Donation Amount
+                    {t(M.amount)}
                   </label>
 
                   {/* Quick Amount Buttons */}
@@ -263,7 +383,7 @@ const Donate = () => {
                             : 'border-gray-300 bg-white text-gray-700 hover:border-primary-300'
                         }`}
                       >
-                        ${amount}
+                        {locale === 'ar' ? money(amount * 100) : `$${amount}`}
                       </button>
                     ))}
                   </div>
@@ -278,9 +398,9 @@ const Donate = () => {
                       type="number"
                       step="0.01"
                       min="1"
-                      placeholder="Enter custom amount"
+                      placeholder={t(M.customAmount)}
                       data-testid="donate-amount-input"
-                      {...register('amount', { required: 'Please enter an amount', min: { value: 1, message: 'Minimum donation is $1' }, valueAsNumber: true })}
+                      {...register('amount', { required: t(M.amountMissing), min: { value: 1, message: t(M.amountMin) }, valueAsNumber: true })}
                       className={`input-field ps-8 text-lg ${errors.amount ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value)
@@ -291,7 +411,7 @@ const Donate = () => {
                   {errors.amount && (
                     <p className="field-error">
                       <AlertCircle className="w-4 h-4" aria-hidden="true" />
-                      {errors.amount.message || 'Please enter a valid amount'}
+                      {errors.amount.message || t(M.amountInvalid)}
                     </p>
                   )}
                 </div>
@@ -299,7 +419,7 @@ const Donate = () => {
                 {/* Purpose */}
                 <div>
                   <label htmlFor="donate-purpose" className="block text-lg font-semibold text-gray-900 mb-2">
-                    Purpose
+                    {t(M.purpose)}
                   </label>
                   <select
                     id="donate-purpose"
@@ -309,7 +429,7 @@ const Donate = () => {
                   >
                     {purposes.map((purpose) => (
                       <option key={purpose} value={purpose}>
-                        {purpose}
+                        {PURPOSE_LABELS[purpose] ? t(PURPOSE_LABELS[purpose]) : purpose}
                       </option>
                     ))}
                   </select>
@@ -318,7 +438,7 @@ const Donate = () => {
                 {/* Frequency */}
                 <fieldset>
                   <legend className="block text-lg font-semibold text-gray-900 mb-2">
-                    Frequency
+                    {t(C.frequency)}
                   </legend>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {['One-Time', 'Monthly', 'Annually'].map((freq) => (
@@ -333,7 +453,7 @@ const Donate = () => {
                           {...register('frequency')}
                           className="me-3 text-primary-600"
                         />
-                        <span className="text-gray-700">{freq}</span>
+                        <span className="text-gray-700">{t(FREQUENCY_LABELS[freq])}</span>
                       </label>
                     ))}
                   </div>
@@ -342,10 +462,9 @@ const Donate = () => {
                 {/* Payment Schedule - Show only for recurring payments */}
                 {(watch('frequency') === 'Monthly' || watch('frequency') === 'Annually') && (
                   <div className="alert-info block">
-                    <h4 className="font-semibold mb-1">Recurring Payment</h4>
+                    <h4 className="font-semibold mb-1">{t(M.recurringTitle)}</h4>
                     <p>
-                      <strong>Payment Schedule:</strong> Your first payment will be processed immediately.
-                      Future payments will occur {watch('frequency') === 'Monthly' ? 'monthly' : 'annually'} from today's date.
+                      <strong>{t(M.scheduleLabel)}</strong> {t(watch('frequency') === 'Monthly' ? M.scheduleMonthly : M.scheduleAnnually)}
                     </p>
                   </div>
                 )}
@@ -354,16 +473,16 @@ const Donate = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="donate-name" className="label">
-                      Full Name *
+                      {t(M.fullName)}
                     </label>
                     <input
                       id="donate-name"
                       type="text"
                       data-testid="donate-name"
                       autoComplete="name"
-                      {...register('name', { required: 'Please enter your full name' })}
+                      {...register('name', { required: t(M.fullNameMissing) })}
                       className={`input-field ${errors.name ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
-                      placeholder="Enter your full name"
+                      placeholder={t(M.fullNamePlaceholder)}
                     />
                     {errors.name && (
                       <p className="field-error">
@@ -374,7 +493,7 @@ const Donate = () => {
                   </div>
                   <div>
                     <label htmlFor="donate-email" className="label">
-                      Email Address *
+                      {t(M.email)}
                     </label>
                     <input
                       id="donate-email"
@@ -382,11 +501,11 @@ const Donate = () => {
                       data-testid="donate-email"
                       autoComplete="email"
                       {...register('email', {
-                        required: 'Please enter your email address',
-                        pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Please enter a valid email address' }
+                        required: t(M.emailMissing),
+                        pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: t(M.emailInvalid) }
                       })}
                       className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
-                      placeholder="Enter your email"
+                      placeholder={t(M.emailPlaceholder)}
                     />
                     {errors.email && (
                       <p className="field-error">
@@ -407,12 +526,12 @@ const Donate = () => {
                   {isProcessing ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      Processing...
+                      {t(M.processing)}
                     </>
                   ) : (
                     watch('frequency') === 'Monthly' || watch('frequency') === 'Annually'
-                      ? 'Set up Recurring Donation'
-                      : 'Proceed to Payment'
+                      ? t(M.setUpRecurring)
+                      : t(M.proceed)
                   )}
                 </button>
               </form>
@@ -424,23 +543,23 @@ const Donate = () => {
             {/* Impact Preview */}
             {watchedAmount > 0 && (
               <div className="card-tinted">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Impact</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t(M.impactTitle)}</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-700">Meals provided:</span>
+                    <span className="text-gray-700">{t(M.meals)}</span>
                     <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 5)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-700">Families helped:</span>
+                    <span className="text-gray-700">{t(M.families)}</span>
                     <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 100)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-700">Children supported:</span>
+                    <span className="text-gray-700">{t(M.children)}</span>
                     <span className="font-semibold text-gray-900">{Math.floor(watchedAmount / 50)}</span>
                   </div>
                 </div>
                 <p className="mt-4 text-xs text-gray-600">
-                  Rough estimates: $5 a meal, $50 a child, $100 a family.
+                  {t(M.estimates, { meal: money(500), child: money(5000), family: money(10000) })}
                 </p>
               </div>
             )}
@@ -450,20 +569,20 @@ const Donate = () => {
             <div className="card">
               <div className="flex items-center mb-3">
                 <ShieldCheck className="w-5 h-5 text-accent-700 me-2" aria-hidden="true" />
-                <h3 className="text-base font-semibold text-gray-900">Secure & Trusted</h3>
+                <h3 className="text-base font-semibold text-gray-900">{t(M.secureTitle)}</h3>
               </div>
               <ul className="space-y-2 text-sm text-gray-600">
                 <li className="flex items-center">
                   <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
-                  256-bit SSL encryption
+                  {t(M.ssl)}
                 </li>
                 <li className="flex items-center">
                   <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
-                  PCI DSS compliant
+                  {t(M.pci)}
                 </li>
                 <li className="flex items-center">
                   <CheckCircle className="w-4 h-4 text-accent-600 me-2 shrink-0" aria-hidden="true" />
-                  Receipt by email
+                  {t(M.receipt)}
                 </li>
               </ul>
             </div>
@@ -471,13 +590,15 @@ const Donate = () => {
             {/* Recent Donations */}
             {recentDonations.length > 0 && (
               <div className="card">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Donations</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">{t(M.recentTitle)}</h3>
                 <ul className="space-y-2 text-sm">
                   {recentDonations.map((donation, index) => (
                     <li key={index} className="flex justify-between items-center">
                       <span className="text-gray-600">{donation.name}</span>
                       <span className="font-semibold text-gray-900">
-                        ${donation.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        {locale === 'ar'
+                          ? money(Math.round(donation.amount) * 100)
+                          : `$${donation.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
                       </span>
                     </li>
                   ))}

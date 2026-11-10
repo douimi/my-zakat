@@ -8,6 +8,18 @@ import { PlayableVideo } from '../components/VideoThumbnail'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
 import Disclosure from '../components/ui/Disclosure'
+import { defineMessages, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  loading: { en: 'Loading', ar: 'جارٍ التحميل' },
+  notFound: { en: 'Program Not Found', ar: 'البرنامج غير موجود' },
+  returnToPrograms: { en: 'Return to Programs', ar: 'العودة إلى البرامج' },
+  allPrograms: { en: 'All programs', ar: 'جميع البرامج' },
+  donate: { en: 'Donate to This Program', ar: 'تبرّع لهذا البرنامج' },
+  about: { en: 'About {title}', ar: 'نبذة عن {title}' },
+  impact: { en: 'Impact', ar: 'الأثر' },
+})
 
 /** Descriptions longer than this (in plain-text characters) start collapsed. */
 const LONG_TEXT_CHARS = 320
@@ -21,6 +33,7 @@ const ProgramDetail = () => {
   const cssRef = useRef<HTMLStyleElement | null>(null)
   // Once the hero video plays, drop the title overlay so it does not cover the player controls.
   const [heroPlaying, setHeroPlaying] = useState(false)
+  const t = useT()
 
   const { data: program, isLoading, error } = useQuery(
     ['program', slug],
@@ -88,7 +101,7 @@ const ProgramDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
-        <span className="sr-only">Loading</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
@@ -97,9 +110,9 @@ const ProgramDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Program Not Found</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t(M.notFound)}</h1>
           <Link to="/programs" className="link">
-            Return to Programs
+            {t(M.returnToPrograms)}
           </Link>
         </div>
       </div>
@@ -150,16 +163,16 @@ const ProgramDetail = () => {
 
       <div className="section-container py-10 sm:py-12">
         <Link to="/programs" className="link inline-flex items-center gap-1.5 text-sm mb-8">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All programs
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {t(M.allPrograms)}
         </Link>
 
         {/* Primary action, visible without expanding anything */}
         <div className="mb-10 flex flex-col sm:flex-row sm:items-center gap-4">
           <Link to={donateHref} className="btn-primary btn-lg">
-            Donate to This Program
+            {t(M.donate)}
           </Link>
           <Link to="/volunteer" className="link">
-            Volunteer
+            {t(C.volunteer)}
           </Link>
         </div>
 
@@ -168,27 +181,27 @@ const ProgramDetail = () => {
           descriptionText.length > LONG_TEXT_CHARS ? (
             <Disclosure
               className="mb-8 max-w-4xl"
-              title={`About ${program.title}`}
+              title={t(M.about, { title: program.title })}
               summary={descriptionText}
             >
-              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: program.description }} />
+              <div className="prose max-w-none" dir="auto" dangerouslySetInnerHTML={{ __html: program.description }} />
             </Disclosure>
           ) : (
-            <div className="prose max-w-none text-lg mb-8" dangerouslySetInnerHTML={{ __html: program.description }} />
+            <div className="prose max-w-none text-lg mb-8" dir="auto" dangerouslySetInnerHTML={{ __html: program.description }} />
           )
         )}
 
         {/* Custom HTML Content (admin-authored, may carry its own CSS/JS: rendered as is) */}
         {program.html_content && (
           <div className="mb-8">
-            <div dangerouslySetInnerHTML={{ __html: program.html_content }} />
+            <div dir="auto" dangerouslySetInnerHTML={{ __html: program.html_content }} />
           </div>
         )}
 
         {/* Impact Text */}
         {program.impact_text && (
           <div className="card-tinted max-w-4xl">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">Impact</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-primary-700">{t(M.impact)}</h2>
             <p className="mt-1 text-lg font-semibold text-gray-900">{program.impact_text}</p>
           </div>
         )}

@@ -5,14 +5,29 @@ import { storiesAPI, getStaticFileUrl } from '../utils/api'
 import { getOptimizedImageUrl, IMAGE_WIDTHS } from '../utils/mediaHelpers'
 import LazyVideo from '../components/LazyVideo'
 import SEOHead from '../components/SEOHead'
+import { defineMessages, useT } from '../i18n'
+import { C } from '../i18n/common'
 
-const BackToStories = () => (
-  <Link to="/stories" className="link inline-flex items-center gap-1 text-sm">
-    <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All stories
-  </Link>
-)
+const M = defineMessages({
+  allStories: { en: 'All stories', ar: 'جميع القصص' },
+  loading: { en: 'Loading story', ar: 'جارٍ تحميل القصة' },
+  notFoundSeo: { en: 'Story not found', ar: 'القصة غير موجودة' },
+  notFound: { en: 'Story Not Found', ar: 'لم نعثر على هذه القصة' },
+  returnToStories: { en: 'Return to Stories', ar: 'العودة إلى القصص' },
+  featured: { en: 'Featured', ar: 'مميزة' },
+})
+
+const BackToStories = () => {
+  const t = useT()
+  return (
+    <Link to="/stories" className="link inline-flex items-center gap-1 text-sm">
+      <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {t(M.allStories)}
+    </Link>
+  )
+}
 
 const StoryDetail = () => {
+  const t = useT()
   const { id } = useParams<{ id: string }>()
 
   const { data: story, isLoading, error } = useQuery(
@@ -44,7 +59,7 @@ const StoryDetail = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true" />
-        <span className="sr-only">Loading story</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
@@ -52,11 +67,11 @@ const StoryDetail = () => {
   if (error || !story) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <SEOHead title="Story not found" noindex />
+        <SEOHead title={t(M.notFoundSeo)} noindex />
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Story Not Found</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t(M.notFound)}</h1>
           <Link to="/stories" className="link">
-            Return to Stories
+            {t(M.returnToStories)}
           </Link>
         </div>
       </div>
@@ -109,7 +124,7 @@ const StoryDetail = () => {
           )}
 
           <article className="card sm:p-8">
-            {story.is_featured && <span className="badge-primary mb-3">Featured</span>}
+            {story.is_featured && <span className="badge-primary mb-3">{t(M.featured)}</span>}
             <h1 className="text-3xl sm:text-4xl font-heading font-bold text-gray-900">{story.title}</h1>
 
             {story.summary && (
@@ -127,7 +142,7 @@ const StoryDetail = () => {
             {/* The story text asks readers to donate: give them the link it refers to. */}
             <div className="mt-8 pt-6 border-t border-gray-200 flex flex-wrap items-center gap-4">
               <Link to={donateHref} className="btn-primary gap-2">
-                <Heart className="w-4 h-4" aria-hidden="true" /> Donate
+                <Heart className="w-4 h-4" aria-hidden="true" /> {t(C.donate)}
               </Link>
               <BackToStories />
             </div>

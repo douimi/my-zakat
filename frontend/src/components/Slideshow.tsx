@@ -3,6 +3,21 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { slideshowAPI, getStaticFileUrl } from '../utils/api'
 import PageHeader from './ui/PageHeader'
+import { defineMessages, useDir, useT } from '../i18n'
+
+const M = defineMessages({
+  loading: { en: 'Loading', ar: 'جارٍ التحميل' },
+  carousel: { en: 'Highlights', ar: 'أبرز ما لدينا' },
+  carouselRole: { en: 'carousel', ar: 'عرض شرائح' },
+  slideRole: { en: 'slide', ar: 'شريحة' },
+  slidePosition: { en: '{current} of {total}', ar: '{current} من {total}' },
+  counter: { en: '{current} / {total}', ar: '{current} من {total}' },
+  previous: { en: 'Previous slide', ar: 'الشريحة السابقة' },
+  next: { en: 'Next slide', ar: 'الشريحة التالية' },
+  pause: { en: 'Pause slideshow', ar: 'إيقاف العرض مؤقتًا' },
+  play: { en: 'Play slideshow', ar: 'تشغيل العرض' },
+  goTo: { en: 'Go to slide {n}', ar: 'الانتقال إلى الشريحة {n}' },
+})
 
 interface SlideshowSlide {
   id: number
@@ -57,6 +72,8 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
   // Hovering or focusing inside the carousel pauses it too (WCAG 2.2.2), without changing the button state.
   const [isInteracting, setIsInteracting] = useState(false)
   const regionRef = useRef<HTMLElement>(null)
+  const t = useT()
+  const dir = useDir()
 
   useEffect(() => {
     fetchSlides()
@@ -101,7 +118,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
     return (
       <div className="w-full h-96 md:h-[500px] lg:h-[600px] bg-gray-100" role="status">
         <h1 className="sr-only">{heading}</h1>
-        <span className="sr-only">Loading</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
@@ -141,8 +158,8 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
     <section
       ref={regionRef}
       className="relative w-full h-96 md:h-[500px] lg:h-[600px] overflow-hidden bg-gray-900"
-      aria-roledescription="carousel"
-      aria-label="Highlights"
+      aria-roledescription={t(M.carouselRole)}
+      aria-label={t(M.carousel)}
       onMouseEnter={() => setIsInteracting(true)}
       onMouseLeave={() => setIsInteracting(false)}
       onFocus={() => setIsInteracting(true)}
@@ -159,7 +176,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
           backgroundImage: `url("${imageUrl}")`,
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/10"></div>
+        <div className={`absolute inset-0 ${dir === 'rtl' ? 'bg-gradient-to-l' : 'bg-gradient-to-r'} from-black/70 via-black/50 to-black/10`}></div>
       </div>
 
       {/* Content Overlay */}
@@ -168,8 +185,8 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
           <div
             key={slideKey}
             className="max-w-2xl text-white px-10 sm:px-12 lg:px-14"
-            aria-roledescription="slide"
-            aria-label={`${currentIndex + 1} of ${slides.length}`}
+            aria-roledescription={t(M.slideRole)}
+            aria-label={t(M.slidePosition, { current: currentIndex + 1, total: slides.length })}
             aria-live={isRunning ? 'off' : 'polite'}
           >
             <h2 className="text-3xl md:text-5xl lg:text-6xl font-heading font-bold mb-4 animate-fade-in">
@@ -201,7 +218,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
             type="button"
             onClick={goToPrevious}
             className="absolute start-2 sm:start-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
-            aria-label="Previous slide"
+            aria-label={t(M.previous)}
           >
             <ChevronLeft className="w-6 h-6" aria-hidden="true" />
           </button>
@@ -209,7 +226,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
             type="button"
             onClick={goToNext}
             className="absolute end-2 sm:end-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
-            aria-label="Next slide"
+            aria-label={t(M.next)}
           >
             <ChevronRight className="w-6 h-6" aria-hidden="true" />
           </button>
@@ -220,14 +237,14 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
               type="button"
               onClick={() => setIsPlaying((p) => !p)}
               className="p-2 text-white"
-              aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
+              aria-label={isPlaying ? t(M.pause) : t(M.play)}
             >
               {isPlaying ? <Pause className="w-4 h-4" aria-hidden="true" /> : <Play className="w-4 h-4" aria-hidden="true" />}
             </button>
             {/* Dots fit up to MAX_DOTS slides on tablet and up; otherwise (and on phones) a counter
                 stands in, so the control row never overflows the screen. Arrows still reach every slide. */}
             <span className={`px-1 text-sm font-medium text-white tabular-nums ${showDots ? 'sm:hidden' : ''}`} aria-hidden="true">
-              {currentIndex + 1} / {slides.length}
+              {t(M.counter, { current: currentIndex + 1, total: slides.length })}
             </span>
             {showDots && slides.map((_, index) => (
               <button
@@ -235,7 +252,7 @@ const Slideshow = ({ heading, emptyDescription, emptyActions }: SlideshowProps) 
                 type="button"
                 onClick={() => goToSlide(index)}
                 className="group p-2 hidden sm:block"
-                aria-label={`Go to slide ${index + 1}`}
+                aria-label={t(M.goTo, { n: index + 1 })}
                 aria-current={index === currentIndex ? 'true' : undefined}
               >
                 <span

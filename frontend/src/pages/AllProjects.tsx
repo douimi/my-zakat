@@ -6,7 +6,7 @@
  * two views stay visually consistent, and groups projects by state: open for
  * donations, recently funded, and past (inactive) projects.
  */
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
@@ -15,6 +15,34 @@ import {
   isProjectOpen,
   type Project,
 } from '../components/FundraisingProjectsSection'
+import { defineMessages, useT } from '../i18n'
+
+const M = defineMessages({
+  seoTitle: { en: 'Support a Project', ar: 'ادعم مشروعًا' },
+  seoDescription: {
+    en: "Browse every fundraising project at MyZakat. See each project's goal, what has been raised, and what is still needed.",
+    ar: 'تصفّح جميع مشاريع جمع التبرعات في ماي زكاة، واطّلع على هدف كل مشروع، وما جُمع له، وما يزال مطلوبًا.',
+  },
+  title: { en: 'Our fundraising projects', ar: 'مشاريعنا لجمع التبرعات' },
+  lead: {
+    en: 'Projects open for donations first, then the ones already funded.',
+    ar: 'المشاريع المفتوحة للتبرع أولًا، ثم المشاريع التي اكتمل تمويلها.',
+  },
+  loading: { en: 'Loading projects', ar: 'جارٍ تحميل المشاريع' },
+  openNow: { en: 'Open now', ar: 'مفتوحة للتبرع الآن' },
+  noneOpen: {
+    en: 'No project is open right now. You can still {link}.',
+    ar: 'لا يوجد مشروع مفتوح للتبرع حاليًا، ويمكنك مع ذلك {link}.',
+  },
+  giveWhereNeeded: { en: 'give where the need is greatest', ar: 'التبرّع حيث تشتد الحاجة' },
+  recentlyFunded: { en: 'Recently funded', ar: 'اكتمل تمويلها مؤخرًا' },
+  past: { en: 'Past projects', ar: 'مشاريع سابقة' },
+  pastLead: { en: 'No longer taking donations.', ar: 'لم تعد تستقبل التبرعات.' },
+})
+
+/** Put React nodes into the `{slot}`s of a translated sentence (word order differs per language). */
+const fill = (text: string, slots: Record<string, ReactNode>) =>
+  text.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? <Fragment key={i}>{slots[part]}</Fragment> : part))
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -27,6 +55,7 @@ const ProjectGrid = ({ projects }: { projects: Project[] }) => (
 const AllProjects = () => {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const t = useT()
 
   useEffect(() => {
     let cancelled = false
@@ -55,21 +84,21 @@ const AllProjects = () => {
   return (
     <>
       <SEOHead
-        title="Support a Project"
-        description="Browse every fundraising project at MyZakat. See each project's goal, what has been raised, and what is still needed."
+        title={t(M.seoTitle)}
+        description={t(M.seoDescription)}
         canonicalPath="/projects"
       />
 
       <PageHeader
-        title="Our fundraising projects"
-        description="Projects open for donations first, then the ones already funded."
+        title={t(M.title)}
+        description={t(M.lead)}
       />
 
       <section className="section">
         <div className="section-container space-y-12">
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="status">
-              <span className="sr-only">Loading projects</span>
+              <span className="sr-only">{t(M.loading)}</span>
               {[0, 1, 2].map((i) => (
                 <div key={i} className={`h-96 rounded-xl bg-gray-100 ${i > 0 ? 'hidden md:block' : ''} ${i > 1 ? 'md:hidden lg:block' : ''}`} />
               ))}
@@ -77,28 +106,29 @@ const AllProjects = () => {
           ) : (
             <>
               <div>
-                <h2 className="section-title mb-6">Open now</h2>
+                <h2 className="section-title mb-6">{t(M.openNow)}</h2>
                 {open.length > 0 ? (
                   <ProjectGrid projects={open} />
                 ) : (
                   <p className="text-gray-700">
-                    No project is open right now. You can still{' '}
-                    <Link to="/donate" className="link">give where the need is greatest</Link>.
+                    {fill(t(M.noneOpen), {
+                      link: <Link to="/donate" className="link">{t(M.giveWhereNeeded)}</Link>,
+                    })}
                   </p>
                 )}
               </div>
 
               {funded.length > 0 && (
                 <div>
-                  <h2 className="section-title mb-6">Recently funded</h2>
+                  <h2 className="section-title mb-6">{t(M.recentlyFunded)}</h2>
                   <ProjectGrid projects={funded} />
                 </div>
               )}
 
               {past.length > 0 && (
                 <div className="pt-12 border-t border-gray-200">
-                  <h2 className="section-title">Past projects</h2>
-                  <p className="text-gray-600 mt-2 mb-6">No longer taking donations.</p>
+                  <h2 className="section-title">{t(M.past)}</h2>
+                  <p className="text-gray-600 mt-2 mb-6">{t(M.pastLead)}</p>
                   <ProjectGrid projects={past} />
                 </div>
               )}

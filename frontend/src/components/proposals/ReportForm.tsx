@@ -30,6 +30,108 @@ import {
   verifyPortalCode,
   type PortalProposal,
 } from '../../utils/proposalPortalApi'
+import { defineMessages, interpolate, useFormat, useLocale, useT, type Locale } from '../../i18n'
+import { C } from '../../i18n/common'
+
+/** Strings of the report form; AddReportFiles reuses the shared ones. */
+export const REPORT_MESSAGES = defineMessages({
+  fileEmpty: { en: 'This file is empty.', ar: 'هذا الملف فارغ.' },
+  fileTooBig: {
+    en: 'This file is {size}; the limit is {limit} MB per file. Split it into two PDFs, or compress the photos inside it.',
+    ar: 'حجم هذا الملف {size}، والحد الأقصى {limit} MB للملف الواحد. قسّمه إلى ملفَّي PDF، أو صغّر حجم الصور التي بداخله.',
+  },
+  heic: {
+    en: 'iPhone HEIC photos are not accepted. Export them as JPEG, or put them in your PDF.',
+    ar: 'صور iPhone بصيغة HEIC غير مقبولة. احفظها بصيغة JPEG، أو ضعها داخل ملف PDF.',
+  },
+  badType: { en: 'Only photos, videos and PDF documents can be attached.', ar: 'يمكن إرفاق الصور ومقاطع الفيديو وملفات PDF فقط.' },
+  sendFailed: {
+    en: 'The report could not be sent. Check your connection and try again; your text and files are still here.',
+    ar: 'تعذّر إرسال التقرير. تحقق من اتصالك بالإنترنت وحاول مرة أخرى، فالنص والملفات ما زالت هنا.',
+  },
+  adminExpired: {
+    en: 'Your admin view of this portal has expired (or is about to). Reopen it from the dossier in the admin console. Your text is saved on this device; add the files again there.',
+    ar: 'انتهت صلاحية عرض المسؤول لهذه البوابة (أو أوشكت على الانتهاء). أعد فتحه من ملف الطلب في لوحة الإدارة. نصك محفوظ على هذا الجهاز، وعليك إضافة الملفات مرة أخرى هناك.',
+  },
+  sessionExpiredNoEmail: {
+    en: 'Your sign-in session has expired. Your text is saved on this device: sign out, sign in again, and add your files once more.',
+    ar: 'انتهت جلسة تسجيل الدخول. نصك محفوظ على هذا الجهاز: سجّل الخروج، ثم سجّل الدخول من جديد، وأضف ملفاتك مرة أخرى.',
+  },
+  expiredWhileSending: {
+    en: 'Your session expired while sending. We have emailed a new code to {email}. Enter it and your report will be sent. Your text and files are kept.',
+    ar: 'انتهت جلستك أثناء الإرسال. أرسلنا رمز تحقق جديدًا إلى {email}. أدخله وسيُرسَل تقريرك. النص والملفات محفوظة.',
+  },
+  confirmItsYou: {
+    en: 'Before sending, please confirm it is you: we have emailed a new six-digit code to {email}. Your text and files are kept.',
+    ar: 'قبل الإرسال، يُرجى تأكيد هويتك: أرسلنا رمز تحقق جديدًا من ست خانات إلى {email}. النص والملفات محفوظة.',
+  },
+  tooManyCodes: {
+    en: '',
+    ar: 'طلبت رموزًا كثيرة خلال وقت قصير. يُرجى الانتظار بضع دقائق ثم المحاولة مرة أخرى، فالنص والملفات ما زالت هنا.',
+  },
+  codeEmailFailed: {
+    en: 'We could not email you a new sign-in code. Please try again in a few minutes; your text and files are still here.',
+    ar: 'لم نتمكن من إرسال رمز تحقق جديد إلى بريدك. يُرجى المحاولة بعد بضع دقائق، فالنص والملفات ما زالت هنا.',
+  },
+  codeInvalid: {
+    en: 'That code is not valid or has expired. Use the newest code we sent.',
+    ar: 'هذا الرمز غير صحيح أو انتهت صلاحيته. استخدم أحدث رمز أرسلناه إليك.',
+  },
+  codeCheckFailed: { en: 'We could not check that code. Please try again.', ar: 'تعذّر التحقق من الرمز. يُرجى المحاولة مرة أخرى.' },
+  titleCorrected: { en: 'Send a corrected completion report', ar: 'أرسل تقرير الإنجاز بعد تصحيحه' },
+  title: { en: 'Send your completion report', ar: 'أرسل تقرير الإنجاز' },
+  lead: {
+    en: 'Three steps. You can come back to this page: what you write is saved on this device.',
+    ar: 'ثلاث خطوات فقط. يمكنك العودة إلى هذه الصفحة لاحقًا، فما تكتبه يُحفظ على هذا الجهاز.',
+  },
+  describe: { en: 'Describe what was done', ar: 'صِف ما تم إنجازه' },
+  describeHint: {
+    en: 'How many beneficiaries were served, what was distributed, what was actually spent, any funds left over, and anything that differed from the approved plan.',
+    ar: 'كم عدد المستفيدين، وما الذي وُزّع، وكم أُنفق فعلًا، وهل بقي شيء من المبلغ، وما الذي اختلف عن الخطة المعتمدة.',
+  },
+  describePlaceholder: {
+    en: 'We distributed food parcels to 48 of the 50 planned families…',
+    ar: 'وزّعنا سلالًا غذائية على 48 أسرة من أصل 50 أسرة كانت في الخطة…',
+  },
+  attach: { en: 'Attach your report and evidence', ar: 'أرفق تقريرك والإثباتات' },
+  dropFiles: { en: 'Drop files here, or', ar: 'اسحب الملفات وأفلتها هنا، أو' },
+  chooseFiles: { en: 'choose files', ar: 'اختر الملفات' },
+  accepts: {
+    en: 'One PDF with all your invoices and photos is fine. Photos, videos or PDFs, up to {perFile} MB each and {total} MB in total.',
+    ar: 'يكفي ملف PDF واحد يضم كل فواتيرك وصورك. يمكنك إرفاق صور أو مقاطع فيديو أو ملفات PDF، بحد أقصى {perFile} MB للملف الواحد و{total} MB للمجموع.',
+  },
+  remove: { en: 'Remove {name}', ar: 'إزالة {name}' },
+  totalLine: { en: '', ar: '{files}، الحجم الإجمالي {size}' },
+  overTotal: {
+    en: ' — over the {limit} MB limit. Send the largest files in a second report.',
+    ar: ' — يتجاوز الحد الأقصى البالغ {limit} MB. أرسل الملفات الأكبر في تقرير ثانٍ.',
+  },
+  overCount: { en: ' — at most {max} files per report.', ar: ' — الحد الأقصى {max} ملفًا لكل تقرير.' },
+  send: { en: 'Send', ar: 'الإرسال' },
+  sendingProgress: {
+    en: 'Sending… {percent}% ({loaded} of {total}). Keep this page open until it finishes.',
+    ar: 'جارٍ الإرسال… {percent}% ({loaded} من {total}). أبقِ هذه الصفحة مفتوحة حتى ينتهي الإرسال.',
+  },
+  receivedSaving: { en: 'Received. Saving your report…', ar: 'تم الاستلام. جارٍ حفظ تقريرك…' },
+  codeLabel: { en: 'Six-digit code', ar: 'رمز التحقق المكوّن من ست خانات' },
+  confirmAndSend: { en: 'Confirm and send', ar: 'تأكيد وإرسال' },
+  newCode: { en: 'Send me a new code', ar: 'أرسل لي رمزًا جديدًا' },
+  noFile: { en: 'No file is attached.', ar: 'لم تُرفق أي ملف.' },
+  noFileQuestion: {
+    en: 'The agreement asks for your receipts, invoices and photographs. Send the report without them?',
+    ar: 'تطلب الاتفاقية إيصالاتك وفواتيرك وصورك. هل تريد إرسال التقرير بدونها؟',
+  },
+  addFiles: { en: 'Add files', ar: 'أضف ملفات' },
+  sendWithoutFiles: { en: 'Send without files', ar: 'أرسل دون ملفات' },
+  sendingPercent: { en: 'Sending {percent}%', ar: 'جارٍ الإرسال {percent}%' },
+  sendReport: { en: 'Send report', ar: 'أرسل التقرير' },
+  writeFirst: { en: 'Write a short description in step 1 to enable sending.', ar: 'اكتب وصفًا قصيرًا في الخطوة 1 حتى يصبح الإرسال ممكنًا.' },
+})
+const RM = REPORT_MESSAGES
+
+/** "3 files" in Arabic, with its six plural forms. */
+export const arabicFileCount = (plural: ReturnType<typeof useFormat>['plural'], count: number) =>
+  plural(count, { zero: 'لا ملفات', one: 'ملف واحد', two: 'ملفان', few: '{count} ملفات', many: '{count} ملفًا', other: '{count} ملف' })
 
 export type ReportResult = Awaited<ReturnType<typeof submitCompletionReport>>
 
@@ -67,18 +169,17 @@ export const formatBytes = (bytes: number): string => {
 const MB = 1024 * 1024
 
 /** Why the server would refuse this file, or null. Mirrors report_attachments.py. */
-export const problemWith = (file: File): string | null => {
-  if (file.size === 0) return 'This file is empty.'
+export const problemWith = (file: File, locale: Locale = 'en'): string | null => {
+  if (file.size === 0) return RM.fileEmpty[locale]
   if (file.size > REPORT_LIMITS.maxFileBytes) {
-    return `This file is ${formatBytes(file.size)}; the limit is ${REPORT_LIMITS.maxFileBytes / MB} MB per file. `
-      + 'Split it into two PDFs, or compress the photos inside it.'
+    return interpolate(RM.fileTooBig[locale], { size: formatBytes(file.size), limit: REPORT_LIMITS.maxFileBytes / MB })
   }
   const type = (file.type || '').toLowerCase()
   if (/hei[cf]/.test(type) || /\.hei[cf]$/i.test(file.name)) {
-    return 'iPhone HEIC photos are not accepted. Export them as JPEG, or put them in your PDF.'
+    return RM.heic[locale]
   }
   if (type && !(type.startsWith('image/') || type.startsWith('video/') || type === 'application/pdf')) {
-    return 'Only photos, videos and PDF documents can be attached.'
+    return RM.badType[locale]
   }
   return null
 }
@@ -99,6 +200,11 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
   // refused, or forgotten), so sending one takes a second, deliberate click.
   const [askNoFiles, setAskNoFiles] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const t = useT()
+  const locale = useLocale()
+  // Server messages are English: the Arabic site shows its own instead.
+  const isAr = locale === 'ar'
+  const fmt = useFormat()
 
   const resubmitting = proposal.status === 'report_changes_requested'
 
@@ -112,7 +218,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
     return () => window.removeEventListener('beforeunload', warn)
   }, [phase])
 
-  const problems = useMemo(() => files.map(problemWith), [files])
+  const problems = useMemo(() => files.map((file) => problemWith(file, locale)), [files, locale])
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
   const tooMany = files.length > REPORT_LIMITS.maxFiles
   const tooLarge = totalBytes > REPORT_LIMITS.maxTotalBytes
@@ -145,23 +251,21 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         return
       }
       const detail = detailOf(err)
-      setError(typeof detail === 'string'
+      setError(!isAr && typeof detail === 'string'
         ? detail
-        : 'The report could not be sent. Check your connection and try again; your text and files are still here.')
+        : t(RM.sendFailed))
       setPhase('editing')
     }
   }
 
   const startReauth = async (reason: 'expiring' | 'expired') => {
     if (adminView) {
-      setError('Your admin view of this portal has expired (or is about to). Reopen it from the '
-        + 'dossier in the admin console. Your text is saved on this device; add the files again there.')
+      setError(t(RM.adminExpired))
       setPhase('editing')
       return
     }
     if (!email.trim()) {
-      setError('Your sign-in session has expired. Your text is saved on this device: sign out, '
-        + 'sign in again, and add your files once more.')
+      setError(t(RM.sessionExpiredNoEmail))
       setPhase('editing')
       return
     }
@@ -169,14 +273,14 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
       await requestPortalCode(email.trim())
       setCode('')
       setCodeNotice(reason === 'expired'
-        ? `Your session expired while sending. We have emailed a new code to ${email.trim()}. Enter it and your report will be sent. Your text and files are kept.`
-        : `Before sending, please confirm it is you: we have emailed a new six-digit code to ${email.trim()}. Your text and files are kept.`)
+        ? t(RM.expiredWhileSending, { email: email.trim() })
+        : t(RM.confirmItsYou, { email: email.trim() }))
       setPhase('code')
     } catch (err: any) {
       const detail = detailOf(err)
       setError(statusOf(err) === 429 && typeof detail === 'string'
-        ? detail
-        : 'We could not email you a new sign-in code. Please try again in a few minutes; your text and files are still here.')
+        ? (isAr ? t(RM.tooManyCodes) : detail)
+        : t(RM.codeEmailFailed))
       setPhase('editing')
     }
   }
@@ -207,8 +311,8 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
       await verifyPortalCode(email.trim(), code)
     } catch (err: any) {
       setError(statusOf(err) === 401
-        ? 'That code is not valid or has expired. Use the newest code we sent.'
-        : 'We could not check that code. Please try again.')
+        ? t(RM.codeInvalid)
+        : t(RM.codeCheckFailed))
       return
     }
     await upload()
@@ -223,10 +327,10 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
     <div className="pt-4 border-t border-gray-100 space-y-5" data-testid="report-form">
       <div>
         <h3 className="text-base font-bold text-gray-900">
-          {resubmitting ? 'Send a corrected completion report' : 'Send your completion report'}
+          {resubmitting ? t(RM.titleCorrected) : t(RM.title)}
         </h3>
         <p className="text-sm text-gray-600 mt-1">
-          Three steps. You can come back to this page: what you write is saved on this device.
+          {t(RM.lead)}
         </p>
       </div>
 
@@ -234,11 +338,10 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
       <section className="space-y-2">
         <label htmlFor={`report-${proposal.id}`} className="flex items-center gap-2 text-sm font-semibold text-gray-900">
           <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs flex items-center justify-center">1</span>
-          Describe what was done
+          {t(RM.describe)}
         </label>
         <p className="text-xs text-gray-500 ps-8">
-          How many beneficiaries were served, what was distributed, what was actually spent,
-          any funds left over, and anything that differed from the approved plan.
+          {t(RM.describeHint)}
         </p>
         <textarea
           id={`report-${proposal.id}`}
@@ -247,7 +350,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
           onChange={(e) => setText(e.target.value)}
           disabled={busy}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
-          placeholder="We distributed food parcels to 48 of the 50 planned families…"
+          placeholder={t(RM.describePlaceholder)}
         />
       </section>
 
@@ -255,7 +358,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
       <section className="space-y-2">
         <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
           <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs flex items-center justify-center">2</span>
-          Attach your report and evidence
+          {t(RM.attach)}
         </p>
         <div
           onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
@@ -265,15 +368,14 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         >
           <UploadCloud className="w-7 h-7 text-gray-400 mx-auto mb-1" />
           <p className="text-sm text-gray-700">
-            Drop files here, or{' '}
+            {t(RM.dropFiles)}{' '}
             <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
               className="text-primary-700 font-semibold hover:underline disabled:text-gray-400">
-              choose files
+              {t(RM.chooseFiles)}
             </button>
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            One PDF with all your invoices and photos is fine. Photos, videos or PDFs,
-            up to {REPORT_LIMITS.maxFileBytes / MB} MB each and {REPORT_LIMITS.maxTotalBytes / MB} MB in total.
+            {t(RM.accepts, { perFile: REPORT_LIMITS.maxFileBytes / MB, total: REPORT_LIMITS.maxTotalBytes / MB })}
           </p>
           <input
             ref={inputRef}
@@ -299,7 +401,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
                   <span className="truncate flex-1 text-gray-800" title={file.name}>{file.name}</span>
                   <span className="text-xs text-gray-500">{formatBytes(file.size)}</span>
                   <button type="button" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                    disabled={busy} aria-label={`Remove ${file.name}`}
+                    disabled={busy} aria-label={t(RM.remove, { name: file.name })}
                     className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 disabled:opacity-50">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -308,9 +410,11 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
               </li>
             ))}
             <li className={`text-xs pt-1 ${tooLarge || tooMany ? 'text-red-700' : 'text-gray-500'}`}>
-              {files.length} file{files.length === 1 ? '' : 's'}, {formatBytes(totalBytes)} in total
-              {tooLarge && ` — over the ${REPORT_LIMITS.maxTotalBytes / MB} MB limit. Send the largest files in a second report.`}
-              {tooMany && ` — at most ${REPORT_LIMITS.maxFiles} files per report.`}
+              {isAr
+                ? t(RM.totalLine, { files: arabicFileCount(fmt.plural, files.length), size: formatBytes(totalBytes) })
+                : <>{files.length} file{files.length === 1 ? '' : 's'}, {formatBytes(totalBytes)} in total</>}
+              {tooLarge && t(RM.overTotal, { limit: REPORT_LIMITS.maxTotalBytes / MB })}
+              {tooMany && t(RM.overCount, { max: REPORT_LIMITS.maxFiles })}
             </li>
           </ul>
         )}
@@ -320,7 +424,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
       <section className="space-y-3">
         <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
           <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs flex items-center justify-center">3</span>
-          Send
+          {t(RM.send)}
         </p>
 
         {phase === 'uploading' && progress && (
@@ -330,8 +434,8 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
             </div>
             <p className="text-sm text-gray-700">
               {percent < 100
-                ? <>Sending… {percent}% ({formatBytes(progress.loaded)} of {formatBytes(progress.total)}). Keep this page open until it finishes.</>
-                : <>Received. Saving your report…</>}
+                ? t(RM.sendingProgress, { percent, loaded: formatBytes(progress.loaded), total: formatBytes(progress.total) })
+                : t(RM.receivedSaving)}
             </p>
           </div>
         )}
@@ -343,7 +447,7 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
             </p>
             <div className="flex gap-2">
               <input
-                aria-label="Six-digit code"
+                aria-label={t(RM.codeLabel)}
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 value={code}
@@ -353,12 +457,12 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
               />
               <button type="submit" disabled={code.length !== 6}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg">
-                Confirm and send
+                {t(RM.confirmAndSend)}
               </button>
             </div>
             <button type="button" onClick={() => void startReauth('expiring')}
               className="text-xs text-primary-700 font-medium hover:underline">
-              Send me a new code
+              {t(RM.newCode)}
             </button>
           </form>
         )}
@@ -366,17 +470,16 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
         {askNoFiles && phase === 'editing' && (
           <div className="ms-8 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2" role="alert">
             <p className="text-sm text-amber-900">
-              <strong>No file is attached.</strong> The agreement asks for your receipts, invoices and
-              photographs. Send the report without them?
+              <strong>{t(RM.noFile)}</strong> {t(RM.noFileQuestion)}
             </p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => { setAskNoFiles(false); inputRef.current?.click() }}
                 className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg">
-                Add files
+                {t(RM.addFiles)}
               </button>
               <button type="button" onClick={() => void send(true)}
                 className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 rounded-lg">
-                Send without files
+                {t(RM.sendWithoutFiles)}
               </button>
             </div>
           </div>
@@ -393,17 +496,17 @@ const ReportForm = ({ proposal, email, onSubmitted, onCancel, adminView = false 
             <button type="button" onClick={() => void send()} disabled={!canSend || askNoFiles}
               className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-lg inline-flex items-center gap-2">
               {phase === 'uploading'
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending {percent}%</>
-                : <><Send className="w-4 h-4" /> Send report</>}
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> {t(RM.sendingPercent, { percent })}</>
+                : <><Send className="w-4 h-4" /> {t(RM.sendReport)}</>}
             </button>
             <button type="button" onClick={onCancel} disabled={phase === 'uploading'}
               className="px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold rounded-lg disabled:opacity-50">
-              Cancel
+              {t(C.cancel)}
             </button>
           </div>
         )}
         {phase === 'editing' && !text.trim() && (
-          <p className="ms-8 text-xs text-gray-500">Write a short description in step 1 to enable sending.</p>
+          <p className="ms-8 text-xs text-gray-500">{t(RM.writeFirst)}</p>
         )}
       </section>
     </div>

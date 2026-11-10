@@ -158,40 +158,40 @@ function App() {
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<Layout />}>
-                <Route index element={en(<Home />)} />
-                <Route path="about" element={en(<About />)} />
-                <Route path="donate" element={en(<Donate />)} />
-                <Route path="donation-success" element={en(<DonationSuccess />)} />
-                <Route path="zakat-calculator" element={en(<ZakatCalculator />)} />
-                <Route path="zakat-education" element={en(<ZakatEducation />)} />
-                <Route path="stories" element={en(<Stories />)} />
-                <Route path="stories/:id" element={en(<StoryDetail />)} />
-                <Route path="events" element={en(<Events />)} />
-                <Route path="events/:id" element={en(<EventDetail />)} />
-                <Route path="programs" element={en(<Programs />)} />
-                <Route path="programs/:slug" element={en(<ProgramDetail />)} />
-                <Route path="categories/:slug" element={en(<CategoryDetail />)} />
-                <Route path="contact" element={en(<Contact />)} />
-                <Route path="volunteer" element={en(<Volunteer />)} />
-                <Route path="testimonials" element={en(<Testimonials />)} />
-                <Route path="urgent-needs/:slug" element={en(<UrgentNeedDetail />)} />
-                <Route path="quick-links" element={en(<QuickLinks />)} />
-                <Route path="islamic-knowledge" element={en(<IslamicKnowledge />)} />
-                <Route path="book-of-duas" element={en(<BookOfDuas />)} />
-                <Route path="charity-in-islam" element={en(<CharityInIslam />)} />
-                <Route path="kaffarah-calculator" element={en(<KaffarahCalculator />)} />
-                <Route path="zakat-al-fitr-calculator" element={en(<ZakatAlFitrCalculator />)} />
-                <Route path="zakat-on-gold" element={en(<ZakatOnGold />)} />
-                <Route path="nisab" element={en(<Nisab />)} />
-                <Route path="umrah-guidelines" element={en(<UmrahGuidelines />)} />
+                <Route index element={<Home />} />
+                <Route path="about" element={<About />} />
+                <Route path="donate" element={<Donate />} />
+                <Route path="donation-success" element={<DonationSuccess />} />
+                <Route path="zakat-calculator" element={<ZakatCalculator />} />
+                <Route path="zakat-education" element={<ZakatEducation />} />
+                <Route path="stories" element={<Stories />} />
+                <Route path="stories/:id" element={<StoryDetail />} />
+                <Route path="events" element={<Events />} />
+                <Route path="events/:id" element={<EventDetail />} />
+                <Route path="programs" element={<Programs />} />
+                <Route path="programs/:slug" element={<ProgramDetail />} />
+                <Route path="categories/:slug" element={<CategoryDetail />} />
+                <Route path="contact" element={<Contact />} />
+                <Route path="volunteer" element={<Volunteer />} />
+                <Route path="testimonials" element={<Testimonials />} />
+                <Route path="urgent-needs/:slug" element={<UrgentNeedDetail />} />
+                <Route path="quick-links" element={<QuickLinks />} />
+                <Route path="islamic-knowledge" element={<IslamicKnowledge />} />
+                <Route path="book-of-duas" element={<BookOfDuas />} />
+                <Route path="charity-in-islam" element={<CharityInIslam />} />
+                <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
+                <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
+                <Route path="zakat-on-gold" element={<ZakatOnGold />} />
+                <Route path="nisab" element={<Nisab />} />
+                <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
                 <Route path="privacy-policy" element={en(<PrivacyPolicy />)} />
                 <Route path="donation-policy" element={en(<DonationPolicy />)} />
                 <Route path="terms-of-service" element={en(<TermsOfService />)} />
                 <Route path="sms-opt-in" element={en(<SmsOptIn />)} />
-                <Route path="unsubscribe" element={en(<Unsubscribe />)} />
-                <Route path="submit-proposal" element={en(<SubmitProposal />)} />
-                <Route path="my-proposals" element={en(<MyProposals />)} />
-                <Route path="projects" element={en(<AllProjects />)} />
+                <Route path="unsubscribe" element={<Unsubscribe />} />
+                <Route path="submit-proposal" element={<SubmitProposal />} />
+                <Route path="my-proposals" element={<MyProposals />} />
+                <Route path="projects" element={<AllProjects />} />
                 <Route path="sponsor" element={<SponsorLanding />} />
                 <Route path="sponsor/orphans" element={<SponsorBrowse kind="orphan" />} />
                 <Route path="sponsor/families" element={<SponsorBrowse kind="family" />} />
@@ -204,12 +204,12 @@ function App() {
               </Route>
 
               {/* User authentication routes */}
-              <Route path="/login" element={en(<UserLogin />)} />
-              <Route path="/register" element={en(<UserRegister />)} />
-              <Route path="/verify-email" element={en(<VerifyEmail />)} />
+              <Route path="/login" element={<UserLogin />} />
+              <Route path="/register" element={<UserRegister />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               
               {/* User dashboard route */}
-              <Route path="/dashboard" element={<UserRoute>{en(<UserDashboard />)}</UserRoute>} />
+              <Route path="/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />
 
               {/* Admin routes */}
               {locale === 'ar' && <Route path="/admin/*" element={<LeaveArabicForAdmin />} />}

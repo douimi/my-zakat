@@ -21,6 +21,85 @@ import LazyVideo from '../components/LazyVideo'
 import VideoThumbnail, { PlayableVideo } from '../components/VideoThumbnail'
 import CampaignPopup from '../components/CampaignPopup'
 import FundraisingProjectsSection from '../components/FundraisingProjectsSection'
+import { defineMessages, useDir, useFormat, useLocale, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  // Error state
+  loadError: {
+    en: 'Unable to load homepage data. Please check your connection.',
+    ar: 'تعذّر تحميل بيانات الصفحة الرئيسية. يُرجى التحقق من اتصالك بالإنترنت.',
+  },
+  otherPagesWork: { en: 'Other pages should still work normally.', ar: 'يُفترض أن تعمل بقية صفحات الموقع بشكل طبيعي.' },
+
+  // Impact numbers
+  sinceWeStarted: { en: 'Since we started', ar: 'منذ انطلاقتنا' },
+  mealsProvided: { en: 'Meals provided', ar: 'وجبات قُدِّمت' },
+  familiesSupported: { en: 'Families supported', ar: 'أسر دعمناها' },
+  orphansCaredFor: { en: 'Orphans cared for', ar: 'أيتام شملتهم رعايتنا' },
+  totalRaised: { en: 'Total raised', ar: 'إجمالي ما جُمع' },
+
+  // SEO
+  seoDescription: {
+    en: 'MyZakat is a nonprofit Zakat distribution foundation. Donate Zakat and Sadaqa online, calculate your Zakat, explore programs, and see the impact of your generosity on communities in need.',
+    ar: 'ماي زكاة مؤسسة غير ربحية لتوزيع الزكاة. أدِّ زكاتك وصدقتك عبر الإنترنت، واحسب زكاتك، واستكشف برامجنا، وشاهد أثر عطائك في المجتمعات المحتاجة.',
+  },
+  faqWhatIsZakatQ: { en: 'What is Zakat?', ar: 'ما هي الزكاة؟' },
+  faqWhatIsZakatA: {
+    en: 'Zakat is one of the Five Pillars of Islam. It is an obligatory annual charitable contribution of 2.5% of qualifying wealth, distributed to eligible recipients including the poor and needy.',
+    ar: 'الزكاة ركن من أركان الإسلام الخمسة، وهي فريضة سنوية مقدارها 2.5% من المال الذي تجب فيه الزكاة، تُصرف لمستحقيها ومنهم الفقراء والمساكين.',
+  },
+  faqCalculateQ: { en: 'How do I calculate my Zakat?', ar: 'كيف أحسب زكاتي؟' },
+  faqCalculateA: {
+    en: 'Use the MyZakat Zakat Calculator to enter your savings, gold, silver, investments, and business assets. The calculator applies the 2.5% rate if your total exceeds the Nisab threshold.',
+    ar: 'استخدم حاسبة الزكاة في ماي زكاة لإدخال مدخراتك وما تملكه من ذهب وفضة واستثمارات وأصول تجارية، وتطبّق الحاسبة نسبة 2.5% إذا بلغ مجموع مالك النصاب.',
+  },
+  faqTaxQ: { en: 'Is my donation tax-deductible?', ar: 'هل يُخصم تبرعي من الضرائب؟' },
+  faqTaxA: {
+    en: 'As a 501(c)(3) nonprofit, donations to MyZakat may be tax-deductible. Donors receive receipts for their records.',
+    ar: 'بصفتها مؤسسة غير ربحية مسجّلة وفق البند 501(c)(3) من قانون الضرائب الأمريكي، قد تكون التبرعات لماي زكاة قابلة للخصم الضريبي، ويحصل المتبرعون على إيصالات لسجلاتهم.',
+  },
+  faqDifferenceQ: { en: 'What is the difference between Zakat and Sadaqa?', ar: 'ما الفرق بين الزكاة والصدقة؟' },
+  faqDifferenceA: {
+    en: 'Zakat is obligatory with specific rules about amounts and recipients. Sadaqa is voluntary charity with no minimum amount or restrictions.',
+    ar: 'الزكاة فريضة لها أحكام محددة في مقاديرها ومستحقيها، أما الصدقة فعطاء تطوعي لا حدّ أدنى له ولا قيود عليه.',
+  },
+
+  // Hero and closing call to action
+  heroHeading: { en: 'MyZakat: give your zakat and sadaqa', ar: 'ماي زكاة: أدِّ زكاتك وصدقتك' },
+  ctaLead: {
+    en: 'Pick a project or give to where the need is greatest. You get a receipt by email.',
+    ar: 'اختر مشروعًا أو تبرّع حيث تشتد الحاجة، وسيصلك إيصال عبر البريد الإلكتروني.',
+  },
+  calculateMyZakat: { en: 'Calculate My Zakat', ar: 'احسب زكاتي' },
+  ctaTitle: { en: 'Give your zakat or sadaqa', ar: 'أدِّ زكاتك أو صدقتك' },
+
+  // Sections
+  ourPrograms: { en: 'Our programs', ar: 'برامجنا' },
+  allPrograms: { en: 'All programs', ar: 'جميع البرامج' },
+  seeProgram: { en: 'See this program', ar: 'اطّلع على هذا البرنامج' },
+  storiesTitle: { en: 'Stories from the field', ar: 'قصص من الميدان' },
+  allStories: { en: 'View All Stories', ar: 'عرض جميع القصص' },
+  readStory: { en: 'Read story', ar: 'اقرأ القصة' },
+  eventsTitle: { en: 'Upcoming events', ar: 'الفعاليات القادمة' },
+  allEvents: { en: 'View All Events', ar: 'عرض جميع الفعاليات' },
+  today: { en: 'Today', ar: 'اليوم' },
+  testimonialsTitle: { en: 'What donors say', ar: 'ماذا يقول المتبرعون' },
+  testimonialVideo: { en: '{name} testimonial', ar: 'شهادة {name}' },
+  rated: { en: 'Rated {rating} out of 5', ar: 'التقييم: {rating} من 5' },
+  quote: { en: '“{text}”', ar: '«{text}»' },
+
+  // Gallery
+  galleryTitle: { en: 'Photos and videos from our work', ar: 'صور ومقاطع من عملنا' },
+  galleryLoading: { en: 'Loading gallery', ar: 'جارٍ تحميل المعرض' },
+  playVideo: { en: 'Play video {n}', ar: 'تشغيل الفيديو {n}' },
+  openPhoto: { en: 'Open photo {n}', ar: 'فتح الصورة {n}' },
+  showAll: { en: 'Show all ({count})', ar: 'عرض الكل ({count})' },
+  galleryDialog: { en: 'Gallery, item {n} of {total}', ar: 'معرض الصور، العنصر {n} من {total}' },
+  previous: { en: 'Previous', ar: 'السابق' },
+  galleryImage: { en: 'Gallery image {n}', ar: 'صورة المعرض {n}' },
+  counter: { en: '{n} / {total}', ar: '{n} من {total}' },
+})
 
 interface Setting {
   key: string
@@ -87,6 +166,9 @@ const SectionHead = ({ id, title, lead, viewAll }: { id: string; title: string; 
 const STRETCHED_LINK = 'after:absolute after:inset-0 after:content-[""] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-primary-600 focus-visible:after:rounded-xl'
 
 const Home = () => {
+  const t = useT()
+  const locale = useLocale()
+  const { number, money, tag } = useFormat()
 
   // Prioritize critical data first, then load secondary content
   const { data: donationStats, error: statsError } = useQuery('donation-stats', donationsAPI.getStats, {
@@ -135,10 +217,10 @@ const Home = () => {
     return (
       <div className="section-alt">
         <div className="section-container text-center">
-          <h1 className="page-title mb-6">MyZakat</h1>
-          <p className="text-red-700 mb-2">Unable to load homepage data. Please check your connection.</p>
-          <p className="text-gray-600 mb-6">Other pages should still work normally.</p>
-          <Link to="/donate" className="btn-primary">Donate</Link>
+          <h1 className="page-title mb-6">{t(C.brand)}</h1>
+          <p className="text-red-700 mb-2">{t(M.loadError)}</p>
+          <p className="text-gray-600 mb-6">{t(M.otherPagesWork)}</p>
+          <Link to="/donate" className="btn-primary">{t(C.donate)}</Link>
         </div>
       </div>
     )
@@ -147,10 +229,15 @@ const Home = () => {
   // The stats endpoint also returns total_raised, which the DonationStats type does not declare.
   const stats = donationStats as (DonationStats & { total_raised?: number }) | undefined
   const impactStats = [
-    { value: (stats?.impact?.meals || 0).toLocaleString('en-US'), label: 'Meals provided' },
-    { value: (stats?.impact?.families || 0).toLocaleString('en-US'), label: 'Families supported' },
-    { value: (stats?.impact?.orphans || 0).toLocaleString('en-US'), label: 'Orphans cared for' },
-    { value: `$${(stats?.total_raised || 0).toLocaleString('en-US')}`, label: 'Total raised' },
+    { value: number(stats?.impact?.meals || 0), label: t(M.mealsProvided) },
+    { value: number(stats?.impact?.families || 0), label: t(M.familiesSupported) },
+    { value: number(stats?.impact?.orphans || 0), label: t(M.orphansCaredFor) },
+    {
+      value: locale === 'ar'
+        ? money(Math.round((stats?.total_raised || 0) * 100))
+        : `$${(stats?.total_raised || 0).toLocaleString('en-US')}`,
+      label: t(M.totalRaised),
+    },
   ]
   const homeImpactEnabled = settings?.find((s) => s.key === 'home_impact_enabled')?.value !== 'false'
 
@@ -158,24 +245,24 @@ const Home = () => {
     <div className="min-h-screen">
       <CampaignPopup />
       <SEOHead
-        description="MyZakat is a nonprofit Zakat distribution foundation. Donate Zakat and Sadaqa online, calculate your Zakat, explore programs, and see the impact of your generosity on communities in need."
+        description={t(M.seoDescription)}
         canonicalPath="/"
         jsonLd={getFaqJsonLd([
-          { question: 'What is Zakat?', answer: 'Zakat is one of the Five Pillars of Islam. It is an obligatory annual charitable contribution of 2.5% of qualifying wealth, distributed to eligible recipients including the poor and needy.' },
-          { question: 'How do I calculate my Zakat?', answer: 'Use the MyZakat Zakat Calculator to enter your savings, gold, silver, investments, and business assets. The calculator applies the 2.5% rate if your total exceeds the Nisab threshold.' },
-          { question: 'Is my donation tax-deductible?', answer: 'As a 501(c)(3) nonprofit, donations to MyZakat may be tax-deductible. Donors receive receipts for their records.' },
-          { question: 'What is the difference between Zakat and Sadaqa?', answer: 'Zakat is obligatory with specific rules about amounts and recipients. Sadaqa is voluntary charity with no minimum amount or restrictions.' },
+          { question: t(M.faqWhatIsZakatQ), answer: t(M.faqWhatIsZakatA) },
+          { question: t(M.faqCalculateQ), answer: t(M.faqCalculateA) },
+          { question: t(M.faqTaxQ), answer: t(M.faqTaxA) },
+          { question: t(M.faqDifferenceQ), answer: t(M.faqDifferenceA) },
         ])}
       />
 
       {/* Hero slideshow (renders the page h1) */}
       <Slideshow
-        heading="MyZakat: give your zakat and sadaqa"
-        emptyDescription="Pick a project or give to where the need is greatest. You get a receipt by email."
+        heading={t(M.heroHeading)}
+        emptyDescription={t(M.ctaLead)}
         emptyActions={
           <>
-            <Link to="/donate" className="btn-primary btn-lg">Donate Now</Link>
-            <Link to="/zakat-calculator" className="btn-secondary btn-lg">Calculate My Zakat</Link>
+            <Link to="/donate" className="btn-primary btn-lg">{t(C.donateNow)}</Link>
+            <Link to="/zakat-calculator" className="btn-secondary btn-lg">{t(M.calculateMyZakat)}</Link>
           </>
         }
       />
@@ -187,7 +274,7 @@ const Home = () => {
       {homeImpactEnabled && (
         <section className="section-alt" aria-labelledby="home-impact-title">
           <div className="section-container">
-            <h2 id="home-impact-title" className="eyebrow mb-6">Since we started</h2>
+            <h2 id="home-impact-title" className="eyebrow mb-6">{t(M.sinceWeStarted)}</h2>
             <dl className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {impactStats.map((stat) => (
                 <div key={stat.label}>
@@ -204,7 +291,7 @@ const Home = () => {
       {categories && categories.length > 0 && (
         <section className="section" aria-labelledby="home-programs-title">
           <div className="section-container">
-            <SectionHead id="home-programs-title" title="Our programs" viewAll={{ to: '/programs', label: 'All programs' }} />
+            <SectionHead id="home-programs-title" title={t(M.ourPrograms)} viewAll={{ to: '/programs', label: t(M.allPrograms) }} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {categories.map((category) => {
@@ -242,7 +329,7 @@ const Home = () => {
                         {category.short_description || category.description || ''}
                       </p>
                       <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
-                        See this program <ArrowRight className="w-4 h-4" />
+                        {t(M.seeProgram)} <ArrowRight className="w-4 h-4" />
                       </span>
                     </div>
                   </article>
@@ -257,7 +344,7 @@ const Home = () => {
       {featuredStories && featuredStories.length > 0 && (
         <section className="section-alt" aria-labelledby="home-stories-title">
           <div className="section-container">
-            <SectionHead id="home-stories-title" title="Stories from the field" viewAll={{ to: '/stories', label: 'View All Stories' }} />
+            <SectionHead id="home-stories-title" title={t(M.storiesTitle)} viewAll={{ to: '/stories', label: t(M.allStories) }} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {featuredStories.slice(0, 3).map((story) => {
@@ -296,7 +383,7 @@ const Home = () => {
                         {story.summary || (story.content ? `${story.content.substring(0, 150)}...` : '')}
                       </p>
                       <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
-                        Read story <ArrowRight className="w-4 h-4" />
+                        {t(M.readStory)} <ArrowRight className="w-4 h-4" />
                       </span>
                     </div>
                   </article>
@@ -311,7 +398,7 @@ const Home = () => {
       {upcomingEvents && upcomingEvents.length > 0 && (
         <section className="section" aria-labelledby="home-events-title">
           <div className="section-container">
-            <SectionHead id="home-events-title" title="Upcoming events" viewAll={{ to: '/events', label: 'View All Events' }} />
+            <SectionHead id="home-events-title" title={t(M.eventsTitle)} viewAll={{ to: '/events', label: t(M.allEvents) }} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {upcomingEvents.slice(0, 3).map((event) => {
@@ -333,7 +420,7 @@ const Home = () => {
                           }}
                         />
                         {isToday && (
-                          <span className="badge-danger absolute top-3 start-3 shadow-sm">Today</span>
+                          <span className="badge-danger absolute top-3 start-3 shadow-sm">{t(M.today)}</span>
                         )}
                       </div>
                     )}
@@ -348,7 +435,7 @@ const Home = () => {
                       <div className="mt-4 space-y-1.5 text-sm text-gray-600">
                         <p className="flex items-center">
                           <Calendar className="w-4 h-4 me-2 text-gray-500 flex-shrink-0" aria-hidden="true" />
-                          {eventDate.toLocaleDateString('en-US', {
+                          {eventDate.toLocaleDateString(tag, {
                             weekday: 'short',
                             year: 'numeric',
                             month: 'short',
@@ -375,7 +462,7 @@ const Home = () => {
       {testimonials && testimonials.length > 0 && (
         <section className="section-alt" aria-labelledby="home-testimonials-title">
           <div className="section-container">
-            <SectionHead id="home-testimonials-title" title="What donors say" />
+            <SectionHead id="home-testimonials-title" title={t(M.testimonialsTitle)} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {testimonials.slice(0, 3).map((testimonial) => {
@@ -387,18 +474,18 @@ const Home = () => {
                   <figure key={testimonial.id} className="card flex flex-col">
                     {videoUrl && (
                       <div className="mb-5 rounded-lg overflow-hidden bg-gray-900 aspect-video">
-                        <PlayableVideo videoSrc={videoUrl} title={`${testimonial.name} testimonial`} className="w-full h-full" />
+                        <PlayableVideo videoSrc={videoUrl} title={t(M.testimonialVideo, { name: testimonial.name })} className="w-full h-full" />
                       </div>
                     )}
                     {rating > 0 && (
-                      <div className="flex mb-4" role="img" aria-label={`Rated ${rating} out of 5`}>
+                      <div className="flex mb-4" role="img" aria-label={t(M.rated, { rating })}>
                         {Array.from({ length: rating }).map((_, i) => (
                           <Star key={i} className="w-4 h-4 text-amber-500 fill-current" aria-hidden="true" />
                         ))}
                       </div>
                     )}
                     <blockquote className="text-gray-700 leading-relaxed flex-1">
-                      <p>“{testimonial.text}”</p>
+                      <p>{t(M.quote, { text: testimonial.text })}</p>
                     </blockquote>
                     <figcaption className="mt-5 pt-4 border-t border-gray-100 flex items-center gap-3">
                       {!videoUrl && imageUrl && (
@@ -434,17 +521,17 @@ const Home = () => {
       <section className="section hero-gradient text-white" aria-labelledby="home-cta-title">
         <div className="section-container text-center">
           <h2 id="home-cta-title" className="section-title text-white">
-            Give your zakat or sadaqa
+            {t(M.ctaTitle)}
           </h2>
           <p className="mt-3 text-lg text-white/90 max-w-2xl mx-auto">
-            Pick a project or give to where the need is greatest. You get a receipt by email.
+            {t(M.ctaLead)}
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link to="/donate" className="btn-inverse btn-lg">
-              Donate Now
+              {t(C.donateNow)}
             </Link>
             <Link to="/zakat-calculator" className="btn btn-lg border border-white/60 text-white hover:bg-white/10">
-              Calculate My Zakat
+              {t(M.calculateMyZakat)}
             </Link>
           </div>
         </div>
@@ -459,6 +546,8 @@ const GallerySection = () => {
   const [showAll, setShowAll] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   const openerRef = useRef<HTMLElement | null>(null)
+  const t = useT()
+  const dir = useDir()
 
   const { data: galleryItems = [], isLoading } = useQuery<GalleryItem[]>('public-gallery', () => galleryAPI.getAll(true))
 
@@ -534,8 +623,10 @@ const GallerySection = () => {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (selectedMediaIndex === null) return
-    if (e.key === 'ArrowLeft') goToPrevious()
-    if (e.key === 'ArrowRight') goToNext()
+    const back = dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft'
+    const forward = dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight'
+    if (e.key === back) goToPrevious()
+    if (e.key === forward) goToNext()
     if (e.key === 'Escape') close()
   }
 
@@ -547,10 +638,10 @@ const GallerySection = () => {
   return (
     <section id="our-work-in-action" className="section scroll-mt-20" aria-labelledby="home-gallery-title">
       <div className="section-container">
-        <SectionHead id="home-gallery-title" title="Photos and videos from our work" />
+        <SectionHead id="home-gallery-title" title={t(M.galleryTitle)} />
         {isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4" role="status">
-            <span className="sr-only">Loading gallery</span>
+            <span className="sr-only">{t(M.galleryLoading)}</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className="aspect-square rounded-xl bg-gray-100" />
             ))}
@@ -567,7 +658,7 @@ const GallerySection = () => {
                     openerRef.current = e.currentTarget
                     setSelectedMediaIndex(index)
                   }}
-                  aria-label={item.type === 'video' ? `Play video ${index + 1}` : `Open photo ${index + 1}`}
+                  aria-label={item.type === 'video' ? t(M.playVideo, { n: index + 1 }) : t(M.openPhoto, { n: index + 1 })}
                 >
                   {item.type === 'video' ? (
                     item.thumbnail ? (
@@ -615,7 +706,7 @@ const GallerySection = () => {
             {hiddenCount > 0 && (
               <div className="mt-6 text-center">
                 <button type="button" className="btn-secondary" onClick={() => setShowAll(true)}>
-                  Show all ({processedItems.length})
+                  {t(M.showAll, { count: processedItems.length })}
                 </button>
               </div>
             )}
@@ -627,7 +718,7 @@ const GallerySection = () => {
                 className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 outline-none"
                 role="dialog"
                 aria-modal="true"
-                aria-label={`Gallery, item ${selectedMediaIndex + 1} of ${processedItems.length}`}
+                aria-label={t(M.galleryDialog, { n: selectedMediaIndex + 1, total: processedItems.length })}
                 onClick={close}
                 onKeyDown={handleKeyDown}
                 tabIndex={-1}
@@ -642,7 +733,7 @@ const GallerySection = () => {
                         goToPrevious()
                       }}
                       className="absolute start-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
-                      aria-label="Previous"
+                      aria-label={t(M.previous)}
                     >
                       <ChevronLeft className="w-8 h-8" aria-hidden="true" />
                     </button>
@@ -663,7 +754,7 @@ const GallerySection = () => {
                     ) : (
                       <img
                         src={selectedMedia.url}
-                        alt={`Gallery image ${selectedMediaIndex + 1}`}
+                        alt={t(M.galleryImage, { n: selectedMediaIndex + 1 })}
                         className="max-w-full max-h-[90vh] object-contain rounded-lg"
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -679,7 +770,7 @@ const GallerySection = () => {
                         goToNext()
                       }}
                       className="absolute end-4 text-white bg-black/50 rounded-full p-3 hover:bg-black/75 transition-colors z-10"
-                      aria-label="Next"
+                      aria-label={t(C.next)}
                     >
                       <ChevronRight className="w-8 h-8" aria-hidden="true" />
                     </button>
@@ -690,7 +781,7 @@ const GallerySection = () => {
                     type="button"
                     onClick={close}
                     className="absolute top-4 end-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/75 transition-colors z-10"
-                    aria-label="Close"
+                    aria-label={t(C.close)}
                   >
                     <X className="w-6 h-6" aria-hidden="true" />
                   </button>
@@ -698,7 +789,7 @@ const GallerySection = () => {
                   {/* Counter */}
                   {processedItems.length > 1 && (
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black/50 rounded-full px-4 py-2 text-sm">
-                      {selectedMediaIndex + 1} / {processedItems.length}
+                      {t(M.counter, { n: selectedMediaIndex + 1, total: processedItems.length })}
                     </div>
                   )}
                 </div>

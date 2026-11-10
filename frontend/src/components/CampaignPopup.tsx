@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, ArrowRight } from 'lucide-react'
+import { useFormat, useLocale, useT } from '../i18n'
+import { C } from '../i18n/common'
 
 interface Campaign {
   id: number
@@ -45,6 +47,9 @@ const CampaignPopup = () => {
   const navigate = useNavigate()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const t = useT()
+  const locale = useLocale()
+  const { money } = useFormat()
 
   // Remembered for the browser session, so the popup does not come back on every visit to Home.
   const dismiss = () => {
@@ -139,7 +144,7 @@ const CampaignPopup = () => {
           type="button"
           onClick={dismiss}
           className="absolute top-3 end-3 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white shadow-lg transition-colors"
-          aria-label="Close"
+          aria-label={t(C.close)}
         >
           <X aria-hidden="true" className="w-5 h-5" />
         </button>
@@ -187,7 +192,9 @@ const CampaignPopup = () => {
             {campaign.cta_text}
             {campaign.amount > 0 && (
               <span className="opacity-90">
-                — ${campaign.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                — {locale === 'ar'
+                  ? money(Math.round(campaign.amount) * 100)
+                  : `$${campaign.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
               </span>
             )}
             <ArrowRight aria-hidden="true" className="w-5 h-5" />

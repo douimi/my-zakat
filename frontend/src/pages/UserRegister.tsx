@@ -4,6 +4,52 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { UserPlus, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import SEOHead from '../components/SEOHead'
+import { defineMessages, useLocale, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  registrationFailed: { en: 'Registration failed', ar: 'تعذّر إنشاء الحساب. يُرجى المحاولة مرة أخرى.' },
+  registrationFailedRetry: { en: 'Registration failed. Please try again.', ar: 'تعذّر إنشاء الحساب. يُرجى المحاولة مرة أخرى.' },
+  resendFailed: { en: 'Failed to resend verification email', ar: 'تعذّر إرسال رسالة التحقق من جديد' },
+  resendFailedRetry: {
+    en: 'Failed to resend verification email. Please try again.',
+    ar: 'تعذّر إرسال رسالة التحقق من جديد. يُرجى المحاولة مرة أخرى.',
+  },
+  checkEmailSeo: { en: 'Check your email', ar: 'تفقّد بريدك الإلكتروني' },
+  successTitle: { en: 'Registration Successful!', ar: 'تم إنشاء حسابك!' },
+  successLead: { en: 'Please verify your email address to continue', ar: 'يُرجى تأكيد بريدك الإلكتروني للمتابعة' },
+  sentTo: { en: "We've sent a verification email to:", ar: 'أرسلنا رسالة تحقق إلى:' },
+  clickLink: {
+    en: 'Click the link in that email to activate your account. The link expires in 7 days.',
+    ar: 'اضغط على الرابط الموجود في تلك الرسالة لتفعيل حسابك. تنتهي صلاحية الرابط بعد 7 أيام.',
+  },
+  sending: { en: 'Sending...', ar: 'جارٍ الإرسال...' },
+  resend: { en: 'Resend Verification Email', ar: 'أعد إرسال رسالة التحقق' },
+  backToLogin: { en: 'Back to Login', ar: 'العودة إلى تسجيل الدخول' },
+  createAccountSeo: { en: 'Create an account', ar: 'إنشاء حساب' },
+  createAccount: { en: 'Create Account', ar: 'إنشاء حساب' },
+  lead: { en: 'Join us to manage your donations and subscriptions', ar: 'انضم إلينا لإدارة تبرعاتك واشتراكاتك' },
+  fullName: { en: 'Full Name', ar: 'الاسم الكامل' },
+  nameRequired: { en: 'Name is required', ar: 'الاسم مطلوب' },
+  namePlaceholder: { en: 'Enter your full name', ar: 'أدخل اسمك الكامل' },
+  emailLabel: { en: 'Email Address', ar: 'البريد الإلكتروني' },
+  emailRequired: { en: 'Email is required', ar: 'البريد الإلكتروني مطلوب' },
+  emailInvalid: { en: 'Invalid email address', ar: 'عنوان البريد الإلكتروني غير صحيح' },
+  emailPlaceholder: { en: 'Enter your email', ar: 'أدخل بريدك الإلكتروني' },
+  passwordLabel: { en: 'Password', ar: 'كلمة المرور' },
+  passwordRequired: { en: 'Password is required', ar: 'كلمة المرور مطلوبة' },
+  passwordMin: { en: 'Password must be at least 6 characters', ar: 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل' },
+  passwordMax: { en: 'Password cannot exceed 72 characters', ar: 'يجب ألا تتجاوز كلمة المرور 72 حرفًا' },
+  passwordPlaceholder: { en: 'Create a password (6-72 characters)', ar: 'اختر كلمة مرور (من 6 إلى 72 حرفًا)' },
+  confirmLabel: { en: 'Confirm Password', ar: 'تأكيد كلمة المرور' },
+  confirmRequired: { en: 'Please confirm your password', ar: 'يُرجى تأكيد كلمة المرور' },
+  mismatch: { en: 'Passwords do not match', ar: 'كلمتا المرور غير متطابقتين' },
+  confirmPlaceholder: { en: 'Confirm your password', ar: 'أعد كتابة كلمة المرور' },
+  creating: { en: 'Creating account...', ar: 'جارٍ إنشاء الحساب...' },
+  haveAccount: { en: 'Already have an account?', ar: 'لديك حساب بالفعل؟' },
+  signIn: { en: 'Sign in', ar: 'سجّل الدخول' },
+  backToWebsite: { en: 'Back to the website', ar: 'العودة إلى الموقع' },
+})
 
 interface RegisterForm {
   email: string
@@ -19,6 +65,9 @@ const UserRegister = () => {
   const { register, handleSubmit, watch, formState: { errors } } = useForm<RegisterForm>()
   const { isAuthenticated, userType } = useAuthStore()
   const navigate = useNavigate()
+  const t = useT()
+  // Server messages are English: the Arabic site shows its own instead.
+  const isAr = useLocale() === 'ar'
 
   const password = watch('password')
 
@@ -46,13 +95,13 @@ const UserRegister = () => {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.detail || 'Registration failed')
+        throw new Error((!isAr && errorData.detail) || t(M.registrationFailed))
       }
 
       // Show verification message
       setRegisteredEmail(data.email)
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.')
+      setError(isAr && err instanceof TypeError ? t(C.networkError) : err.message || t(M.registrationFailedRetry))
     } finally {
       setIsLoading(false)
     }
@@ -76,13 +125,13 @@ const UserRegister = () => {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to resend verification email')
+        throw new Error((!isAr && errorData.detail) || t(M.resendFailed))
       }
 
       setError('')
       // Success will be shown via toast if available, or user will see success message
     } catch (err: any) {
-      setError(err.message || 'Failed to resend verification email. Please try again.')
+      setError(isAr && err instanceof TypeError ? t(C.networkError) : err.message || t(M.resendFailedRetry))
     } finally {
       setIsLoading(false)
     }
@@ -90,7 +139,7 @@ const UserRegister = () => {
 
   const logo = (
     <Link to="/" className="inline-block mb-6">
-      <img src="/logo.png" alt="MyZakat home" className="h-12 mx-auto" />
+      <img src="/logo.png" alt={t(C.homeLogoAlt)} className="h-12 mx-auto" />
     </Link>
   )
 
@@ -98,13 +147,13 @@ const UserRegister = () => {
   if (registeredEmail) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <SEOHead title="Check your email" canonicalPath="/register" noindex />
+        <SEOHead title={t(M.checkEmailSeo)} canonicalPath="/register" noindex />
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
             {logo}
-            <h1 className="text-3xl font-heading font-bold text-gray-900">Registration Successful!</h1>
+            <h1 className="text-3xl font-heading font-bold text-gray-900">{t(M.successTitle)}</h1>
             <p className="mt-2 text-sm text-gray-600">
-              Please verify your email address to continue
+              {t(M.successLead)}
             </p>
           </div>
 
@@ -112,13 +161,13 @@ const UserRegister = () => {
             <div className="space-y-4">
               <div className="alert-info">
                 <div>
-                  <p className="font-medium mb-1">We've sent a verification email to:</p>
-                  <p className="font-semibold break-all">{registeredEmail}</p>
+                  <p className="font-medium mb-1">{t(M.sentTo)}</p>
+                  <p dir="ltr" className="font-semibold break-all">{registeredEmail}</p>
                 </div>
               </div>
 
               <p className="text-gray-600 text-sm">
-                Click the link in that email to activate your account. The link expires in 7 days.
+                {t(M.clickLink)}
               </p>
 
               {error && (
@@ -137,19 +186,19 @@ const UserRegister = () => {
                   {isLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 me-2" aria-hidden="true"></div>
-                      Sending...
+                      {t(M.sending)}
                     </>
                   ) : (
                     <>
                       <Mail className="w-5 h-5 me-2" aria-hidden="true" />
-                      Resend Verification Email
+                      {t(M.resend)}
                     </>
                   )}
                 </button>
 
                 <div className="text-center">
                   <Link to="/login" className="link text-sm">
-                    Back to Login
+                    {t(M.backToLogin)}
                   </Link>
                 </div>
               </div>
@@ -162,13 +211,13 @@ const UserRegister = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <SEOHead title="Create an account" canonicalPath="/register" noindex />
+      <SEOHead title={t(M.createAccountSeo)} canonicalPath="/register" noindex />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           {logo}
-          <h1 className="text-3xl font-heading font-bold text-gray-900">Create Account</h1>
+          <h1 className="text-3xl font-heading font-bold text-gray-900">{t(M.createAccount)}</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Join us to manage your donations and subscriptions
+            {t(M.lead)}
           </p>
         </div>
 
@@ -182,7 +231,7 @@ const UserRegister = () => {
 
             <div>
               <label htmlFor="register-name" className="label">
-                Full Name
+                {t(M.fullName)}
               </label>
               <input
                 id="register-name"
@@ -190,9 +239,9 @@ const UserRegister = () => {
                 autoComplete="name"
                 aria-invalid={errors.name ? true : undefined}
                 aria-describedby={errors.name ? 'register-name-error' : undefined}
-                {...register('name', { required: 'Name is required' })}
+                {...register('name', { required: t(M.nameRequired) })}
                 className="input-field"
-                placeholder="Enter your full name"
+                placeholder={t(M.namePlaceholder)}
               />
               {errors.name && (
                 <p id="register-name-error" className="field-error">{errors.name.message}</p>
@@ -201,7 +250,7 @@ const UserRegister = () => {
 
             <div>
               <label htmlFor="register-email" className="label">
-                Email Address
+                {t(M.emailLabel)}
               </label>
               <input
                 id="register-email"
@@ -210,14 +259,14 @@ const UserRegister = () => {
                 aria-invalid={errors.email ? true : undefined}
                 aria-describedby={errors.email ? 'register-email-error' : undefined}
                 {...register('email', {
-                  required: 'Email is required',
+                  required: t(M.emailRequired),
                   pattern: {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address',
+                    message: t(M.emailInvalid),
                   },
                 })}
                 className="input-field"
-                placeholder="Enter your email"
+                placeholder={t(M.emailPlaceholder)}
               />
               {errors.email && (
                 <p id="register-email-error" className="field-error">{errors.email.message}</p>
@@ -226,7 +275,7 @@ const UserRegister = () => {
 
             <div>
               <label htmlFor="register-password" className="label">
-                Password
+                {t(M.passwordLabel)}
               </label>
               <input
                 id="register-password"
@@ -235,18 +284,18 @@ const UserRegister = () => {
                 aria-invalid={errors.password ? true : undefined}
                 aria-describedby={errors.password ? 'register-password-error' : undefined}
                 {...register('password', {
-                  required: 'Password is required',
+                  required: t(M.passwordRequired),
                   minLength: {
                     value: 6,
-                    message: 'Password must be at least 6 characters',
+                    message: t(M.passwordMin),
                   },
                   maxLength: {
                     value: 72,
-                    message: 'Password cannot exceed 72 characters',
+                    message: t(M.passwordMax),
                   },
                 })}
                 className="input-field"
-                placeholder="Create a password (6-72 characters)"
+                placeholder={t(M.passwordPlaceholder)}
               />
               {errors.password && (
                 <p id="register-password-error" className="field-error">{errors.password.message}</p>
@@ -255,7 +304,7 @@ const UserRegister = () => {
 
             <div>
               <label htmlFor="register-confirm-password" className="label">
-                Confirm Password
+                {t(M.confirmLabel)}
               </label>
               <input
                 id="register-confirm-password"
@@ -264,11 +313,11 @@ const UserRegister = () => {
                 aria-invalid={errors.confirmPassword ? true : undefined}
                 aria-describedby={errors.confirmPassword ? 'register-confirm-password-error' : undefined}
                 {...register('confirmPassword', {
-                  required: 'Please confirm your password',
-                  validate: (value) => value === password || 'Passwords do not match',
+                  required: t(M.confirmRequired),
+                  validate: (value) => value === password || t(M.mismatch),
                 })}
                 className="input-field"
-                placeholder="Confirm your password"
+                placeholder={t(M.confirmPlaceholder)}
               />
               {errors.confirmPassword && (
                 <p id="register-confirm-password-error" className="field-error">{errors.confirmPassword.message}</p>
@@ -283,12 +332,12 @@ const UserRegister = () => {
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white me-2" aria-hidden="true"></div>
-                  Creating account...
+                  {t(M.creating)}
                 </>
               ) : (
                 <>
                   <UserPlus className="w-5 h-5 me-2" aria-hidden="true" />
-                  Create Account
+                  {t(M.createAccount)}
                 </>
               )}
             </button>
@@ -296,16 +345,16 @@ const UserRegister = () => {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Already have an account?{' '}
+              {t(M.haveAccount)}{' '}
               <Link to="/login" className="link">
-                Sign in
+                {t(M.signIn)}
               </Link>
             </p>
           </div>
         </div>
 
         <p className="text-center text-sm text-gray-600">
-          <Link to="/" className="link">Back to the website</Link>
+          <Link to="/" className="link">{t(M.backToWebsite)}</Link>
         </p>
       </div>
     </div>

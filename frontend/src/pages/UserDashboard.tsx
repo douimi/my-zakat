@@ -5,6 +5,84 @@ import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import { useConfirmation } from '../hooks/useConfirmation'
 import SEOHead from '../components/SEOHead'
+import { defineMessages, useFormat, useLocale, useT } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  cancelTitle: { en: 'Cancel Subscription', ar: 'إلغاء الاشتراك' },
+  cancelMessage: {
+    en: 'Are you sure you want to cancel this subscription? This action cannot be undone.',
+    ar: 'هل أنت متأكد من رغبتك في إلغاء هذا الاشتراك؟ لا يمكن التراجع عن هذا الإجراء.',
+  },
+  cancelConfirm: { en: 'Cancel Subscription', ar: 'إلغاء الاشتراك' },
+  keepSubscription: { en: 'Keep Subscription', ar: 'الإبقاء على الاشتراك' },
+  success: { en: 'Success', ar: 'تم بنجاح' },
+  error: { en: 'Error', ar: 'خطأ' },
+  canceledOk: { en: 'Subscription canceled successfully', ar: 'تم إلغاء الاشتراك بنجاح' },
+  cancelFailed: { en: 'Failed to cancel subscription', ar: 'تعذّر إلغاء الاشتراك' },
+  downloadedOk: { en: 'Certificate downloaded successfully', ar: 'تم تنزيل الشهادة بنجاح' },
+  downloadFailed: { en: 'Failed to download certificate', ar: 'تعذّر تنزيل الشهادة' },
+  regeneratedOk: { en: 'Certificate regenerated successfully', ar: 'تم إنشاء الشهادة من جديد بنجاح' },
+  regenerateFailed: { en: 'Failed to regenerate certificate', ar: 'تعذّر إنشاء الشهادة من جديد' },
+  emailedOk: { en: 'Certificate emailed successfully', ar: 'أرسلنا الشهادة إلى بريدك الإلكتروني' },
+  emailFailed: { en: 'Failed to email certificate', ar: 'تعذّر إرسال الشهادة بالبريد الإلكتروني' },
+  backToWebsite: { en: 'Back to the website', ar: 'العودة إلى الموقع' },
+  loading: { en: 'Loading your dashboard', ar: 'جارٍ تحميل لوحتك' },
+  seoTitle: { en: 'My donations', ar: 'تبرعاتي' },
+  welcomeBack: { en: 'Welcome back, {name}!', ar: 'أهلًا بعودتك، {name}!' },
+  user: { en: 'User', ar: 'المستخدم' },
+  donateAgain: { en: 'Donate again', ar: 'تبرّع مرة أخرى' },
+  logout: { en: 'Logout', ar: 'تسجيل الخروج' },
+  totalDonated: { en: 'Total Donated', ar: 'إجمالي التبرعات' },
+  donationsMade: { en: 'Donations Made', ar: 'عدد التبرعات' },
+  activeSubscriptions: { en: 'Active Subscriptions', ar: 'الاشتراكات النشطة' },
+  amount: { en: 'Amount:', ar: 'المبلغ:' },
+  status: { en: 'Status:', ar: 'الحالة:' },
+  nextPayment: { en: 'Next Payment: {date}', ar: 'الدفعة القادمة: {date}' },
+  cancelling: { en: 'Cancelling', ar: 'جارٍ الإلغاء' },
+  donationHistory: { en: 'Donation History', ar: 'سجل التبرعات' },
+  noDonations: { en: 'No donations yet', ar: 'لا توجد تبرعات بعد' },
+  firstDonation: { en: 'Make your first donation', ar: 'قدّم تبرعك الأول' },
+  date: { en: 'Date', ar: 'التاريخ' },
+  amountCol: { en: 'Amount', ar: 'المبلغ' },
+  type: { en: 'Type', ar: 'النوع' },
+  certificate: { en: 'Certificate', ar: 'الشهادة' },
+  downloadCertificate: { en: 'Download certificate', ar: 'تنزيل الشهادة' },
+  download: { en: 'Download', ar: 'تنزيل' },
+  emailCertificate: { en: 'Email certificate', ar: 'إرسال الشهادة بالبريد' },
+  sending: { en: 'Sending...', ar: 'جارٍ الإرسال...' },
+  email: { en: 'Email', ar: 'إرسال بالبريد' },
+})
+
+/**
+ * Values stored by the payment flow (frequency, interval, status) are English
+ * words. The English site shows them as stored; the Arabic site translates the
+ * ones it knows and falls back to the stored value.
+ */
+const AR_VALUES: Record<string, string> = {
+  // frequency
+  'one-time': 'مرة واحدة',
+  'one-time (synced)': 'مرة واحدة',
+  monthly: 'شهري',
+  annually: 'سنوي',
+  yearly: 'سنوي',
+  'recurring monthly': 'شهري متكرر',
+  'recurring yearly': 'سنوي متكرر',
+  manual: 'يدوي',
+  // interval
+  month: 'شهر',
+  year: 'سنة',
+  // subscription status
+  active: 'نشط',
+  canceled: 'ملغى',
+  cancelled: 'ملغى',
+  past_due: 'متأخر السداد',
+  unpaid: 'غير مدفوع',
+  incomplete: 'غير مكتمل',
+  incomplete_expired: 'منتهي',
+  trialing: 'فترة تجريبية',
+  paused: 'متوقف مؤقتًا',
+}
 
 interface DashboardStats {
   total_donated: number
@@ -54,6 +132,11 @@ const UserDashboard = () => {
   const { showSuccess, showError } = useToast()
   // Called before any early return so the hook order never changes between renders.
   const { confirm, ConfirmationDialog } = useConfirmation()
+  const t = useT()
+  const locale = useLocale()
+  const isAr = locale === 'ar'
+  const fmt = useFormat()
+  const storedValue = (value: string) => (isAr ? AR_VALUES[value.trim().toLowerCase()] ?? value : value)
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -127,10 +210,10 @@ const UserDashboard = () => {
 
   const handleCancelSubscription = async (subscriptionId: number) => {
     const confirmed = await confirm({
-      title: 'Cancel Subscription',
-      message: 'Are you sure you want to cancel this subscription? This action cannot be undone.',
-      confirmText: 'Cancel Subscription',
-      cancelText: 'Keep Subscription',
+      title: t(M.cancelTitle),
+      message: t(M.cancelMessage),
+      confirmText: t(M.cancelConfirm),
+      cancelText: t(M.keepSubscription),
       variant: 'warning'
     })
     if (!confirmed) {
@@ -153,14 +236,14 @@ const UserDashboard = () => {
       }
 
       if (response.ok) {
-        showSuccess('Success', 'Subscription canceled successfully')
+        showSuccess(t(M.success), t(M.canceledOk))
         fetchDashboardData() // Refresh data
       } else {
         const error = await response.json()
-        showError('Error', error.detail || 'Failed to cancel subscription')
+        showError(t(M.error), (!isAr && error.detail) || t(M.cancelFailed))
       }
     } catch (error) {
-      showError('Error', 'Failed to cancel subscription')
+      showError(t(M.error), t(M.cancelFailed))
     } finally {
       setCancellingId(null)
     }
@@ -190,13 +273,13 @@ const UserDashboard = () => {
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-        showSuccess('Success', 'Certificate downloaded successfully')
+        showSuccess(t(M.success), t(M.downloadedOk))
       } else {
         const error = await response.json()
-        showError('Error', error.detail || 'Failed to download certificate')
+        showError(t(M.error), (!isAr && error.detail) || t(M.downloadFailed))
       }
     } catch (error) {
-      showError('Error', 'Failed to download certificate')
+      showError(t(M.error), t(M.downloadFailed))
     }
   }
 
@@ -217,14 +300,14 @@ const UserDashboard = () => {
       }
 
       if (response.ok) {
-        showSuccess('Success', 'Certificate regenerated successfully')
+        showSuccess(t(M.success), t(M.regeneratedOk))
         fetchDashboardData() // Refresh data
       } else {
         const error = await response.json()
-        showError('Error', error.detail || 'Failed to regenerate certificate')
+        showError(t(M.error), (!isAr && error.detail) || t(M.regenerateFailed))
       }
     } catch (error) {
-      showError('Error', 'Failed to regenerate certificate')
+      showError(t(M.error), t(M.regenerateFailed))
     } finally {
       setRegeneratingId(null)
     }
@@ -247,13 +330,13 @@ const UserDashboard = () => {
       }
 
       if (response.ok) {
-        showSuccess('Success', 'Certificate emailed successfully')
+        showSuccess(t(M.success), t(M.emailedOk))
       } else {
         const error = await response.json()
-        showError('Error', error.detail || 'Failed to email certificate')
+        showError(t(M.error), (!isAr && error.detail) || t(M.emailFailed))
       }
     } catch (error) {
-      showError('Error', 'Failed to email certificate')
+      showError(t(M.error), t(M.emailFailed))
     } finally {
       setEmailingId(null)
     }
@@ -265,7 +348,7 @@ const UserDashboard = () => {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString(fmt.tag, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -273,16 +356,19 @@ const UserDashboard = () => {
   }
 
 
+  // Amounts here are dollars, not cents. English keeps its original rendering.
   const formatMoney = (value: number) =>
-    `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    isAr
+      ? fmt.money(Math.round(value * 100), { decimals: true })
+      : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   // This page renders outside the site layout (no header), so it carries its own way back.
   const topBar = (
     <div className="flex items-center justify-between gap-4 mb-6">
       <Link to="/" className="inline-flex items-center">
-        <img src="/logo.png" alt="MyZakat home" className="h-10" />
+        <img src="/logo.png" alt={t(C.homeLogoAlt)} className="h-10" />
       </Link>
-      <Link to="/" className="link text-sm">Back to the website</Link>
+      <Link to="/" className="link text-sm">{t(M.backToWebsite)}</Link>
     </div>
   )
 
@@ -290,14 +376,14 @@ const UserDashboard = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" aria-hidden="true"></div>
-        <span className="sr-only">Loading your dashboard</span>
+        <span className="sr-only">{t(M.loading)}</span>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-8">
-      <SEOHead title="My donations" canonicalPath="/dashboard" noindex />
+      <SEOHead title={t(M.seoTitle)} canonicalPath="/dashboard" noindex />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {topBar}
 
@@ -306,13 +392,13 @@ const UserDashboard = () => {
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-heading font-bold text-gray-900 truncate">
-                Welcome back, {user?.name || 'User'}!
+                {t(M.welcomeBack, { name: user?.name || t(M.user) })}
               </h1>
               <p className="text-sm text-gray-600 truncate">{user?.email}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Link to="/donate" className="btn-primary btn-sm gap-2">
-                <Heart className="w-4 h-4" aria-hidden="true" /> {donations.length > 0 ? 'Donate again' : 'Donate'}
+                <Heart className="w-4 h-4" aria-hidden="true" /> {donations.length > 0 ? t(M.donateAgain) : t(C.donate)}
               </Link>
               {isStaff && (
                 <button
@@ -321,7 +407,7 @@ const UserDashboard = () => {
                   className="btn-secondary btn-sm gap-2"
                 >
                   <Shield className="w-4 h-4" aria-hidden="true" />
-                  {isAdmin ? 'Admin Console' : 'Manager Console'}
+                  {isAdmin ? t(C.adminConsole) : t(C.managerConsole)}
                 </button>
               )}
               <button
@@ -330,7 +416,7 @@ const UserDashboard = () => {
                 className="btn-ghost btn-sm gap-2"
               >
                 <LogOut className="w-4 h-4" aria-hidden="true" />
-                Logout
+                {t(M.logout)}
               </button>
             </div>
           </div>
@@ -339,16 +425,16 @@ const UserDashboard = () => {
           {stats && (
             <dl className="mt-5 pt-5 border-t border-gray-200 grid grid-cols-3 gap-3 text-center sm:text-start">
               <div>
-                <dt className="text-xs sm:text-sm text-gray-600">Total Donated</dt>
+                <dt className="text-xs sm:text-sm text-gray-600">{t(M.totalDonated)}</dt>
                 <dd className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{formatMoney(stats.total_donated)}</dd>
               </div>
               <div>
-                <dt className="text-xs sm:text-sm text-gray-600">Donations Made</dt>
-                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{stats.donation_count}</dd>
+                <dt className="text-xs sm:text-sm text-gray-600">{t(M.donationsMade)}</dt>
+                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{isAr ? fmt.number(stats.donation_count) : stats.donation_count}</dd>
               </div>
               <div>
-                <dt className="text-xs sm:text-sm text-gray-600">Active Subscriptions</dt>
-                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{stats.active_subscriptions}</dd>
+                <dt className="text-xs sm:text-sm text-gray-600">{t(M.activeSubscriptions)}</dt>
+                <dd className="text-lg sm:text-2xl font-bold text-gray-900">{isAr ? fmt.number(stats.active_subscriptions) : stats.active_subscriptions}</dd>
               </div>
             </dl>
           )}
@@ -358,7 +444,7 @@ const UserDashboard = () => {
         {subscriptions.length > 0 && (
           <section className="card mb-6" aria-labelledby="dashboard-subscriptions">
             <h2 id="dashboard-subscriptions" className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
-              Active Subscriptions
+              {t(M.activeSubscriptions)}
             </h2>
             <ul className="space-y-3">
               {subscriptions.map((subscription) => (
@@ -370,16 +456,16 @@ const UserDashboard = () => {
                     <h3 className="font-semibold text-gray-900 break-words">{subscription.purpose}</h3>
                     <div className="mt-2 text-sm text-gray-600 space-y-1">
                       <p>
-                        Amount: <span className="font-medium text-gray-900">${subscription.amount}</span> / {subscription.interval}
+                        {t(M.amount)} <span className="font-medium text-gray-900">{isAr ? formatMoney(subscription.amount) : `$${subscription.amount}`}</span> / {storedValue(subscription.interval)}
                       </p>
                       <p className="flex items-center gap-2">
-                        Status:{' '}
+                        {t(M.status)}{' '}
                         <span className={subscription.status === 'active' ? 'badge-success' : 'badge-warning'}>
-                          {subscription.status}
+                          {storedValue(subscription.status)}
                         </span>
                       </p>
                       {subscription.next_payment_date && (
-                        <p>Next Payment: {formatDate(subscription.next_payment_date)}</p>
+                        <p>{t(M.nextPayment, { date: formatDate(subscription.next_payment_date) })}</p>
                       )}
                     </div>
                   </div>
@@ -392,12 +478,12 @@ const UserDashboard = () => {
                     {cancellingId === subscription.id ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-700" aria-hidden="true"></div>
-                        <span className="sr-only">Cancelling</span>
+                        <span className="sr-only">{t(M.cancelling)}</span>
                       </>
                     ) : (
                       <>
                         <X className="w-4 h-4" aria-hidden="true" />
-                        Cancel
+                        {t(C.cancel)}
                       </>
                     )}
                   </button>
@@ -410,12 +496,12 @@ const UserDashboard = () => {
         {/* Donation History */}
         <section className="card" aria-labelledby="dashboard-history">
           <h2 id="dashboard-history" className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
-            Donation History
+            {t(M.donationHistory)}
           </h2>
           {donations.length === 0 ? (
             <div className="text-center py-8 space-y-4">
-              <p className="text-gray-600">No donations yet</p>
-              <Link to="/donate" className="btn-primary btn-sm">Make your first donation</Link>
+              <p className="text-gray-600">{t(M.noDonations)}</p>
+              <Link to="/donate" className="btn-primary btn-sm">{t(M.firstDonation)}</Link>
             </div>
           ) : (
             <div className="overflow-x-auto -mx-2 sm:mx-0">
@@ -423,16 +509,16 @@ const UserDashboard = () => {
                 <thead>
                   <tr>
                     <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
-                      Date
+                      {t(M.date)}
                     </th>
                     <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
-                      Amount
+                      {t(M.amountCol)}
                     </th>
                     <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider hidden sm:table-cell">
-                      Type
+                      {t(M.type)}
                     </th>
                     <th scope="col" className="px-2 sm:px-4 py-3 text-start text-xs font-medium text-gray-600 uppercase tracking-wider">
-                      Certificate
+                      {t(M.certificate)}
                     </th>
                   </tr>
                 </thead>
@@ -441,13 +527,13 @@ const UserDashboard = () => {
                     <tr key={donation.id}>
                       <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         {formatDate(donation.donated_at)}
-                        <span className="block text-xs text-gray-500 sm:hidden">{donation.frequency}</span>
+                        <span className="block text-xs text-gray-500 sm:hidden">{storedValue(donation.frequency)}</span>
                       </td>
                       <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {formatMoney(donation.amount)}
                       </td>
                       <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm text-gray-600 hidden sm:table-cell">
-                        {donation.frequency}
+                        {storedValue(donation.frequency)}
                       </td>
                       <td className="px-2 sm:px-4 py-3 text-sm">
                         {/* Certificates are generated on the fly, so they're always available.
@@ -457,27 +543,27 @@ const UserDashboard = () => {
                             type="button"
                             onClick={() => handleDownloadCertificate(donation.id)}
                             className="inline-flex items-center gap-1 p-2 -m-1 sm:p-0 sm:m-0 rounded text-primary-700 hover:text-primary-800 font-medium"
-                            title="Download certificate"
+                            title={t(M.downloadCertificate)}
                           >
                             <Download className="w-4 h-4" aria-hidden="true" />
-                            <span className="sr-only sm:not-sr-only">Download</span>
+                            <span className="sr-only sm:not-sr-only">{t(M.download)}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleEmailCertificate(donation.id)}
                             disabled={emailingId === donation.id}
                             className="inline-flex items-center gap-1 p-2 -m-1 sm:p-0 sm:m-0 rounded text-primary-700 hover:text-primary-800 font-medium disabled:opacity-50"
-                            title="Email certificate"
+                            title={t(M.emailCertificate)}
                           >
                             {emailingId === donation.id ? (
                               <>
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" aria-hidden="true"></div>
-                                <span className="sr-only sm:not-sr-only">Sending...</span>
+                                <span className="sr-only sm:not-sr-only">{t(M.sending)}</span>
                               </>
                             ) : (
                               <>
                                 <Mail className="w-4 h-4" aria-hidden="true" />
-                                <span className="sr-only sm:not-sr-only">Email</span>
+                                <span className="sr-only sm:not-sr-only">{t(M.email)}</span>
                               </>
                             )}
                           </button>

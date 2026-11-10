@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react'
 import { useQuery } from 'react-query'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Heart } from 'lucide-react'
@@ -7,12 +8,43 @@ import type { ProgramCategory } from '../types'
 import LazyVideo from '../components/LazyVideo'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
+import { defineMessages, useT } from '../i18n'
+
+const M = defineMessages({
+  title: { en: 'Our programs', ar: 'برامجنا' },
+  lead: {
+    en: 'The areas we fund. Open one to see its programs and how to give.',
+    ar: 'المجالات التي نموّلها. افتح أيًّا منها لتطّلع على برامجه وطرق التبرع.',
+  },
+  loading: { en: 'Loading programs', ar: 'جارٍ تحميل البرامج' },
+  loadError: {
+    en: 'Unable to load programs. Please try again later.',
+    ar: 'تعذّر تحميل البرامج. يُرجى المحاولة لاحقًا.',
+  },
+  seoTitle: { en: 'Charitable Programs', ar: 'البرامج الخيرية' },
+  seoDescription: {
+    en: 'Explore MyZakat charitable programs. From emergency relief to community development, find programs that make a lasting impact and support those in need.',
+    ar: 'استكشف البرامج الخيرية لماي زكاة، من الإغاثة العاجلة إلى تنمية المجتمعات، واختر برامج تترك أثرًا دائمًا وتدعم المحتاجين.',
+  },
+  learnMore: { en: 'Learn More', ar: 'اعرف المزيد' },
+  emptyTitle: { en: 'No programs yet', ar: 'لا توجد برامج بعد' },
+  empty: {
+    en: 'Programs will appear here once they are added. You can still {link}.',
+    ar: 'ستظهر البرامج هنا فور إضافتها، ويمكنك مع ذلك {link}.',
+  },
+  giveWhereNeeded: { en: 'give where the need is greatest', ar: 'التبرّع حيث تشتد الحاجة' },
+})
+
+/** Put React nodes into the `{slot}`s of a translated sentence (word order differs per language). */
+const fill = (text: string, slots: Record<string, ReactNode>) =>
+  text.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? <Fragment key={i}>{slots[part]}</Fragment> : part))
 
 // Card title link whose ::after covers the whole card (one link per card). The video
 // player sits above it (z-10) so its native controls stay usable.
 const STRETCHED_LINK = 'after:absolute after:inset-0 after:content-[""] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-primary-600 focus-visible:after:rounded-xl'
 
 const Programs = () => {
+  const t = useT()
   const { data: categories, isLoading, error } = useQuery<ProgramCategory[]>('program-categories', () =>
     programCategoriesAPI.getAll(true)
   )
@@ -32,8 +64,8 @@ const Programs = () => {
 
   const header = (
     <PageHeader
-      title="Our programs"
-      description="The areas we fund. Open one to see its programs and how to give."
+      title={t(M.title)}
+      description={t(M.lead)}
     />
   )
 
@@ -43,7 +75,7 @@ const Programs = () => {
         {header}
         <div className="section">
           <div className="section-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="status">
-            <span className="sr-only">Loading programs</span>
+            <span className="sr-only">{t(M.loading)}</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className="h-80 rounded-xl bg-gray-100" />
             ))}
@@ -59,7 +91,7 @@ const Programs = () => {
         {header}
         <div className="section">
           <div className="section-container">
-            <p className="alert-error" role="alert">Unable to load programs. Please try again later.</p>
+            <p className="alert-error" role="alert">{t(M.loadError)}</p>
           </div>
         </div>
       </div>
@@ -69,8 +101,8 @@ const Programs = () => {
   return (
     <div className="min-h-screen bg-white">
       <SEOHead
-        title="Charitable Programs"
-        description="Explore MyZakat charitable programs. From emergency relief to community development, find programs that make a lasting impact and support those in need."
+        title={t(M.seoTitle)}
+        description={t(M.seoDescription)}
         canonicalPath="/programs"
       />
       {header}
@@ -123,7 +155,7 @@ const Programs = () => {
                         {category.short_description || category.description || ''}
                       </p>
                       <span className="mt-4 text-sm font-medium text-primary-700 inline-flex items-center gap-1" aria-hidden="true">
-                        Learn More <ArrowRight className="w-4 h-4" />
+                        {t(M.learnMore)} <ArrowRight className="w-4 h-4" />
                       </span>
                     </div>
                   </article>
@@ -132,10 +164,11 @@ const Programs = () => {
             </div>
           ) : (
             <div className="text-center py-16">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">No programs yet</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{t(M.emptyTitle)}</h2>
               <p className="text-gray-600">
-                Programs will appear here once they are added. You can still{' '}
-                <Link to="/donate" className="link">give where the need is greatest</Link>.
+                {fill(t(M.empty), {
+                  link: <Link to="/donate" className="link">{t(M.giveWhereNeeded)}</Link>,
+                })}
               </p>
             </div>
           )}

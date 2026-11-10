@@ -13,9 +13,54 @@
  * Open projects are listed first. When nothing is open, the section says so and
  * shows recently funded projects instead of pretending they still need money.
  */
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Clock, HeartHandshake, CheckCircle2 } from 'lucide-react'
+import { defineMessages, useDir, useFormat, useLocale, useT, type Dir } from '../i18n'
+import { C } from '../i18n/common'
+
+const M = defineMessages({
+  pastProject: { en: 'Past project', ar: 'مشروع سابق' },
+  fullyFunded: { en: 'Fully funded', ar: 'اكتمل تمويله' },
+  urgent: { en: 'Urgent', ar: 'عاجل' },
+  featured: { en: 'Featured', ar: 'مميّز' },
+  percentFunded: { en: '{percent}% funded', ar: 'تم تمويل {percent}%' },
+  progressLabel: { en: '{title}: {percent}% funded', ar: '{title}: تم تمويل {percent}%' },
+  goal: { en: 'Goal', ar: 'الهدف' },
+  raised: { en: 'Raised', ar: 'ما جُمع' },
+  stillNeeded: { en: 'Still needed', ar: 'المتبقي' },
+  endsToday: { en: 'Ends today', ar: 'ينتهي اليوم' },
+  oneDayLeft: { en: '1 day left', ar: 'بقي يوم واحد' },
+  daysLeft: { en: '{count} days left', ar: 'بقي {count} يوم' },
+  closed: { en: 'No longer taking donations.', ar: 'لم يعد يستقبل التبرعات.' },
+  fundedThanks: { en: 'Fully funded. Thank you!', ar: 'اكتمل التمويل، جزى الله المتبرعين خيرًا!' },
+  donate: { en: 'Donate to this project', ar: 'تبرّع لهذا المشروع' },
+  sectionTitle: { en: 'Projects you can fund', ar: 'مشاريع يمكنك تمويلها' },
+  recentlyFunded: { en: 'Recently funded', ar: 'اكتمل تمويلها مؤخرًا' },
+  sectionLead: {
+    en: "Each card shows the goal, what's been raised, and what's left.",
+    ar: 'تعرض كل بطاقة الهدف، وما جُمع، وما تبقّى.',
+  },
+  noneOpen: {
+    en: 'No project is open for donations right now. You can still {link}.',
+    ar: 'لا يوجد حاليًا مشروع مفتوح للتبرع، ويمكنك مع ذلك {link}.',
+  },
+  giveWhereNeeded: { en: 'give where the need is greatest', ar: 'التبرّع حيث تشتد الحاجة' },
+  loading: { en: 'Loading projects', ar: 'جارٍ تحميل المشاريع' },
+})
+
+/** Arabic needs all six CLDR plural forms for a day count; 0 is "Ends today" above. */
+const AR_DAYS_LEFT = {
+  one: 'بقي يوم واحد',
+  two: 'بقي يومان',
+  few: 'بقيت {count} أيام',
+  many: 'بقي {count} يومًا',
+  other: 'بقي {count} يوم',
+}
+
+/** Put React nodes into the `{slot}`s of a translated sentence (word order differs per language). */
+const fill = (text: string, slots: Record<string, ReactNode>) =>
+  text.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? <Fragment key={i}>{slots[part]}</Fragment> : part))
 
 export interface Project {
   id: number
@@ -39,9 +84,9 @@ export interface Project {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // ── Helpers ──────────────────────────────────────────────────────────
-const formatMoney = (amount: number, currency = 'USD') => {
+const formatMoney = (amount: number, currency = 'USD', tag = 'en-US') => {
   try {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(tag, {
       style: 'currency', currency, maximumFractionDigits: amount < 100 ? 2 : 0,
     }).format(amount)
   } catch {
@@ -62,7 +107,7 @@ export const isProjectOpen = (p: Project) =>
   p.is_active !== false && p.status !== 'completed' && p.progress_percent < 100
 
 // ── Progress bar with milestone ticks ────────────────────────────────
-const ProgressBar = ({ percent, animate, label }: { percent: number; animate: boolean; label: string }) => {
+const ProgressBar = ({ percent, animate, label, dir = 'ltr' }: { percent: number; animate: boolean; label: string; dir?: Dir }) => {
   const clamped = Math.max(0, Math.min(100, percent))
   return (
     <div
@@ -85,7 +130,7 @@ const ProgressBar = ({ percent, animate, label }: { percent: number; animate: bo
           <div
             key={tick}
             className={`absolute top-0 h-2.5 w-px ${clamped >= tick ? 'bg-white/70' : 'bg-gray-300'}`}
-            style={{ left: `${tick}%` }}
+            style={dir === 'rtl' ? { right: `${tick}%` } : { left: `${tick}%` }}
           />
         ))}
       </div>
@@ -97,6 +142,10 @@ const ProgressBar = ({ percent, animate, label }: { percent: number; animate: bo
 export const ProjectCard = ({ project }: { project: Project }) => {
   const [animate, setAnimate] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const t = useT()
+  const locale = useLocale()
+  const dir = useDir()
+  const { plural, tag } = useFormat()
 
   // Trigger the progress-bar animation when the card scrolls into view.
   useEffect(() => {
@@ -121,13 +170,13 @@ export const ProjectCard = ({ project }: { project: Project }) => {
 
   // One status badge at most (with the category, two badges in total).
   const status = isArchived
-    ? { label: 'Past project', className: 'badge-neutral' }
+    ? { label: t(M.pastProject), className: 'badge-neutral' }
     : isCompleted
-      ? { label: 'Fully funded', className: 'badge-success' }
+      ? { label: t(M.fullyFunded), className: 'badge-success' }
       : isUrgent
-        ? { label: 'Urgent', className: 'badge-danger' }
+        ? { label: t(M.urgent), className: 'badge-danger' }
         : project.is_featured
-          ? { label: 'Featured', className: 'badge-primary' }
+          ? { label: t(M.featured), className: 'badge-primary' }
           : null
 
   // Build the Donate link — pre-fill amount + purpose so the form is one click away.
@@ -168,45 +217,50 @@ export const ProjectCard = ({ project }: { project: Project }) => {
         <h3 className="card-title mb-1.5 line-clamp-2">{project.title}</h3>
         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.short_description}</p>
 
-        <p className="text-sm font-semibold text-gray-900 mb-2">{project.progress_percent}% funded</p>
+        <p className="text-sm font-semibold text-gray-900 mb-2">{t(M.percentFunded, { percent: project.progress_percent })}</p>
         <ProgressBar
           percent={project.progress_percent}
           animate={animate}
-          label={`${project.title}: ${project.progress_percent}% funded`}
+          label={t(M.progressLabel, { title: project.title, percent: project.progress_percent })}
+          dir={dir}
         />
 
         <dl className="grid grid-cols-3 gap-2 text-center mt-4 mb-5">
           <div>
-            <dt className="text-xs text-gray-500">Goal</dt>
-            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.goal_amount, project.currency)}</dd>
+            <dt className="text-xs text-gray-500">{t(M.goal)}</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.goal_amount, project.currency, tag)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Raised</dt>
-            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.spent_amount, project.currency)}</dd>
+            <dt className="text-xs text-gray-500">{t(M.raised)}</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.spent_amount, project.currency, tag)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Still needed</dt>
-            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.remaining_amount, project.currency)}</dd>
+            <dt className="text-xs text-gray-500">{t(M.stillNeeded)}</dt>
+            <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.remaining_amount, project.currency, tag)}</dd>
           </div>
         </dl>
 
         {days !== null && days >= 0 && !isCompleted && !isArchived && (
           <p className="text-xs text-gray-600 mb-3 inline-flex items-center gap-1.5">
             <Clock className={`w-3.5 h-3.5 ${days <= 7 ? 'text-red-600' : 'text-gray-500'}`} aria-hidden="true" />
-            {days === 0 ? 'Ends today' : days === 1 ? '1 day left' : `${days} days left`}
+            {days === 0
+              ? t(M.endsToday)
+              : locale === 'ar'
+                ? plural(days, AR_DAYS_LEFT)
+                : days === 1 ? t(M.oneDayLeft) : t(M.daysLeft, { count: days })}
           </p>
         )}
 
         <div className="mt-auto">
           {isArchived ? (
-            <p className="text-sm text-gray-600">No longer taking donations.</p>
+            <p className="text-sm text-gray-600">{t(M.closed)}</p>
           ) : isCompleted ? (
             <p className="text-sm font-medium text-green-800 inline-flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Fully funded. Thank you!
+              <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> {t(M.fundedThanks)}
             </p>
           ) : (
             <Link to={donateHref} className="btn-primary w-full">
-              Donate to this project
+              {t(M.donate)}
             </Link>
           )}
         </div>
@@ -219,6 +273,7 @@ export const ProjectCard = ({ project }: { project: Project }) => {
 const FundraisingProjectsSection = () => {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const t = useT()
 
   useEffect(() => {
     let cancelled = false
@@ -257,27 +312,24 @@ const FundraisingProjectsSection = () => {
         <div className="section-head">
           <div>
             <h2 id="fund-projects-title" className="section-title">
-              {loading || hasOpen ? 'Projects you can fund' : 'Recently funded'}
+              {loading || hasOpen ? t(M.sectionTitle) : t(M.recentlyFunded)}
             </h2>
             <p className="section-lead">
               {loading || hasOpen
-                ? "Each card shows the goal, what's been raised, and what's left."
-                : (
-                  <>
-                    No project is open for donations right now. You can still{' '}
-                    <Link to="/donate" className="link">give where the need is greatest</Link>.
-                  </>
-                )}
+                ? t(M.sectionLead)
+                : fill(t(M.noneOpen), {
+                  link: <Link to="/donate" className="link">{t(M.giveWhereNeeded)}</Link>,
+                })}
             </p>
           </div>
           <Link to="/projects" className="link inline-flex items-center gap-1 shrink-0">
-            All projects <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            {t(C.allProjects)} <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </Link>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="status">
-            <span className="sr-only">Loading projects</span>
+            <span className="sr-only">{t(M.loading)}</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className={`h-96 rounded-xl bg-gray-100 ${i > 0 ? 'hidden md:block' : ''} ${i > 1 ? 'md:hidden lg:block' : ''}`} />
             ))}

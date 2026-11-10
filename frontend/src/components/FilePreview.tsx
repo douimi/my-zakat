@@ -11,6 +11,20 @@
  */
 import { useEffect } from 'react'
 import { Download, X } from 'lucide-react'
+import { defineMessages, useT } from '../i18n'
+
+const M = defineMessages({
+  download: { en: 'Download', ar: 'تنزيل' },
+  closePreview: { en: 'Close preview', ar: 'إغلاق المعاينة' },
+  cannotShow: {
+    en: 'This file cannot be shown here. Use Download to open it on your device.',
+    ar: 'لا يمكن عرض هذا الملف هنا. اضغط «تنزيل» لفتحه على جهازك.',
+  },
+  pdfHint: {
+    en: 'Nothing showing? Some phones cannot display PDFs inside a page. Use Download.',
+    ar: 'لا يظهر شيء؟ بعض الهواتف لا تعرض ملفات PDF داخل الصفحة. اضغط «تنزيل».',
+  },
+})
 
 export interface PreviewFile {
   url: string
@@ -32,6 +46,7 @@ interface FilePreviewProps {
 }
 
 const FilePreview = ({ file, onClose }: FilePreviewProps) => {
+  const t = useT()
   // The object URL holds the whole file in memory until it is revoked.
   useEffect(() => () => URL.revokeObjectURL(file.url), [file.url])
 
@@ -55,9 +70,9 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
           <div className="flex items-center gap-2 shrink-0">
             <a href={file.url} download={file.filename}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary-600 hover:bg-primary-700 text-white">
-              <Download className="w-4 h-4" /> Download
+              <Download className="w-4 h-4" /> {t(M.download)}
             </a>
-            <button type="button" onClick={onClose} aria-label="Close preview"
+            <button type="button" onClick={onClose} aria-label={t(M.closePreview)}
               className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5" />
             </button>
@@ -72,13 +87,13 @@ const FilePreview = ({ file, onClose }: FilePreviewProps) => {
             <video src={file.url} controls className="max-w-full max-h-full" />
           ) : (
             <p className="text-sm text-gray-600 p-6 text-center">
-              This file cannot be shown here. Use Download to open it on your device.
+              {t(M.cannotShow)}
             </p>
           )}
         </div>
         {isPdf && (
           <p className="shrink-0 px-4 py-2 text-xs text-gray-500 border-t border-gray-200">
-            Nothing showing? Some phones cannot display PDFs inside a page. Use Download.
+            {t(M.pdfHint)}
           </p>
         )}
       </div>
