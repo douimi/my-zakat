@@ -113,13 +113,18 @@ export const useFormat = () => {
   const locale = useLocale()
   return useMemo(() => {
     const tag = INTL_LOCALE[locale]
-    const money = (cents: number, opts: { decimals?: boolean } = {}) =>
-      new Intl.NumberFormat(tag, {
+    // Amounts are always "$40": Intl's Arabic currency pattern ("40 US$") gets
+    // reordered by the bidi algorithm into "$US 40" inside Arabic sentences.
+    // The dollar figure is isolated (LRI…PDI) so it reads as one LTR unit.
+    const money = (cents: number, opts: { decimals?: boolean } = {}) => {
+      const text = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
         minimumFractionDigits: opts.decimals || cents % 100 !== 0 ? 2 : 0,
         maximumFractionDigits: 2,
       }).format(cents / 100)
+      return locale === 'ar' ? `⁦${text}⁩` : text
+    }
     const number = (value: number) => new Intl.NumberFormat(tag).format(value)
     const date = (iso: string | null | undefined, style: 'medium' | 'long' = 'medium') => {
       if (!iso) return ''

@@ -98,7 +98,7 @@ async def list_cases(
     age_max: Optional[int] = Query(None, ge=0, le=18),
     needs_sponsor: bool = True,
     sort: Literal["waiting", "newest", "need"] = "waiting",
-    limit: int = Query(24, ge=1, le=60),
+    limit: int = Query(24, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):

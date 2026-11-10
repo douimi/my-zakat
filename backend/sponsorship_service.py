@@ -880,6 +880,19 @@ def mark_seen(db: Session, case: SponsorshipCase) -> None:
     db.commit()
 
 
+def unread_counts(db: Session) -> dict:
+    """What the admin badge needs, without building the whole overview."""
+    rows = (
+        db.query(SponsorshipCase.kind, SponsorshipCase.admin_seen_at, SponsorshipCase.last_applicant_activity_at)
+        .filter(SponsorshipCase.status.notin_((CLOSED, REJECTED))).all()
+    )
+    counts = {FAMILY: 0, ORPHAN: 0}
+    for kind, seen, activity in rows:
+        if seen is None or activity > seen:
+            counts[kind] += 1
+    return {"unread": counts[FAMILY] + counts[ORPHAN], **counts}
+
+
 def is_unread(case: SponsorshipCase) -> bool:
     return case.admin_seen_at is None or case.last_applicant_activity_at > case.admin_seen_at
 
@@ -1193,6 +1206,10 @@ def record_disbursement(db: Session, case: SponsorshipCase, staff: User, data: d
     amount = int(data.get("amount_cents") or 0)
     if amount <= 0:
         raise SponsorshipError("The amount must be positive.")
+    receipt_id = data.get("receipt_document_id")
+    if receipt_id is not None and not db.query(SponsorshipCaseDocument.id).filter(
+            SponsorshipCaseDocument.id == receipt_id, SponsorshipCaseDocument.case_id == case.id).first():
+        raise SponsorshipError("That receipt is not one of this case's documents.")
     row = SponsorshipDisbursement(
         case_id=case.id,
         amount_cents=amount,

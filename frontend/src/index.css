@@ -54,55 +54,6 @@
     outline-offset: 2px;
   }
 
-  /* ---------- Right-to-left (the /ar site) ----------
-   * Layout direction comes from logical utilities (ms-/me-/ps-/pe-/start-/end-/text-start),
-   * which are identical in LTR and mirror in RTL. What they cannot express lives here.
-   * :dir(rtl), not [dir="rtl"] ancestors: an English-only block (dir="ltr") inside the
-   * Arabic site must keep its icons and spacing as they are. */
-
-  /* Letter-spacing breaks the joins of Arabic script, and Arabic has no case. */
-  .eyebrow:dir(rtl),
-  [class*="tracking-"]:dir(rtl) {
-    letter-spacing: 0;
-    text-transform: none;
-  }
-
-  /* Arabic glyphs are taller; body copy needs more room between lines. */
-  html[dir="rtl"] body {
-    line-height: 1.7;
-  }
-
-  /* Directional icons point the other way. `scale`, not `transform`, so a
-   * Tailwind rotate-90 on the same icon (disclosures) still composes. */
-  .lucide-arrow-right:dir(rtl),
-  .lucide-arrow-left:dir(rtl),
-  .lucide-chevron-right:dir(rtl),
-  .lucide-chevron-left:dir(rtl),
-  .lucide-chevrons-right:dir(rtl),
-  .lucide-chevrons-left:dir(rtl),
-  .lucide-arrow-up-right:dir(rtl),
-  .lucide-external-link:dir(rtl),
-  .lucide-log-out:dir(rtl),
-  .lucide-send:dir(rtl),
-  .lucide-reply:dir(rtl),
-  .rtl-mirror:dir(rtl) {
-    scale: -1 1;
-  }
-
-  /* space-x-* puts its margin on the physical left; flip it. */
-  [class*="space-x-"]:dir(rtl) > :not([hidden]) ~ :not([hidden]) {
-    --tw-space-x-reverse: 1;
-  }
-
-  /* Numbers, emails, phone numbers and codes read left-to-right inside Arabic text. */
-  .ltr-nums:dir(rtl),
-  input[type="email"]:dir(rtl),
-  input[type="tel"]:dir(rtl),
-  input[inputmode="numeric"]:dir(rtl) {
-    direction: ltr;
-    text-align: end;
-  }
-
   /* Programmatic focus targets (e.g. <main tabIndex={-1}>) do not need a ring. */
   [tabindex="-1"]:focus {
     outline: none;
@@ -491,4 +442,56 @@ html {
 /* Ensure body starts at top on page load */
 body {
   scroll-behavior: auto;
+}
+
+/* ---------- Right-to-left (the /ar site) ----------
+ * Deliberately OUTSIDE @layer: Tailwind drops any layered rule whose class
+ * does not appear in the source, and lucide adds .lucide-arrow-right & co. at
+ * runtime, so inside a layer these rules were silently purged.
+ * Layout direction comes from logical utilities (ms-/me-/ps-/pe-/start-/end-/text-start),
+ * which are identical in LTR and mirror in RTL. What they cannot express lives here.
+ * :dir(rtl), not [dir="rtl"] ancestors: an English-only block (dir="ltr") inside the
+ * Arabic site must keep its icons and spacing as they are. */
+
+/* Letter-spacing breaks the joins of Arabic script, and Arabic has no case. */
+.eyebrow:dir(rtl),
+[class*="tracking-"]:dir(rtl) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Arabic glyphs are taller; body copy needs more room between lines. */
+html[dir="rtl"] body {
+  line-height: 1.7;
+}
+
+/* Directional icons point the other way. `scale`, not `transform`, so a
+ * Tailwind rotate-90 on the same icon (disclosures) still composes. */
+.lucide-arrow-right:dir(rtl),
+.lucide-arrow-left:dir(rtl),
+.lucide-chevron-right:dir(rtl),
+.lucide-chevron-left:dir(rtl),
+.lucide-chevrons-right:dir(rtl),
+.lucide-chevrons-left:dir(rtl),
+.lucide-arrow-up-right:dir(rtl),
+.lucide-external-link:dir(rtl),
+.lucide-log-out:dir(rtl),
+.lucide-send:dir(rtl),
+.lucide-reply:dir(rtl),
+.rtl-mirror:dir(rtl) {
+  scale: -1 1;
+}
+
+/* space-x-* puts its margin on the physical left; flip it. */
+[class*="space-x-"]:dir(rtl) > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+
+/* Numbers, emails, phone numbers and codes read left-to-right inside Arabic text. */
+.ltr-nums:dir(rtl),
+input[type="email"]:dir(rtl),
+input[type="tel"]:dir(rtl),
+input[inputmode="numeric"]:dir(rtl) {
+  direction: ltr;
+  text-align: end;
 }

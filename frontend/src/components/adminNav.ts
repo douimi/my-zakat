@@ -27,6 +27,10 @@ import {
   Rocket,
   HeartHandshake,
   FolderKanban,
+  HelpingHand,
+  PieChart,
+  Home,
+  Baby,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../store/authStore'
@@ -56,6 +60,19 @@ export const NAV: readonly NavEntry[] = [
   { kind: 'link', name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   // The main review workflow, top level so its unread badge is always in view.
   { kind: 'link', name: 'Project Proposals', href: '/admin/project-proposals', icon: FolderKanban },
+  // The other review workflow: families and orphans asking to be sponsored.
+  {
+    kind: 'group',
+    id: 'sponsorship',
+    label: 'Sponsorship',
+    icon: HelpingHand,
+    items: [
+      { kind: 'link', name: 'Overview', href: '/admin/sponsorship', icon: PieChart },
+      { kind: 'link', name: 'Families', href: '/admin/sponsorship/families', icon: Home },
+      { kind: 'link', name: 'Orphans', href: '/admin/sponsorship/orphans', icon: Baby },
+      { kind: 'link', name: 'Sponsors', href: '/admin/sponsorship/sponsors', icon: HeartHandshake },
+    ],
+  },
 
   {
     kind: 'group',
@@ -149,6 +166,11 @@ export const ROLE_ALLOWED: Partial<Record<Role, ReadonlySet<string>>> = {
     '/admin/volunteers',
     '/admin/stories',
     '/admin/project-proposals',
+    // Managers review sponsorship cases; money-moving actions inside are admin-only server-side.
+    '/admin/sponsorship',
+    '/admin/sponsorship/families',
+    '/admin/sponsorship/orphans',
+    '/admin/sponsorship/sponsors',
     '/admin/media',
     '/admin/media/all',
   ]),

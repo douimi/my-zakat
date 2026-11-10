@@ -616,3 +616,31 @@ def test_uploaded_documents_are_stored_under_their_case(client, db_session, fake
     keys = [d.object_key for d in db_session.query(SponsorshipCaseDocument).all()]
     assert len(set(keys)) == 2
     assert all(k.startswith("sponsorship/") for k in keys)
+
+
+def test_a_staff_edit_of_an_unknown_field_is_refused_not_ignored(client, auth_headers, db_session):
+    ref = apply(client, "orphan", orphan_payload()).json()["reference"]
+    case = db_session.query(SponsorshipCase).filter_by(reference=ref).one()
+
+    unknown = admin(client, auth_headers, "patch", "/cases/%d" % case.id, json={"favourite_colour": "blue"})
+    known = admin(client, auth_headers, "patch", "/cases/%d" % case.id, json={"siblings_count": 3, "lives_with": "relatives"})
+
+    assert unknown.status_code == 422
+    assert known.status_code == 200 and set(known.json()["changed"]) == {"siblings_count", "lives_with"}
+
+
+def test_the_badge_counts_unread_cases_by_kind(client, auth_headers, db_session):
+    apply(client, "orphan", orphan_payload())
+    apply(client, "family", family_payload())
+    assert admin(client, auth_headers, "get", "/unread").json() == {"unread": 2, "family": 1, "orphan": 1}
+
+
+def test_a_disbursement_receipt_must_belong_to_the_case(client, auth_headers, db_session):
+    case = published_family(client, auth_headers, db_session)
+    other = apply(client, "family", family_payload(email="z@example.com"),
+                  docs=[("r.pdf", PDF, "application/pdf", "receipt")]).json()["reference"]
+    foreign = db_session.query(SponsorshipCaseDocument).join(
+        SponsorshipCase, SponsorshipCase.id == SponsorshipCaseDocument.case_id).filter(SponsorshipCase.reference == other).one()
+    r = admin(client, auth_headers, "post", "/cases/%d/disbursements" % case.id, json={
+        "amount_cents": 1000, "category": "food", "description": "Basket", "receipt_document_id": foreign.id})
+    assert r.status_code == 400

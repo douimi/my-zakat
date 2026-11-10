@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 import sponsorship_service as svc
 
@@ -182,7 +182,12 @@ class TransitionRequest(BaseModel):
 
 
 class StaffCaseEdit(BaseModel):
-    """Any subset of the dossier, plus the curated profile. Unset = unchanged."""
+    """Any subset of the dossier, plus the curated profile. Unset = unchanged.
+
+    extra="forbid": a field this schema does not know is a 422, never a 200
+    that quietly changed nothing.
+    """
+    model_config = ConfigDict(extra="forbid")
     note: Optional[str] = Field(default=None, max_length=2000)
     assigned_to: Optional[int] = None
     # Profile
@@ -197,6 +202,8 @@ class StaffCaseEdit(BaseModel):
     submitter_name: Optional[str] = Field(default=None, max_length=200)
     submitter_phone: Optional[str] = Field(default=None, max_length=50)
     organization_name: Optional[str] = Field(default=None, max_length=200)
+    organization_registration: Optional[str] = Field(default=None, max_length=100)
+    organization_contact_role: Optional[str] = Field(default=None, max_length=100)
     country: Optional[str] = Field(default=None, max_length=100)
     region: Optional[str] = Field(default=None, max_length=150)
     city: Optional[str] = Field(default=None, max_length=150)
@@ -211,6 +218,10 @@ class StaffCaseEdit(BaseModel):
     # Family
     head_full_name: Optional[str] = Field(default=None, max_length=200)
     head_national_id: Optional[str] = Field(default=None, max_length=50)
+    head_birth_year: Optional[int] = Field(default=None, ge=1900, le=_THIS_YEAR)
+    head_gender: Optional[Gender] = None
+    head_marital_status: Optional[Literal["married", "widowed", "divorced", "single", "separated"]] = None
+    head_occupation: Optional[str] = Field(default=None, max_length=150)
     household_size: Optional[int] = Field(default=None, ge=1, le=30)
     housing_status: Optional[Literal["owned", "rented", "hosted", "shelter_camp", "other"]] = None
     monthly_rent_cents: Optional[int] = Field(default=None, ge=0)
@@ -218,11 +229,24 @@ class StaffCaseEdit(BaseModel):
     members: Optional[list[HouseholdMember]] = None
     # Orphan
     full_name: Optional[str] = Field(default=None, max_length=200)
+    gender: Optional[Gender] = None
     birth_date: Optional[date] = None
+    orphan_type: Optional[Literal["father", "mother", "both"]] = None
+    father_name: Optional[str] = Field(default=None, max_length=200)
+    father_death_date: Optional[date] = None
+    father_death_cause: Optional[str] = Field(default=None, max_length=1000)
+    mother_name: Optional[str] = Field(default=None, max_length=200)
+    mother_alive: Optional[bool] = None
+    mother_death_date: Optional[date] = None
     school_level: Optional[str] = Field(default=None, max_length=100)
     school_name: Optional[str] = Field(default=None, max_length=200)
     health_status: Optional[str] = Field(default=None, max_length=2000)
+    interests: Optional[str] = Field(default=None, max_length=1000)
+    lives_with: Optional[Literal["mother", "relatives", "guardian", "orphanage", "other"]] = None
+    siblings_count: Optional[int] = Field(default=None, ge=0, le=30)
     guardian_name: Optional[str] = Field(default=None, max_length=200)
+    guardian_relationship: Optional[str] = Field(default=None, max_length=50)
+    guardian_national_id: Optional[str] = Field(default=None, max_length=50)
     guardian_phone: Optional[str] = Field(default=None, max_length=50)
 
 

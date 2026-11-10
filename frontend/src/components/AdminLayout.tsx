@@ -18,6 +18,7 @@ const COLLAPSED_KEY = 'myzakat_admin_nav_collapsed'
 /** How often the sidebar re-checks for proposals nobody has opened yet. */
 const UNREAD_POLL_MS = 60_000
 const PROPOSALS_HREF = '/admin/project-proposals'
+const SPONSORSHIP_HREF = '/admin/sponsorship'
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
@@ -112,6 +113,7 @@ const AdminLayout = () => {
   }
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
   const [proposalsUnread, setProposalsUnread] = useState(0)
+  const [sponsorshipUnread, setSponsorshipUnread] = useState(0)
   const location = useLocation()
   const { logout, user, role } = useAuthStore()
   const token = useAuthStore((s) => s.token)
@@ -144,12 +146,24 @@ const AdminLayout = () => {
       } catch {
         /* the badge is not worth surfacing an error for */
       }
+      // Sponsorship cases are reviewed by managers and admins only; field staff would get a 403.
+      if (role !== 'admin' && role !== 'manager') return
+      try {
+        const resp = await fetch(`${API_URL}/api/sponsorship/admin/unread`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!resp.ok) return
+        const body = await resp.json()
+        if (!cancelled) setSponsorshipUnread(body.unread || 0)
+      } catch {
+        /* same: a missing badge is not an error */
+      }
     }
 
     check()
     const timer = window.setInterval(check, UNREAD_POLL_MS)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [token, location.pathname])
+  }, [token, role, location.pathname])
 
   const nav = useMemo(() => filterNavForRole(NAV, role), [role])
   const activeHref = useMemo(
@@ -189,7 +203,7 @@ const AdminLayout = () => {
     // Only the proposals entry carries a count today; `badge` stays a local
     // lookup rather than a field on NavLink so adminNav.ts remains a pure
     // static structure with no data fetching behind it.
-    const badge = link.href === PROPOSALS_HREF ? proposalsUnread : 0
+    const badge = badgeFor(link.href)
     return (
       <Link
         key={link.href}
@@ -230,6 +244,9 @@ const AdminLayout = () => {
     )
   }
 
+  const badgeFor = (href: string) =>
+    href === PROPOSALS_HREF ? proposalsUnread : href === SPONSORSHIP_HREF ? sponsorshipUnread : 0
+
   const renderGroup = (group: NavGroup) => {
     // Collapsed sidebar: render the group's items as plain icons with a small
     // separator above. No header, no chevron.
@@ -243,6 +260,8 @@ const AdminLayout = () => {
 
     const isOpen = expanded.has(group.id)
     const containsActive = group.items.some((i) => i.href === activeHref)
+    // A folded group still says something inside awaits review.
+    const groupBadge = isOpen ? 0 : group.items.reduce((n, i) => n + badgeFor(i.href), 0)
 
     return (
       <div key={group.id} className="space-y-0.5">
@@ -259,6 +278,14 @@ const AdminLayout = () => {
         >
           <group.icon className="w-5 h-5 mr-3 flex-shrink-0" />
           <span className="flex-1 text-left">{group.label}</span>
+          {groupBadge > 0 && (
+            <span
+              className="mr-2 min-w-[1.25rem] px-1.5 py-0.5 text-xs font-bold leading-none text-center rounded-full bg-amber-500 text-white"
+              aria-label={`${groupBadge} awaiting review`}
+            >
+              {groupBadge > 99 ? '99+' : groupBadge}
+            </span>
+          )}
           <ChevronDown
             className={clsx(
               'w-4 h-4 text-gray-400 transition-transform duration-200',

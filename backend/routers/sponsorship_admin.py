@@ -80,6 +80,12 @@ async def overview(db: Session = Depends(get_db), staff: User = Depends(get_curr
     return svc.overview(db)
 
 
+@router.get("/unread")
+async def unread(db: Session = Depends(get_db), staff: User = Depends(get_current_manager_or_admin)):
+    """For the console's badge, polled every minute: counts only."""
+    return svc.unread_counts(db)
+
+
 @router.get("/cases")
 async def list_cases(
     kind: Optional[Literal["family", "orphan"]] = None,
