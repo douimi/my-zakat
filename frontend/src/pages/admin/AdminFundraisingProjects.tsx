@@ -31,6 +31,7 @@ interface Project {
   currency: string
   suggested_donation: number | null
   deadline: string | null
+  starts_at?: string | null
   status: string
   display_order: number
   is_active: boolean
@@ -49,6 +50,7 @@ const EMPTY_FORM = {
   currency: 'USD',
   suggested_donation: '',
   deadline: '',
+  starts_at: '',
   status: 'active',
   display_order: '0',
   is_active: true,
@@ -106,6 +108,7 @@ const AdminFundraisingProjects = () => {
       currency: p.currency,
       suggested_donation: p.suggested_donation ? String(p.suggested_donation) : '',
       deadline: p.deadline ? p.deadline.slice(0, 10) : '',
+      starts_at: p.starts_at ? p.starts_at.slice(0, 10) : '',
       status: p.status,
       display_order: String(p.display_order),
       is_active: p.is_active,
@@ -134,6 +137,8 @@ const AdminFundraisingProjects = () => {
         currency: form.currency.toUpperCase() || 'USD',
         suggested_donation: form.suggested_donation ? parseFloat(form.suggested_donation) : null,
         deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+        // Only meaningful while upcoming; cleared otherwise so a stale date never shows.
+        starts_at: form.status === 'upcoming' && form.starts_at ? new Date(form.starts_at).toISOString() : null,
         status: form.status,
         display_order: parseInt(form.display_order) || 0,
         is_active: form.is_active,
@@ -261,6 +266,7 @@ const AdminFundraisingProjects = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <h2 className="text-base font-semibold text-gray-900 leading-tight truncate flex-1">{p.title}</h2>
+                      {p.status === 'upcoming' && <StatusBadge tone="info">Upcoming{p.starts_at ? ` · ${p.starts_at.slice(0, 10)}` : ''}</StatusBadge>}
                       {p.is_featured && <StatusBadge tone="warning" icon={Sparkles}>Featured</StatusBadge>}
                     </div>
                     <p className="text-xs text-gray-500 truncate">slug: {p.slug} · order: {p.display_order}</p>
@@ -398,10 +404,18 @@ const AdminFundraisingProjects = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm">
                     <option value="active">Active</option>
+                    <option value="upcoming">Upcoming (announced, not open yet)</option>
                     <option value="paused">Paused</option>
                     <option value="completed">Completed</option>
                   </select>
                 </div>
+                {form.status === 'upcoming' && (
+                  <div>
+                    <label htmlFor="project-starts-at" className="block text-sm font-medium text-gray-700 mb-1">Opens for donations on</label>
+                    <input id="project-starts-at" type="date" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
+                    <p className="text-xs text-gray-500 mt-1">Optional. Shown as “Opens for donations on …”. When nothing is open, upcoming projects appear on the homepage under recently funded ones.</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Display order</label>
                   <input type="number" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" placeholder="0" />

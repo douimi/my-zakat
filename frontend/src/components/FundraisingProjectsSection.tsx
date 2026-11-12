@@ -10,12 +10,15 @@
  *   - Optional deadline countdown
  *   - Donate CTA that pre-fills the Donate form with amount + purpose (open projects only)
  *
- * Open projects are listed first. When nothing is open, the section says so and
- * shows recently funded projects instead of pretending they still need money.
+ * Open projects are listed first. When nothing is open, the section says so,
+ * shows recently funded projects instead of pretending they still need money,
+ * and then what is coming next: projects announced as 'upcoming', with their
+ * expected opening date, so a donor who arrives between campaigns is pointed
+ * somewhere rather than at a dead end.
  */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Clock, HeartHandshake, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, CalendarClock, Clock, HeartHandshake, CheckCircle2 } from 'lucide-react'
 import { defineMessages, useDir, useFormat, useLocale, useT, type Dir } from '../i18n'
 import { C } from '../i18n/common'
 
@@ -47,6 +50,15 @@ const M = defineMessages({
   },
   giveWhereNeeded: { en: 'give where the need is greatest', ar: 'التبرّع حيث تشتد الحاجة' },
   loading: { en: 'Loading projects', ar: 'جارٍ تحميل المشاريع' },
+  comingSoon: { en: 'Coming soon', ar: 'قريبًا' },
+  upcomingTitle: { en: 'Upcoming projects', ar: 'مشاريع قادمة' },
+  upcomingLead: {
+    en: 'These open for donations soon. Until then, you can {link}.',
+    ar: 'ستُفتح هذه المشاريع للتبرع قريبًا، وحتى ذلك الحين يمكنك {link}.',
+  },
+  opensOn: { en: 'Opens for donations on {date}', ar: 'يُفتح للتبرع بتاريخ {date}' },
+  opensSoon: { en: 'Opens for donations soon', ar: 'يُفتح للتبرع قريبًا' },
+  giveNow: { en: 'Give where the need is greatest', ar: 'تبرّع حيث تشتد الحاجة' },
 })
 
 /** Arabic needs all six CLDR plural forms for a day count; 0 is "Ends today" above. */
@@ -75,6 +87,8 @@ export interface Project {
   currency: string
   suggested_donation: number | null
   deadline: string | null
+  /** Expected opening date of an upcoming project. */
+  starts_at?: string | null
   status: string
   is_active: boolean
   is_featured: boolean
@@ -102,9 +116,16 @@ const daysUntil = (iso: string | null): number | null => {
   return Math.ceil((d - now) / (1000 * 60 * 60 * 24))
 }
 
-/** Still taking donations: active, not marked completed, and under 100%. */
+/** Announced, not yet taking donations. */
+export const isProjectUpcoming = (p: Project) => p.is_active !== false && p.status === 'upcoming'
+
+/** Still taking donations: active, not marked completed or upcoming, and under 100%. */
 export const isProjectOpen = (p: Project) =>
-  p.is_active !== false && p.status !== 'completed' && p.progress_percent < 100
+  p.is_active !== false && p.status !== 'completed' && p.status !== 'upcoming' && p.progress_percent < 100
+
+/** Upcoming projects soonest first; those with no date yet go last. */
+export const byOpeningDate = (a: Project, b: Project) =>
+  (a.starts_at ? Date.parse(a.starts_at) : Infinity) - (b.starts_at ? Date.parse(b.starts_at) : Infinity)
 
 // ── Progress bar with milestone ticks ────────────────────────────────
 const ProgressBar = ({ percent, animate, label, dir = 'ltr' }: { percent: number; animate: boolean; label: string; dir?: Dir }) => {
@@ -145,7 +166,7 @@ export const ProjectCard = ({ project }: { project: Project }) => {
   const t = useT()
   const locale = useLocale()
   const dir = useDir()
-  const { plural, tag } = useFormat()
+  const { plural, tag, date } = useFormat()
 
   // Trigger the progress-bar animation when the card scrolls into view.
   useEffect(() => {
@@ -162,8 +183,9 @@ export const ProjectCard = ({ project }: { project: Project }) => {
 
   const days = daysUntil(project.deadline)
   const isArchived = project.is_active === false
-  const isCompleted = project.progress_percent >= 100 || project.status === 'completed'
-  const isUrgent = !isArchived && !isCompleted && (
+  const isUpcoming = !isArchived && project.status === 'upcoming'
+  const isCompleted = !isUpcoming && (project.progress_percent >= 100 || project.status === 'completed')
+  const isUrgent = !isArchived && !isCompleted && !isUpcoming && (
     (project.progress_percent >= 75 && project.progress_percent < 100)
     || (days !== null && days >= 0 && days <= 14)
   )
@@ -171,6 +193,8 @@ export const ProjectCard = ({ project }: { project: Project }) => {
   // One status badge at most (with the category, two badges in total).
   const status = isArchived
     ? { label: t(M.pastProject), className: 'badge-neutral' }
+    : isUpcoming
+      ? { label: t(M.comingSoon), className: 'badge-primary' }
     : isCompleted
       ? { label: t(M.fullyFunded), className: 'badge-success' }
       : isUrgent
@@ -217,6 +241,17 @@ export const ProjectCard = ({ project }: { project: Project }) => {
         <h3 className="card-title mb-1.5 line-clamp-2">{project.title}</h3>
         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{project.short_description}</p>
 
+        {isUpcoming ? (
+          <>
+            <p className="text-sm text-gray-700 mb-1">
+              {t(M.goal)}: <span className="font-semibold text-gray-900">{formatMoney(project.goal_amount, project.currency, tag)}</span>
+            </p>
+            <p className="text-sm text-primary-700 mb-5 inline-flex items-center gap-1.5">
+              <CalendarClock className="w-4 h-4" aria-hidden="true" />
+              {project.starts_at ? t(M.opensOn, { date: date(project.starts_at, 'long') }) : t(M.opensSoon)}
+            </p>
+          </>
+        ) : (<>
         <p className="text-sm font-semibold text-gray-900 mb-2">{t(M.percentFunded, { percent: project.progress_percent })}</p>
         <ProgressBar
           percent={project.progress_percent}
@@ -239,8 +274,9 @@ export const ProjectCard = ({ project }: { project: Project }) => {
             <dd className="text-sm font-semibold text-gray-900">{formatMoney(project.remaining_amount, project.currency, tag)}</dd>
           </div>
         </dl>
+        </>)}
 
-        {days !== null && days >= 0 && !isCompleted && !isArchived && (
+        {days !== null && days >= 0 && !isCompleted && !isArchived && !isUpcoming && (
           <p className="text-xs text-gray-600 mb-3 inline-flex items-center gap-1.5">
             <Clock className={`w-3.5 h-3.5 ${days <= 7 ? 'text-red-600' : 'text-gray-500'}`} aria-hidden="true" />
             {days === 0
@@ -254,6 +290,9 @@ export const ProjectCard = ({ project }: { project: Project }) => {
         <div className="mt-auto">
           {isArchived ? (
             <p className="text-sm text-gray-600">{t(M.closed)}</p>
+          ) : isUpcoming ? (
+            // Nothing to give to here yet, so the one action is the general fund.
+            <Link to="/donate" className="btn-secondary w-full">{t(M.giveNow)}</Link>
           ) : isCompleted ? (
             <p className="text-sm font-medium text-green-800 inline-flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> {t(M.fundedThanks)}
@@ -295,13 +334,19 @@ const FundraisingProjectsSection = () => {
   const open = projects
     .filter(isProjectOpen)
     .sort((a, b) => Number(b.is_featured) - Number(a.is_featured))
-  const funded = projects.filter((p) => !isProjectOpen(p))
+  const upcoming = projects.filter(isProjectUpcoming).sort(byOpeningDate)
+  const funded = projects.filter((p) => !isProjectOpen(p) && !isProjectUpcoming(p))
   const fundedFeatured = funded.filter((p) => p.is_featured)
   const hasOpen = open.length > 0
   const homepageProjects = (hasOpen
     ? [...open, ...fundedFeatured]
     : (fundedFeatured.length > 0 ? fundedFeatured : funded)
   ).slice(0, 6)
+  // Upcoming projects only appear when nothing can be given to right now:
+  // while a campaign is open, it is the one thing to point donors at.
+  const showUpcoming = !loading && !hasOpen && upcoming.length > 0
+  const onlyUpcoming = showUpcoming && homepageProjects.length === 0
+  const giveLink = <Link to="/donate" className="link">{t(M.giveWhereNeeded)}</Link>
 
   // Nothing to render if no active projects — the admin hasn't set any up yet.
   if (!loading && projects.length === 0) return null
@@ -312,14 +357,12 @@ const FundraisingProjectsSection = () => {
         <div className="section-head">
           <div>
             <h2 id="fund-projects-title" className="section-title">
-              {loading || hasOpen ? t(M.sectionTitle) : t(M.recentlyFunded)}
+              {loading || hasOpen ? t(M.sectionTitle) : onlyUpcoming ? t(M.upcomingTitle) : t(M.recentlyFunded)}
             </h2>
             <p className="section-lead">
               {loading || hasOpen
                 ? t(M.sectionLead)
-                : fill(t(M.noneOpen), {
-                  link: <Link to="/donate" className="link">{t(M.giveWhereNeeded)}</Link>,
-                })}
+                : fill(t(onlyUpcoming ? M.upcomingLead : M.noneOpen), { link: giveLink })}
             </p>
           </div>
           <Link to="/projects" className="link inline-flex items-center gap-1 shrink-0">
@@ -335,9 +378,26 @@ const FundraisingProjectsSection = () => {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
-          </div>
+          <>
+            {homepageProjects.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {homepageProjects.map((p) => <ProjectCard key={p.id} project={p} />)}
+              </div>
+            )}
+            {showUpcoming && (
+              <div className={onlyUpcoming ? '' : 'mt-12'}>
+                {!onlyUpcoming && (
+                  <>
+                    <h3 className="text-xl sm:text-2xl font-heading font-bold text-gray-900">{t(M.upcomingTitle)}</h3>
+                    <p className="mt-2 mb-6 text-gray-600">{fill(t(M.upcomingLead), { link: giveLink })}</p>
+                  </>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {upcoming.slice(0, 3).map((p) => <ProjectCard key={p.id} project={p} />)}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

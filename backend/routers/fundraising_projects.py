@@ -50,6 +50,7 @@ def _serialize(p: FundraisingProject) -> dict:
         "currency": p.currency or "USD",
         "suggested_donation": ((p.suggested_donation_cents or 0) / 100.0) if p.suggested_donation_cents else None,
         "deadline": p.deadline,
+        "starts_at": p.starts_at,
         "status": p.status,
         "display_order": p.display_order,
         "is_active": p.is_active,
@@ -79,7 +80,8 @@ class ProjectCreate(BaseModel):
     currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
     suggested_donation: Optional[float] = Field(default=None, gt=0)
     deadline: Optional[datetime] = None
-    status: str = Field(default="active", pattern=r"^(active|completed|paused)$")
+    starts_at: Optional[datetime] = None
+    status: str = Field(default="active", pattern=r"^(active|upcoming|completed|paused)$")
     display_order: int = Field(default=0)
     is_active: bool = True
     is_featured: bool = False
@@ -97,7 +99,8 @@ class ProjectUpdate(BaseModel):
     currency: Optional[str] = Field(default=None, pattern=r"^[A-Z]{3}$")
     suggested_donation: Optional[float] = Field(default=None, ge=0)
     deadline: Optional[datetime] = None
-    status: Optional[str] = Field(default=None, pattern=r"^(active|completed|paused)$")
+    starts_at: Optional[datetime] = None
+    status: Optional[str] = Field(default=None, pattern=r"^(active|upcoming|completed|paused)$")
     display_order: Optional[int] = None
     is_active: Optional[bool] = None
     is_featured: Optional[bool] = None
@@ -190,6 +193,7 @@ async def create_project(
         currency=payload.currency,
         suggested_donation_cents=_to_cents(payload.suggested_donation),
         deadline=payload.deadline,
+        starts_at=payload.starts_at,
         status=payload.status,
         display_order=payload.display_order,
         is_active=payload.is_active,

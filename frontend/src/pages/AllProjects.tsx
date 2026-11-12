@@ -12,7 +12,7 @@ import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
 import {
   ProjectCard,
-  isProjectOpen,
+  isProjectOpen, isProjectUpcoming, byOpeningDate,
   type Project,
 } from '../components/FundraisingProjectsSection'
 import { defineMessages, useT } from '../i18n'
@@ -36,6 +36,8 @@ const M = defineMessages({
   },
   giveWhereNeeded: { en: 'give where the need is greatest', ar: 'التبرّع حيث تشتد الحاجة' },
   recentlyFunded: { en: 'Recently funded', ar: 'اكتمل تمويلها مؤخرًا' },
+  upcoming: { en: 'Upcoming projects', ar: 'مشاريع قادمة' },
+  upcomingLead: { en: 'Announced, and opening for donations soon.', ar: 'تم الإعلان عنها، وستُفتح للتبرع قريبًا.' },
   past: { en: 'Past projects', ar: 'مشاريع سابقة' },
   pastLead: { en: 'No longer taking donations.', ar: 'لم تعد تستقبل التبرعات.' },
 })
@@ -78,7 +80,8 @@ const AllProjects = () => {
   // projects lead within each group.
   const byFeatured = (a: Project, b: Project) => Number(b.is_featured) - Number(a.is_featured)
   const open = projects.filter(isProjectOpen).sort(byFeatured)
-  const funded = projects.filter((p) => p.is_active && !isProjectOpen(p)).sort(byFeatured)
+  const upcoming = projects.filter(isProjectUpcoming).sort(byOpeningDate)
+  const funded = projects.filter((p) => p.is_active && !isProjectOpen(p) && !isProjectUpcoming(p)).sort(byFeatured)
   const past = projects.filter((p) => !p.is_active)
 
   return (
@@ -117,6 +120,14 @@ const AllProjects = () => {
                   </p>
                 )}
               </div>
+
+              {upcoming.length > 0 && (
+                <div>
+                  <h2 className="section-title">{t(M.upcoming)}</h2>
+                  <p className="text-gray-600 mt-2 mb-6">{t(M.upcomingLead)}</p>
+                  <ProjectGrid projects={upcoming} />
+                </div>
+              )}
 
               {funded.length > 0 && (
                 <div>

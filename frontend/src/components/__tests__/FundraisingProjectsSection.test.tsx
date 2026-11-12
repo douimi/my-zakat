@@ -89,3 +89,42 @@ describe('FundraisingProjectsSection', () => {
     await vi.waitFor(() => expect(container).toBeEmptyDOMElement())
   })
 })
+
+describe('FundraisingProjectsSection: upcoming projects', () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+  const funded = project({ id: 1, title: 'Wells in Gaza', progress_percent: 100, spent_amount: 1000, remaining_amount: 0 })
+  const winter = project({ id: 2, title: 'Winter coats', status: 'upcoming', progress_percent: 0, starts_at: '2026-12-01T00:00:00' })
+  const ramadan = project({ id: 3, title: 'Ramadan baskets', status: 'upcoming', progress_percent: 0, starts_at: null })
+
+  it('shows what is coming next under the recently funded projects when nothing is open', async () => {
+    mockFetch([funded, ramadan, winter])
+    renderSection()
+
+    expect(await screen.findByRole('heading', { name: 'Recently funded', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Upcoming projects', level: 3 })).toBeInTheDocument()
+    // Soonest first; an undated one last.
+    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    expect(titles.indexOf('Winter coats')).toBeLessThan(titles.indexOf('Ramadan baskets'))
+    expect(screen.getByText(/Opens for donations on December 1, 2026/)).toBeInTheDocument()
+    expect(screen.getByText('Opens for donations soon')).toBeInTheDocument()
+  })
+
+  it('never offers to donate to a project that is not open yet', async () => {
+    mockFetch([winter])
+    renderSection()
+
+    expect(await screen.findByRole('heading', { name: 'Upcoming projects', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Donate to this project' })).toBeNull()
+    expect(screen.queryByText(/% funded/)).toBeNull()
+    expect(screen.getByRole('link', { name: 'Give where the need is greatest' })).toHaveAttribute('href', '/donate')
+  })
+
+  it('keeps the homepage on the open campaign while one exists', async () => {
+    mockFetch([project({ id: 4, title: 'Food parcels' }), winter])
+    renderSection()
+
+    expect(await screen.findByRole('heading', { name: 'Projects you can fund', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByText('Winter coats')).toBeNull()
+  })
+})

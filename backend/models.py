@@ -585,6 +585,9 @@ class FundraisingProject(Base):
     currency = Column(String(3), nullable=False, default="USD")
     suggested_donation_cents = Column(Integer, nullable=True)
     deadline = Column(DateTime, nullable=True)
+    # When an 'upcoming' project is expected to open for donations (migration 40).
+    starts_at = Column(DateTime, nullable=True)
+    # active | upcoming | paused | completed
     status = Column(String(20), nullable=False, default="active")
     display_order = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
