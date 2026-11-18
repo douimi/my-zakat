@@ -128,6 +128,7 @@ export const donationsAPI = {
     email: string
     purpose?: string
     frequency?: string
+    fundraising_project_id?: number
     utm_source?: string
     utm_medium?: string
     utm_campaign?: string
@@ -145,6 +146,7 @@ export const donationsAPI = {
     interval: 'month' | 'year'
     payment_day: number
     payment_month?: number
+    fundraising_project_id?: number
     utm_source?: string
     utm_medium?: string
     utm_campaign?: string

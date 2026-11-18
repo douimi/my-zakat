@@ -10,12 +10,10 @@ describe('Sponsorship navigation', () => {
     expect(NAV[i + 1]).toMatchObject({ kind: 'group', id: 'sponsorship', label: 'Sponsorship' })
   })
 
-  it('is visible to managers and admins with its four pages', () => {
-    for (const role of ['admin', 'manager'] as const) {
-      expect(sponsorshipGroup(role)?.items.map((i) => i.href)).toEqual([
-        '/admin/sponsorship', '/admin/sponsorship/families', '/admin/sponsorship/orphans', '/admin/sponsorship/sponsors',
-      ])
-    }
+  it('is visible to managers and admins; only admins see the monthly transfers, which move money', () => {
+    const review = ['/admin/sponsorship', '/admin/sponsorship/families', '/admin/sponsorship/orphans', '/admin/sponsorship/sponsors']
+    expect(sponsorshipGroup('admin')?.items.map((i) => i.href)).toEqual([...review, '/admin/sponsorship/transfers'])
+    expect(sponsorshipGroup('manager')?.items.map((i) => i.href)).toEqual(review)
   })
 
   it('stays hidden from field staff', () => {

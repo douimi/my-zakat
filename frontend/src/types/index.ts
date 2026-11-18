@@ -10,6 +10,8 @@ export interface Donation {
   notes?: string | null
   certificate_filename?: string | null
   stripe_session_id?: string | null
+  /** The fundraising project the donation counts towards. */
+  fundraising_project_id?: number | null
 }
 
 export interface ContactSubmission {

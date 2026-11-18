@@ -207,7 +207,7 @@ export const ProjectCard = ({ project }: { project: Project }) => {
   const donationAmount = project.suggested_donation
     || Math.min(project.remaining_amount, 50) // sensible default: whatever's smaller
     || project.remaining_amount
-  const donateHref = `/donate?amount=${Math.max(1, Math.round(donationAmount))}&purpose=${encodeURIComponent(project.title)}`
+  const donateHref = `/donate?amount=${Math.max(1, Math.round(donationAmount))}&project=${encodeURIComponent(project.slug)}`
 
   return (
     <div ref={ref} className="card-media group">

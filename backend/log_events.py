@@ -127,6 +127,9 @@ SPONSORSHIP_PAYMENT_FAILED = "sponsorship.payment_failed"
 SPONSORSHIP_ENDED = "sponsorship.ended"                        # by sponsor, staff, Stripe or case closure
 SPONSORSHIP_DISBURSEMENT_RECORDED = "sponsorship.disbursement_recorded"
 SPONSORSHIP_PORTAL_SIGNED_IN = "sponsorship.portal_signed_in"
+SPONSORSHIP_MANUAL_FUNDS_ADDED = "sponsorship.manual_funds_added"    # staff added money to a case by hand
+SPONSORSHIP_PAYOUT_PLANNED = "sponsorship.payout_planned"            # a month's transfers were prepared
+SPONSORSHIP_PAYOUT_CONFIRMED = "sponsorship.payout_confirmed"        # a family confirmed as having received one
 
 SPONSORSHIP_EVENTS = (
     SPONSORSHIP_CASE_SUBMITTED, SPONSORSHIP_CASE_RESUBMITTED,
@@ -135,7 +138,8 @@ SPONSORSHIP_EVENTS = (
     SPONSORSHIP_CHECKOUT_CREATED, SPONSORSHIP_STARTED,
     SPONSORSHIP_PAYMENT_RECORDED, SPONSORSHIP_PAYMENT_FAILED,
     SPONSORSHIP_ENDED, SPONSORSHIP_DISBURSEMENT_RECORDED,
-    SPONSORSHIP_PORTAL_SIGNED_IN,
+    SPONSORSHIP_PORTAL_SIGNED_IN, SPONSORSHIP_MANUAL_FUNDS_ADDED,
+    SPONSORSHIP_PAYOUT_PLANNED, SPONSORSHIP_PAYOUT_CONFIRMED,
 )
 
 # ---------------------------------------------------------------------------

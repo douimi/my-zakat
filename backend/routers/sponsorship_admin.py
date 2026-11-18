@@ -24,18 +24,19 @@ import report_attachments
 import s3_service
 import sponsorship_emails as emails
 import sponsorship_files as files_svc
+import sponsorship_payouts as payouts
 import sponsorship_service as svc
 from auth_utils import get_current_admin, get_current_manager_or_admin
 from database import get_db
 from logging_config import get_logger
 from models import (
-    Sponsorship, SponsorshipCase, SponsorshipCaseDocument, SponsorshipCaseEvent,
+    Sponsorship, SponsorshipCase, SponsorshipPayout, SponsorshipCaseDocument, SponsorshipCaseEvent,
     SponsorshipFamilyDetails, SponsorshipOrphanDetails, User,
 )
 from routers.sponsorship_portal import cancel_in_stripe
 from sponsorship_schemas import (
-    DisbursementRequest, DocumentReview, LinkRequest, NoteRequest, StaffCaseEdit,
-    StaffSponsorshipEnd, TransitionRequest, UpdateRequest,
+    DisbursementRequest, DocumentReview, LinkRequest, ManualCreditRequest, NoteRequest, PayoutBulkConfirm,
+    PayoutConfirm, PayoutEdit, PlanRequest, StaffCaseEdit, StaffSponsorshipEnd, TransitionRequest, UpdateRequest,
 )
 
 logger = get_logger(__name__)
@@ -71,6 +72,17 @@ def _safely(send, *args, **kwargs) -> None:
         logger.event(ev.SPONSORSHIP_CASE_TRANSITIONED, "a sponsorship email could not be queued",
                      level=logging.ERROR, exc=exc, outcome=ev.OUTCOME_FAILURE,
                      reason=ev.REASON_EMAIL_SEND_FAILED)
+
+
+def _view(db: Session, case: SponsorshipCase) -> dict:
+    """The staff view of a case, with the money it holds and its transfers."""
+    view = svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    view["finances"] = payouts.funds(db, [case.id])[case.id]
+    view["manual_credits"] = [payouts.credit_view(c) for c in payouts.credits_of(db, case.id)]
+    view["payouts"] = [payouts.payout_view(p) for p in (
+        db.query(SponsorshipPayout).filter(SponsorshipPayout.case_id == case.id)
+        .order_by(SponsorshipPayout.period.desc(), SponsorshipPayout.id.desc()).all())]
+    return view
 
 
 # ── Overview and lists ────────────────────────────────────────────────
@@ -168,7 +180,7 @@ async def list_cases(
 async def get_case(case_id: int, db: Session = Depends(get_db),
                    staff: User = Depends(get_current_manager_or_admin)):
     case = _case(db, case_id)
-    view = svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    view = _view(db, case)
     # Opening the case is what clears the unread marker — after building the
     # view, so the page itself still shows what was new.
     svc.mark_seen(db, case)
@@ -198,7 +210,7 @@ async def edit_case(case_id: int, payload: StaffCaseEdit, db: Session = Depends(
         changes = svc.staff_edit(db, case, data, staff, note=note)
     except svc.SponsorshipError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"changed": sorted(changes), "case": svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)}
+    return {"changed": sorted(changes), "case": _view(db, case)}
 
 
 @router.post("/cases/{case_id}/transition")
@@ -224,7 +236,7 @@ async def transition(case_id: int, payload: TransitionRequest, db: Session = Dep
     _safely(emails.applicant_decision, case, payload.action, payload.message, last.id if last else 0)
     for sp in ending:
         _safely(emails.sponsor_case_closed, sp, case, last.id if last else 0)
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 @router.post("/cases/{case_id}/notes")
@@ -257,7 +269,7 @@ async def link_family(case_id: int, payload: LinkRequest, db: Session = Depends(
         svc.link_orphan_to_family(db, case, family, svc.Actor.staff(staff))
     except svc.SponsorshipError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 # ── Documents and photo ───────────────────────────────────────────────
@@ -275,7 +287,7 @@ async def upload_documents(
     staged = await files_svc.stage_documents(files, doc_types)
     stored = await files_svc.store_documents(db, case, staged, uploaded_by="staff", email=staff.email,
                                              actor=svc.Actor.staff(staff))
-    return {"stored": stored, "case": svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)}
+    return {"stored": stored, "case": _view(db, case)}
 
 
 @router.get("/cases/{case_id}/documents/{doc_id}")
@@ -304,7 +316,7 @@ async def review_document(case_id: int, doc_id: int, payload: DocumentReview, db
         labels = DOC_LABELS_AR if case.preferred_language == "ar" else DOC_LABELS
         _safely(emails.applicant_document_refused, case, labels.get(doc.doc_type, doc.doc_type),
                 doc.review_note or "", doc.id)
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 _PHOTO_EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
@@ -335,7 +347,7 @@ async def set_photo(case_id: int, file: UploadFile = File(...), confirm_safe: bo
     case.public_photo_key = key
     svc.record_event(db, case, "photo_set", svc.Actor.staff(staff), changes={"photo": [old, key]})
     db.commit()
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 @router.delete("/cases/{case_id}/photo")
@@ -347,7 +359,7 @@ async def remove_photo(case_id: int, db: Session = Depends(get_db),
                          changes={"photo": [case.public_photo_key, None]})
         case.public_photo_key = None
         db.commit()
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 @router.get("/cases/{case_id}/photo")
@@ -371,7 +383,7 @@ async def add_disbursement(case_id: int, payload: DisbursementRequest, db: Sessi
         svc.record_disbursement(db, case, staff, payload.model_dump())
     except svc.SponsorshipError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 @router.post("/cases/{case_id}/updates", status_code=status.HTTP_201_CREATED)
@@ -385,7 +397,7 @@ async def post_update(case_id: int, payload: UpdateRequest, db: Session = Depend
     if payload.notify_sponsors:
         for sp in svc.committed_sponsorships(db, case.id):
             _safely(emails.sponsor_update, sp, case, update)
-    return svc.staff_view(db, case, photo_url_for=files_svc.photo_url_for)
+    return _view(db, case)
 
 
 @router.get("/sponsorships")
@@ -434,3 +446,120 @@ async def end_sponsorship(sponsorship_id: int, payload: StaffSponsorshipEnd, db:
     cancel_in_stripe(sp)
     svc.end_by_staff(db, sp, staff, reason=payload.reason, note=payload.note)
     return {"ok": True, "status": sp.status}
+
+
+# ── Money added by hand, and monthly transfers (admin only) ──────────
+
+@router.post("/cases/{case_id}/manual-funds", status_code=status.HTTP_201_CREATED)
+async def add_manual_funds(case_id: int, payload: ManualCreditRequest, db: Session = Depends(get_db),
+                           staff: User = Depends(get_current_admin)):
+    case = _case(db, case_id)
+    try:
+        payouts.add_manual_credit(db, case, staff, payload.model_dump())
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _view(db, case)
+
+
+def _period_payload(db: Session, period: str) -> dict:
+    rows = payouts.period_rows(db, period)
+    return {
+        "period": period,
+        "items": rows,
+        "totals": {
+            "planned_cents": sum(r["amount_cents"] for r in rows if r["status"] == payouts.PLANNED),
+            "confirmed_cents": sum(r["amount_cents"] for r in rows if r["status"] == payouts.CONFIRMED),
+            "lines": len(rows),
+        },
+    }
+
+
+@router.get("/payouts")
+async def list_payouts(period: Optional[str] = None, db: Session = Depends(get_db),
+                       staff: User = Depends(get_current_admin)):
+    try:
+        return _period_payload(db, payouts.check_period(period or payouts.current_period()))
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/payouts/plan")
+async def plan_payouts(payload: PlanRequest, db: Session = Depends(get_db), staff: User = Depends(get_current_admin)):
+    created = payouts.plan_period(db, payload.period, staff, kind=payload.kind)
+    return {"created": len(created), **_period_payload(db, payload.period)}
+
+
+@router.get("/payouts/export")
+async def export_payouts(period: str, db: Session = Depends(get_db), staff: User = Depends(get_current_admin)):
+    import io
+    from fastapi.responses import StreamingResponse
+    from http_headers import content_disposition
+    try:
+        rows = payouts.period_rows(db, payouts.check_period(period))
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    content = payouts.export_xlsx(rows, period)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": content_disposition("MyZakat_transfers_%s.xlsx" % period),
+                 "Cache-Control": "private, no-store"},
+    )
+
+
+def _payout(db: Session, payout_id: int) -> SponsorshipPayout:
+    row = db.query(SponsorshipPayout).get(payout_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    return row
+
+
+@router.post("/payouts/{payout_id}/confirm")
+async def confirm_payout(payout_id: int, payload: PayoutConfirm, db: Session = Depends(get_db),
+                         staff: User = Depends(get_current_admin)):
+    row = _payout(db, payout_id)
+    try:
+        payouts.confirm(db, row, staff, **payload.model_dump())
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _period_payload(db, row.period)
+
+
+@router.post("/payouts/confirm-bulk")
+async def confirm_payouts(payload: PayoutBulkConfirm, db: Session = Depends(get_db),
+                          staff: User = Depends(get_current_admin)):
+    """Confirm several lines at once; a line that cannot be confirmed is
+    reported, not allowed to stop the others."""
+    rows = db.query(SponsorshipPayout).filter(SponsorshipPayout.id.in_(payload.ids)).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No such transfers")
+    refused = []
+    for row in rows:
+        try:
+            payouts.confirm(db, row, staff, method=payload.method, received_on=payload.received_on)
+        except svc.SponsorshipError as exc:
+            db.rollback()
+            refused.append({"id": row.id, "reason": str(exc)})
+    return {"refused": refused, **_period_payload(db, rows[0].period)}
+
+
+@router.patch("/payouts/{payout_id}")
+async def edit_payout(payout_id: int, payload: PayoutEdit, db: Session = Depends(get_db),
+                      staff: User = Depends(get_current_admin)):
+    row = _payout(db, payout_id)
+    try:
+        payouts.update_planned(db, row, amount_cents=payload.amount_cents, note=payload.note)
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _period_payload(db, row.period)
+
+
+@router.post("/payouts/{payout_id}/cancel")
+async def cancel_payout(payout_id: int, payload: Optional[NoteRequest] = None, db: Session = Depends(get_db),
+                        staff: User = Depends(get_current_admin)):
+    row = _payout(db, payout_id)
+    try:
+        payouts.cancel(db, row, staff, payload.note if payload else None)
+    except svc.SponsorshipError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _period_payload(db, row.period)

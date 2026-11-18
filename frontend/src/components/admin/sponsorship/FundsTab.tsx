@@ -6,6 +6,7 @@ import { sponsorshipAdmin, errorDetail, type NeedCategory, type StaffCase } from
 import { NEED_CATEGORIES } from '../../sponsorship/labels'
 import { docLabel, fmtDate, money, needLabel, toCents } from './format'
 import { Panel, Stat, httpStatus, type CaseTabProps } from './ui'
+import CaseMoneyPanel from './CaseMoneyPanel'
 
 /** Money in, money out, and (admins only) recording a disbursement. */
 const FundsTab = ({ case: c, isAdmin, onUpdated }: CaseTabProps) => {
@@ -15,10 +16,12 @@ const FundsTab = ({ case: c, isAdmin, onUpdated }: CaseTabProps) => {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Stat label="Collected" value={money(f.collected_cents)} hint="Every sponsor payment for this case" />
+        <Stat label="Collected" value={money(f.collected_cents)} hint="Sponsor payments and money added by hand" />
         <Stat label="Distributed" value={money(f.disbursed_cents)} />
         <Stat label="Balance to distribute" value={money(f.balance_cents)} tone={f.balance_cents > 0 ? 'warning' : 'default'} />
       </div>
+
+      {isAdmin && <CaseMoneyPanel case={c} onUpdated={onUpdated} />}
 
       <Panel
         title={`Disbursements (${c.disbursements.length})`}

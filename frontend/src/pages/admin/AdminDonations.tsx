@@ -43,6 +43,7 @@ const AdminDonations = () => {
     payment_method: 'Cash',
     notes: '',
     donated_at: new Date().toISOString().slice(0, 10),
+    fundraising_project_id: '',
   })
   const [manualProof, setManualProof] = useState<File | null>(null)
   const [submittingManual, setSubmittingManual] = useState(false)
@@ -56,7 +57,7 @@ const AdminDonations = () => {
   // Edit donation modal
   const [editDonation, setEditDonation] = useState<Donation | null>(null)
   const [editForm, setEditForm] = useState({
-    name: '', email: '', amount: '', payment_method: '', notes: '', donated_at: '',
+    name: '', email: '', amount: '', payment_method: '', notes: '', donated_at: '', fundraising_project_id: '',
   })
   const [savingEdit, setSavingEdit] = useState(false)
   // Delete confirmation
@@ -106,6 +107,30 @@ const AdminDonations = () => {
   )
 
   const { data: stats } = useQuery('donation-stats', donationsAPI.getStats)
+  // Every project, closed ones included: cash can arrive for a project after it closed.
+  const { data: projects = [] } = useQuery<{ id: number; title: string; status: string; is_active: boolean }[]>(
+    'admin-donation-projects',
+    async () => {
+      const resp = await fetch(`${API_URL}/api/fundraising-projects/?include_inactive=true`)
+      return resp.ok ? resp.json() : []
+    },
+    { staleTime: 60_000 },
+  )
+  const projectTitle = (id?: number | null) => (id ? projects.find((p) => p.id === id)?.title : undefined)
+  const projectSelect = (value: string, onChange: (v: string) => void, id: string) => (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">Counts towards project</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="input-field">
+        <option value="">None — where most needed</option>
+        {projects.map((p) => (
+          <option key={p.id} value={String(p.id)}>
+            {p.title}{!p.is_active || p.status === 'completed' ? ' (closed)' : p.status === 'upcoming' ? ' (upcoming)' : ''}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-gray-500 mt-1">The amount is added to that project's raised total.</p>
+    </div>
+  )
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -237,6 +262,7 @@ const AdminDonations = () => {
       formData.append('payment_method', manualForm.payment_method)
       if (manualForm.notes.trim()) formData.append('notes', manualForm.notes.trim())
       if (manualForm.donated_at) formData.append('donated_at', manualForm.donated_at)
+      if (manualForm.fundraising_project_id) formData.append('fundraising_project_id', manualForm.fundraising_project_id)
       if (manualProof) formData.append('proof', manualProof)
 
       const response = await fetch(`${API_URL}/api/donations/manual`, {
@@ -252,6 +278,7 @@ const AdminDonations = () => {
           name: '', email: '', amount: '',
           payment_method: 'Cash', notes: '',
           donated_at: new Date().toISOString().slice(0, 10),
+          fundraising_project_id: '',
         })
         setManualProof(null)
         queryClient.invalidateQueries(['admin-donations'])
@@ -330,6 +357,7 @@ const AdminDonations = () => {
       payment_method: donation.payment_method || '',
       notes: donation.notes || '',
       donated_at: donation.donated_at ? new Date(donation.donated_at).toISOString().slice(0, 10) : '',
+      fundraising_project_id: donation.fundraising_project_id ? String(donation.fundraising_project_id) : '',
     })
   }
 
@@ -352,6 +380,8 @@ const AdminDonations = () => {
       // Only send payment_method/date if present (avoid wiping Stripe metadata)
       if (editForm.payment_method) body.payment_method = editForm.payment_method
       if (editForm.donated_at) body.donated_at = new Date(editForm.donated_at).toISOString()
+      // Sent every time: choosing "None" must be able to unlink a donation.
+      body.fundraising_project_id = editForm.fundraising_project_id ? Number(editForm.fundraising_project_id) : null
 
       const response = await fetch(`${API_URL}/api/donations/${editDonation.id}`, {
         method: 'PUT',
@@ -554,6 +584,11 @@ const AdminDonations = () => {
                           via {donation.payment_method}
                         </span>
                       )}
+                      {projectTitle(donation.fundraising_project_id) && (
+                        <span className="block text-xs text-primary-700">
+                          → {projectTitle(donation.fundraising_project_id)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
                       {new Date(donation.donated_at).toLocaleDateString()}
@@ -740,6 +775,9 @@ const AdminDonations = () => {
                     </select>
                   </div>
                 </div>
+
+                {projectSelect(manualForm.fundraising_project_id,
+                  (v) => setManualForm({ ...manualForm, fundraising_project_id: v }), 'manual-project')}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Donation date</label>
@@ -985,6 +1023,9 @@ const AdminDonations = () => {
                     </select>
                   </div>
                 )}
+
+                {projectSelect(editForm.fundraising_project_id,
+                  (v) => setEditForm({ ...editForm, fundraising_project_id: v }), 'edit-project')}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>

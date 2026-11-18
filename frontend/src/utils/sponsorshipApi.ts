@@ -36,6 +36,8 @@ export type Kind = 'family' | 'orphan'
 export type CaseStatus = 'submitted' | 'under_review' | 'info_requested' | 'approved' | 'published' | 'paused' | 'rejected' | 'closed'
 export type FundingState = 'unfunded' | 'partial' | 'full'
 export type NeedCategory = 'food' | 'rent' | 'utilities' | 'education' | 'health' | 'clothing' | 'transport' | 'other'
+  /** A monthly transfer to the family; a distribution category, never a need they list. */
+  | 'monthly_support'
 export type DocType = 'id_document' | 'death_certificate' | 'birth_certificate' | 'guardianship' | 'school_certificate'
   | 'medical_report' | 'income_proof' | 'residence_proof' | 'association_mandate' | 'photo' | 'receipt' | 'other'
 export type SponsorshipStatus = 'pending' | 'active' | 'past_due' | 'canceled' | 'ended' | 'abandoned'
@@ -311,7 +313,10 @@ export interface StaffCaseSummary {
   requested_monthly_cents: number
   approved_monthly_cents: number | null
   coverage: Coverage & { monthly_need_cents: number; overfunded: boolean }
-  finances: { collected_cents: number; disbursed_cents: number; balance_cents: number }
+  finances: {
+    collected_cents: number; disbursed_cents: number; balance_cents: number
+    online_cents?: number; manual_cents?: number; planned_cents?: number; available_cents?: number
+  }
   unread: boolean
   flags: number
   docs_pending: number
@@ -391,6 +396,9 @@ export interface StaffCase extends StaffCaseSummary {
   disbursements: Disbursement[]
   updates: CaseUpdate[]
   history: StaffEvent[]
+  /** Admin view only: money added by hand, and the case's monthly transfers. */
+  manual_credits?: ManualCredit[]
+  payouts?: CasePayout[]
   related: { id: number; reference: string; kind: Kind; status: CaseStatus; relation: 'family' | 'sibling' | 'orphan' }[]
 }
 
@@ -469,4 +477,82 @@ export const sponsorshipAdmin = {
   })[] }> => (await api.get(`${A}/sponsorships`, { params })).data,
   endSponsorship: async (id: number, body: { reason?: string; note?: string }) =>
     (await api.post(`${A}/sponsorships/${id}/end`, body)).data,
+  addManualFunds: async (id: number, body: {
+    amount_cents: number; method: CreditMethod; donor_name?: string; note?: string; received_on?: string
+  }): Promise<StaffCase> => (await api.post(`${A}/cases/${id}/manual-funds`, body)).data,
+  payouts: async (period: string): Promise<PayoutPeriod> =>
+    (await api.get(`${A}/payouts`, { params: { period } })).data,
+  planPayouts: async (period: string, kind?: Kind): Promise<PayoutPeriod & { created: number }> =>
+    (await api.post(`${A}/payouts/plan`, { period, kind })).data,
+  exportPayouts: async (period: string): Promise<Blob> =>
+    (await api.get(`${A}/payouts/export`, { params: { period }, responseType: 'blob' })).data,
+  confirmPayout: async (id: number, body: {
+    method?: PayoutMethod; reference?: string; received_on?: string; amount_cents?: number; note?: string
+  }): Promise<PayoutPeriod> => (await api.post(`${A}/payouts/${id}/confirm`, body)).data,
+  confirmPayouts: async (ids: number[], body: { method?: PayoutMethod; received_on?: string }):
+    Promise<PayoutPeriod & { refused: { id: number; reason: string }[] }> =>
+    (await api.post(`${A}/payouts/confirm-bulk`, { ids, ...body })).data,
+  editPayout: async (id: number, body: { amount_cents?: number; note?: string }): Promise<PayoutPeriod> =>
+    (await api.patch(`${A}/payouts/${id}`, body)).data,
+  cancelPayout: async (id: number, note?: string): Promise<PayoutPeriod> =>
+    (await api.post(`${A}/payouts/${id}/cancel`, note ? { note } : undefined)).data,
+}
+
+// ── Monthly transfers and money added by hand ─────────────────────────
+
+export type PayoutMethod = 'bank_transfer' | 'cash' | 'mobile_money' | 'check' | 'other'
+export type CreditMethod = 'cash' | 'check' | 'bank_transfer' | 'other'
+export type PayoutStatus = 'planned' | 'confirmed' | 'cancelled'
+
+export interface PayoutRow {
+  payout_id: number
+  case_id: number
+  reference: string
+  kind: Kind
+  case_status: CaseStatus
+  recipient: string
+  child: string | null
+  phone: string | null
+  organization: string | null
+  address: string | null
+  city: string
+  region: string | null
+  country: string
+  monthly_cents: number
+  balance_before_cents: number
+  amount_cents: number
+  balance_after_cents: number
+  status: PayoutStatus
+  method: PayoutMethod | null
+  transfer_reference: string | null
+  note: string | null
+  received_on: string | null
+}
+
+export interface PayoutPeriod {
+  period: string
+  items: PayoutRow[]
+  totals: { planned_cents: number; confirmed_cents: number; lines: number }
+}
+
+export interface CasePayout {
+  id: number
+  period: string
+  amount_cents: number
+  status: PayoutStatus
+  method: PayoutMethod | null
+  reference: string | null
+  note: string | null
+  planned_at: string | null
+  received_on: string | null
+  confirmed_at: string | null
+}
+
+export interface ManualCredit {
+  id: number
+  amount_cents: number
+  method: CreditMethod
+  donor_name: string | null
+  note: string | null
+  received_on: string | null
 }

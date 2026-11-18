@@ -47,7 +47,7 @@ describe('FundraisingProjectsSection', () => {
   it('lists open projects first, with a donate link that carries the purpose', async () => {
     mockFetch([
       project({ id: 1, title: 'Funded wells', progress_percent: 100, remaining_amount: 0, spent_amount: 1000, is_featured: true }),
-      project({ id: 2, title: 'Winter blankets', progress_percent: 40 }),
+      project({ id: 2, title: 'Winter blankets', slug: 'winter-blankets', progress_percent: 40 }),
     ])
     renderSection()
 
@@ -56,7 +56,8 @@ describe('FundraisingProjectsSection', () => {
     expect(titles).toEqual(['Winter blankets', 'Funded wells'])
 
     const donate = screen.getByRole('link', { name: 'Donate to this project' })
-    expect(donate).toHaveAttribute('href', expect.stringContaining('purpose=Winter%20blankets'))
+    // The project itself is chosen on the Donate page, so its gift counts towards its total.
+    expect(donate).toHaveAttribute('href', expect.stringContaining('project=winter-blankets'))
     // Only the open project gets a donate button.
     expect(screen.getAllByRole('link', { name: 'Donate to this project' })).toHaveLength(1)
   })

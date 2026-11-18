@@ -15,12 +15,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth_utils import get_current_admin
 from database import get_db
 from logging_config import get_logger
-from models import FundraisingProject, User
+from models import Donation, FundraisingProject, User
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -28,14 +29,37 @@ router = APIRouter()
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _serialize(p: FundraisingProject) -> dict:
-    remaining_cents = max(0, (p.goal_cents or 0) - (p.spent_cents or 0))
+# Donation rows the webhook writes for money that never arrived. They are kept
+# for the funnel, but they are not money raised.
+_NOT_MONEY = ("Abandoned", "Failed", "Pending")
+
+
+def donated_map(db: Session, project_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """{project_id: (cents, count)} of the donations given to each project."""
+    if not project_ids:
+        return {}
+    q = (
+        db.query(Donation.fundraising_project_id, func.coalesce(func.sum(Donation.amount), 0.0), func.count(Donation.id))
+        .filter(Donation.fundraising_project_id.in_(project_ids))
+    )
+    for word in _NOT_MONEY:
+        q = q.filter(~Donation.frequency.ilike(word + "%"))
+    return {pid: (int(round(total * 100)), n) for pid, total, n in q.group_by(Donation.fundraising_project_id).all()}
+
+
+def _serialize(p: FundraisingProject, donated: tuple[int, int] = (0, 0)) -> dict:
+    """`spent_amount` is everything raised: donations given to the project on the
+    site plus `spent_cents`, what was raised outside them. Both parts are shown
+    separately to staff."""
+    donated_cents, donations_count = donated
+    raised_cents = (p.spent_cents or 0) + donated_cents
+    remaining_cents = max(0, (p.goal_cents or 0) - raised_cents)
     goal = (p.goal_cents or 0) / 100.0
-    spent = (p.spent_cents or 0) / 100.0
+    spent = raised_cents / 100.0
     remaining = remaining_cents / 100.0
     progress = 0.0
     if p.goal_cents and p.goal_cents > 0:
-        progress = min(100.0, round((p.spent_cents or 0) / p.goal_cents * 100, 1))
+        progress = min(100.0, round(raised_cents / p.goal_cents * 100, 1))
     return {
         "id": p.id,
         "title": p.title,
@@ -45,6 +69,9 @@ def _serialize(p: FundraisingProject) -> dict:
         "image_url": p.image_url,
         "goal_amount": goal,
         "spent_amount": spent,
+        "raised_online_amount": donated_cents / 100.0,
+        "raised_offline_amount": (p.spent_cents or 0) / 100.0,
+        "donations_count": donations_count,
         "remaining_amount": remaining,
         "progress_percent": progress,
         "currency": p.currency or "USD",
@@ -136,7 +163,23 @@ async def list_public(
         FundraisingProject.display_order.asc(),
         FundraisingProject.id.asc(),
     ).all()
-    return [_serialize(p) for p in rows]
+    donated = donated_map(db, [p.id for p in rows])
+    return [_serialize(p, donated.get(p.id, (0, 0))) for p in rows]
+
+
+def open_project(db: Session, project_id: Optional[int]) -> Optional[FundraisingProject]:
+    """The project a donation may be given to, or None for 'where most needed'.
+
+    Refuses a project that is hidden, upcoming or completed: the Donate page
+    only offers open ones, but a page left open for a day can still post one.
+    """
+    if project_id is None:
+        return None
+    p = db.query(FundraisingProject).filter(FundraisingProject.id == project_id).first()
+    if not p or not p.is_active or p.status in ("upcoming", "completed"):
+        raise HTTPException(status_code=409, detail="This project is no longer taking donations. "
+                                                    "Please choose another one, or give where the need is greatest.")
+    return p
 
 
 @router.get("/by-slug/{slug}")
@@ -144,7 +187,7 @@ async def get_by_slug(slug: str, db: Session = Depends(get_db)):
     p = db.query(FundraisingProject).filter(FundraisingProject.slug == slug).first()
     if not p or not p.is_active:
         raise HTTPException(status_code=404, detail="Project not found")
-    return _serialize(p)
+    return _serialize(p, donated_map(db, [p.id]).get(p.id, (0, 0)))
 
 
 # ── Admin endpoints ─────────────────────────────────────────────────
@@ -159,7 +202,8 @@ async def list_admin(
         .order_by(FundraisingProject.display_order.asc(), FundraisingProject.id.desc())
         .all()
     )
-    return [_serialize(p) for p in rows]
+    donated = donated_map(db, [p.id for p in rows])
+    return [_serialize(p, donated.get(p.id, (0, 0))) for p in rows]
 
 
 @router.get("/{project_id}")
@@ -171,7 +215,7 @@ async def get_admin(
     p = db.query(FundraisingProject).filter(FundraisingProject.id == project_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
-    return _serialize(p)
+    return _serialize(p, donated_map(db, [p.id]).get(p.id, (0, 0)))
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -205,7 +249,7 @@ async def create_project(
     db.commit()
     db.refresh(p)
     logger.info("Admin %s created project %s (%s)", current_admin.email, p.id, p.slug)
-    return _serialize(p)
+    return _serialize(p, donated_map(db, [p.id]).get(p.id, (0, 0)))
 
 
 @router.put("/{project_id}")
@@ -242,7 +286,7 @@ async def update_project(
     p.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(p)
-    return _serialize(p)
+    return _serialize(p, donated_map(db, [p.id]).get(p.id, (0, 0)))
 
 
 @router.post("/{project_id}/adjust-spent")
@@ -268,7 +312,7 @@ async def adjust_spent(
     p.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(p)
-    return _serialize(p)
+    return _serialize(p, donated_map(db, [p.id]).get(p.id, (0, 0)))
 
 
 @router.delete("/{project_id}")

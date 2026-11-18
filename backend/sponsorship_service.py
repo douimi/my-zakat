@@ -71,7 +71,8 @@ STATUSES = (SUBMITTED, UNDER_REVIEW, INFO_REQUESTED, APPROVED, PUBLISHED, PAUSED
 OPEN_STATUSES = (SUBMITTED, UNDER_REVIEW, INFO_REQUESTED, APPROVED, PUBLISHED, PAUSED)
 
 NEED_CATEGORIES = ("food", "rent", "utilities", "education", "health", "clothing", "transport", "other")
-DISBURSEMENT_CATEGORIES = NEED_CATEGORIES
+# "monthly_support" is a monthly transfer (sponsorship_payouts); the rest name a need.
+DISBURSEMENT_CATEGORIES = NEED_CATEGORIES + ("monthly_support",)
 SITUATION_CATEGORIES = (
     "loss_of_breadwinner", "illness_disability", "unemployment", "displacement",
     "divorce_abandonment", "low_income", "other",
@@ -1185,6 +1186,13 @@ def finances_map(db: Session, case_ids: list[int]) -> dict[int, dict]:
         .filter(Sponsorship.case_id.in_(case_ids))
         .group_by(Sponsorship.case_id).all()
     )
+    # Money staff added by hand counts as received, like a sponsor's payment.
+    from models import SponsorshipManualCredit
+    manual = dict(
+        db.query(SponsorshipManualCredit.case_id, func.coalesce(func.sum(SponsorshipManualCredit.amount_cents), 0))
+        .filter(SponsorshipManualCredit.case_id.in_(case_ids))
+        .group_by(SponsorshipManualCredit.case_id).all()
+    )
     disbursed = dict(
         db.query(SponsorshipDisbursement.case_id, func.coalesce(func.sum(SponsorshipDisbursement.amount_cents), 0))
         .filter(SponsorshipDisbursement.case_id.in_(case_ids))
@@ -1192,9 +1200,12 @@ def finances_map(db: Session, case_ids: list[int]) -> dict[int, dict]:
     )
     out = {}
     for cid in case_ids:
-        c = cents(collected.get(cid, 0))
+        online = cents(collected.get(cid, 0))
+        added = int(manual.get(cid, 0))
+        c = online + added
         d = int(disbursed.get(cid, 0))
-        out[cid] = {"collected_cents": c, "disbursed_cents": d, "balance_cents": c - d}
+        out[cid] = {"collected_cents": c, "disbursed_cents": d, "balance_cents": c - d,
+                    "online_cents": online, "manual_cents": added}
     return out
 
 
@@ -1639,7 +1650,8 @@ def sponsor_view(db: Session, sp: Sponsorship, *, photo_url_for) -> dict:
             "story_ar": case.public_story_ar,
             "case_status": case.status,
         },
-        "finances": fin,
+        # Received / distributed / balance only: how it splits is staff detail.
+        "finances": {k: fin[k] for k in ("collected_cents", "disbursed_cents", "balance_cents")},
         "disbursements": [disbursement_view(d) for d in disbursements],
         "updates": [update_view(u) for u in updates],
     }

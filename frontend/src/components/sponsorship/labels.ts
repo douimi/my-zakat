@@ -15,9 +15,11 @@ export const NEED_LABELS: Record<NeedCategory, Message> = defineMessages({
   clothing: { en: 'Clothing', ar: 'الملابس' },
   transport: { en: 'Transport', ar: 'المواصلات' },
   other: { en: 'Other', ar: 'أخرى' },
+  monthly_support: { en: 'Monthly support', ar: 'الدعم الشهري' },
 })
 
-export const NEED_CATEGORIES = Object.keys(NEED_LABELS) as NeedCategory[]
+/** The needs an applicant can list: every label except the monthly transfer. */
+export const NEED_CATEGORIES = (Object.keys(NEED_LABELS) as NeedCategory[]).filter((c) => c !== 'monthly_support')
 
 export const DOC_LABELS: Record<DocType, Message> = defineMessages({
   id_document: { en: 'Identity document', ar: 'وثيقة الهوية' },

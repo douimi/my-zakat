@@ -1,262 +1,264 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
-import { ToastProvider } from './contexts/ToastContext'
-import { useEffect, Suspense, lazy } from 'react'
-import Layout from './components/Layout'
-import AdminRoute from './components/AdminRoute'
-import AdminLayout from './components/AdminLayout'
-import UserRoute from './components/UserRoute'
-import ErrorBoundary from './components/ErrorBoundary'
-import ScrollToTop from './components/ScrollToTop'
-import { useAuthStore } from './store/authStore'
-import PageLoader from './components/PageLoader'
-import EnglishOnly from './components/i18n/EnglishOnly'
-import { useLocale } from './i18n'
-
-// Lazy load all pages for code splitting - reduces initial bundle size
-const Home = lazy(() => import('./pages/Home'))
-const About = lazy(() => import('./pages/About'))
-const Donate = lazy(() => import('./pages/Donate'))
-const DonationSuccess = lazy(() => import('./pages/DonationSuccess'))
-const ZakatCalculator = lazy(() => import('./pages/ZakatCalculator'))
-const ZakatEducation = lazy(() => import('./pages/ZakatEducation'))
-const Stories = lazy(() => import('./pages/Stories'))
-const StoryDetail = lazy(() => import('./pages/StoryDetail'))
-const Events = lazy(() => import('./pages/Events'))
-const EventDetail = lazy(() => import('./pages/EventDetail'))
-const Programs = lazy(() => import('./pages/Programs'))
-const Contact = lazy(() => import('./pages/Contact'))
-const Volunteer = lazy(() => import('./pages/Volunteer'))
-const Testimonials = lazy(() => import('./pages/Testimonials'))
-const UserLogin = lazy(() => import('./pages/UserLogin'))
-const UserRegister = lazy(() => import('./pages/UserRegister'))
-const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
-const UserDashboard = lazy(() => import('./pages/UserDashboard'))
-const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
-const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
-const AdminDonations = lazy(() => import('./pages/admin/AdminDonations'))
-const AdminContacts = lazy(() => import('./pages/admin/AdminContacts'))
-const AdminEvents = lazy(() => import('./pages/admin/AdminEvents'))
-const AdminStories = lazy(() => import('./pages/admin/AdminStories'))
-const AdminTestimonials = lazy(() => import('./pages/admin/AdminTestimonials'))
-const AdminVolunteers = lazy(() => import('./pages/admin/AdminVolunteers'))
-const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions'))
-const AdminProgramCategories = lazy(() => import('./pages/admin/AdminProgramCategories'))
-const AdminPrograms = lazy(() => import('./pages/admin/AdminPrograms'))
-const AdminGallery = lazy(() => import('./pages/admin/AdminGallery'))
-const AdminCleanup = lazy(() => import('./pages/admin/AdminCleanup'))
-const AdminMediaWorkspace = lazy(() => import('./pages/admin/AdminMediaWorkspace'))
-const AdminMediaLibrary = lazy(() => import('./pages/admin/AdminMediaLibrary'))
-const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
-const AdminSlideshow = lazy(() => import('./pages/admin/AdminSlideshow'))
-const AdminUrgentNeeds = lazy(() => import('./pages/admin/AdminUrgentNeeds'))
-const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
-const UrgentNeedDetail = lazy(() => import('./pages/UrgentNeedDetail'))
-const CategoryDetail = lazy(() => import('./pages/CategoryDetail'))
-const ProgramDetail = lazy(() => import('./pages/ProgramDetail'))
-const QuickLinks = lazy(() => import('./pages/QuickLinks'))
-const IslamicKnowledge = lazy(() => import('./pages/IslamicKnowledge'))
-const BookOfDuas = lazy(() => import('./pages/BookOfDuas'))
-const CharityInIslam = lazy(() => import('./pages/CharityInIslam'))
-const KaffarahCalculator = lazy(() => import('./pages/KaffarahCalculator'))
-const ZakatAlFitrCalculator = lazy(() => import('./pages/ZakatAlFitrCalculator'))
-const ZakatOnGold = lazy(() => import('./pages/ZakatOnGold'))
-const Nisab = lazy(() => import('./pages/Nisab'))
-const UmrahGuidelines = lazy(() => import('./pages/UmrahGuidelines'))
-const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
-const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
-const TermsOfService = lazy(() => import('./pages/TermsOfService'))
-const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
-const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
-const SubmitProposal = lazy(() => import('./pages/SubmitProposal'))
-const MyProposals = lazy(() => import('./pages/MyProposals'))
-const AllProjects = lazy(() => import('./pages/AllProjects'))
-const AdminProjectProposals = lazy(() => import('./pages/admin/AdminProjectProposals'))
-const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
-const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
-const AdminEmailTemplates = lazy(() => import('./pages/admin/AdminEmailTemplates'))
-const AdminSegments = lazy(() => import('./pages/admin/AdminSegments'))
-const AdminMarketingCampaigns = lazy(() => import('./pages/admin/AdminMarketingCampaigns'))
-const AdminMarketingWizard = lazy(() => import('./pages/admin/AdminMarketingWizard'))
-const AdminFundraisingProjects = lazy(() => import('./pages/admin/AdminFundraisingProjects'))
-const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAnalytics'))
-
-// Sponsorship (families and orphans). Bilingual from day one.
-const SponsorLanding = lazy(() => import('./pages/sponsorship/SponsorLanding'))
-const SponsorBrowse = lazy(() => import('./pages/sponsorship/SponsorBrowse'))
-const SponsorProfile = lazy(() => import('./pages/sponsorship/SponsorProfile'))
-const SponsorThankYou = lazy(() => import('./pages/sponsorship/SponsorThankYou'))
-const SponsorApply = lazy(() => import('./pages/sponsorship/SponsorApply'))
-const MyRequests = lazy(() => import('./pages/sponsorship/MyRequests'))
-const MySponsorships = lazy(() => import('./pages/sponsorship/MySponsorships'))
-const AdminSponsorshipOverview = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipOverview'))
-const AdminSponsorshipCases = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCases'))
-const AdminSponsorshipCase = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCase'))
-const AdminSponsorships = lazy(() => import('./pages/admin/sponsorship/AdminSponsorships'))
-
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
-
-// Managers and field staff don't have access to the admin dashboard — send
-// them to their landing page (stories, media workspace) instead of the
-// admin metrics view.
-const AdminIndex = () => {
-  const isManager = useAuthStore((s) => s.isManager)
-  const isFieldStaff = useAuthStore((s) => s.isFieldStaff)
-  if (isFieldStaff) return <Navigate to="/admin/media" replace />
-  if (isManager) return <Navigate to="/admin/stories" replace />
-  return <AdminDashboard />
-}
-
-/**
- * The admin console is a staff tool and stays English. Reached from the
- * Arabic site (/ar/admin...), it reloads at the same path without the prefix.
- */
-const LeaveArabicForAdmin = () => {
-  useEffect(() => {
-    const { pathname, search, hash } = window.location
-    window.location.replace(`${pathname.replace(/^\/ar(?=\/|$)/, '') || '/'}${search}${hash}`)
-  }, [])
-  return <PageLoader />
-}
-
-/**
- * A page not translated yet: on the Arabic site it renders its English
- * content left-to-right under a one-line note (see EnglishOnly). Remove the
- * wrapper from a route once its page has its own messages.
- */
-const en = (page: JSX.Element) => <EnglishOnly>{page}</EnglishOnly>
-
-function App() {
-  const locale = useLocale()
-  const initFromStorage = useAuthStore((state) => state.initFromStorage)
-  const logout = useAuthStore((state) => state.logout)
-
-  // Initialize auth from localStorage on app start
-  useEffect(() => {
-    // Check if we need to clear old tokens from previous auth system
-    const userType = localStorage.getItem('user_type')
-    const adminData = localStorage.getItem('admin_data')
-    
-    // If old format detected, clear and force re-login
-    if (userType === 'admin' || adminData) {
-      console.log('Detected old auth format, clearing...')
-      logout()
-      return
-    }
-    
-    initFromStorage()
-  }, [initFromStorage, logout])
-
-  return (
-    <ErrorBoundary>
-      <ToastProvider>
-        <Elements stripe={stripePromise}>
-          <ScrollToTop />
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="about" element={<About />} />
-                <Route path="donate" element={<Donate />} />
-                <Route path="donation-success" element={<DonationSuccess />} />
-                <Route path="zakat-calculator" element={<ZakatCalculator />} />
-                <Route path="zakat-education" element={<ZakatEducation />} />
-                <Route path="stories" element={<Stories />} />
-                <Route path="stories/:id" element={<StoryDetail />} />
-                <Route path="events" element={<Events />} />
-                <Route path="events/:id" element={<EventDetail />} />
-                <Route path="programs" element={<Programs />} />
-                <Route path="programs/:slug" element={<ProgramDetail />} />
-                <Route path="categories/:slug" element={<CategoryDetail />} />
-                <Route path="contact" element={<Contact />} />
-                <Route path="volunteer" element={<Volunteer />} />
-                <Route path="testimonials" element={<Testimonials />} />
-                <Route path="urgent-needs/:slug" element={<UrgentNeedDetail />} />
-                <Route path="quick-links" element={<QuickLinks />} />
-                <Route path="islamic-knowledge" element={<IslamicKnowledge />} />
-                <Route path="book-of-duas" element={<BookOfDuas />} />
-                <Route path="charity-in-islam" element={<CharityInIslam />} />
-                <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
-                <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
-                <Route path="zakat-on-gold" element={<ZakatOnGold />} />
-                <Route path="nisab" element={<Nisab />} />
-                <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
-                <Route path="privacy-policy" element={en(<PrivacyPolicy />)} />
-                <Route path="donation-policy" element={en(<DonationPolicy />)} />
-                <Route path="terms-of-service" element={en(<TermsOfService />)} />
-                <Route path="sms-opt-in" element={en(<SmsOptIn />)} />
-                <Route path="unsubscribe" element={<Unsubscribe />} />
-                <Route path="submit-proposal" element={<SubmitProposal />} />
-                <Route path="my-proposals" element={<MyProposals />} />
-                <Route path="projects" element={<AllProjects />} />
-                <Route path="sponsor" element={<SponsorLanding />} />
-                <Route path="sponsor/orphans" element={<SponsorBrowse kind="orphan" />} />
-                <Route path="sponsor/families" element={<SponsorBrowse kind="family" />} />
-                <Route path="sponsor/thank-you" element={<SponsorThankYou />} />
-                <Route path="sponsor/apply" element={<SponsorApply />} />
-                <Route path="sponsor/apply/:kind" element={<SponsorApply />} />
-                <Route path="sponsor/:ref" element={<SponsorProfile />} />
-                <Route path="my-requests" element={<MyRequests />} />
-                <Route path="my-sponsorships" element={<MySponsorships />} />
-              </Route>
-
-              {/* User authentication routes */}
-              <Route path="/login" element={<UserLogin />} />
-              <Route path="/register" element={<UserRegister />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              
-              {/* User dashboard route */}
-              <Route path="/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />
-
-              {/* Admin routes */}
-              {locale === 'ar' && <Route path="/admin/*" element={<LeaveArabicForAdmin />} />}
-              <Route path="/admin" element={locale === 'ar' ? <LeaveArabicForAdmin /> : <AdminRoute><AdminLayout /></AdminRoute>}>
-                <Route index element={<AdminIndex />} />
-                <Route path="donations" element={<AdminDonations />} />
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="contacts" element={<AdminContacts />} />
-                <Route path="events" element={<AdminEvents />} />
-                <Route path="stories" element={<AdminStories />} />
-                <Route path="testimonials" element={<AdminTestimonials />} />
-                <Route path="volunteers" element={<AdminVolunteers />} />
-                <Route path="subscriptions" element={<AdminSubscriptions />} />
-                <Route path="program-categories" element={<AdminProgramCategories />} />
-                <Route path="programs" element={<AdminPrograms />} />
-                <Route path="media" element={<AdminMediaWorkspace />} />
-                <Route path="media/all" element={<AdminMediaLibrary />} />
-                <Route path="gallery" element={<AdminGallery />} />
-                <Route path="slideshow" element={<AdminSlideshow />} />
-                <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
-                <Route path="campaigns" element={<AdminCampaigns />} />
-                <Route path="email-log" element={<AdminEmailLog />} />
-                <Route path="suppressions" element={<AdminSuppressions />} />
-                <Route path="email-templates" element={<AdminEmailTemplates />} />
-                <Route path="audiences" element={<AdminSegments />} />
-                <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
-                <Route path="marketing-campaigns/new" element={<AdminMarketingWizard />} />
-                <Route path="project-proposals" element={<AdminProjectProposals />} />
-                <Route path="sponsorship" element={<AdminSponsorshipOverview />} />
-                <Route path="sponsorship/families" element={<AdminSponsorshipCases kind="family" />} />
-                <Route path="sponsorship/orphans" element={<AdminSponsorshipCases kind="orphan" />} />
-                <Route path="sponsorship/cases/:id" element={<AdminSponsorshipCase />} />
-                <Route path="sponsorship/sponsors" element={<AdminSponsorships />} />
-                <Route path="fundraising-projects" element={<AdminFundraisingProjects />} />
-                <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
-                <Route path="cleanup" element={<AdminCleanup />} />
-                {/* Bookmark compatibility: /admin/s3-media is repointed at the new page
-                    rather than removed, so an existing bookmark still lands somewhere sensible. */}
-                <Route path="s3-media" element={<AdminMediaLibrary />} />
-                <Route path="settings" element={<AdminSettings />} />
-              </Route>
-            </Routes>
-          </Suspense>
-        </Elements>
-      </ToastProvider>
-    </ErrorBoundary>
-  )
-}
-
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { Elements } from '@stripe/react-stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
+import { ToastProvider } from './contexts/ToastContext'
+import { useEffect, Suspense, lazy } from 'react'
+import Layout from './components/Layout'
+import AdminRoute from './components/AdminRoute'
+import AdminLayout from './components/AdminLayout'
+import UserRoute from './components/UserRoute'
+import ErrorBoundary from './components/ErrorBoundary'
+import ScrollToTop from './components/ScrollToTop'
+import { useAuthStore } from './store/authStore'
+import PageLoader from './components/PageLoader'
+import EnglishOnly from './components/i18n/EnglishOnly'
+import { useLocale } from './i18n'
+
+// Lazy load all pages for code splitting - reduces initial bundle size
+const Home = lazy(() => import('./pages/Home'))
+const About = lazy(() => import('./pages/About'))
+const Donate = lazy(() => import('./pages/Donate'))
+const DonationSuccess = lazy(() => import('./pages/DonationSuccess'))
+const ZakatCalculator = lazy(() => import('./pages/ZakatCalculator'))
+const ZakatEducation = lazy(() => import('./pages/ZakatEducation'))
+const Stories = lazy(() => import('./pages/Stories'))
+const StoryDetail = lazy(() => import('./pages/StoryDetail'))
+const Events = lazy(() => import('./pages/Events'))
+const EventDetail = lazy(() => import('./pages/EventDetail'))
+const Programs = lazy(() => import('./pages/Programs'))
+const Contact = lazy(() => import('./pages/Contact'))
+const Volunteer = lazy(() => import('./pages/Volunteer'))
+const Testimonials = lazy(() => import('./pages/Testimonials'))
+const UserLogin = lazy(() => import('./pages/UserLogin'))
+const UserRegister = lazy(() => import('./pages/UserRegister'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const UserDashboard = lazy(() => import('./pages/UserDashboard'))
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
+const AdminDonations = lazy(() => import('./pages/admin/AdminDonations'))
+const AdminContacts = lazy(() => import('./pages/admin/AdminContacts'))
+const AdminEvents = lazy(() => import('./pages/admin/AdminEvents'))
+const AdminStories = lazy(() => import('./pages/admin/AdminStories'))
+const AdminTestimonials = lazy(() => import('./pages/admin/AdminTestimonials'))
+const AdminVolunteers = lazy(() => import('./pages/admin/AdminVolunteers'))
+const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions'))
+const AdminProgramCategories = lazy(() => import('./pages/admin/AdminProgramCategories'))
+const AdminPrograms = lazy(() => import('./pages/admin/AdminPrograms'))
+const AdminGallery = lazy(() => import('./pages/admin/AdminGallery'))
+const AdminCleanup = lazy(() => import('./pages/admin/AdminCleanup'))
+const AdminMediaWorkspace = lazy(() => import('./pages/admin/AdminMediaWorkspace'))
+const AdminMediaLibrary = lazy(() => import('./pages/admin/AdminMediaLibrary'))
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminSlideshow = lazy(() => import('./pages/admin/AdminSlideshow'))
+const AdminUrgentNeeds = lazy(() => import('./pages/admin/AdminUrgentNeeds'))
+const AdminCampaigns = lazy(() => import('./pages/admin/AdminCampaigns'))
+const UrgentNeedDetail = lazy(() => import('./pages/UrgentNeedDetail'))
+const CategoryDetail = lazy(() => import('./pages/CategoryDetail'))
+const ProgramDetail = lazy(() => import('./pages/ProgramDetail'))
+const QuickLinks = lazy(() => import('./pages/QuickLinks'))
+const IslamicKnowledge = lazy(() => import('./pages/IslamicKnowledge'))
+const BookOfDuas = lazy(() => import('./pages/BookOfDuas'))
+const CharityInIslam = lazy(() => import('./pages/CharityInIslam'))
+const KaffarahCalculator = lazy(() => import('./pages/KaffarahCalculator'))
+const ZakatAlFitrCalculator = lazy(() => import('./pages/ZakatAlFitrCalculator'))
+const ZakatOnGold = lazy(() => import('./pages/ZakatOnGold'))
+const Nisab = lazy(() => import('./pages/Nisab'))
+const UmrahGuidelines = lazy(() => import('./pages/UmrahGuidelines'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const DonationPolicy = lazy(() => import('./pages/DonationPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const SmsOptIn = lazy(() => import('./pages/SmsOptIn'))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe'))
+const SubmitProposal = lazy(() => import('./pages/SubmitProposal'))
+const MyProposals = lazy(() => import('./pages/MyProposals'))
+const AllProjects = lazy(() => import('./pages/AllProjects'))
+const AdminProjectProposals = lazy(() => import('./pages/admin/AdminProjectProposals'))
+const AdminEmailLog = lazy(() => import('./pages/admin/AdminEmailLog'))
+const AdminSuppressions = lazy(() => import('./pages/admin/AdminSuppressions'))
+const AdminEmailTemplates = lazy(() => import('./pages/admin/AdminEmailTemplates'))
+const AdminSegments = lazy(() => import('./pages/admin/AdminSegments'))
+const AdminMarketingCampaigns = lazy(() => import('./pages/admin/AdminMarketingCampaigns'))
+const AdminMarketingWizard = lazy(() => import('./pages/admin/AdminMarketingWizard'))
+const AdminFundraisingProjects = lazy(() => import('./pages/admin/AdminFundraisingProjects'))
+const AdminCampaignAnalytics = lazy(() => import('./pages/admin/AdminCampaignAnalytics'))
+
+// Sponsorship (families and orphans). Bilingual from day one.
+const SponsorLanding = lazy(() => import('./pages/sponsorship/SponsorLanding'))
+const SponsorBrowse = lazy(() => import('./pages/sponsorship/SponsorBrowse'))
+const SponsorProfile = lazy(() => import('./pages/sponsorship/SponsorProfile'))
+const SponsorThankYou = lazy(() => import('./pages/sponsorship/SponsorThankYou'))
+const SponsorApply = lazy(() => import('./pages/sponsorship/SponsorApply'))
+const MyRequests = lazy(() => import('./pages/sponsorship/MyRequests'))
+const MySponsorships = lazy(() => import('./pages/sponsorship/MySponsorships'))
+const AdminSponsorshipOverview = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipOverview'))
+const AdminSponsorshipCases = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCases'))
+const AdminSponsorshipCase = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipCase'))
+const AdminSponsorships = lazy(() => import('./pages/admin/sponsorship/AdminSponsorships'))
+const AdminSponsorshipTransfers = lazy(() => import('./pages/admin/sponsorship/AdminSponsorshipTransfers'))
+
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
+
+// Managers and field staff don't have access to the admin dashboard — send
+// them to their landing page (stories, media workspace) instead of the
+// admin metrics view.
+const AdminIndex = () => {
+  const isManager = useAuthStore((s) => s.isManager)
+  const isFieldStaff = useAuthStore((s) => s.isFieldStaff)
+  if (isFieldStaff) return <Navigate to="/admin/media" replace />
+  if (isManager) return <Navigate to="/admin/stories" replace />
+  return <AdminDashboard />
+}
+
+/**
+ * The admin console is a staff tool and stays English. Reached from the
+ * Arabic site (/ar/admin...), it reloads at the same path without the prefix.
+ */
+const LeaveArabicForAdmin = () => {
+  useEffect(() => {
+    const { pathname, search, hash } = window.location
+    window.location.replace(`${pathname.replace(/^\/ar(?=\/|$)/, '') || '/'}${search}${hash}`)
+  }, [])
+  return <PageLoader />
+}
+
+/**
+ * A page not translated yet: on the Arabic site it renders its English
+ * content left-to-right under a one-line note (see EnglishOnly). Remove the
+ * wrapper from a route once its page has its own messages.
+ */
+const en = (page: JSX.Element) => <EnglishOnly>{page}</EnglishOnly>
+
+function App() {
+  const locale = useLocale()
+  const initFromStorage = useAuthStore((state) => state.initFromStorage)
+  const logout = useAuthStore((state) => state.logout)
+
+  // Initialize auth from localStorage on app start
+  useEffect(() => {
+    // Check if we need to clear old tokens from previous auth system
+    const userType = localStorage.getItem('user_type')
+    const adminData = localStorage.getItem('admin_data')
+    
+    // If old format detected, clear and force re-login
+    if (userType === 'admin' || adminData) {
+      console.log('Detected old auth format, clearing...')
+      logout()
+      return
+    }
+    
+    initFromStorage()
+  }, [initFromStorage, logout])
+
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <Elements stripe={stripePromise}>
+          <ScrollToTop />
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="about" element={<About />} />
+                <Route path="donate" element={<Donate />} />
+                <Route path="donation-success" element={<DonationSuccess />} />
+                <Route path="zakat-calculator" element={<ZakatCalculator />} />
+                <Route path="zakat-education" element={<ZakatEducation />} />
+                <Route path="stories" element={<Stories />} />
+                <Route path="stories/:id" element={<StoryDetail />} />
+                <Route path="events" element={<Events />} />
+                <Route path="events/:id" element={<EventDetail />} />
+                <Route path="programs" element={<Programs />} />
+                <Route path="programs/:slug" element={<ProgramDetail />} />
+                <Route path="categories/:slug" element={<CategoryDetail />} />
+                <Route path="contact" element={<Contact />} />
+                <Route path="volunteer" element={<Volunteer />} />
+                <Route path="testimonials" element={<Testimonials />} />
+                <Route path="urgent-needs/:slug" element={<UrgentNeedDetail />} />
+                <Route path="quick-links" element={<QuickLinks />} />
+                <Route path="islamic-knowledge" element={<IslamicKnowledge />} />
+                <Route path="book-of-duas" element={<BookOfDuas />} />
+                <Route path="charity-in-islam" element={<CharityInIslam />} />
+                <Route path="kaffarah-calculator" element={<KaffarahCalculator />} />
+                <Route path="zakat-al-fitr-calculator" element={<ZakatAlFitrCalculator />} />
+                <Route path="zakat-on-gold" element={<ZakatOnGold />} />
+                <Route path="nisab" element={<Nisab />} />
+                <Route path="umrah-guidelines" element={<UmrahGuidelines />} />
+                <Route path="privacy-policy" element={en(<PrivacyPolicy />)} />
+                <Route path="donation-policy" element={en(<DonationPolicy />)} />
+                <Route path="terms-of-service" element={en(<TermsOfService />)} />
+                <Route path="sms-opt-in" element={en(<SmsOptIn />)} />
+                <Route path="unsubscribe" element={<Unsubscribe />} />
+                <Route path="submit-proposal" element={<SubmitProposal />} />
+                <Route path="my-proposals" element={<MyProposals />} />
+                <Route path="projects" element={<AllProjects />} />
+                <Route path="sponsor" element={<SponsorLanding />} />
+                <Route path="sponsor/orphans" element={<SponsorBrowse kind="orphan" />} />
+                <Route path="sponsor/families" element={<SponsorBrowse kind="family" />} />
+                <Route path="sponsor/thank-you" element={<SponsorThankYou />} />
+                <Route path="sponsor/apply" element={<SponsorApply />} />
+                <Route path="sponsor/apply/:kind" element={<SponsorApply />} />
+                <Route path="sponsor/:ref" element={<SponsorProfile />} />
+                <Route path="my-requests" element={<MyRequests />} />
+                <Route path="my-sponsorships" element={<MySponsorships />} />
+              </Route>
+
+              {/* User authentication routes */}
+              <Route path="/login" element={<UserLogin />} />
+              <Route path="/register" element={<UserRegister />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
+              
+              {/* User dashboard route */}
+              <Route path="/dashboard" element={<UserRoute><UserDashboard /></UserRoute>} />
+
+              {/* Admin routes */}
+              {locale === 'ar' && <Route path="/admin/*" element={<LeaveArabicForAdmin />} />}
+              <Route path="/admin" element={locale === 'ar' ? <LeaveArabicForAdmin /> : <AdminRoute><AdminLayout /></AdminRoute>}>
+                <Route index element={<AdminIndex />} />
+                <Route path="donations" element={<AdminDonations />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="contacts" element={<AdminContacts />} />
+                <Route path="events" element={<AdminEvents />} />
+                <Route path="stories" element={<AdminStories />} />
+                <Route path="testimonials" element={<AdminTestimonials />} />
+                <Route path="volunteers" element={<AdminVolunteers />} />
+                <Route path="subscriptions" element={<AdminSubscriptions />} />
+                <Route path="program-categories" element={<AdminProgramCategories />} />
+                <Route path="programs" element={<AdminPrograms />} />
+                <Route path="media" element={<AdminMediaWorkspace />} />
+                <Route path="media/all" element={<AdminMediaLibrary />} />
+                <Route path="gallery" element={<AdminGallery />} />
+                <Route path="slideshow" element={<AdminSlideshow />} />
+                <Route path="urgent-needs" element={<AdminUrgentNeeds />} />
+                <Route path="campaigns" element={<AdminCampaigns />} />
+                <Route path="email-log" element={<AdminEmailLog />} />
+                <Route path="suppressions" element={<AdminSuppressions />} />
+                <Route path="email-templates" element={<AdminEmailTemplates />} />
+                <Route path="audiences" element={<AdminSegments />} />
+                <Route path="marketing-campaigns" element={<AdminMarketingCampaigns />} />
+                <Route path="marketing-campaigns/new" element={<AdminMarketingWizard />} />
+                <Route path="project-proposals" element={<AdminProjectProposals />} />
+                <Route path="sponsorship" element={<AdminSponsorshipOverview />} />
+                <Route path="sponsorship/families" element={<AdminSponsorshipCases kind="family" />} />
+                <Route path="sponsorship/orphans" element={<AdminSponsorshipCases kind="orphan" />} />
+                <Route path="sponsorship/cases/:id" element={<AdminSponsorshipCase />} />
+                <Route path="sponsorship/sponsors" element={<AdminSponsorships />} />
+                <Route path="sponsorship/transfers" element={<AdminSponsorshipTransfers />} />
+                <Route path="fundraising-projects" element={<AdminFundraisingProjects />} />
+                <Route path="marketing-campaigns/:campaignId/analytics" element={<AdminCampaignAnalytics />} />
+                <Route path="cleanup" element={<AdminCleanup />} />
+                {/* Bookmark compatibility: /admin/s3-media is repointed at the new page
+                    rather than removed, so an existing bookmark still lands somewhere sensible. */}
+                <Route path="s3-media" element={<AdminMediaLibrary />} />
+                <Route path="settings" element={<AdminSettings />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </Elements>
+      </ToastProvider>
+    </ErrorBoundary>
+  )
+}
+
 export default App

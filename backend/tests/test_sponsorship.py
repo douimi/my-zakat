@@ -644,3 +644,102 @@ def test_a_disbursement_receipt_must_belong_to_the_case(client, auth_headers, db
     r = admin(client, auth_headers, "post", "/cases/%d/disbursements" % case.id, json={
         "amount_cents": 1000, "category": "food", "description": "Basket", "receipt_document_id": foreign.id})
     assert r.status_code == 400
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Money added by hand and monthly transfers
+# ─────────────────────────────────────────────────────────────────────
+
+def _fund_by_hand(client, headers, case, cents, **over):
+    body = {"amount_cents": cents, "method": "cash", "donor_name": "Mosque collection"}
+    body.update(over)
+    return admin(client, headers, "post", "/cases/%d/manual-funds" % case.id, json=body)
+
+
+def test_money_added_by_hand_counts_towards_the_balance(client, auth_headers, db_session):
+    case = published_family(client, auth_headers, db_session)   # $100/month approved
+
+    r = _fund_by_hand(client, auth_headers, case, 25000)
+
+    assert r.status_code == 201, r.text
+    f = r.json()["finances"]
+    assert f["manual_cents"] == 25000 and f["balance_cents"] == 25000 and f["available_cents"] == 25000
+    assert r.json()["manual_credits"][0]["donor_name"] == "Mosque collection"
+    # The family's own space does not say who gave it.
+    mine = client.get("/api/sponsorship/portal/requests", headers=portal("fatima@example.com"))
+    assert "Mosque collection" not in mine.text
+
+
+def test_a_month_is_prepared_until_the_money_runs_out(client, auth_headers, db_session):
+    case = published_family(client, auth_headers, db_session)
+    _fund_by_hand(client, auth_headers, case, 25000)              # 2.5 months of $100
+
+    months = {}
+    for period in ("2026-11", "2026-12", "2027-01", "2027-02"):
+        plan = admin(client, auth_headers, "post", "/payouts/plan", json={"period": period})
+        assert plan.status_code == 200, plan.text
+        months[period] = [r["amount_cents"] for r in plan.json()["items"]]
+
+    assert months == {"2026-11": [10000], "2026-12": [10000], "2027-01": [5000], "2027-02": []}
+    again = admin(client, auth_headers, "post", "/payouts/plan", json={"period": "2026-11"})
+    assert again.json()["created"] == 0 and len(again.json()["items"]) == 1
+
+
+def test_only_a_confirmed_transfer_leaves_the_balance_and_sponsors_see_it(
+        client, auth_headers, db_session, stripe_sessions):
+    case = published_family(client, auth_headers, db_session)
+    checkout(client, case.reference, 10000)
+    sp = db_session.query(Sponsorship).one()
+    _hook(db_session, "invoice_paid", _invoice(sp, 1))           # $100 received online
+    plan = admin(client, auth_headers, "post", "/payouts/plan", json={"period": "2026-11"}).json()
+    line = plan["items"][0]
+    assert line["recipient"] == "Fatima Benali" and line["address"].startswith("12 Rue")
+    assert admin(client, auth_headers, "get", "/cases/%d" % case.id).json()["finances"]["balance_cents"] == 10000
+
+    r = admin(client, auth_headers, "post", "/payouts/%d/confirm" % line["payout_id"],
+              json={"method": "mobile_money", "reference": "WU-123", "amount_cents": 8000})
+
+    assert r.status_code == 200, r.text
+    f = admin(client, auth_headers, "get", "/cases/%d" % case.id).json()["finances"]
+    assert f["balance_cents"] == 2000 and f["disbursed_cents"] == 8000
+    seen = client.get("/api/sponsorship/portal/sponsorships", headers=portal("donor@example.com")).json()
+    assert seen["items"][0]["disbursements"][0]["category"] == "monthly_support"
+    assert "WU-123" not in json.dumps(seen)                      # the reference is staff detail
+    again = admin(client, auth_headers, "post", "/payouts/%d/confirm" % line["payout_id"], json={})
+    assert again.status_code == 409
+
+
+def test_the_month_exports_to_excel(client, auth_headers, db_session):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    case = published_family(client, auth_headers, db_session)
+    _fund_by_hand(client, auth_headers, case, 10000)
+    admin(client, auth_headers, "post", "/payouts/plan", json={"period": "2026-11"})
+
+    r = admin(client, auth_headers, "get", "/payouts/export?period=2026-11")
+
+    assert r.status_code == 200
+    assert "spreadsheetml" in r.headers["content-type"]
+    ws = load_workbook(BytesIO(r.content)).active
+    header = [c.value for c in ws[1]]
+    row = dict(zip(header, [c.value for c in ws[2]]))
+    assert row["Reference"] == case.reference and row["Recipient"] == "Fatima Benali"
+    assert row["Amount to transfer (USD)"] == 100 and row["Balance after (USD)"] == 0
+
+
+def test_a_cancelled_transfer_frees_the_money_and_the_month_can_be_prepared_again(client, auth_headers, db_session):
+    case = published_family(client, auth_headers, db_session)
+    _fund_by_hand(client, auth_headers, case, 10000)
+    line = admin(client, auth_headers, "post", "/payouts/plan", json={"period": "2026-11"}).json()["items"][0]
+
+    admin(client, auth_headers, "post", "/payouts/%d/cancel" % line["payout_id"], json={"note": "Family travelling"})
+    replanned = admin(client, auth_headers, "post", "/payouts/plan", json={"period": "2026-11"}).json()
+
+    assert replanned["created"] == 1 and replanned["items"][0]["amount_cents"] == 10000
+
+
+def test_transfers_are_for_admins_only(client, auth_headers, manager_headers, db_session):
+    case = published_family(client, auth_headers, db_session)
+    assert _fund_by_hand(client, manager_headers, case, 1000).status_code == 403
+    assert admin(client, manager_headers, "post", "/payouts/plan", json={"period": "2026-11"}).status_code == 403
+    assert admin(client, manager_headers, "get", "/payouts/export?period=2026-11").status_code == 403

@@ -71,6 +71,8 @@ export const NAV: readonly NavEntry[] = [
       { kind: 'link', name: 'Families', href: '/admin/sponsorship/families', icon: Home },
       { kind: 'link', name: 'Orphans', href: '/admin/sponsorship/orphans', icon: Baby },
       { kind: 'link', name: 'Sponsors', href: '/admin/sponsorship/sponsors', icon: HeartHandshake },
+      // Admin only (not in ROLE_ALLOWED.manager): it moves money.
+      { kind: 'link', name: 'Monthly transfers', href: '/admin/sponsorship/transfers', icon: Send },
     ],
   },
 

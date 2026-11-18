@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
+import ProjectChoice from '../components/ProjectChoice'
 import { defineMessages, useFormat, useLocale, useT, type Message } from '../i18n'
 import { C } from '../i18n/common'
 
@@ -157,6 +158,9 @@ const Donate = () => {
   const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
   const urlFrequency = searchParams.get('frequency')
   const urlPurpose = searchParams.get('purpose')
+  // A project card links here with ?project=<slug>; older links only named it in ?purpose=.
+  const urlProject = searchParams.get('project') || urlPurpose
+  const [projectId, setProjectId] = useState<number | null>(null)
 
   // Marketing attribution — captured from inbound campaign links so we can
   // forward them through Stripe and credit the originating campaign on the
@@ -288,6 +292,7 @@ const Donate = () => {
           interval: data.frequency === 'Monthly' ? 'month' : 'year',
           payment_day: 1,  // Default to 1st of month
           payment_month: undefined,  // Not used anymore
+          fundraising_project_id: projectId ?? undefined,
           ...attributionPayload,
         })
 
@@ -307,6 +312,7 @@ const Donate = () => {
           email: data.email,
           purpose: data.purpose,
           frequency: data.frequency,
+          fundraising_project_id: projectId ?? undefined,
           ...attributionPayload,
         })
 
@@ -434,6 +440,9 @@ const Donate = () => {
                     ))}
                   </select>
                 </div>
+
+                {/* Project: optional, "where most needed" by default */}
+                <ProjectChoice value={projectId} onChange={(id) => setProjectId(id)} preselect={urlProject} />
 
                 {/* Frequency */}
                 <fieldset>

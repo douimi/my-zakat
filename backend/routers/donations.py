@@ -47,6 +47,15 @@ if stripe_secret_key and stripe_secret_key.startswith(('sk_test_', 'sk_live_')):
 router = APIRouter()
 
 
+def _project_from_metadata(metadata) -> Optional[int]:
+    """The fundraising project a Stripe object was created for, if any."""
+    try:
+        value = (metadata or {}).get("fundraising_project_id")
+        return int(value) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
 def generate_certificate(donation: Donation, db: Session) -> str:
     """
     Generate PDF certificate for a donation (without sending email)
@@ -217,6 +226,12 @@ async def update_donation(
     if "amount" in data and (data["amount"] is None or data["amount"] <= 0):
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
 
+    if data.get("fundraising_project_id") is not None:
+        from models import FundraisingProject
+        if not db.query(FundraisingProject.id).filter(
+                FundraisingProject.id == data["fundraising_project_id"]).first():
+            raise HTTPException(status_code=400, detail="Unknown project")
+
     # Normalize payment method alias (Cheque -> Check)
     if "payment_method" in data and data["payment_method"]:
         data["payment_method"] = PAYMENT_METHOD_ALIASES.get(
@@ -284,6 +299,7 @@ async def create_manual_donation(
     payment_method: str = Form(...),
     notes: Optional[str] = Form(None),
     donated_at: Optional[str] = Form(None),  # ISO date string, optional
+    fundraising_project_id: Optional[int] = Form(None),
     proof: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin = Depends(get_current_admin),
@@ -307,6 +323,12 @@ async def create_manual_donation(
     payment_method = PAYMENT_METHOD_ALIASES.get(payment_method, payment_method)
     if not name.strip():
         raise HTTPException(status_code=400, detail="Donor name is required")
+    if fundraising_project_id is not None:
+        from models import FundraisingProject
+        # Staff may record cash for a project that has since closed, so only
+        # existence is checked here, not whether it is still open.
+        if not db.query(FundraisingProject.id).filter(FundraisingProject.id == fundraising_project_id).first():
+            raise HTTPException(status_code=400, detail="Unknown project")
 
     # Parse the donation date (defaults to now if omitted/invalid)
     donation_date = datetime.utcnow()
@@ -365,6 +387,7 @@ async def create_manual_donation(
         proof_filename=proof_filename,
         notes=notes.strip() if notes else None,
         donated_at=donation_date,
+        fundraising_project_id=fundraising_project_id,
         certificate_filename="available",  # Allow certificate generation
     )
     db.add(donation)
@@ -766,6 +789,10 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         # Get frontend URL from environment
         frontend_url = os.getenv("FRONTEND_URL", "https://myzakat.org")
         
+        # A chosen project must still be open; the donor is told if it closed.
+        from routers.fundraising_projects import open_project
+        project = open_project(db, payment.fundraising_project_id)
+
         # Create Stripe checkout session
         purpose = payment.purpose or "General Donation"
         # Marketing attribution — forward any UTMs supplied by the donate page
@@ -776,6 +803,9 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
             "donor_name": payment.name,
             "donor_email": payment.email,
         }
+        if project is not None:
+            stripe_metadata["fundraising_project_id"] = str(project.id)
+            stripe_metadata["fundraising_project"] = project.title[:100]
         for utm_field in ("utm_source", "utm_medium", "utm_campaign", "utm_content"):
             value = getattr(payment, utm_field, None)
             if value:
@@ -787,7 +817,7 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
-                        "name": f"{purpose} - {payment.frequency}",
+                        "name": f"{purpose} - {payment.frequency}" + (f" - {project.title}" if project else ""),
                         "description": f"Donation from {payment.name}",
                     },
                     "unit_amount": int(payment.amount * 100),  # Convert to cents
@@ -816,6 +846,8 @@ async def create_payment_session(payment: PaymentCreate, db: Session = Depends(g
         )
         return PaymentSession(id=checkout_session.id)
 
+    except HTTPException:
+        raise
     # Both handlers fold the exception into the single event record via exc=,
     # instead of the three separate lines this used to emit (message, error
     # type, then a multi-line traceback that Loki received as unrelated
@@ -938,6 +970,11 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
     try:
         frontend_url = os.getenv("FRONTEND_URL", "https://myzakat.org")
         
+        # A chosen project must still be open; the donor is told if it closed.
+        from routers.fundraising_projects import open_project
+        project = open_project(db, subscription.fundraising_project_id)
+        project_meta = {"fundraising_project_id": str(project.id)} if project else {}
+
         # Create or retrieve customer
         customer = stripe.Customer.create(
             email=subscription.email,
@@ -994,6 +1031,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                     "donor_name": subscription.name,
                     "payment_day": str(subscription.payment_day),
                     "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
+                    **project_meta,
                 }
             },
             success_url=f"{frontend_url}/donation-success?session_id={{CHECKOUT_SESSION_ID}}",
@@ -1004,6 +1042,7 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
                 "donor_name": subscription.name,
                 "payment_day": str(subscription.payment_day),
                 "payment_month": str(subscription.payment_month) if subscription.payment_month else "",
+                **project_meta,
                 # P3b marketing attribution
                 **{f: str(getattr(subscription, f))[:100] for f in
                    ("utm_source", "utm_medium", "utm_campaign", "utm_content")
@@ -1025,6 +1064,8 @@ async def create_subscription(subscription: SubscriptionCreate, db: Session = De
         )
         return SubscriptionSession(id=checkout_session.id)
         
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1424,6 +1465,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         if utm_medium:   existing.utm_medium = utm_medium
                         if utm_campaign: existing.utm_campaign = utm_campaign
                         if utm_content:  existing.utm_content = utm_content
+                        if _project_from_metadata(metadata):
+                            existing.fundraising_project_id = _project_from_metadata(metadata)
                         if not existing.donated_at:
                             existing.donated_at = datetime.utcnow()
                         db.commit()
@@ -1454,6 +1497,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             utm_medium=utm_medium,
                             utm_campaign=utm_campaign,
                             utm_content=utm_content,
+                            fundraising_project_id=_project_from_metadata(metadata),
                         )
                         db.add(new_donation)
                         db.commit()
@@ -1527,6 +1571,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     existing_sub.stripe_subscription_id = subscription_id
                     existing_sub.stripe_customer_id = customer_id
                     existing_sub.status = "active"
+                    existing_sub.fundraising_project_id = (
+                        _project_from_metadata(metadata) or existing_sub.fundraising_project_id)
                 else:
                     db.add(DonationSubscription(
                         stripe_subscription_id=subscription_id,
@@ -1538,6 +1584,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         interval=interval,
                         payment_day=1,
                         status="active",
+                        fundraising_project_id=_project_from_metadata(metadata),
                     ))
 
                 # NOTE: No donation record here. invoice.payment_succeeded
@@ -1589,6 +1636,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                                 stripe_session_id=invoice_id,
                                 donated_at=datetime.utcnow(),
                                 certificate_filename="available",
+                                fundraising_project_id=db_sub.fundraising_project_id,
                             )
                             db.add(donation)
 

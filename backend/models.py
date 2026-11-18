@@ -63,6 +63,11 @@ class Donation(Base):
                             name="fk_donations_sponsorship_id"),
         nullable=True, index=True,
     )
+    # The fundraising project this donation was given to (migration 41). Its
+    # amount counts towards the project's raised total, computed, never copied.
+    fundraising_project_id = Column(
+        Integer, ForeignKey("fundraising_projects.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
 
 
 class User(Base):
@@ -191,6 +196,10 @@ class DonationSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     next_payment_date = Column(DateTime, nullable=True)
+    # Every monthly charge of this gift goes to this project (migration 41).
+    fundraising_project_id = Column(
+        Integer, ForeignKey("fundraising_projects.id", ondelete="SET NULL"), nullable=True,
+    )
     # P3b marketing attribution
     utm_source = Column(String(100), nullable=True)
     utm_medium = Column(String(100), nullable=True)
@@ -1241,3 +1250,41 @@ class SponsorshipCaseUpdate(Base):
     photo_key = Column(String(500), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SponsorshipManualCredit(Base):
+    """Money staff add to a case by hand: cash, a cheque, a partner's transfer."""
+    __tablename__ = "sponsorship_manual_credits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id"), nullable=False, index=True)
+    amount_cents = Column(Integer, nullable=False)
+    method = Column(String(20), nullable=False)
+    donor_name = Column(String(200), nullable=True)
+    note = Column(Text, nullable=True)
+    received_on = Column(Date, nullable=False)
+    recorded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SponsorshipPayout(Base):
+    """One month's transfer to one case. Leaves the balance only once confirmed
+    as received, when it becomes a SponsorshipDisbursement."""
+    __tablename__ = "sponsorship_payouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("sponsorship_cases.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)
+    amount_cents = Column(Integer, nullable=False)
+    status = Column(String(12), nullable=False, default="planned")
+    method = Column(String(20), nullable=True)
+    reference = Column(String(120), nullable=True)
+    note = Column(Text, nullable=True)
+    planned_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    planned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    received_on = Column(Date, nullable=True)
+    confirmed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    disbursement_id = Column(
+        Integer, ForeignKey("sponsorship_disbursements.id", ondelete="SET NULL"), nullable=True,
+    )

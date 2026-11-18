@@ -265,7 +265,8 @@ class NoteRequest(BaseModel):
 
 class DisbursementRequest(BaseModel):
     amount_cents: int = Field(gt=0, le=100_000_000)
-    category: NeedCategory
+    category: Literal["food", "rent", "utilities", "education", "health", "clothing", "transport", "other",
+                      "monthly_support"]
     period: Optional[str] = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     description: str = Field(min_length=3, max_length=2000)
     description_ar: Optional[str] = Field(default=None, max_length=2000)
@@ -284,4 +285,39 @@ class UpdateRequest(BaseModel):
 
 class StaffSponsorshipEnd(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=40)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ManualCreditRequest(BaseModel):
+    amount_cents: int = Field(gt=0, le=100_000_000)
+    method: Literal["cash", "check", "bank_transfer", "other"] = "cash"
+    donor_name: Optional[str] = Field(default=None, max_length=200)
+    note: Optional[str] = Field(default=None, max_length=2000)
+    received_on: Optional[date] = None
+
+
+class PlanRequest(BaseModel):
+    period: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    kind: Optional[Literal["family", "orphan"]] = None
+
+
+PayoutMethod = Literal["bank_transfer", "cash", "mobile_money", "check", "other"]
+
+
+class PayoutConfirm(BaseModel):
+    method: Optional[PayoutMethod] = None
+    reference: Optional[str] = Field(default=None, max_length=120)
+    received_on: Optional[date] = None
+    amount_cents: Optional[int] = Field(default=None, gt=0)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PayoutBulkConfirm(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    method: Optional[PayoutMethod] = None
+    received_on: Optional[date] = None
+
+
+class PayoutEdit(BaseModel):
+    amount_cents: Optional[int] = Field(default=None, gt=0)
     note: Optional[str] = Field(default=None, max_length=2000)

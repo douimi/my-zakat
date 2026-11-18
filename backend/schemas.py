@@ -311,6 +311,8 @@ class DonationUpdate(BaseModel):
     payment_method: Optional[str] = None
     notes: Optional[str] = None
     donated_at: Optional[datetime] = None
+    # null unlinks the donation from its project.
+    fundraising_project_id: Optional[int] = None
 
 class DonationResponse(BaseModel):
     id: int
@@ -324,6 +326,7 @@ class DonationResponse(BaseModel):
     payment_method: Optional[str] = None
     proof_filename: Optional[str] = None
     notes: Optional[str] = None
+    fundraising_project_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -334,6 +337,8 @@ class PaymentCreate(BaseModel):
     email: EmailStr
     purpose: Optional[str] = None
     frequency: str
+    # The project the donor chose on the Donate page; None = where most needed.
+    fundraising_project_id: Optional[int] = None
     # Marketing attribution (P3b) — forwarded from the Donate page URL into
     # Stripe Checkout's metadata, then back onto the Donation row in the webhook.
     utm_source: Optional[str] = None
@@ -387,6 +392,7 @@ class SubscriptionCreate(BaseModel):
     interval: str
     payment_day: int
     payment_month: Optional[int] = None
+    fundraising_project_id: Optional[int] = None
     # Marketing attribution (P3b)
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
