@@ -8,7 +8,9 @@ import { useAuthStore } from '../store/authStore'
 import { useToast } from '../contexts/ToastContext'
 import SEOHead from '../components/SEOHead'
 import PageHeader from '../components/ui/PageHeader'
-import ProjectChoice from '../components/ProjectChoice'
+import DonationDestination, {
+  FIXED_GIVING_TYPES, purposeOf, type Destination, type FixedGivingType,
+} from '../components/DonationDestination'
 import { defineMessages, useFormat, useLocale, useT, type Message } from '../i18n'
 import { C } from '../i18n/common'
 
@@ -59,8 +61,6 @@ const M = defineMessages({
   amountMin: { en: 'Minimum donation is $1', ar: 'الحد الأدنى للتبرع دولار واحد' },
   amountInvalid: { en: 'Please enter a valid amount', ar: 'يُرجى إدخال مبلغ صحيح' },
 
-  // Purpose
-  purpose: { en: 'Purpose', ar: 'وجهة التبرع' },
 
   // Frequency
   recurringTitle: { en: 'Recurring Payment', ar: 'تبرع دوري' },
@@ -102,23 +102,7 @@ const M = defineMessages({
   pci: { en: 'PCI DSS compliant', ar: 'متوافق مع معيار PCI DSS' },
   receipt: { en: 'Receipt by email', ar: 'إيصال عبر البريد الإلكتروني' },
   recentTitle: { en: 'Recent Donations', ar: 'أحدث التبرعات' },
-
-  // Purposes (the English name is the value sent to Stripe and stored)
-  generalDonation: { en: 'General Donation', ar: 'تبرع عام' },
-  zakat: { en: 'Zakat', ar: 'زكاة' },
-  emergencyRelief: { en: 'Emergency Relief', ar: 'إغاثة عاجلة' },
-  supportFamily: { en: 'Support a Family', ar: 'دعم أسرة' },
-  orphanCare: { en: 'Orphan Care', ar: 'رعاية الأيتام' },
-  foodWater: { en: 'Food & Water Aid', ar: 'الغذاء والماء' },
-  education: { en: 'Education', ar: 'التعليم' },
-  healthcare: { en: 'Healthcare', ar: 'الرعاية الصحية' },
 })
-
-/** Labels for the standard purposes; a campaign purpose from the URL is shown as given. */
-const PURPOSE_LABELS: Record<string, Message> = Object.fromEntries(
-  [M.generalDonation, M.zakat, M.emergencyRelief, M.supportFamily, M.orphanCare, M.foodWater, M.education, M.healthcare]
-    .map((m) => [m.en, m]),
-)
 
 /** The radio value stays English (it drives the Stripe interval); only the label is translated. */
 const FREQUENCY_LABELS: Record<string, Message> = {
@@ -132,7 +116,6 @@ interface DonationForm {
   email: string
   amount: number
   frequency: string
-  purpose: string
 }
 
 const Donate = () => {
@@ -158,9 +141,20 @@ const Donate = () => {
   const urlAmount = searchParams.get('amount') || searchParams.get('zakat_amount')
   const urlFrequency = searchParams.get('frequency')
   const urlPurpose = searchParams.get('purpose')
-  // A project card links here with ?project=<slug>; older links only named it in ?purpose=.
-  const urlProject = searchParams.get('project') || urlPurpose
-  const [projectId, setProjectId] = useState<number | null>(null)
+  // One question replaces "Purpose" + "Project": where the money goes. What
+  // ?purpose= used to say is split by meaning: a giving type (Zakat, or an
+  // obligation from a calculator) or a cause (a program, an urgent need, a
+  // pop-up). A project card links with ?project=<slug>.
+  const purposeParam = (urlPurpose || '').trim()
+  const urlProject = searchParams.get('project') || purposeParam || null
+  const [givingType, setGivingType] = useState<FixedGivingType | null>(
+    purposeParam in FIXED_GIVING_TYPES ? (purposeParam as FixedGivingType) : null)
+  const [isZakat, setIsZakat] = useState(
+    purposeParam === 'Zakat' || Boolean(searchParams.get('zakat_amount')))
+  const cause = purposeParam && !(purposeParam in FIXED_GIVING_TYPES)
+    && !['Zakat', 'General Donation'].includes(purposeParam) ? purposeParam : null
+  const [destination, setDestination] = useState<Destination>(
+    cause ? { kind: 'cause', title: cause } : { kind: 'general' })
 
   // Marketing attribution — captured from inbound campaign links so we can
   // forward them through Stripe and credit the originating campaign on the
@@ -193,21 +187,16 @@ const Donate = () => {
   const stripe = useStripe()
   const elements = useElements()
 
-  const initialPurpose = urlPurpose && urlPurpose.trim()
-    ? urlPurpose.trim()
-    : (searchParams.get('zakat_amount') ? 'Zakat' : 'General Donation')
-
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<DonationForm>({
     defaultValues: {
       name: '',
       email: '',
       amount: selectedAmount || 0,
       frequency: urlFrequency || 'One-Time',
-      purpose: initialPurpose
     }
   })
 
-  // Pre-fill amount, frequency, and purpose from URL params
+  // Pre-fill amount and frequency from URL params
   useEffect(() => {
     if (urlAmount) {
       const amount = parseFloat(urlAmount)
@@ -219,10 +208,7 @@ const Donate = () => {
     if (urlFrequency && ['One-Time', 'Monthly', 'Annually'].includes(urlFrequency)) {
       setValue('frequency', urlFrequency)
     }
-    if (urlPurpose && urlPurpose.trim()) {
-      setValue('purpose', urlPurpose.trim())
-    }
-  }, [urlAmount, urlFrequency, urlPurpose, setValue])
+  }, [urlAmount, urlFrequency, setValue])
 
   // Pre-fill form with user data if logged in
   useEffect(() => {
@@ -244,22 +230,6 @@ const Donate = () => {
   const watchedAmount = watch('amount')
 
   const quickAmounts = [25, 50, 100, 250, 500, 1000]
-  const basePurposes = [
-    'General Donation',
-    'Zakat',
-    'Emergency Relief',
-    'Support a Family',
-    'Orphan Care',
-    'Food & Water Aid',
-    'Education',
-    'Healthcare'
-  ]
-  // Include the campaign / URL-provided purpose at the top if it isn't a standard option
-  const watchedPurpose = watch('purpose')
-  const purposes = watchedPurpose && !basePurposes.includes(watchedPurpose)
-    ? [watchedPurpose, ...basePurposes]
-    : basePurposes
-
   const onSubmit = async (data: DonationForm) => {
     if (!stripe || !elements) {
       showError(t(M.paymentLoadingTitle), t(M.paymentLoadingBody))
@@ -280,6 +250,9 @@ const Donate = () => {
       utm_content: attribution.utm_content || undefined,
     }
 
+    const purpose = purposeOf(destination, isZakat, givingType)
+    const fundraisingProjectId = destination.kind === 'project' ? destination.id : undefined
+
     setIsProcessing(true)
     try {
       if (data.frequency === 'Monthly' || data.frequency === 'Annually') {
@@ -288,11 +261,11 @@ const Donate = () => {
           amount: data.amount,
           name: data.name,
           email: data.email,
-          purpose: data.purpose,
+          purpose,
           interval: data.frequency === 'Monthly' ? 'month' : 'year',
           payment_day: 1,  // Default to 1st of month
           payment_month: undefined,  // Not used anymore
-          fundraising_project_id: projectId ?? undefined,
+          fundraising_project_id: fundraisingProjectId,
           ...attributionPayload,
         })
 
@@ -310,9 +283,9 @@ const Donate = () => {
           amount: data.amount,
           name: data.name,
           email: data.email,
-          purpose: data.purpose,
+          purpose,
           frequency: data.frequency,
-          fundraising_project_id: projectId ?? undefined,
+          fundraising_project_id: fundraisingProjectId,
           ...attributionPayload,
         })
 
@@ -422,27 +395,17 @@ const Donate = () => {
                   )}
                 </div>
 
-                {/* Purpose */}
-                <div>
-                  <label htmlFor="donate-purpose" className="block text-lg font-semibold text-gray-900 mb-2">
-                    {t(M.purpose)}
-                  </label>
-                  <select
-                    id="donate-purpose"
-                    data-testid="donate-purpose"
-                    {...register('purpose')}
-                    className="input-field"
-                  >
-                    {purposes.map((purpose) => (
-                      <option key={purpose} value={purpose}>
-                        {PURPOSE_LABELS[purpose] ? t(PURPOSE_LABELS[purpose]) : purpose}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Project: optional, "where most needed" by default */}
-                <ProjectChoice value={projectId} onChange={(id) => setProjectId(id)} preselect={urlProject} />
+                {/* Where the money goes, and whether it is Zakat: one question. */}
+                <DonationDestination
+                  value={destination}
+                  onChange={setDestination}
+                  cause={cause}
+                  preselect={urlProject}
+                  isZakat={isZakat}
+                  onZakatChange={setIsZakat}
+                  givingType={givingType}
+                  onClearGivingType={() => setGivingType(null)}
+                />
 
                 {/* Frequency */}
                 <fieldset>
@@ -603,7 +566,7 @@ const Donate = () => {
                 <ul className="space-y-2 text-sm">
                   {recentDonations.map((donation, index) => (
                     <li key={index} className="flex justify-between items-center">
-                      <span className="text-gray-600">{donation.name}</span>
+                      <span className="text-gray-600" dir="auto">{donation.name}</span>
                       <span className="font-semibold text-gray-900">
                         {locale === 'ar'
                           ? money(Math.round(donation.amount) * 100)

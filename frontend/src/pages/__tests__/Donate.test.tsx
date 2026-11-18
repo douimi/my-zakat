@@ -95,10 +95,13 @@ describe('Donate Page', () => {
     expect(screen.getAllByText('Annually').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('shows purpose dropdown', () => {
+  it('asks one question about where the money goes, defaulting to where it is most needed', () => {
     renderDonate()
-    const purposeSelects = screen.getAllByDisplayValue('General Donation')
-    expect(purposeSelects.length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Where should your donation go?')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Where the need is greatest/)).toBeChecked()
+    expect(screen.getByTestId('donate-zakat')).not.toBeChecked()
+    // The old static purpose list is gone.
+    expect(screen.queryByTestId('donate-purpose')).toBeNull()
   })
 
   it('shows security trust content', () => {
@@ -120,11 +123,20 @@ describe('Donate Page - URL Parameters', () => {
     expect(amountInput).toBeDefined()
   })
 
-  it('pre-fills Zakat purpose when zakat_amount param is used', () => {
+  it('marks the gift as Zakat when the donor comes from the Zakat calculator', () => {
     renderDonate(['/donate?zakat_amount=312.50'])
-    // Should set purpose to Zakat
-    const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
-    const zakatSelect = selects.find((s) => s.value === 'Zakat')
-    expect(zakatSelect).toBeDefined()
+    expect(screen.getByTestId('donate-zakat')).toBeChecked()
+  })
+
+  it('offers the cause a link named, selected, above "where most needed"', () => {
+    renderDonate(['/donate?purpose=Food%20for%20Gaza'])
+    expect(screen.getByLabelText(/Food for Gaza/)).toBeChecked()
+    expect(screen.getByLabelText(/Where the need is greatest/)).not.toBeChecked()
+  })
+
+  it('shows an obligation from a calculator as fixed, not as the Zakat box', () => {
+    renderDonate(['/donate?purpose=Kaffarah&amount=120'])
+    expect(screen.getByTestId('donate-giving-type')).toHaveTextContent('You are paying: Kaffarah')
+    expect(screen.queryByTestId('donate-zakat')).toBeNull()
   })
 })

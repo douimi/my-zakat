@@ -30,7 +30,8 @@ async function fillDonationForm(
     quickAmount?: number
     name?: string
     email?: string
-    purpose?: string
+    /** Tick "This donation is my Zakat". Where the money goes stays "where most needed". */
+    zakat?: boolean
     frequency?: 'one-time' | 'monthly' | 'annually'
   } = {},
 ) {
@@ -39,7 +40,7 @@ async function fillDonationForm(
     quickAmount,
     name = 'E2E Test Donor',
     email = `e2e-${Date.now()}@test.myzakat.org`,
-    purpose,
+    zakat,
     frequency,
   } = options
 
@@ -58,8 +59,8 @@ async function fillDonationForm(
     await page.getByTestId(`donate-freq-${frequency}`).check()
   }
 
-  if (purpose) {
-    await page.getByTestId('donate-purpose').selectOption(purpose)
+  if (zakat) {
+    await page.getByTestId('donate-zakat').check()
   }
 
   await page.getByTestId('donate-name').fill(name)
@@ -115,7 +116,7 @@ test.describe('Donate Page — Rendering', () => {
     }
 
     await expect(page.getByTestId('donate-amount-input')).toBeVisible()
-    await expect(page.getByTestId('donate-purpose')).toBeVisible()
+    await expect(page.getByTestId('donate-destination')).toBeVisible()
     await expect(page.getByTestId('donate-freq-one-time')).toBeVisible()
     await expect(page.getByTestId('donate-freq-monthly')).toBeVisible()
     await expect(page.getByTestId('donate-freq-annually')).toBeVisible()
@@ -146,12 +147,9 @@ test.describe('Donate Page — Rendering', () => {
     await expect(page.getByText(/recurring payment/i)).toBeVisible()
   })
 
-  test('purpose dropdown has all options', async ({ page }) => {
-    const options = await page.getByTestId('donate-purpose').locator('option').allTextContents()
-    expect(options).toContain('General Donation')
-    expect(options).toContain('Zakat')
-    expect(options).toContain('Emergency Relief')
-    expect(options).toContain('Orphan Care')
+  test('asks where the money goes, defaulting to where it is most needed', async ({ page }) => {
+    await expect(page.getByLabel(/where the need is greatest/i)).toBeChecked()
+    await expect(page.getByTestId('donate-zakat')).not.toBeChecked()
   })
 })
 
@@ -165,10 +163,10 @@ test.describe('Donate Page — URL Parameters', () => {
     await expect(page.getByTestId('donate-amount-input')).toHaveValue('250')
   })
 
-  test('pre-fills Zakat purpose from ?zakat_amount= parameter', async ({ page }) => {
+  test('marks the gift as Zakat from ?zakat_amount= parameter', async ({ page }) => {
     await page.goto('/donate?zakat_amount=312.50')
     await expect(page.getByTestId('donate-amount-input')).toHaveValue('312.5')
-    await expect(page.getByTestId('donate-purpose')).toHaveValue('Zakat')
+    await expect(page.getByTestId('donate-zakat')).toBeChecked()
   })
 
   test('pre-fills frequency from ?frequency= parameter', async ({ page }) => {
@@ -189,7 +187,7 @@ test.describe('One-Time Payment Flow', () => {
     const email = await fillDonationForm(page, {
       quickAmount: 50,
       name: 'E2E One-Time Donor',
-      purpose: 'Zakat',
+      zakat: true,
     })
 
     // Intercept the API call to verify it happens
@@ -226,13 +224,12 @@ test.describe('One-Time Payment Flow', () => {
     }
   })
 
-  test('donation with different purpose calls correct API endpoint', async ({ page }) => {
+  test('donation to where the need is greatest calls the payment endpoint', async ({ page }) => {
     await page.goto('/donate')
 
     await fillDonationForm(page, {
       quickAmount: 100,
-      name: 'E2E Purpose Test',
-      purpose: 'Education',
+      name: 'E2E Destination Test',
     })
 
     const apiPromise = page.waitForResponse(
@@ -295,7 +292,6 @@ test.describe('Subscription Payment Flow', () => {
       quickAmount: 25,
       name: 'E2E Monthly Donor',
       frequency: 'monthly',
-      purpose: 'General Donation',
     })
 
     await expect(page.getByTestId('donate-submit')).toContainText('Set up Recurring Donation')
