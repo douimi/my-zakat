@@ -1562,7 +1562,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 amount = subscription["items"]["data"][0]["price"]["unit_amount"] / 100.0
                 interval = subscription["items"]["data"][0]["price"]["recurring"]["interval"]
 
+                # The first invoice may have been processed first and already
+                # filed this subscription (see _record_recurring_invoice).
                 existing_sub = db.query(DonationSubscription).filter(
+                    DonationSubscription.stripe_subscription_id == subscription_id
+                ).first() or db.query(DonationSubscription).filter(
                     DonationSubscription.email == customer.email,
                     DonationSubscription.status.in_(["pending", "checkout_completed"])
                 ).first()
@@ -1608,58 +1612,17 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         # ── invoice.payment_succeeded — ONE donation per actual charge ──
         elif event_type == "invoice.payment_succeeded":
             invoice = event["data"]["object"]
-            invoice_id = invoice.get("id", "")
-            subscription_id = invoice.get("subscription")
-
-            if subscription_id:
-                amount_paid = invoice.get("amount_paid", 0) / 100.0
-                billing_reason = invoice.get("billing_reason", "")
-
-                # Guard: check if we already recorded a donation for this invoice
-                existing_invoice_donation = db.query(Donation).filter(
-                    Donation.stripe_session_id == invoice_id
-                ).first()
-                if existing_invoice_donation:
-                    logger.info("Invoice %s already recorded, skipping", invoice_id)
-                else:
-                    db_sub = db.query(DonationSubscription).filter(
-                        DonationSubscription.stripe_subscription_id == subscription_id
-                    ).first()
-
-                    if db_sub:
-                        try:
-                            donation = Donation(
-                                name=db_sub.name,
-                                email=db_sub.email,
-                                amount=amount_paid,
-                                frequency=f"Recurring {db_sub.interval}ly",
-                                stripe_session_id=invoice_id,
-                                donated_at=datetime.utcnow(),
-                                certificate_filename="available",
-                                fundraising_project_id=db_sub.fundraising_project_id,
-                            )
-                            db.add(donation)
-
-                            db_sub.next_payment_date = calculate_next_payment_date(
-                                db_sub.payment_day, db_sub.payment_month, db_sub.interval
-                            )
-                            db_sub.updated_at = datetime.utcnow()
-                            db.commit()
-                            db.refresh(donation)
-                            logger.event(
-                                ev.SUBSCRIPTION_PAYMENT_RECORDED, "recurring donation charged",
-                                outcome=ev.OUTCOME_SUCCESS,
-                                donation_id=donation.id, amount=amount_paid,
-                                currency="usd", stripe_event=event_id,
-                            )
-                            _send_certificate_safe(donation)
-                        except Exception as e:
-                            logger.event(
-                                ev.SUBSCRIPTION_FAILED, "a recurring charge could not be recorded",
-                                level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
-                                reason=ev.REASON_DB_ERROR, stripe_event=event_id,
-                            )
-                            db.rollback()
+            try:
+                donation = _record_recurring_invoice(db, invoice, event_id)
+                if donation is not None:
+                    _send_certificate_safe(donation)
+            except Exception as e:
+                logger.event(
+                    ev.SUBSCRIPTION_FAILED, "a recurring charge could not be recorded",
+                    level=logging.ERROR, exc=e, outcome=ev.OUTCOME_FAILURE,
+                    reason=ev.REASON_DB_ERROR, stripe_event=event_id,
+                )
+                db.rollback()
 
             # After the generic path: it may have just written the Donation,
             # which the hook then tags; when it skipped the invoice, the hook
@@ -1810,6 +1773,148 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             reason=ev.REASON_UNEXPECTED,
         )
         return JSONResponse(status_code=500, content={"status": "webhook error"})
+
+
+def _invoice_paid_at(invoice: dict) -> datetime:
+    """When the charge happened: matters for an import of old invoices."""
+    ts = ((invoice.get("status_transitions") or {}).get("paid_at")) or invoice.get("created")
+    return datetime.utcfromtimestamp(ts) if ts else datetime.utcnow()
+
+
+def _invoice_metadata(invoice: dict) -> dict:
+    """The subscription's metadata as an invoice carries it, across API versions."""
+    for holder in (invoice.get("subscription_details") or {},
+                   ((invoice.get("parent") or {}).get("subscription_details") or {})):
+        if holder.get("metadata"):
+            return dict(holder["metadata"])
+    return {}
+
+
+def _ensure_subscription_record(db: Session, subscription_id: str, invoice: dict) -> DonationSubscription:
+    """The DonationSubscription for a paid invoice, filed now if it is missing.
+
+    Stripe sends customer.subscription.created and the first
+    invoice.payment_succeeded together and in no guaranteed order. The invoice
+    used to be dropped when it came first, which is how monthly gifts went
+    missing from the donations list. Does not commit.
+    """
+    db_sub = db.query(DonationSubscription).filter(
+        DonationSubscription.stripe_subscription_id == subscription_id).first()
+    if db_sub is not None:
+        return db_sub
+    metadata = _invoice_metadata(invoice)
+    amount = (invoice.get("amount_paid") or 0) / 100.0
+    interval = "month"
+    try:
+        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+        metadata = dict(stripe_sub.get("metadata") or {}) or metadata
+        price = stripe_sub["items"]["data"][0]["price"]
+        amount = (price.get("unit_amount") or 0) / 100.0 or amount
+        interval = (price.get("recurring") or {}).get("interval") or interval
+    except Exception as e:  # the invoice alone is enough to record the money
+        logger.warning("Could not read subscription %s from Stripe: %s", subscription_id, e)
+    try:
+        payment_day = int(metadata.get("payment_day") or 1)
+    except (TypeError, ValueError):
+        payment_day = 1
+    db_sub = DonationSubscription(
+        stripe_subscription_id=subscription_id,
+        stripe_customer_id=invoice.get("customer") or "",
+        name=metadata.get("donor_name") or invoice.get("customer_name") or "Donor",
+        email=invoice.get("customer_email") or "",
+        amount=amount,
+        purpose=metadata.get("purpose") or "General Donation",
+        interval=interval,
+        payment_day=payment_day,
+        status="active",
+        fundraising_project_id=_project_from_metadata(metadata),
+    )
+    db.add(db_sub)
+    db.flush()
+    return db_sub
+
+
+def _record_recurring_invoice(db: Session, invoice: dict, event_id: str,
+                              *, recorded_as: str = "webhook") -> Optional[Donation]:
+    """Record one paid recurring-gift invoice as a Donation, exactly once.
+
+    Returns the new Donation, or None when there is nothing to record: not a
+    subscription invoice, nothing paid, already recorded, or a sponsorship
+    (those are recorded by the sponsorship hook, tagged to their case).
+    Commits.
+    """
+    import sponsorship_service as sp_svc
+    from models import Sponsorship
+
+    subscription_id = sp_svc.invoice_subscription_id(invoice)
+    invoice_id = invoice.get("id") or ""
+    amount = (invoice.get("amount_paid") or 0) / 100.0
+    if not subscription_id or amount <= 0:
+        return None
+    if sp_svc.invoice_sponsorship_id(invoice) or db.query(Sponsorship.id).filter(
+            Sponsorship.stripe_subscription_id == subscription_id).first():
+        return None
+    if db.query(Donation.id).filter(Donation.stripe_session_id == invoice_id).first():
+        return None
+
+    db_sub = _ensure_subscription_record(db, subscription_id, invoice)
+    donation = Donation(
+        name=db_sub.name,
+        email=db_sub.email or invoice.get("customer_email") or "",
+        amount=amount,
+        frequency=f"Recurring {db_sub.interval}ly",
+        stripe_session_id=invoice_id,
+        donated_at=_invoice_paid_at(invoice),
+        certificate_filename="available",
+        payment_method="Stripe",
+        fundraising_project_id=db_sub.fundraising_project_id,
+    )
+    db.add(donation)
+    db_sub.next_payment_date = calculate_next_payment_date(db_sub.payment_day, db_sub.payment_month, db_sub.interval)
+    db_sub.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(donation)
+    logger.event(
+        ev.SUBSCRIPTION_PAYMENT_RECORDED, "recurring donation charged",
+        outcome=ev.OUTCOME_SUCCESS, donation_id=donation.id, amount=amount,
+        currency="usd", stripe_event=event_id, recorded_as=recorded_as,
+    )
+    return donation
+
+
+@router.post("/sync-recurring-payments")
+async def sync_recurring_payments(days: int = 400, db: Session = Depends(get_db),
+                                  current_admin = Depends(get_current_admin)):
+    """Import the recurring charges Stripe has and the donations list lacks.
+
+    For gifts the webhook could not record (see _ensure_subscription_record).
+    Safe to run any number of times: an invoice already recorded is skipped.
+    No receipt is emailed for an imported charge — the donor would get a pile
+    of old receipts at once.
+    """
+    import time as _time
+    import sponsorship_service as sp_svc
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+    since = int(_time.time()) - max(1, min(days, 3 * 365)) * 86400
+    checked = imported = sponsorship_payments = 0
+    try:
+        invoices = stripe.Invoice.list(status="paid", created={"gte": since}, limit=100)
+        for inv in invoices.auto_paging_iter():
+            data = inv.to_dict_recursive() if hasattr(inv, "to_dict_recursive") else inv.to_dict()
+            checked += 1
+            if _record_recurring_invoice(db, data, "sync", recorded_as="backfill") is not None:
+                imported += 1
+                continue
+            sp, _donation, created, _started = sp_svc.record_payment(db, data, "sync")
+            if sp is not None and created:
+                sponsorship_payments += 1
+    except stripe.error.StripeError as e:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e}")
+    logger.info("Recurring sync by %s: checked=%d imported=%d sponsorship=%d",
+                mask_email(current_admin.email), checked, imported, sponsorship_payments)
+    return {"checked": checked, "imported": imported, "sponsorship_payments": sponsorship_payments}
 
 
 def _sponsorship_hook(kind: str, db: Session, obj: dict, event_id: str) -> None:

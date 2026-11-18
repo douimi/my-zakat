@@ -157,8 +157,11 @@ const AdminDonations = () => {
           donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           donation.email.toLowerCase().includes(searchTerm.toLowerCase())
 
+        const freq = donation.frequency.toLowerCase()
+        // "Recurring" covers monthly/annual gifts and monthly sponsorships alike.
         const matchesFrequency = !frequencyFilter ||
-          donation.frequency.toLowerCase().includes(frequencyFilter.toLowerCase())
+          (frequencyFilter === 'Recurring' ? freq.includes('recurring') || freq.startsWith('sponsorship')
+            : freq.includes(frequencyFilter.toLowerCase()))
 
         const { status } = getStatusInfo(donation.frequency)
         const matchesStatus = statusFilter === 'all' || statusFilter === status
@@ -200,6 +203,24 @@ const AdminDonations = () => {
   const pagedDonations = filteredDonations.slice(pageStart, pageStart + pageSize)
   const rangeFrom = filteredDonations.length === 0 ? 0 : pageStart + 1
   const rangeTo = Math.min(pageStart + pageSize, filteredDonations.length)
+
+  const [importing, setImporting] = useState(false)
+  const handleImportRecurring = async () => {
+    setImporting(true)
+    try {
+      const r = await donationsAPI.syncRecurringPayments()
+      const added = r.imported + r.sponsorship_payments
+      showSuccess('Recurring payments imported', added === 0
+        ? `Checked ${r.checked} Stripe payments: nothing was missing.`
+        : `${added} missing payment${added === 1 ? '' : 's'} added (out of ${r.checked} checked).`)
+      queryClient.invalidateQueries(['admin-donations'])
+      queryClient.invalidateQueries('donation-stats')
+    } catch (error: any) {
+      showError('Import failed', error?.response?.data?.detail || 'Could not reach Stripe.')
+    } finally {
+      setImporting(false)
+    }
+  }
 
   const handleSyncStripeData = async () => {
     setSyncing(true)
@@ -462,6 +483,11 @@ const AdminDonations = () => {
               <Download className="w-4 h-4" aria-hidden="true" />
               Export CSV
             </button>
+            <button onClick={handleImportRecurring} disabled={importing} className="btn-secondary gap-2"
+              title="Adds the monthly and annual charges Stripe has made that are missing here. Safe to run again.">
+              <RefreshCw className={`w-4 h-4 ${importing ? 'animate-spin' : ''}`} aria-hidden="true" />
+              {importing ? 'Importing…' : 'Import recurring payments'}
+            </button>
             {window.location.hostname === 'localhost' && (
               <button onClick={handleSyncStripeData} disabled={syncing} className="btn-secondary gap-2">
                 <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -481,7 +507,8 @@ const AdminDonations = () => {
         >
           <option value="">All Types</option>
           <option value="One-Time">One-Time</option>
-          <option value="Recurring">Recurring</option>
+          <option value="Recurring">Recurring (monthly / annual)</option>
+          <option value="Sponsorship">Sponsorships</option>
         </select>
         <select
           value={statusFilter}
