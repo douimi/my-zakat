@@ -12,6 +12,16 @@ export interface Donation {
   stripe_session_id?: string | null
   /** The fundraising project the donation counts towards. */
   fundraising_project_id?: number | null
+  /** Why a Stripe payment did not go through (failed or abandoned only). */
+  failure_code?: string | null
+  /** Stripe's own wording, the card used, and the raw codes. */
+  failure_detail?: string | null
+  /** One plain-English line for staff, computed by the backend. */
+  failure_explanation?: string | null
+  /** The "may we help?" email to the donor. */
+  followup_status?: 'scheduled' | 'sent' | 'not_needed' | 'skipped' | null
+  followup_due_at?: string | null
+  followup_sent_at?: string | null
 }
 
 export interface ContactSubmission {

@@ -327,6 +327,13 @@ class DonationResponse(BaseModel):
     proof_filename: Optional[str] = None
     notes: Optional[str] = None
     fundraising_project_id: Optional[int] = None
+    # Why a Stripe payment did not go through, and the help email (migration 43).
+    failure_code: Optional[str] = None
+    failure_detail: Optional[str] = None
+    failure_explanation: Optional[str] = None
+    followup_status: Optional[str] = None
+    followup_due_at: Optional[datetime] = None
+    followup_sent_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

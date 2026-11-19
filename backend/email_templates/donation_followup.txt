@@ -1,0 +1,25 @@
+السلام عليكم ورحمة الله وبركاته
+
+Assalamu alaikum wa rahmatullahi wa barakatuh{% if first_name %} {{ first_name }}{% endif %},
+
+JazakAllahu khayran for choosing to give through the Zakat Distribution Foundation. We noticed that your donation of {{ amount_str }} on {{ date_str }} did not go through: {{ reason }}. You have not been charged.
+
+Please do not let this trouble you. The Prophet Muhammad (peace be upon him) taught us that whoever sincerely intends a good deed, Allah records it for them as a complete good deed, even before they are able to carry it out (Sahih al-Bukhari 6491, Sahih Muslim 131). May Allah accept your intention and reward you abundantly for it.
+
+If you would still like to complete your gift, you can do so here:
+{{ donate_url }}
+
+And if something got in the way, whether a card problem, a question about your zakat, or anything else, it would be an honour to help you personally:
+
+  Email: {{ contact_email }}
+  Phone / WhatsApp: {{ contact_phone }} ({{ whatsapp_url }})
+
+You can also simply reply to this email.
+
+May Allah bless you, your family and your wealth, and make it a source of barakah for you in this life and the next.
+
+BarakAllahu feekum,
+Naser Hdieb
+Chairperson, Zakat Distribution Foundation
+
+Your Zakat, Their Lifeline.

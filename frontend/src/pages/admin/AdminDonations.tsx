@@ -22,6 +22,57 @@ function getStatusInfo(frequency: string) {
   return { status: 'confirmed', label: frequency, color: 'bg-blue-100 text-blue-800' }
 }
 
+function followupLine(d: Donation): string | null {
+  const at = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '')
+  switch (d.followup_status) {
+    case 'scheduled': return `A help email to the donor is scheduled for ${at(d.followup_due_at)}.`
+    case 'sent': return `Help email sent to the donor on ${at(d.followup_sent_at)}.`
+    case 'not_needed': return 'No help email: the donor completed a donation afterwards.'
+    case 'skipped': return 'No help email: the donor was already contacted recently, or is unsubscribed.'
+    default: return null
+  }
+}
+
+/** Why a payment did not go through: the reason up front, Stripe's detail on click. */
+function FailureDetails({ donation }: { donation: Donation }) {
+  const [open, setOpen] = useState(false)
+  const followup = followupLine(donation)
+  return (
+    <div className="mb-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600 shrink-0" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="font-semibold text-red-900">Why it didn&apos;t go through</p>
+          <p className="text-red-900">{donation.failure_explanation}</p>
+          {followup && (
+            <p className="mt-2 flex items-center gap-1.5 text-gray-700">
+              <Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {followup}
+            </p>
+          )}
+          {donation.failure_detail && (
+            <>
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open}
+                className="mt-2 text-xs font-medium text-red-700 hover:text-red-900 underline"
+              >
+                {open ? 'Hide Stripe details' : 'Show Stripe details'}
+              </button>
+              {open && (
+                <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-xs text-gray-700 bg-white/70 p-2 rounded border border-red-100">
+                  {donation.failure_detail}
+                </pre>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const AdminDonations = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [frequencyFilter, setFrequencyFilter] = useState('')
@@ -238,14 +289,15 @@ const AdminDonations = () => {
 
   const exportToCsv = () => {
     const csvContent = [
-      ['ID', 'Name', 'Email', 'Amount', 'Frequency', 'Date'].join(','),
+      ['ID', 'Name', 'Email', 'Amount', 'Frequency', 'Date', 'Why it failed'].join(','),
       ...filteredDonations.map((donation: Donation) => [
         donation.id,
         `"${donation.name}"`,
         donation.email,
         donation.amount,
         `"${donation.frequency}"`,
-        new Date(donation.donated_at).toLocaleDateString()
+        new Date(donation.donated_at).toLocaleDateString(),
+        `"${(donation.failure_explanation || '').replace(/"/g, '""')}"`,
       ].join(','))
     ].join('\n')
 
@@ -601,8 +653,16 @@ const AdminDonations = () => {
                         ${donation.amount.toLocaleString()}
                       </div>
                     </td>
-                    <td className="px-3 sm:px-6 py-4">
+                    <td className="px-3 sm:px-6 py-4 max-w-[16rem]">
                       <StatusBadge tone={STATUS_TONE[status] || 'neutral'}>{STATUS_LABEL[status] || status}</StatusBadge>
+                      {donation.failure_explanation && (
+                        <span
+                          className="block mt-1 text-xs text-gray-500 truncate"
+                          title={donation.failure_explanation}
+                        >
+                          {donation.failure_explanation}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-700 hidden md:table-cell">
                       <span className="whitespace-nowrap">{label}</span>
@@ -855,6 +915,8 @@ const AdminDonations = () => {
       {detailsDonation && (
         <Modal title="Donation Details" onClose={() => setDetailsDonation(null)} size="lg" closeOnOverlayClick>
             <div>
+
+              {detailsDonation.failure_explanation && <FailureDetails donation={detailsDonation} />}
 
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>

@@ -1,0 +1,20 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<p dir="rtl" lang="ar" style="text-align: right; font-size: 18px; color: #1e3a8a; margin-bottom: 8px;">السلام عليكم ورحمة الله وبركاته</p>
+<p>Assalamu alaikum wa rahmatullahi wa barakatuh{% if first_name %} {{ first_name }}{% endif %},</p>
+<p><strong>JazakAllahu khayran</strong> for choosing to give through the Zakat Distribution Foundation. We noticed that your donation of <strong>{{ amount_str }}</strong> on {{ date_str }} did not go through: {{ reason }}. You have not been charged.</p>
+<p>Please do not let this trouble you. The Prophet Muhammad ﷺ taught us that whoever sincerely intends a good deed, Allah records it for them as a complete good deed, even before they are able to carry it out <span style="color: #6b7280;">(Sahih al-Bukhari 6491, Sahih Muslim 131)</span>. May Allah accept your intention and reward you abundantly for it.</p>
+<p>If you would still like to complete your gift, you can do so here:</p>
+<p style="text-align: center; margin: 24px 0;"><a href="{{ donate_url }}" class="btn">Complete my donation</a></p>
+<p>And if something got in the way, whether a card problem, a question about your zakat, or anything else, it would be an honour to help you personally:</p>
+<table role="presentation" style="border-collapse: collapse; margin: 0 0 16px 0; background-color: #f3f4f6; border-left: 4px solid #1e3a8a; border-radius: 4px; width: 100%;">
+  <tr><td style="padding: 12px 16px 4px 16px;">Email: <a href="mailto:{{ contact_email }}" style="color: #1e3a8a;">{{ contact_email }}</a></td></tr>
+  <tr><td style="padding: 4px 16px 12px 16px;">Phone / WhatsApp: <a href="{{ whatsapp_url }}" style="color: #1e3a8a;">{{ contact_phone }}</a></td></tr>
+</table>
+<p>You can also simply reply to this email.</p>
+<p>May Allah bless you, your family and your wealth, and make it a source of barakah for you in this life and the next.</p>
+<p style="margin-top: 28px;">BarakAllahu feekum,</p>
+<p style="margin: 2px 0;"><strong>Naser Hdieb</strong></p>
+<p style="margin: 0; color: #4b5563;">Chairperson, Zakat Distribution Foundation</p>
+<p style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; font-style: italic; color: #6b7280; font-size: 13px;">Your Zakat, Their Lifeline.</p>
+{% endblock %}

@@ -23,6 +23,7 @@ from logging_config import get_logger, mask_email
 # scripts/logs.sh match on these event names, so they live in one module rather
 # than being spelled out as prose at each call site.
 import log_events as ev
+import donation_followups as followups
 from s3_service import upload_file, download_file, generate_object_key, file_exists
 # One definition of the nisab mass for the whole codebase: the figure this
 # calculation compares against is the same object the /api/nisab snapshot and
@@ -1674,14 +1675,18 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 ).first()
                 if not exists:
                     try:
-                        db.add(Donation(
+                        abandoned = Donation(
                             name=donor_name or "Anonymous",
                             email=customer_email,
                             amount=amount,
                             frequency="Abandoned",
                             stripe_session_id=session_id,
                             donated_at=datetime.utcnow(),
-                        ))
+                            failure_code=followups.CHECKOUT_EXPIRED,
+                            failure_detail=_last_payment_error(session.get("payment_intent")),
+                        )
+                        followups.schedule_followup(abandoned)
+                        db.add(abandoned)
                         db.commit()
                         # Expected in volume and not a fault, so INFO with no
                         # outcome field: it must not count against the success
@@ -1718,14 +1723,23 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 if not exists:
                     try:
                         reason = failure_code[:40]  # keep frequency column short
-                        db.add(Donation(
+                        failed = Donation(
                             name=donor_name,
                             email=customer_email,
                             amount=amount,
                             frequency=f"Failed - {reason}",
                             stripe_session_id=charge_id,
                             donated_at=datetime.utcnow(),
-                        ))
+                            failure_code=_specific_decline_code(charge)[:100],
+                            failure_detail=_charge_failure_detail(charge),
+                        )
+                        # Charges of a subscription invoice get no email from
+                        # here: a declined renewal has its own notices, and a
+                        # first recurring checkout that is never completed is
+                        # covered by checkout.session.expired.
+                        if not charge.get("invoice"):
+                            followups.schedule_followup(failed)
+                        db.add(failed)
                         db.commit()
                         # A declined card is a real donation failure: the donor
                         # tried to give and could not. WARNING rather than ERROR
@@ -1773,6 +1787,57 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             reason=ev.REASON_UNEXPECTED,
         )
         return JSONResponse(status_code=500, content={"status": "webhook error"})
+
+
+def _specific_decline_code(charge: dict) -> str:
+    """The most telling code: Stripe's failure_code is often just
+    card_declined, while outcome.reason says insufficient_funds."""
+    outcome = charge.get("outcome") or {}
+    reason = outcome.get("reason")
+    if reason and reason not in ("generic_decline",):
+        return reason
+    return charge.get("failure_code") or reason or "declined"
+
+
+def _charge_failure_detail(charge: dict) -> Optional[str]:
+    """Stripe's own words about a failed charge, plus which card, for staff."""
+    outcome = charge.get("outcome") or {}
+    card = ((charge.get("payment_method_details") or {}).get("card")) or {}
+    parts = []
+    msg = charge.get("failure_message") or outcome.get("seller_message")
+    if msg:
+        parts.append(msg)
+    if card.get("last4"):
+        parts.append("Card: %s •••• %s%s" % (
+            (card.get("brand") or "card").title(), card["last4"],
+            " (%s)" % card["country"] if card.get("country") else ""))
+    codes = [c for c in (charge.get("failure_code"), outcome.get("reason"), outcome.get("network_status"))
+             if c]
+    if codes:
+        parts.append("Stripe codes: %s" % ", ".join(dict.fromkeys(codes)))
+    return "\n".join(parts) or None
+
+
+def _last_payment_error(payment_intent_id) -> Optional[str]:
+    """If the donor tried a card before leaving checkout, why it failed.
+
+    A Checkout session that expires unpaid may still have a PaymentIntent with
+    a declined attempt on it; that is the real reason the gift did not happen.
+    """
+    if not payment_intent_id or not isinstance(payment_intent_id, str):
+        return None
+    try:
+        pi = stripe.PaymentIntent.retrieve(payment_intent_id)
+        err = pi.get("last_payment_error") if hasattr(pi, "get") else None
+    except Exception:
+        return None
+    if not err:
+        return None
+    codes = [c for c in (err.get("code"), err.get("decline_code")) if c]
+    parts = ["Last attempt failed: %s" % (err.get("message") or "declined")]
+    if codes:
+        parts.append("Stripe codes: %s" % ", ".join(dict.fromkeys(codes)))
+    return "\n".join(parts)
 
 
 def _invoice_paid_at(invoice: dict) -> datetime:

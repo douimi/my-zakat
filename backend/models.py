@@ -68,6 +68,22 @@ class Donation(Base):
     fundraising_project_id = Column(
         Integer, ForeignKey("fundraising_projects.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    # Why a Stripe payment did not go through (migration 43). failure_code is
+    # the most specific code Stripe gave (insufficient_funds, expired_card, ...,
+    # or checkout_expired); failure_detail is Stripe's own wording plus the card.
+    failure_code = Column(String(100), nullable=True)
+    failure_detail = Column(Text, nullable=True)
+    # The "may we help?" email to the donor: scheduled | sent | not_needed |
+    # skipped. NULL means none was ever planned (older rows, successful gifts).
+    followup_status = Column(String(30), nullable=True)
+    followup_due_at = Column(DateTime, nullable=True)
+    followup_sent_at = Column(DateTime, nullable=True)
+
+    @property
+    def failure_explanation(self):
+        """Plain-English reason for staff; None for a donation that went through."""
+        from donation_followups import explain_failure
+        return explain_failure(self)
 
 
 class User(Base):

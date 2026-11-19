@@ -51,6 +51,12 @@ DONATION_FAILED = "donation.failed"
 # useful as a funnel denominator, not an error.
 DONATION_ABANDONED = "donation.abandoned"
 
+# The "may we help you complete your gift?" email sent to a donor whose payment
+# failed or who left checkout (donation_followups.py). Sent by the worker an
+# hour after the failure, and only when the donor has not completed since.
+DONATION_FOLLOWUP_EMAILED = "donation.followup_emailed"
+DONATION_FOLLOWUP_FAILED = "donation.followup_failed"
+
 # Receipt PDF delivery. Separate from the donation itself: the money is safe
 # even when the email is not, and conflating them hid failed receipts.
 DONATION_CERTIFICATE_EMAILED = "donation.certificate_emailed"
@@ -181,6 +187,7 @@ REASONS = (
 PAYMENT_EVENTS = (
     DONATION_SESSION_CREATED, DONATION_SESSION_FAILED,
     DONATION_SUCCEEDED, DONATION_FAILED, DONATION_ABANDONED,
+    DONATION_FOLLOWUP_EMAILED, DONATION_FOLLOWUP_FAILED,
     DONATION_CERTIFICATE_EMAILED, DONATION_CERTIFICATE_FAILED,
     DONATION_RECORDED_MANUALLY, DONATION_UPDATED, DONATION_DELETED,
     WEBHOOK_RECEIVED, WEBHOOK_PROCESSED, WEBHOOK_DUPLICATE,

@@ -135,6 +135,20 @@ async def scan_outbox(ctx: dict[str, Any]) -> None:
         db.close()
 
 
+async def send_donation_followups(ctx: dict[str, Any]) -> None:
+    """Every 5 min, email donors whose payment failed an hour ago and who have
+    not completed since (see donation_followups.py)."""
+    from donation_followups import process_due_followups
+
+    db = SessionLocal()
+    try:
+        counts = process_due_followups(db)
+        if any(counts.values()):
+            logger.info("send_donation_followups: %s", counts)
+    finally:
+        db.close()
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Worker settings (consumed by `arq backend.marketing.queue.WorkerSettings`)
 # ─────────────────────────────────────────────────────────────────────
@@ -158,6 +172,7 @@ class WorkerSettings:
     functions = [send_email_task]
     cron_jobs = [
         cron(scan_outbox, second={0, 15, 30, 45}),  # every 15s
+        cron(send_donation_followups, minute=set(range(0, 60, 5)), second=20),
     ]
     redis_settings = _redis_settings()
     max_jobs = 10
