@@ -181,3 +181,123 @@ def test_the_template_pair_renders_without_a_name():
                whatsapp_url="https://wa.me/15712430710", frontend_url="https://myzakat.org", subject="s")
     html, text = render("donation_followup", ctx)
     assert "barakatuh," in text and "السلام عليكم" in html
+
+
+# ── Staff tools on the details screen ────────────────────────────────────────
+
+def old_abandoned(db, email="safa@example.com", session="cs_live_old"):
+    d = Donation(name="Safa", email=email, amount=325.5, frequency="Abandoned",
+                 stripe_session_id=session, donated_at=datetime.utcnow() - timedelta(days=1))
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+@pytest.fixture
+def fake_stripe(monkeypatch):
+    import stripe
+    monkeypatch.setattr(stripe, "api_key", "sk_test_fake")
+    data = {"session": {}, "charges": [], "pi": {}}
+    monkeypatch.setattr(stripe.checkout.Session, "retrieve", staticmethod(lambda sid: data["session"]))
+    monkeypatch.setattr(stripe.Charge, "list", staticmethod(lambda **kw: {"data": data["charges"]}))
+    monkeypatch.setattr(stripe.Charge, "retrieve", staticmethod(lambda cid: data["charges"][0]))
+    monkeypatch.setattr(stripe.PaymentIntent, "retrieve", staticmethod(lambda pid: data["pi"]))
+    return data
+
+
+def test_staff_see_that_the_donor_never_submitted_a_card(client, db_session, auth_headers, fake_stripe):
+    d = old_abandoned(db_session)
+    fake_stripe["session"] = {"id": "cs_live_old", "mode": "payment", "amount_total": 32550, "currency": "usd",
+                              "created": 1763495576, "expires_at": 1763581976, "status": "expired",
+                              "payment_intent": None, "metadata": {"purpose": "Zakat"}}
+
+    r = client.get("/api/donations/%d/stripe-timeline" % d.id, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["summary"] == "The donor left without ever submitting a card: no payment was attempted."
+    assert body["attempted"] is False
+    labels = [s["label"] for s in body["steps"]]
+    assert labels[0] == "Donor opened the Stripe payment page for $325.50 (Zakat)"
+    assert labels[-1] == "Stripe closed the payment page: it expired unpaid"
+    assert body["steps"][0]["at"].endswith("Z")
+
+
+def test_staff_see_each_declined_attempt_and_the_reason_is_kept(client, db_session, auth_headers, fake_stripe):
+    d = old_abandoned(db_session)
+    fake_stripe["session"] = {"id": "cs_live_old", "mode": "payment", "amount_total": 32550, "currency": "usd",
+                              "created": 1763495576, "expires_at": 1763581976, "status": "expired",
+                              "payment_intent": "pi_1", "metadata": {}}
+    fake_stripe["charges"] = [
+        {"id": "ch_2", "created": 1763495700, "status": "failed", "amount": 32550, "currency": "usd",
+         "failure_code": "card_declined", "failure_message": "Your card was declined.",
+         "outcome": {"reason": "do_not_honor", "network_status": "declined_by_network"},
+         "payment_method_details": {"card": {"brand": "mastercard", "last4": "1111", "country": "FR"}}},
+        {"id": "ch_1", "created": 1763495650, "status": "failed", "amount": 32550, "currency": "usd",
+         "failure_code": "incorrect_cvc", "failure_message": "Your card's security code is incorrect.",
+         "outcome": {}, "payment_method_details": {"card": {"brand": "visa", "last4": "4242"}}},
+    ]
+
+    body = client.get("/api/donations/%d/stripe-timeline" % d.id, headers=auth_headers).json()
+    assert body["summary"] == "The donor tried to pay (2 attempts), was declined, then left."
+    declined = [s for s in body["steps"] if s["tone"] == "danger"]
+    assert declined[0]["label"] == "Payment attempt with Visa •••• 4242 was declined"
+    assert "Mastercard •••• 1111 (FR)" in declined[1]["label"] and "do_not_honor" in declined[1]["detail"]
+
+    db_session.refresh(d)
+    assert "security code is incorrect" in d.failure_detail
+    assert "after a failed attempt" in d.failure_explanation
+
+
+def test_the_timeline_says_when_the_donor_gave_afterwards(client, db_session, auth_headers, fake_stripe):
+    d = old_abandoned(db_session)
+    db_session.add(Donation(name="Safa", email="safa@example.com", amount=325.5, frequency="One-Time",
+                            donated_at=datetime.utcnow()))
+    db_session.commit()
+    fake_stripe["session"] = {"id": "cs_live_old", "mode": "payment", "amount_total": 32550,
+                              "created": 1763495576, "status": "expired", "payment_intent": None}
+
+    body = client.get("/api/donations/%d/stripe-timeline" % d.id, headers=auth_headers).json()
+    assert body["steps"][-1]["tone"] == "success" and "$325.50" in body["steps"][-1]["label"]
+
+
+def test_the_timeline_explains_when_stripe_cannot_be_asked(client, db_session, auth_headers, monkeypatch):
+    import stripe
+    monkeypatch.setattr(stripe, "api_key", None)
+    d = old_abandoned(db_session)
+    r = client.get("/api/donations/%d/stripe-timeline" % d.id, headers=auth_headers)
+    assert r.status_code == 422 and "not configured" in r.json()["detail"]
+
+
+def test_staff_can_send_the_help_email_by_hand_even_for_an_old_row(client, db_session, auth_headers):
+    d = old_abandoned(db_session)
+    r = client.post("/api/donations/%d/send-followup" % d.id, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["followup_status"] == "sent" and r.json()["followup_sent_at"]
+    [mail] = emails_to(db_session, "safa@example.com")
+    assert mail.from_email == "nhdieb@myzakat.org" and "$325.50" in mail.body_text
+
+    # Each press is one more email, never a silent no-op.
+    assert client.post("/api/donations/%d/send-followup" % d.id, headers=auth_headers).status_code == 200
+    assert len(emails_to(db_session, "safa@example.com")) == 2
+
+
+def test_sending_by_hand_asks_first_when_the_donor_already_gave(client, db_session, auth_headers):
+    d = old_abandoned(db_session)
+    db_session.add(Donation(name="Safa", email="safa@example.com", amount=100, frequency="One-Time",
+                            donated_at=datetime.utcnow()))
+    db_session.commit()
+
+    r = client.post("/api/donations/%d/send-followup" % d.id, headers=auth_headers)
+    assert r.status_code == 409 and "already completed a donation of $100.00" in r.json()["detail"]
+    assert emails_to(db_session, "safa@example.com") == []
+    assert client.post("/api/donations/%d/send-followup?force=true" % d.id, headers=auth_headers).status_code == 200
+
+
+def test_a_successful_donation_cannot_get_the_help_email(client, db_session, auth_headers):
+    ok = Donation(name="Safa", email="safa@example.com", amount=10, frequency="One-Time")
+    db_session.add(ok)
+    db_session.commit()
+    r = client.post("/api/donations/%d/send-followup" % ok.id, headers=auth_headers)
+    assert r.status_code == 400
+    assert client.post("/api/donations/%d/send-followup" % ok.id).status_code in (401, 403)

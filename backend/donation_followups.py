@@ -157,7 +157,8 @@ def schedule_followup(donation, now: datetime | None = None) -> None:
     donation.followup_due_at = now + FOLLOWUP_DELAY
 
 
-def _completed_since(db: Session, donation) -> bool:
+def completed_after(db: Session, donation):
+    """The first successful donation by the same donor since this one, if any."""
     from models import Donation
 
     email = (donation.email or "").strip().lower()
@@ -166,15 +167,15 @@ def _completed_since(db: Session, donation) -> bool:
         # Recorded when Stripe expired the session, up to a day after the
         # donor opened it; a gift completed in between still counts.
         since = donation.donated_at - CHECKOUT_LIFETIME
-    q = db.query(Donation.id).filter(
+    q = db.query(Donation).filter(
         func.lower(Donation.email) == email,
         Donation.donated_at >= since,
         Donation.id != donation.id,
         Donation.amount > 0,
     )
-    for prefix in ("Failed%", "Abandoned%", "Pending%", "failed%", "abandoned%", "pending%"):
-        q = q.filter(~Donation.frequency.like(prefix))
-    return db.query(q.exists()).scalar()
+    for prefix in ("failed%", "abandoned%", "pending%"):
+        q = q.filter(~func.lower(Donation.frequency).like(prefix))
+    return q.order_by(Donation.donated_at.asc()).first()
 
 
 def _contacted_recently(db: Session, donation, now: datetime) -> bool:
@@ -190,7 +191,7 @@ def _contacted_recently(db: Session, donation, now: datetime) -> bool:
     ).scalar()
 
 
-def _send(db: Session, donation) -> bool:
+def _send(db: Session, donation, idempotency_key: str | None = None) -> bool:
     from marketing.mailer import enqueue_email
 
     first_name = (donation.name or "").strip().split(" ")[0]
@@ -219,12 +220,40 @@ def _send(db: Session, donation) -> bool:
             "brand_subtitle": "Your Zakat, Their Lifeline.",
         },
         category="transactional",
-        idempotency_key="donation-followup-%d" % donation.id,
+        idempotency_key=idempotency_key or "donation-followup-%d" % donation.id,
         from_email=FOLLOWUP_FROM_EMAIL,
         from_name=FOLLOWUP_FROM_NAME,
         reply_to=FOLLOWUP_FROM_EMAIL,
     )
     return row is not None and row.status != "suppressed"
+
+
+class NotSendable(Exception):
+    pass
+
+
+def send_now(db: Session, donation, now: datetime | None = None) -> None:
+    """Staff pressed "Send help email": send it now, whatever the schedule said.
+
+    Works for any failed or abandoned donation, including ones from before the
+    automatic email existed, and can be sent again (each press is one email).
+    """
+    if not is_unsuccessful(donation.frequency) or (donation.frequency or "").lower().startswith("pending"):
+        raise NotSendable("Only a failed or abandoned donation can get this email.")
+    if not donation.email:
+        raise NotSendable("This donation has no email address.")
+    now = now or datetime.utcnow()
+    if not _send(db, donation, idempotency_key="donation-followup-%d-manual-%d" % (
+            donation.id, int(now.timestamp() * 1000))):
+        raise NotSendable("This address is on the unsubscribe list, so no email was sent.")
+    donation.followup_status = SENT
+    donation.followup_sent_at = now
+    db.commit()
+    logger.event(
+        ev.DONATION_FOLLOWUP_EMAILED, "staff sent the donor the offer of help",
+        outcome=ev.OUTCOME_SUCCESS, donation_id=donation.id, manual=True,
+        stripe_code=_code_of(donation), email=mask_email(donation.email),
+    )
 
 
 def process_due_followups(db: Session, now: datetime | None = None, limit: int = 50) -> dict:
@@ -242,7 +271,7 @@ def process_due_followups(db: Session, now: datetime | None = None, limit: int =
     counts = {SENT: 0, NOT_NEEDED: 0, SKIPPED: 0}
     for donation in due:
         try:
-            if _completed_since(db, donation):
+            if completed_after(db, donation) is not None:
                 outcome = NOT_NEEDED
             elif _contacted_recently(db, donation, now):
                 outcome = SKIPPED

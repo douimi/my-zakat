@@ -547,6 +547,70 @@ async def admin_email_receipt(
     return {"message": f"Receipt sent to {donation.email}"}
 
 
+@router.get("/{donation_id}/stripe-timeline")
+async def admin_stripe_timeline(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: ask Stripe, step by step, what happened to this payment."""
+    from donation_timeline import TimelineUnavailable, detail_from_timeline, stripe_timeline
+
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+    try:
+        timeline = stripe_timeline(donation)
+    except TimelineUnavailable as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Keep what we learned, so the list shows the real reason from now on.
+    if not donation.failure_detail and followups.is_unsuccessful(donation.frequency):
+        detail = detail_from_timeline(timeline)
+        if detail:
+            donation.failure_detail = detail
+            db.commit()
+
+    later = followups.completed_after(db, donation) if followups.is_unsuccessful(donation.frequency) else None
+    if later is not None:
+        timeline["steps"].append({
+            "at": later.donated_at.isoformat() + "Z", "tone": "success",
+            "label": "The same donor completed a donation of ${:,.2f} (#{})".format(later.amount, later.id),
+        })
+    timeline["failure_explanation"] = donation.failure_explanation
+    timeline["failure_detail"] = donation.failure_detail
+    return timeline
+
+
+@router.post("/{donation_id}/send-followup", response_model=DonationResponse)
+async def admin_send_followup(
+    donation_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_current_admin),
+):
+    """Admin-only: send the donor the "may we help you complete your gift?" email now.
+
+    Refuses with 409 when the donor has completed a donation since, unless
+    `force` is set: staff are asked to confirm rather than prevented.
+    """
+    donation = db.query(Donation).filter(Donation.id == donation_id).first()
+    if not donation:
+        raise HTTPException(status_code=404, detail="Donation not found")
+    if not force:
+        later = followups.completed_after(db, donation)
+        if later is not None:
+            raise HTTPException(status_code=409, detail=(
+                "{} already completed a donation of ${:,.2f} on {} after this one. Send the email anyway?".format(
+                    donation.name or donation.email, later.amount, later.donated_at.strftime("%B %d, %Y"))))
+    try:
+        followups.send_now(db, donation)
+    except followups.NotSendable as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    db.refresh(donation)
+    return donation
+
+
 @router.get("/stats")
 async def get_donation_stats(db: Session = Depends(get_db)):
     from models import Setting

@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from 'react-query'
 import { Heart, Download, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Plus, Eye, FileText, Mail, FileDown, Pencil, Trash2, AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { donationsAPI } from '../../utils/api'
 import type { Donation } from '../../types'
 import { useToast } from '../../contexts/ToastContext'
 import { useAuthStore } from '../../store/authStore'
+import { useConfirmation } from '../../hooks/useConfirmation'
 import {
   PageHeader, FilterBar, Modal, LoadingBlock, ErrorState, EmptyState, StatusBadge, type StatusTone,
 } from '../../components/admin'
@@ -33,15 +35,110 @@ function followupLine(d: Donation): string | null {
   }
 }
 
-/** Why a payment did not go through: the reason up front, Stripe's detail on click. */
-function FailureDetails({ donation }: { donation: Donation }) {
+interface TimelineStep {
+  at: string | null
+  tone: 'info' | 'danger' | 'success' | 'neutral'
+  label: string
+  detail?: string | null
+}
+interface StripeTimeline {
+  summary: string
+  steps: TimelineStep[]
+  failure_explanation?: string | null
+  failure_detail?: string | null
+}
+
+const STEP_DOT: Record<TimelineStep['tone'], string> = {
+  info: 'bg-blue-500', danger: 'bg-red-500', success: 'bg-green-500', neutral: 'bg-gray-400',
+}
+
+/**
+ * Why a payment did not go through: the reason up front, what Stripe saw step
+ * by step on demand, and the one action that matters: offering the donor help.
+ */
+function FailureDetails({ donation, onUpdated }: { donation: Donation; onUpdated: (d: Donation) => void }) {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  const token = useAuthStore((state) => state.token)
+  const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmationDialog } = useConfirmation()
   const [open, setOpen] = useState(false)
+  const [timeline, setTimeline] = useState<StripeTimeline | null>(null)
+  const [loadingTimeline, setLoadingTimeline] = useState(false)
+  const [sending, setSending] = useState(false)
   const followup = followupLine(donation)
+
+  const askStripe = async () => {
+    setLoadingTimeline(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/donations/${donation.id}/stripe-timeline`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await resp.json().catch(() => ({} as any))
+      if (!resp.ok) {
+        showError('Stripe', data.detail || 'Could not ask Stripe')
+        return
+      }
+      setTimeline(data)
+      if (data.failure_detail !== donation.failure_detail || data.failure_explanation !== donation.failure_explanation) {
+        onUpdated({ ...donation, failure_detail: data.failure_detail, failure_explanation: data.failure_explanation })
+      }
+    } catch {
+      showError('Stripe', 'Network error while asking Stripe')
+    } finally {
+      setLoadingTimeline(false)
+    }
+  }
+
+  const sendHelpEmail = async () => {
+    const again = donation.followup_status === 'sent'
+    const previously = again && donation.followup_sent_at
+      ? ` One was already sent on ${new Date(donation.followup_sent_at).toLocaleString()}.`
+      : ''
+    const ok = await confirm({
+      title: again ? 'Send the help email again?' : 'Send the help email?',
+      message: `${donation.email} will receive the email from nhdieb@myzakat.org thanking them for their intention `
+        + `and offering help to complete the donation (email, phone and WhatsApp).${previously}`,
+      confirmText: 'Send',
+      variant: 'info',
+    })
+    if (!ok) return
+    setSending(true)
+    try {
+      const post = (force: boolean) => fetch(
+        `${API_URL}/api/donations/${donation.id}/send-followup${force ? '?force=true' : ''}`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      )
+      let resp = await post(false)
+      let data = await resp.json().catch(() => ({} as any))
+      if (resp.status === 409) {
+        const anyway = await confirm({
+          title: 'This donor already gave',
+          message: data.detail || 'This donor completed a donation afterwards. Send the email anyway?',
+          confirmText: 'Send anyway',
+          variant: 'warning',
+        })
+        if (!anyway) return
+        resp = await post(true)
+        data = await resp.json().catch(() => ({} as any))
+      }
+      if (resp.ok) {
+        onUpdated(data as Donation)
+        showSuccess('Email sent', `Help email sent to ${donation.email}`)
+      } else {
+        showError('Error', data.detail || 'Could not send the email')
+      }
+    } catch {
+      showError('Error', 'Network error while sending the email')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="mb-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm">
       <div className="flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600 shrink-0" aria-hidden="true" />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-red-900">Why it didn&apos;t go through</p>
           <p className="text-red-900">{donation.failure_explanation}</p>
           {followup && (
@@ -50,13 +147,46 @@ function FailureDetails({ donation }: { donation: Donation }) {
               {followup}
             </p>
           )}
-          {donation.failure_detail && (
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={sendHelpEmail} disabled={sending || !donation.email} className="btn-primary btn-sm gap-2">
+              <Mail className="w-4 h-4" aria-hidden="true" />
+              {sending ? 'Sending...' : donation.followup_status === 'sent' ? 'Send help email again' : 'Send help email'}
+            </button>
+            {donation.stripe_session_id && !timeline && (
+              <button type="button" onClick={askStripe} disabled={loadingTimeline} className="btn-secondary btn-sm gap-2">
+                <RefreshCw className={`w-4 h-4 ${loadingTimeline ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {loadingTimeline ? 'Asking Stripe...' : 'What happened exactly?'}
+              </button>
+            )}
+          </div>
+
+          {timeline && (
+            <div className="mt-4 rounded border border-red-100 bg-white p-3">
+              <p className="font-medium text-gray-900">{timeline.summary}</p>
+              <ol className="mt-3 space-y-2">
+                {timeline.steps.map((step, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${STEP_DOT[step.tone] || STEP_DOT.neutral}`} aria-hidden="true" />
+                    <div className="min-w-0">
+                      {step.at && <span className="block text-xs text-gray-500">{new Date(step.at).toLocaleString()}</span>}
+                      <span className="text-gray-900">{step.label}</span>
+                      {step.detail && <span className="block text-xs text-gray-600 break-words">{step.detail}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 text-xs text-gray-400">Read live from Stripe.</p>
+            </div>
+          )}
+
+          {!timeline && donation.failure_detail && (
             <>
               <button
                 type="button"
                 onClick={() => setOpen((v) => !v)}
                 aria-expanded={open}
-                className="mt-2 text-xs font-medium text-red-700 hover:text-red-900 underline"
+                className="mt-3 block text-xs font-medium text-red-700 hover:text-red-900 underline"
               >
                 {open ? 'Hide Stripe details' : 'Show Stripe details'}
               </button>
@@ -69,6 +199,8 @@ function FailureDetails({ donation }: { donation: Donation }) {
           )}
         </div>
       </div>
+      {/* Portalled so it sits above the details modal, which defers to the top layer. */}
+      {createPortal(<ConfirmationDialog />, document.body)}
     </div>
   )
 }
@@ -916,7 +1048,16 @@ const AdminDonations = () => {
         <Modal title="Donation Details" onClose={() => setDetailsDonation(null)} size="lg" closeOnOverlayClick>
             <div>
 
-              {detailsDonation.failure_explanation && <FailureDetails donation={detailsDonation} />}
+              {detailsDonation.failure_explanation && (
+                <FailureDetails
+                  key={detailsDonation.id}
+                  donation={detailsDonation}
+                  onUpdated={(d) => {
+                    setDetailsDonation(d)
+                    queryClient.invalidateQueries(['admin-donations'])
+                  }}
+                />
+              )}
 
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
